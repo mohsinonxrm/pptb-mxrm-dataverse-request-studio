@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Variant L — "Insider build" / DRS
+       Same K chassis + small gold-orange triangle filling the top-right
+       vertex of the hex = Microsoft Office Insiders precedent.
+       Gold (#FFB900) is the Microsoft Insiders signature color across
+       Office / Windows; reads as "Insider build" to anyone in the
+       Microsoft ecosystem. -->
+
+  <path d="M 18 8 L 46 8 L 60 32 L 46 56 L 18 56 L 4 32 Z" fill="#0E5A9C"/>
+  <polygon points="46,8 60,32 46,56 18,56" fill="#2B8FD9"/>
+
+  <!-- Insider stamp — gold triangle in top-right vertex -->
+  <polygon points="46,8 40,8 49,15" fill="#FFB900"/>
+
+  <!-- Tool glyph — { → } in white -->
+  <path d="M22 22 C 18 22 18 25 18 28 C 18 31 16 33 15 33 C 16 33 18 35 18 38 C 18 41 18 44 22 44"
+        stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M42 22 C 46 22 46 25 46 28 C 46 31 48 33 49 33 C 48 33 46 35 46 38 C 46 41 46 44 42 44"
+        stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <line x1="24" y1="33" x2="40" y2="33" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+  <polyline points="36,29 40,33 36,37" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

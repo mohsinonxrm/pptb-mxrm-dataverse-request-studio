@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔐 Security issue (private)
+    url: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/security/advisories/new
+    about: Please report vulnerabilities privately via GitHub Security Advisories.
+  - name: 🧰 Power Platform ToolBox (PPTB)
+    url: https://www.powerplatformtoolbox.com/
+    about: Info about the PPTB host environment where this tool runs.
+  - name: 📖 Dataverse Web API reference (Microsoft Learn)
+    url: https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/overview
+    about: OData Web API endpoints, conventions, and query syntax for Dataverse.
+  - name: 🧮 Query antipatterns (Microsoft Learn)
+    url: https://learn.microsoft.com/en-us/power-apps/developer/data-platform/query-antipatterns
+    about: Patterns to avoid in Dataverse queries (calculated columns, logical attrs, large-text filters, etc).

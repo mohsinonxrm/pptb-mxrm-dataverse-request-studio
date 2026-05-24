@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dataverse Request Studio</title>
+    <style>
+      html, body, #root { height: 100%; margin: 0; padding: 0; }
+      body { font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif; }
+
+      /* Brand / method colors — CSS-var bridge per gotcha G-001.
+         Switched on data-theme attribute on <html>. */
+      :root[data-theme='light'] {
+        --color-request-read:    #005a9e;
+        --color-request-write:   #107c10;
+        --color-request-relate:  #8764b8;
+        --color-request-execute: #ca5010;
+        --color-request-binary:  #9d432c;
+
+        --color-method-get:    #005a9e;
+        --color-method-post:   #107c10;
+        --color-method-patch:  #ca5010;
+        --color-method-put:    #9d432c;
+        --color-method-delete: #a4262c;
+        --color-method-batch:  #8764b8;
+
+        --canvas-bg: #f0eee9;
+      }
+      :root[data-theme='dark'] {
+        --color-request-read:    #62b1f8;
+        --color-request-write:   #6ccb5f;
+        --color-request-relate:  #b4a0ff;
+        --color-request-execute: #f7894a;
+        --color-request-binary:  #d69c8b;
+
+        --color-method-get:    #62b1f8;
+        --color-method-post:   #6ccb5f;
+        --color-method-patch:  #f7894a;
+        --color-method-put:    #d69c8b;
+        --color-method-delete: #f1707b;
+        --color-method-batch:  #b4a0ff;
+
+        --canvas-bg: #1a1a1a;
+      }
+
+      /* ─────────────────────────────────────────────────────────────
+         Group-color cascade — per v3-design-review P0-1.
+         When the frame body carries `data-mode-group="<group>"`, every
+         Fluent v9 token that drives "brand" chrome (primary button,
+         active tab underline, focus ring, tinted backgrounds) is
+         remapped to the group color. Result: the Execute button on
+         Create reads green, the active tab underline on Associate
+         reads purple, etc. — without touching component code.
+
+         Tokens we override:
+           --colorBrandBackground        : primary button bg
+           --colorBrandBackgroundHover   : primary button hover bg
+           --colorBrandStroke1           : focus rings, active borders
+           --colorBrandStroke2           : tinted card borders
+           --colorBrandBackground2       : tinted card backgrounds
+           --colorBrandBackground2Hover  : tinted card hover bg
+           --colorBrandForeground1       : icon + emphasis fg
+           --colorBrandForeground2       : caption + helper fg
+           --colorCompoundBrandBackground: TabList active underline
+           --colorCompoundBrandStroke    : compound borders
+
+         The Read group keeps the v9 defaults (blue) since v9's brand
+         IS blue, so we only override for non-read groups. This avoids
+         a no-op cascade for the most common mode group.
+         ───────────────────────────────────────────────────────────── */
+      [data-mode-group='write'] {
+        --colorBrandBackground:         var(--color-request-write);
+        --colorBrandBackgroundHover:    var(--color-request-write);
+        --colorBrandBackgroundPressed:  var(--color-request-write);
+        --colorBrandBackgroundSelected: var(--color-request-write);
+        --colorBrandStroke1:            var(--color-request-write);
+        --colorBrandStroke2:            var(--color-request-write);
+        --colorBrandForeground1:        var(--color-request-write);
+        --colorBrandForeground2:        var(--color-request-write);
+        --colorCompoundBrandBackground: var(--color-request-write);
+        --colorCompoundBrandStroke:     var(--color-request-write);
+      }
+      [data-mode-group='relate'] {
+        --colorBrandBackground:         var(--color-request-relate);
+        --colorBrandBackgroundHover:    var(--color-request-relate);
+        --colorBrandBackgroundPressed:  var(--color-request-relate);
+        --colorBrandBackgroundSelected: var(--color-request-relate);
+        --colorBrandStroke1:            var(--color-request-relate);
+        --colorBrandStroke2:            var(--color-request-relate);
+        --colorBrandForeground1:        var(--color-request-relate);
+        --colorBrandForeground2:        var(--color-request-relate);
+        --colorCompoundBrandBackground: var(--color-request-relate);
+        --colorCompoundBrandStroke:     var(--color-request-relate);
+      }
+      [data-mode-group='execute'] {
+        --colorBrandBackground:         var(--color-request-execute);
+        --colorBrandBackgroundHover:    var(--color-request-execute);
+        --colorBrandBackgroundPressed:  var(--color-request-execute);
+        --colorBrandBackgroundSelected: var(--color-request-execute);
+        --colorBrandStroke1:            var(--color-request-execute);
+        --colorBrandStroke2:            var(--color-request-execute);
+        --colorBrandForeground1:        var(--color-request-execute);
+        --colorBrandForeground2:        var(--color-request-execute);
+        --colorCompoundBrandBackground: var(--color-request-execute);
+        --colorCompoundBrandStroke:     var(--color-request-execute);
+      }
+      [data-mode-group='binary'] {
+        --colorBrandBackground:         var(--color-request-binary);
+        --colorBrandBackgroundHover:    var(--color-request-binary);
+        --colorBrandBackgroundPressed:  var(--color-request-binary);
+        --colorBrandBackgroundSelected: var(--color-request-binary);
+        --colorBrandStroke1:            var(--color-request-binary);
+        --colorBrandStroke2:            var(--color-request-binary);
+        --colorBrandForeground1:        var(--color-request-binary);
+        --colorBrandForeground2:        var(--color-request-binary);
+        --colorCompoundBrandBackground: var(--color-request-binary);
+        --colorCompoundBrandStroke:     var(--color-request-binary);
+      }
+
+      /* ─────────────────────────────────────────────────────────────
+         Slim Fluent-themed scrollbars.
+
+         Default Windows / Chromium scrollbars on Win 11 at 125% DPI are
+         the thick "flat" style (~17 px) and look out of place inside a
+         Fluent v9 surface. We replace them with the slim overlay style
+         Microsoft 365 web apps use: ~10 px width, semi-transparent gray
+         thumb, transparent track, slightly bolder on hover. Theme-aware
+         via [data-theme='dark'].
+
+         Design rationale (Fluent 2 + WCAG 2.5.7 "Dragging movements"):
+         we deliberately do NOT hide scrollbars. Hidden scrollbars hurt
+         discoverability + keyboard nav. Slim-but-visible is the right
+         balance: present but unobtrusive.
+
+         Applied via `*` so every scrollable surface gets the treatment
+         (mainBody, virtualized grid body, drawer scroll, etc.). Monaco
+         paints its own scrollbar over an internally-hidden native one,
+         so it's unaffected.
+         ───────────────────────────────────────────────────────────── */
+
+      /* Firefox + standards-track Chromium 121+ */
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(96, 94, 92, 0.40) transparent;
+      }
+
+      /* WebKit / Blink — finer control */
+      *::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      *::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      *::-webkit-scrollbar-thumb {
+        background-color: rgba(96, 94, 92, 0.35);
+        border-radius: 8px;
+        /* 2 px transparent border + background-clip gives the thumb a
+           visual gap from the track edge (overlay-scrollbar feel)
+           without the actual track ever being visible. */
+        border: 2px solid transparent;
+        background-clip: content-box;
+      }
+      *::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(96, 94, 92, 0.65);
+        background-clip: content-box;
+      }
+      *::-webkit-scrollbar-thumb:active {
+        background-color: rgba(96, 94, 92, 0.80);
+        background-clip: content-box;
+      }
+      *::-webkit-scrollbar-corner {
+        background: transparent;
+      }
+
+      /* Dark theme — flip thumb color so it remains visible against
+         dark surfaces. Same opacity progression idle → hover → active. */
+      :root[data-theme='dark'] * {
+        scrollbar-color: rgba(200, 198, 196, 0.35) transparent;
+      }
+      :root[data-theme='dark'] *::-webkit-scrollbar-thumb {
+        background-color: rgba(200, 198, 196, 0.30);
+        background-clip: content-box;
+      }
+      :root[data-theme='dark'] *::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(200, 198, 196, 0.55);
+        background-clip: content-box;
+      }
+      :root[data-theme='dark'] *::-webkit-scrollbar-thumb:active {
+        background-color: rgba(200, 198, 196, 0.75);
+        background-clip: content-box;
+      }
+
+      #boot-splash {
+        position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+        flex-direction: column; gap: 16px; background: var(--canvas-bg); z-index: 1;
+      }
+      #boot-splash .ring {
+        width: 32px; height: 32px; border: 3px solid #e0dfde; border-top-color: #0f6cbd;
+        border-radius: 50%; animation: spin 1s linear infinite;
+      }
+      #boot-splash .label { font-size: 13px; color: #605e5c; }
+      #boot-splash.hide { opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <div id="boot-splash">
+      <div class="ring"></div>
+      <div class="label">Loading Dataverse Request Studio…</div>
+    </div>
+    <div id="root"></div>
+    <!-- Anti-flash theme bootstrap.
+         When embedded in PPTB the host appends `?pptb=1&theme=dark` (or light).
+         Reading it synchronously here lets us paint the right background before
+         the React bundle parses + mounts. Without this the iframe flashes light
+         even when the host is in dark mode. -->
+    <script>
+      (function () {
+        try {
+          var p = new URLSearchParams(window.location.search);
+          var t = p.get('theme');
+          if (t === 'dark' || t === 'light') {
+            document.documentElement.setAttribute('data-theme', t);
+          }
+        } catch (e) { /* ignore — fall back to default light */ }
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

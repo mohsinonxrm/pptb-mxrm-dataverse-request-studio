@@ -1,0 +1,72 @@
+name: 🐢 Performance issue
+description: Slow UI, slow metadata loading, long query execution, memory spikes, etc.
+title: "[Performance]: "
+labels: ["performance", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Performance reports are most useful with timings + dataset size.
+        🚫 Do NOT include tokens or Authorization headers.
+
+  - type: input
+    attributes:
+      label: Tool version
+      placeholder: "e.g., v1.0.0"
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: PPTB version (if known)
+      placeholder: "e.g., 1.2.x"
+    validations:
+      required: false
+
+  - type: dropdown
+    attributes:
+      label: Where is it slow?
+      options:
+        - App startup / loading
+        - Metadata loading (tables / columns / relationships)
+        - Building / editing requests (UI / editor)
+        - Picker dropdowns (entity / column / action / nav-property)
+        - Request execution
+        - Rendering results grid
+        - Save / Load library
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: Rough timing
+      placeholder: "e.g., metadata load ~45s; query ~12s; grid render ~3s"
+    validations:
+      required: false
+
+  - type: input
+    attributes:
+      label: Approx dataset size
+      placeholder: "e.g., 300 tables; query returns ~8k rows"
+    validations:
+      required: false
+
+  - type: textarea
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Notes / logs (optional)
+      description: Console logs, screenshots, or network summaries (sanitize).
+    validations:
+      required: false
