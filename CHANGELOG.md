@@ -5,6 +5,41 @@ All notable changes to Dataverse Request Studio will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-05-25
+
+### ✨ Added
+
+- **Scope-setup guidance banner** — when the tool loads with the entity scope
+  unconfigured (i.e. `entityScopeMode` is `publisher-solution` or
+  `solution-only` but no solutions have been selected), a contextual
+  `MessageBar` (warning intent) is shown at the top of the Target pane across
+  **all 14 modes** that use `TargetEditor`. The banner provides a mode-specific
+  hint and an **Open Settings** button that opens the Settings drawer directly.
+  It disappears automatically once the user selects a publisher / solution (or
+  switches to *All Entities*) — no dismiss cookie required, because the
+  condition is purely reactive to the persisted `DisplaySettings` state.
+
+- **`OpenSettingsProvider` / `useOpenSettings` / `useRegisterOpenSettings`**
+  (`src/host/useOpenSettings.tsx`) — new React context that provides a
+  stable `() => void` callback to open the Settings drawer from any component
+  in the tree without prop-drilling. Uses a ref-based registration pattern
+  (zero provider re-renders). `FrameHeader` registers the callback on mount;
+  any consumer calls `useOpenSettings()` to get it.
+
+- **`useScopedEntities` now exposes `needsSetup: boolean` and
+  `scopeMode: EntityScopeMode`** — consumers can detect the
+  unconfigured-scope condition and tailor guidance text accordingly.
+
+### 🔍 Settings persistence confirmation
+
+- Verified that all `DisplaySettings` (scope mode, selected publisher /
+  solution IDs, display flags) are persisted via `window.toolboxAPI.settings`
+  under the namespaced key `pptb-dataverse-request-studio:displaySettings`.
+  The prefix is distinct from other PPTB tools (e.g. FetchXML Studio). No
+  changes to the persistence layer were required.
+
+---
+
 ## [1.0.0] - 2026-05-24
 
 Initial public release of Dataverse Request Studio — a metadata-driven studio
