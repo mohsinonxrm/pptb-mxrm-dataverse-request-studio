@@ -6,7 +6,7 @@ import {
   Add20Regular, Delete20Regular, ArrowUp20Regular, ArrowDown20Regular,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
-import { findTable, isCompanionLogicalReadOnly } from '../mock/metadata';
+import { findTable, isCompanionLogicalReadOnly, resolveNavPath } from '../mock/metadata';
 import { PaneHead } from './PaneHead';
 import { ApplyOverridesBanner } from './ApplyOverridesBanner';
 import { SortableList, SortableItem } from '../primitives/Sortable';
@@ -43,7 +43,7 @@ export function OrderbyEditor({ table, items, setItems, group = 'read', applyAct
   //  - Lookup/Customer/Owner: sorts by related row's primary name field (cross-table join)
   const warnings: string[] = [];
   for (const it of items) {
-    const c = tbl.columns.find(x => x.logicalName === it.col);
+    const c = resolveNavPath(tbl, it.col).leaf;
     if (!c) continue;
     if (c.attributeType === 'Picklist' || c.attributeType === 'State' || c.attributeType === 'Status') {
       warnings.push(`${c.displayName}: choice columns sort by the underlying integer value, not the localized label. Use FetchXml if you need label order.`);
@@ -60,7 +60,7 @@ export function OrderbyEditor({ table, items, setItems, group = 'read', applyAct
   }
   // Recommend a unique-key tie-breaker if no primary key is in the orderby
   const pkInSort = items.some(it => {
-    const c = tbl.columns.find(x => x.logicalName === it.col);
+    const c = resolveNavPath(tbl, it.col).leaf;
     return c?.attributeType === 'Uniqueidentifier';
   });
   if (items.length > 0 && !pkInSort) {
@@ -130,7 +130,7 @@ export function OrderbyEditor({ table, items, setItems, group = 'read', applyAct
           }}
         >
           {items.map((it, i) => {
-            const col = tbl.columns.find(c => c.logicalName === it.col);
+            const col = resolveNavPath(tbl, it.col).leaf;
             const itemId = it.id ?? `${it.col}-${i}`;
             // Grid columns: grip · row-number · column picker · sort-direction toggle · ↑ · ↓ · 🗑
             return (
