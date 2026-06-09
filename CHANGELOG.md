@@ -5,6 +5,31 @@ All notable changes to Dataverse Request Studio will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-06-08
+
+### 🐛 Fixed
+
+- **`refreshAll()` race condition** (`metadataProvider.ts`) — the Settings
+  "Refresh metadata" button now drains any in-flight `buildTable` promises via
+  `Promise.allSettled` before clearing the cache. Previously an orphaned fetch
+  that settled after the clear could call `__registerLiveTable` with
+  pre-refresh data, silently overwriting the fresh registration.
+
+- **Silent bad-hop in OData parse validation** (`odataParser.ts`) — when the
+  parser walks a nav-path `$filter` column and encounters an unknown or
+  non-ManyToOne navigation segment, it now emits an actionable warning (naming
+  the bad segment and its owner table) instead of silently skipping validation.
+  A separate warning is emitted when the related entity's metadata times out
+  during the walk.
+
+- **`resolveNavPath` leaf lookup now matches `oDataName`** (`mock/metadata.ts`)
+  — the leaf-column search now also checks `ColumnMeta.oDataName` (e.g.
+  `_primarycontactid_value`) in addition to `logicalName`. This closes a gap
+  where a round-tripped or pasted OData `$filter` that preserved the lookup
+  wire form as the path leaf would resolve to `undefined`, causing the `$filter`
+  encoder to fall back to string-quoting a value that should be unquoted
+  (GUID / integer).
+
 ## [1.1.1] - 2026-06-08
 
 ### 🐛 Fixed
