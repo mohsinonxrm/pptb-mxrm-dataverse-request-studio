@@ -387,6 +387,13 @@ export const metadata: MetadataProvider = {
   },
 
   async refreshAll(): Promise<void> {
+    // Drain any currently in-flight builds before touching the cache.
+    // Without this, an orphaned buildTable promise can settle AFTER the
+    // cache clear and re-register a pre-refresh TableMeta, silently
+    // overwriting the fresh data we're about to fetch (race on
+    // __registerLiveTable). allSettled so a failing fetch doesn't abort.
+    await Promise.allSettled([...buildInFlight.values()]);
+
     // Snapshot what's currently registered, drop caches, then rebuild each
     // table. `buildTable` always hits the network (cache just cleared) and
     // re-registers via `__registerLiveTable`, firing the registry listeners

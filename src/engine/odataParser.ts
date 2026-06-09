@@ -390,15 +390,36 @@ async function validateFilterColumns(
       if (col.includes('/')) {
         const segs = col.split('/');
         let cursor: TableMeta | undefined = ownerTable;
+        let badHop: string | undefined;
+        let timedOutEntity: string | undefined;
         for (let i = 0; i < segs.length - 1; i++) {
           if (!cursor) break;
           const nav: NavProperty | undefined = cursor.navigationProperties.find(
             (n: NavProperty) => n.name === segs[i] && n.cardinality === 'ManyToOne',
           );
-          if (!nav) { cursor = undefined; break; }
-          cursor = await loadTableWithTimeout(loadTable, nav.targetEntity);
+          if (!nav) {
+            badHop = `\`${segs[i]}\` is not a ManyToOne navigation on \`${cursor.logicalName}\``;
+            cursor = undefined;
+            break;
+          }
+          const next = await loadTableWithTimeout(loadTable, nav.targetEntity);
+          if (!next) {
+            timedOutEntity = nav.targetEntity;
+            cursor = undefined;
+            break;
+          }
+          cursor = next;
         }
-        if (cursor) {
+        if (badHop) {
+          warnings.push(iss(
+            `$filter: nav path \`${col}\` — ${badHop}.`,
+            DOCS.filterRows,
+          ));
+        } else if (timedOutEntity) {
+          warnings.push(iss(
+            `$filter: couldn't validate \`${col}\` — metadata for \`${timedOutEntity}\` timed out.`,
+          ));
+        } else if (cursor) {
           const leaf = segs[segs.length - 1];
           if (!columnExistsOnTable(cursor, leaf)) {
             warnings.push(iss(

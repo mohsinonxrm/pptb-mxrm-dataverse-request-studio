@@ -564,7 +564,11 @@ export function resolveNavPath(
     current = target;
   }
   const leafSeg = segs[segs.length - 1];
-  return { leaf: current.columns.find(c => c.logicalName === leafSeg), ownerTable: current, chain };
+  return {
+    leaf: current.columns.find(c => c.logicalName === leafSeg || c.oDataName === leafSeg),
+    ownerTable: current,
+    chain,
+  };
 }
 
 /**
