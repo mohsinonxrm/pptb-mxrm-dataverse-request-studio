@@ -26,11 +26,12 @@ import {
   TagPicker, TagPickerControl, TagPickerGroup, TagPickerInput,
   TagPickerList, TagPickerOption, useTagPickerFilter, Tag,
 } from '@fluentui/react-components';
-import { Dismiss24Regular, Settings20Regular, Info16Regular } from '@fluentui/react-icons';
+import { Dismiss24Regular, Settings20Regular, Info16Regular, ArrowClockwise20Regular } from '@fluentui/react-icons';
 import type {
   DisplaySettings, ValueDisplayMode, EntityScopeMode,
 } from '../state/displaySettings';
 import type { AccessSummary } from '../host/pptbClient';
+import { metadata } from '../host/metadataProvider';
 import { usePublisherFilter } from '../host/usePublisherFilter';
 import { useSolutionFilter } from '../host/useSolutionFilter';
 
@@ -116,6 +117,17 @@ export function SettingsDrawer({
   const handleSolutionIdsChange = useCallback((ids: string[]) => {
     onSettingsChange({ ...settings, selectedSolutionIds: ids });
   }, [settings, onSettingsChange]);
+
+  // Refresh metadata — drops every cache entry and re-fetches the
+  // currently-loaded tables in place. Used when entity/attribute/relationship
+  // definitions change in the environment mid-session (the cache TTL is 1h).
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefreshMetadata = useCallback(async () => {
+    setRefreshing(true);
+    try { await metadata.refreshAll(); }
+    catch (e) { console.warn('[SettingsDrawer] refresh metadata failed', e); }
+    finally { setRefreshing(false); }
+  }, []);
 
   // Privilege gating — when AccessSummary hasn't loaded yet we allow all
   // options (deferred validation).
@@ -284,6 +296,32 @@ export function SettingsDrawer({
               <Option value="raw">Raw</Option>
               <Option value="both">Both (2 columns per attribute)</Option>
             </Dropdown>
+          </div>
+        </div>
+
+        <Divider />
+
+        {/* ── Section: Metadata ────────────────────────────────── */}
+        <div className={styles.section} style={{ marginTop: tokens.spacingVerticalL }}>
+          <Text className={styles.sectionTitle}>Metadata</Text>
+
+          <div className={styles.settingItem}>
+            <Text className={styles.settingLabel}>Refresh metadata</Text>
+            <Text className={styles.settingDescription} block style={{ marginBottom: tokens.spacingVerticalS }}>
+              Re-fetch entity, attribute &amp; relationship definitions from the
+              environment. Use this after publishing schema changes — metadata is
+              otherwise cached for up to an hour.
+            </Text>
+            <Button
+              appearance="outline"
+              size="small"
+              icon={refreshing ? <Spinner size="tiny" /> : <ArrowClockwise20Regular />}
+              disabled={refreshing}
+              onClick={handleRefreshMetadata}
+              style={{ alignSelf: 'flex-start' }}
+            >
+              {refreshing ? 'Refreshing…' : 'Refresh metadata'}
+            </Button>
           </div>
         </div>
       </DrawerBody>

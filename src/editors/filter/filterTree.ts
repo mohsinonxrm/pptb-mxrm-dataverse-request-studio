@@ -11,6 +11,7 @@
 // Lambda nodes own their own nested FilterGroup.
 
 import type { ColumnMeta, TableMeta } from '../../mock/metadata';
+import { resolveNavPath } from '../../mock/metadata';
 import { findOperator, type OperatorDef } from './operators';
 import { attrRef } from '../../engine/odataAttr';
 // `Pick<>` here keeps the literal type narrow but allows ColumnMeta arity to widen
@@ -381,10 +382,17 @@ const arrayLiteral = (vals: string[]): string =>
   JSON.stringify(vals.map(v => String(v ?? '')));
 
 function colLookup(col: string, prefix: string | undefined, table: TableMeta): ColumnMeta | undefined {
-  // Strip lambda alias prefix (e.g. "c/jobtitle" → "jobtitle")
-  const stripped = prefix && col.startsWith(prefix + '/') ? col.slice(prefix.length + 1) : col;
-  const last = stripped.split('/').pop() ?? stripped;
-  return table.columns.find(c => c.logicalName === last);
+  // Resolve the leaf through the canonical metadata-driven resolver so a
+  // nav-path leaf (`msdyn_opportunityid/abc_salesstage`) is looked up on the
+  // RELATED entity, not the root. This is what makes the leaf's AttributeType
+  // drive quoting in `quoteLiteral` — fixing the custom-OptionSet "quoted as
+  // a string" bug (#33). `prefix` strips an enclosing lambda alias. For a bare
+  // column the resolver behaves exactly like the old root-table lookup.
+  //
+  // Returns undefined while a hop's metadata is still loading; the warm layer
+  // (`useWarmReferencedTables`) ensures referenced related entities are fetched
+  // so this resolves correctly by encode time, then re-renders.
+  return resolveNavPath(table, col, { alias: prefix }).leaf;
 }
 
 export interface EncodeCtx {

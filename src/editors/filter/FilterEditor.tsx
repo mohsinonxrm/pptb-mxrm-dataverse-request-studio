@@ -27,7 +27,7 @@ import {
 import { useStudioStyles } from '../../primitives/styles';
 import { groupColorVar } from '../../theme/theme';
 import { PaneHead } from '../PaneHead';
-import { findColumn, findTable, isCompanionLogicalReadOnly, type ColumnMeta, type TableMeta } from '../../mock/metadata';
+import { findColumn, findTable, isCompanionLogicalReadOnly, resolveNavPath, type ColumnMeta, type TableMeta } from '../../mock/metadata';
 import { useLiveTable } from '../../host/useLiveMetadata';
 import { ApplyOverridesBanner } from '../ApplyOverridesBanner';
 import {
@@ -59,22 +59,11 @@ function resolvePathLeaf(rootTable: TableMeta, path: string): {
   ownerTable?: TableMeta;
 } {
   if (!path) return {};
-  const segs = path.split('/');
-  let current: TableMeta | undefined = rootTable;
-  for (let i = 0; i < segs.length; i++) {
-    if (!current) return {};
-    const seg = segs[i];
-    if (i === segs.length - 1) {
-      return {
-        col: current.columns.find(c => c.logicalName === seg),
-        ownerTable: current,
-      };
-    }
-    const nav = current.navigationProperties.find(n => n.name === seg);
-    if (!nav) return {};
-    current = findTable(nav.targetEntity);
-  }
-  return {};
+  // Delegates to the canonical metadata-driven resolver (one source of truth
+  // shared with the $filter encoder, picker, and pre-warmer) so leaf type
+  // resolution is identical everywhere.
+  const r = resolveNavPath(rootTable, path);
+  return { col: r.leaf, ownerTable: r.ownerTable };
 }
 
 /** Convenience: just the leaf column. */
@@ -91,18 +80,10 @@ function resolvePathLeafColumn(rootTable: TableMeta, path: string): ColumnMeta |
  */
 function findPendingNavTarget(rootTable: TableMeta, path: string): string | null {
   if (!path || !path.includes('/')) return null;
-  const segs = path.split('/');
-  let current: TableMeta | undefined = rootTable;
-  // Skip the leaf segment (last one); only walk nav hops.
-  for (let i = 0; i < segs.length - 1; i++) {
-    if (!current) return null;
-    const nav = current.navigationProperties.find(n => n.name === segs[i]);
-    if (!nav) return null;
-    const target = findTable(nav.targetEntity);
-    if (!target) return nav.targetEntity;
-    current = target;
-  }
-  return null;
+  // Same canonical resolver — `pendingTarget` is the first nav hop whose
+  // entity isn't in the registry yet. Drives the per-row `useLiveTable` so a
+  // saved/pasted nav-path resolves level-by-level as targets load.
+  return resolveNavPath(rootTable, path).pendingTarget ?? null;
 }
 import type { RequestGroup } from '../../registry/requestTypes';
 

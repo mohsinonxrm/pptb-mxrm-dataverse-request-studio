@@ -13,7 +13,7 @@
 // loaders short-circuit on cache hit.
 
 import * as loader from './dataverseMetadata';
-import { __registerLiveTable, findTable } from '../mock/metadata';
+import { __registerLiveTable, findTable, getLiveTables } from '../mock/metadata';
 import type {
   TableMeta, ColumnMeta, NavProperty, AlternateKeyDef,
   AttributeTypeCode, SourceType,
@@ -41,8 +41,15 @@ export interface MetadataProvider {
   peekTable(logical: string): TableMeta | undefined;
   /** Invalidate one table; the next read refetches. */
   invalidateTable(logical: string): void;
-  /** Nuke all caches. Wired to the "Refresh metadata" button. */
+  /** Nuke all caches + the live registry. The next read refetches. */
   invalidateAll(): void;
+  /**
+   * Refresh in place: drop caches, then re-fetch every currently-registered
+   * table and re-publish it. Unlike `invalidateAll`, editors keep showing the
+   * (briefly stale) current data until fresh data lands, with no need to
+   * re-navigate. Wired to the Settings "Refresh metadata" button.
+   */
+  refreshAll(): Promise<void>;
 }
 
 // ── Raw → studio-shape mappers ─────────────────────────────────────────
@@ -377,5 +384,19 @@ export const metadata: MetadataProvider = {
     // The next mode-level `useLiveTable` fetch will repopulate.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     import('../mock/metadata').then(({ __clearLiveTables }) => __clearLiveTables());
+  },
+
+  async refreshAll(): Promise<void> {
+    // Snapshot what's currently registered, drop caches, then rebuild each
+    // table. `buildTable` always hits the network (cache just cleared) and
+    // re-registers via `__registerLiveTable`, firing the registry listeners
+    // so every editor re-renders with fresh data. We deliberately do NOT
+    // clear the registry first, so the UI shows current data until each
+    // table's refresh lands. The set is small (current target + warmed
+    // related entities), keeping us clear of the 100-concurrent cap.
+    const logicals = getLiveTables().map(t => t.logicalName);
+    metadataCache.clear();
+    buildInFlight = new Map();
+    await Promise.all(logicals.map(l => buildTable(l)));
   },
 };

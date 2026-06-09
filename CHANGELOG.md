@@ -5,6 +5,46 @@ All notable changes to Dataverse Request Studio will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-06-08
+
+### 🐛 Fixed
+
+- **Custom OptionSet (and other typed) values incorrectly quoted as strings in
+  `$filter` over a lookup navigation** ([#33](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/33)).
+  Filtering on a related-entity column via a nav path — e.g.
+  `msdyn_opportunityid/abc_salesstage eq 809770000` — emitted the value as a
+  quoted `Edm.String` (`'809770000'`), which Dataverse rejects with HTTP 500
+  / `0x80060888`. Standard columns appeared to work only by coincidence (the
+  root entity happened to own a same-named column). Root cause: the `$filter`
+  encoder resolved the leaf column against the **root** table instead of
+  walking the relationship to the **related** entity, so the leaf's
+  `AttributeType` never drove the quoting decision. The encoder now resolves
+  nav-path leaves against the correct related entity, so numeric/boolean/choice
+  types are emitted unquoted and strings/GUIDs are quoted, consistently.
+
+### ✨ Added / Changed (architecture)
+
+- **Single, metadata-driven nav-path resolver (`resolveNavPath`)** in
+  `mock/metadata.ts` — now the one source of truth for resolving a
+  slash-delimited path (`nav/.../leaf`, alias-aware) to its leaf `ColumnMeta`,
+  owner table, visited chain, and first not-yet-loaded hop. The `$filter`
+  encoder (`colLookup`), the filter editor's leaf/pending-target resolution,
+  and the `$orderby` warnings all route through it, eliminating duplicated
+  walk logic that had drifted out of sync.
+- **Related-entity metadata pre-warming (`useWarmReferencedTables`)** — the
+  Retrieve Multiple / Retrieve Single modes now walk the `$filter`, `$expand`,
+  `$apply`, and `$orderby` trees and pre-fetch the related entities they
+  reference. This makes correct type resolution independent of whether the
+  user opened the relevant editor — covering **saved-request reload**,
+  **pasted OData URLs**, and **direct Execute**. Targeted (only referenced
+  entities) and self-healing across multi-hop paths, so it stays clear of the
+  100-concurrent-request cap.
+- **Paste-OData parsing** now validates and pre-loads nav-path filter leaves
+  instead of skipping them.
+- **Metadata cache TTL raised from 5 minutes to 1 hour**, with a new
+  **Settings → Refresh metadata** button (`metadata.refreshAll`) to force a
+  fresh pull after publishing schema changes mid-session.
+
 ## [1.1.0] - 2026-05-25
 
 ### ✨ Added

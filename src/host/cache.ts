@@ -8,7 +8,7 @@
 //                                          same key during a single fetch
 //   3. Fresh fetch                     →  cache + clear in-flight on resolve
 //
-// Stale-after-TTL means re-fetches kick in 5 minutes after the last write.
+// Stale-after-TTL means re-fetches kick in 1 hour after the last write.
 // Clear methods invalidate proactively (used by the "Refresh metadata"
 // button in Settings).
 //
@@ -28,7 +28,11 @@ interface CacheEntry<T> {
   timestamp: number;
 }
 
-const TTL_MS = 5 * 60 * 1000; // 5 minutes
+// 1 hour. Metadata (entities/attributes/relationships) changes rarely in a
+// released environment, so a long TTL keeps the tool snappy across a working
+// session. Users can force a fresh pull anytime via the Settings → "Refresh
+// metadata" button (metadata.refreshAll), which clears every cache entry.
+const TTL_MS = 60 * 60 * 1000; // 1 hour
 
 class MetadataCache {
   // ── Storage ─────────────────────────────────────────────────────────
