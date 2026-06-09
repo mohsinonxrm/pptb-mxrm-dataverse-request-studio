@@ -48,7 +48,7 @@ import type { ThemeMode } from '../theme/theme';
 // Live-metadata hook: subscribes to the registry so child editors
 // (SelectEditor, FilterEditor, OrderbyEditor, ExpandEditor, lambdas)
 // re-render when columns + relationships land from Dataverse.
-import { useLiveTable } from '../host/useLiveMetadata';
+import { useLiveTable, useWarmReferencedTables } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
 
 // Empty initial state — the studio is a request *builder*; seeding it with
@@ -110,6 +110,17 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // The hook intentionally returns nothing we use here; its side effect
   // (subscription + warming) is the point.
   useLiveTable(state.table || null);
+  // Pre-warm RELATED entities referenced by nav-path filters / lambdas /
+  // $expand / $apply / $orderby so the encoders resolve leaf column TYPES
+  // against the correct entity (issue #33) — even on saved-request reload,
+  // pasted-URL apply, or a direct Execute where no editor was opened to
+  // lazily trigger the loads.
+  useWarmReferencedTables(state.table || null, {
+    filter: state.filter,
+    expand: state.expand,
+    apply: state.apply,
+    orderby: state.orderby,
+  });
   // Entity list — used to validate saved-request loads against the
   // current org (block load if the entity has been uninstalled).
   const { entities } = useScopedEntities();

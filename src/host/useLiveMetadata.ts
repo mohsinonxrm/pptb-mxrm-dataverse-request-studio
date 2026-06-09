@@ -11,11 +11,12 @@
 //   - `useLiveTable(logical)` — fires `metadata.getTable(logical)` + subscribes.
 //   - `useLiveEntities()` — `metadata.listEntities()`, returns EntityListItem[].
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { metadata, type EntityListItem } from './metadataProvider';
 import {
   __subscribeLiveTables, findTable, type TableMeta,
 } from '../mock/metadata';
+import { collectReferencedEntities, type ReferencedTreeInput } from '../engine/navPath';
 
 /**
  * Returns the TableMeta for a logical name. On mount/change it fires the
@@ -89,3 +90,45 @@ export function useWarmTable(): (logical: string) => Promise<void> {
 // 100-concurrent-request cap on wide entities. Editors now load the
 // *selected* target only via `useLiveTable(name)`. Display labels for
 // non-loaded targets gracefully fall back to the raw logical name.
+
+/**
+ * Pre-warm the RELATED entities a request actually references via nav-paths,
+ * lambdas, and $expand — so the $filter/$apply/$expand encoders resolve leaf
+ * column TYPES against the correct entity (issue #33) even when the request
+ * arrives fully-formed (saved-request reload, pasted OData URL, or a direct
+ * Execute) and no editor was ever opened to lazily trigger the loads.
+ *
+ * Targeted, not bulk: only the handful of entities the request mentions are
+ * fetched (`metadata.getTable` dedupes + caches), so this stays well clear of
+ * the 100-concurrent-request cap that motivated removing `useWarmTables`.
+ *
+ * Self-healing across hops: the walk only reaches as deep as the registry is
+ * currently warm. Each fetch fires a registry update, which re-runs this hook
+ * and lets the walk reach one level deeper, until the whole referenced graph
+ * is present. Failures are swallowed (best-effort warming; the editors still
+ * render with whatever metadata is available).
+ */
+export function useWarmReferencedTables(
+  rootTable: string | null | undefined,
+  trees: ReferencedTreeInput,
+): void {
+  const [registryVersion, setRegistryVersion] = useState(0);
+  useEffect(() => __subscribeLiveTables(() => setRegistryVersion(v => v + 1)), []);
+
+  // Stable dependency key — the trees object is rebuilt by the caller each
+  // render, so depend on its serialized content rather than its identity.
+  const treeKey = useMemo(
+    () => JSON.stringify([trees.filter, trees.expand, trees.apply, trees.orderby]),
+    [trees.filter, trees.expand, trees.apply, trees.orderby],
+  );
+
+  useEffect(() => {
+    if (!rootTable) return;
+    for (const name of collectReferencedEntities(rootTable, trees)) {
+      if (!findTable(name)) void metadata.getTable(name).catch(() => {});
+    }
+    // `trees` is read via the stable `treeKey`; `registryVersion` re-runs the
+    // walk as deeper hops become resolvable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rootTable, treeKey, registryVersion]);
+}

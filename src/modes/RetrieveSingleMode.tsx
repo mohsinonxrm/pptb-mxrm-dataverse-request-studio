@@ -49,7 +49,7 @@ import { runtime, type ExecResult } from '../engine/runtime';
 import type { ExpandSpec } from '../editors/ExpandEditor';
 import type { RetrieveSingleState, RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
-import { useLiveTable } from '../host/useLiveMetadata';
+import { useLiveTable, useWarmReferencedTables } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
 import {
   serializeRetrieveSingle, hashState, deserializeRetrieveSingle,
@@ -79,6 +79,10 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   const [state, setState] = useState(initialState);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
   useLiveTable(state.table || null);
+  // Pre-warm entities referenced by nested $expand (inner $select/$filter/
+  // $orderby) so encoders resolve against the right related entity — even on
+  // saved-request reload / pasted URL where no expand editor was opened.
+  useWarmReferencedTables(state.table || null, { expand: state.expand });
   const { entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');

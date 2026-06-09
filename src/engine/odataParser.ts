@@ -31,7 +31,7 @@
 //   ⚠️ `$search`, `$format`, `$skiptoken` — Dataverse doesn't support these
 //      and DRS doesn't model them. Skipped silently.
 
-import type { TableMeta } from '../mock/metadata';
+import type { TableMeta, NavProperty } from '../mock/metadata';
 import { findTable } from '../mock/metadata';
 import type {
   FilterGroup, FilterNode, FilterRule, FilterFunctionNode, FilterLambdaNode,
@@ -381,8 +381,34 @@ async function validateFilterColumns(
       if (lambdaAlias && col.startsWith(lambdaAlias + '/')) {
         col = col.slice(lambdaAlias.length + 1);
       }
-      // Skip multi-segment nav-paths (e.g. `primarycontactid/fullname`)
-      if (col.includes('/')) continue;
+      // Multi-segment nav-path (e.g. `primarycontactid/abc_salesstage`):
+      // walk the N:1 hops, loading each related entity — which both validates
+      // the leaf AND warms the related metadata so the $filter encoder can
+      // resolve the leaf's type (and avoid string-quoting a numeric/boolean
+      // OptionSet — issue #33). Reported as a warning, not an error, because
+      // a hop may legitimately fail to load within the timeout.
+      if (col.includes('/')) {
+        const segs = col.split('/');
+        let cursor: TableMeta | undefined = ownerTable;
+        for (let i = 0; i < segs.length - 1; i++) {
+          if (!cursor) break;
+          const nav: NavProperty | undefined = cursor.navigationProperties.find(
+            (n: NavProperty) => n.name === segs[i] && n.cardinality === 'ManyToOne',
+          );
+          if (!nav) { cursor = undefined; break; }
+          cursor = await loadTableWithTimeout(loadTable, nav.targetEntity);
+        }
+        if (cursor) {
+          const leaf = segs[segs.length - 1];
+          if (!columnExistsOnTable(cursor, leaf)) {
+            warnings.push(iss(
+              `$filter: column \`${leaf}\` not found on \`${cursor.logicalName}\` (via \`${col}\`).`,
+              DOCS.filterRows,
+            ));
+          }
+        }
+        continue;
+      }
       if (!columnExistsOnTable(ownerTable, col)) {
         errors.push(iss(
           `$filter: column \`${col}\` does not exist on \`${ownerTable.logicalName}\`.`,

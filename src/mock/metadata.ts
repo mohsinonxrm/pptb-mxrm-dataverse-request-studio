@@ -486,6 +486,87 @@ export const findTable = (logicalName: string): TableMeta | undefined =>
 export const findColumn = (table: TableMeta, logicalName: string): ColumnMeta | undefined =>
   table.columns.find(c => c.logicalName === logicalName);
 
+// ══════════════════════════════════════════════════════════════════════
+// Canonical nav-path resolver — SINGLE SOURCE OF TRUTH.
+// ══════════════════════════════════════════════════════════════════════
+//
+// A "nav-path" is a slash-delimited column reference that walks one or more
+// single-valued (N:1) navigation properties to reach a column on a RELATED
+// entity — e.g. `msdyn_opportunityid/abc_salesstage` or the chained form
+// `primarycontactid/createdby/fullname`. The convention is: every segment
+// EXCEPT the last is a nav property; the last segment is the leaf column.
+//
+// Before this resolver existed, the same walk was reimplemented in ~5 places
+// (FilterEditor, NavPathColumnPicker, antipatterns, columnDisplayMap, the
+// lambda encoder) and — critically — was MISSING from the $filter encoder's
+// `colLookup`, which resolved the leaf against the ROOT table only. That made
+// the encoder serialise a related-entity custom OptionSet (Edm.Int32) as a
+// quoted string, which Dataverse rejects with 0x80060888 (issue #33). Routing
+// every committed-path resolution through this one function makes the leaf's
+// AttributeType drive quoting everywhere, consistently.
+//
+// Resolution is metadata-driven and lazy-aware: each hop is looked up in the
+// live registry via `findTable`. If a related entity hasn't been fetched yet,
+// `pendingTarget` names the first missing entity so callers can trigger a load
+// (`useWarmReferencedTables` / `useLiveTable`) and re-resolve on the next
+// render. This is the same self-healing contract the lambda encoder relies on.
+
+export interface ResolvedNavPath {
+  /** The resolved leaf column, on the deepest entity. Undefined when the
+   *  path can't be fully resolved (bad segment, or a hop not yet loaded). */
+  leaf?: ColumnMeta;
+  /** The entity the leaf lives on (the deepest entity walked). For a bare
+   *  column this is the root table. */
+  ownerTable?: TableMeta;
+  /** Entities visited, starting with the root: `[root, …related]`. */
+  chain: TableMeta[];
+  /** Logical name of the first nav target NOT yet in the live registry, if
+   *  any. Drives lazy-loading; undefined once the whole chain is resolvable. */
+  pendingTarget?: string;
+}
+
+/**
+ * Resolve a (possibly aliased) nav-path against `rootTable`, walking N:1
+ * navigation properties through the live registry.
+ *
+ * @param rootTable the entity the path is anchored on (root, or a lambda's
+ *   target entity when resolving inside a lambda predicate).
+ * @param path      slash-delimited path: `col` | `nav/col` | `nav/nav/col`.
+ * @param opts.alias a lambda alias to strip from the head (e.g. `c` strips
+ *   `c/jobtitle` → `jobtitle`, `c/primarycontactid/name` →
+ *   `primarycontactid/name`).
+ */
+export function resolveNavPath(
+  rootTable: TableMeta | undefined,
+  path: string,
+  opts?: { alias?: string },
+): ResolvedNavPath {
+  if (!rootTable) return { chain: [] };
+  let p = path;
+  const alias = opts?.alias;
+  if (alias && p.startsWith(alias + '/')) p = p.slice(alias.length + 1);
+  const segs = p.split('/').filter(Boolean);
+  const chain: TableMeta[] = [rootTable];
+  if (segs.length === 0) return { ownerTable: rootTable, chain };
+
+  let current: TableMeta = rootTable;
+  // Walk every segment except the leaf as an N:1 nav hop.
+  for (let i = 0; i < segs.length - 1; i++) {
+    const nav = current.navigationProperties.find(
+      n => n.name === segs[i] && n.cardinality === 'ManyToOne',
+    );
+    // Unknown nav segment — can't go deeper; report what we have.
+    if (!nav) return { ownerTable: current, chain };
+    const target = findTable(nav.targetEntity);
+    // Target not loaded yet — surface it for lazy-loading + re-resolve later.
+    if (!target) return { ownerTable: current, chain, pendingTarget: nav.targetEntity };
+    chain.push(target);
+    current = target;
+  }
+  const leafSeg = segs[segs.length - 1];
+  return { leaf: current.columns.find(c => c.logicalName === leafSeg), ownerTable: current, chain };
+}
+
 /**
  * Predicate that hides "companion" read-only logical columns from picker
  * UIs. These are the denormalized `*name` / `*yominame` / `*codename` text
