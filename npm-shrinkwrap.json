@@ -1,12 +1,12 @@
 {
 	"name": "@mohsinonxrm/pptb-dataverse-request-studio",
-	"version": "1.1.2",
+	"version": "1.1.3",
 	"lockfileVersion": 3,
 	"requires": true,
 	"packages": {
 		"": {
 			"name": "@mohsinonxrm/pptb-dataverse-request-studio",
-			"version": "1.1.2",
+			"version": "1.1.3",
 			"license": "AGPL-3.0-only",
 			"dependencies": {
 				"@dnd-kit/core": "^6.3.1",
