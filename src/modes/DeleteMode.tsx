@@ -29,17 +29,41 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Table20Regular, Table20Filled,
-  Delete20Regular, Delete20Filled,
-  LineHorizontal320Regular, LineHorizontal320Filled,
-  ShieldLock20Regular, ShieldLock20Filled,
-  Warning20Filled, Checkmark20Filled,
+  Table20Regular,
+  Table20Filled,
+  Delete20Regular,
+  Delete20Filled,
+  LineHorizontal320Regular,
+  LineHorizontal320Filled,
+  ShieldLock20Regular,
+  ShieldLock20Filled,
+  Warning20Filled,
+  Checkmark20Filled,
 } from '@fluentui/react-icons';
 import {
-  Field, RadioGroup, Radio, Combobox, Option, Caption1, tokens,
-  Input, Checkbox, Badge, Persona, Spinner, Button,
-  MessageBar, MessageBarBody, MessageBarTitle, mergeClasses,
-  Table, TableHeader, TableHeaderCell, TableBody, TableRow, TableCell,
+  Field,
+  RadioGroup,
+  Radio,
+  Combobox,
+  Option,
+  Caption1,
+  tokens,
+  Input,
+  Checkbox,
+  Badge,
+  Persona,
+  Spinner,
+  Button,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
+  mergeClasses,
+  Table,
+  TableHeader,
+  TableHeaderCell,
+  TableBody,
+  TableRow,
+  TableCell,
 } from '@fluentui/react-components';
 import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
@@ -48,7 +72,12 @@ import { ModeShell } from '../shell/ModeShell';
 import { useStudioStyles } from '../primitives/styles';
 import { TargetEditor } from '../editors/TargetEditor';
 import { PaneHead } from '../editors/PaneHead';
-import { HeadersEditor, defaultWriteHeaders, headerItemsToObject, type HeaderItem } from '../editors/HeadersEditor';
+import {
+  HeadersEditor,
+  defaultWriteHeaders,
+  headerItemsToObject,
+  type HeaderItem,
+} from '../editors/HeadersEditor';
 import { PreconditionEditor, preconditionToHeader } from '../editors/PreconditionEditor';
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
 import { applyBypassToHeaders } from '../engine/bypassHeaders';
@@ -66,12 +95,17 @@ import type { ThemeMode } from '../theme/theme';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
 import {
-  useCascadeConfiguration, cascadeSeverityRank, isParental,
+  useCascadeConfiguration,
+  cascadeSeverityRank,
+  isParental,
   type CascadeBehavior,
 } from '../host/useCascadeConfiguration';
 import {
-  serializeDelete, deserializeDelete, hashState,
-  type SavedRequest, type SerializedDeleteState,
+  serializeDelete,
+  deserializeDelete,
+  hashState,
+  type SavedRequest,
+  type SerializedDeleteState,
 } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
 
@@ -93,14 +127,15 @@ type RootClauseId = 'target' | 'scope' | 'confirmation' | 'precondition' | 'head
 // GUID shape — Dataverse rejects malformed ids at the wire level, but we
 // surface the mismatch via an advisory so the user finds out before the
 // DELETE is sent (we don't want an irreversible round-trip on a typo).
-const GUID_RE = /^[{(]?[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}[)}]?$/;
+const GUID_RE =
+  /^[{(]?[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}[)}]?$/;
 const isValidGuid = (s: string | null | undefined): boolean => !!s && GUID_RE.test(s.trim());
 
 export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('delete');
   const [state, setState] = useState(initialState);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
-  useLiveTable((state).table || null);
+  useLiveTable(state.table || null);
   const { entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
@@ -153,55 +188,75 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     // entity — sending a column the schema doesn't have makes Dataverse
     // 400 and breaks the entire preview.
     const cols = new Set<string>([tbl.primaryKey, tbl.primaryName]);
-    for (const candidate of ['accountnumber', 'emailaddress1', 'fullname', 'firstname', 'lastname', 'createdon', 'modifiedon']) {
-      if (tbl.columns.some(c => c.logicalName === candidate)) cols.add(candidate);
+    for (const candidate of [
+      'accountnumber',
+      'emailaddress1',
+      'fullname',
+      'firstname',
+      'lastname',
+      'createdon',
+      'modifiedon',
+    ]) {
+      if (tbl.columns.some((c) => c.logicalName === candidate)) cols.add(candidate);
     }
     // Use the same URL form as executeRetrieveSingle (leading slash).
     // PPTB's queryData accepts both forms in different paths but the
     // single-record form is more reliable with the leading slash.
     const url = `/${tbl.entitySetName}(${state.recordId})?$select=${[...cols].join(',')}`;
     setPickedRowLoading(true);
-    window.dataverseAPI.queryData(url).then(res => {
-      if (cancelled) return;
-      // PPTB normalizes single-record responses into either
-      // `{ value: <recordObject> }` OR `{ value: [<recordObject>] }`
-      // depending on the host build. Handle both.
-      const v = (res as { value?: unknown } | null)?.value;
-      const row =
-        Array.isArray(v) ? (v[0] as Record<string, unknown> | undefined ?? null) :
-        v && typeof v === 'object' ? v as Record<string, unknown> :
-        null;
-      setPickedRow(row);
-      setPickedRowLoading(false);
-      setPickedRowError(null);
-    }).catch((e: unknown) => {
-      if (cancelled) return;
-      // Capture the actual error so the danger card can explain WHY
-      // the fetch didn't work — much more helpful than the previous
-      // silent "couldn't fetch this record" message.
-      const msg = e instanceof Error ? e.message : String(e);
-      setPickedRow(null);
-      setPickedRowLoading(false);
-      setPickedRowError(msg);
-    });
-    return () => { cancelled = true; };
+    window.dataverseAPI
+      .queryData(url)
+      .then((res) => {
+        if (cancelled) return;
+        // PPTB normalizes single-record responses into either
+        // `{ value: <recordObject> }` OR `{ value: [<recordObject>] }`
+        // depending on the host build. Handle both.
+        const v = (res as { value?: unknown } | null)?.value;
+        const row = Array.isArray(v)
+          ? ((v[0] as Record<string, unknown> | undefined) ?? null)
+          : v && typeof v === 'object'
+            ? (v as Record<string, unknown>)
+            : null;
+        setPickedRow(row);
+        setPickedRowLoading(false);
+        setPickedRowError(null);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        // Capture the actual error so the danger card can explain WHY
+        // the fetch didn't work — much more helpful than the previous
+        // silent "couldn't fetch this record" message.
+        const msg = e instanceof Error ? e.message : String(e);
+        setPickedRow(null);
+        setPickedRowLoading(false);
+        setPickedRowError(msg);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [state.recordId, state.table, tbl]);
 
   // Picker-primary wins over fetch-derived primary. The fetch is only
   // for the secondary identifier (accountnumber etc.) in the danger card.
   const primaryName =
-    pickedPrimaryFromPicker ||
-    (pickedRow && tbl ? String(pickedRow[tbl.primaryName] ?? '') : '');
+    pickedPrimaryFromPicker || (pickedRow && tbl ? String(pickedRow[tbl.primaryName] ?? '') : '');
 
-  const markDirty = (id: string) => setState(s => { const d = new Set(s.dirty); d.add(id); return { ...s, dirty: d }; });
+  const markDirty = (id: string) =>
+    setState((s) => {
+      const d = new Set(s.dirty);
+      d.add(id);
+      return { ...s, dirty: d };
+    });
   const set = <K extends keyof DeleteState>(k: K, v: DeleteState[K], dirtyId?: string) => {
-    setState(s => ({ ...s, [k]: v }));
+    setState((s) => ({ ...s, [k]: v }));
     if (dirtyId) markDirty(dirtyId);
   };
 
   // ── Gates ──
   const requireTypedConfirm = state.scope.kind === 'whole-row';
-  const typedConfirmOk = !requireTypedConfirm || (state.confirmText.trim() === primaryName.trim() && primaryName.length > 0);
+  const typedConfirmOk =
+    !requireTypedConfirm ||
+    (state.confirmText.trim() === primaryName.trim() && primaryName.length > 0);
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeDelete(state), [state]);
@@ -217,11 +272,11 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     if (entry.modeId !== 'delete') return;
     const snap = entry.state as SerializedDeleteState;
     // Lenient table check — entity list may still be warming up.
-    if (entities.length > 0 && !entities.some(e => e.logicalName === snap.table)) {
+    if (entities.length > 0 && !entities.some((e) => e.logicalName === snap.table)) {
       window.alert(
         `Can't load "${entry.name}": entity \`${snap.table}\` ` +
-        `isn't available in this environment. The solution may have been ` +
-        `removed or you may be connected to a different org.`,
+          `isn't available in this environment. The solution may have been ` +
+          `removed or you may be connected to a different org.`,
       );
       return;
     }
@@ -234,18 +289,20 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // Publish save context — hide when no table set (nothing meaningful
   // to save yet).
-  usePublishSaveContext(useMemo(() => {
-    if (!state.table) return null;
-    return {
-      state: currentSerialized,
-      modeId: 'delete' as const,
-      dirty: isDirty,
-      lastSavedId,
-      onSaved,
-      onLoadSaved,
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentSerialized, isDirty, lastSavedId, state.table]));
+  usePublishSaveContext(
+    useMemo(() => {
+      if (!state.table) return null;
+      return {
+        state: currentSerialized,
+        modeId: 'delete' as const,
+        dirty: isDirty,
+        lastSavedId,
+        onSaved,
+        onLoadSaved,
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentSerialized, isDirty, lastSavedId, state.table]),
+  );
 
   // ── Advisories — bypass family + GUID validation + missing record.
   // Same pattern as the read modes: a flat Advisory[] aggregated into the
@@ -280,14 +337,17 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
         severity: 'error',
         source: 'validation',
         focusNode: 'scope',
-        title: 'Single-property DELETE isn\'t supported by the PPTB host',
+        title: "Single-property DELETE isn't supported by the PPTB host",
         body: (
           <>
-            DRS authors the correct URL <code>DELETE /{state.table ? `&lt;set&gt;` : ''}(&lt;id&gt;)/&lt;column&gt;</code>,
-            but PPTB&apos;s <code>dataverseAPI</code> only exposes whole-row delete — there&apos;s no raw-request
-            hook for property-path URLs. To clear one column from inside PPTB, switch to <strong>Update mode</strong>{' '}
-            and set the column to <code>null</code>. To use the property-DELETE pattern, copy the URL from the URL bar
-            (or the Code-tab <code>fetch</code> snippet) and run it from Postman / curl / the JS SDK / Power Automate.
+            DRS authors the correct URL{' '}
+            <code>DELETE /{state.table ? `&lt;set&gt;` : ''}(&lt;id&gt;)/&lt;column&gt;</code>, but
+            PPTB&apos;s <code>dataverseAPI</code> only exposes whole-row delete — there&apos;s no
+            raw-request hook for property-path URLs. To clear one column from inside PPTB, switch to{' '}
+            <strong>Update mode</strong> and set the column to <code>null</code>. To use the
+            property-DELETE pattern, copy the URL from the URL bar (or the Code-tab{' '}
+            <code>fetch</code> snippet) and run it from Postman / curl / the JS SDK / Power
+            Automate.
           </>
         ),
       });
@@ -298,17 +358,25 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const bypassBlocker = disabledReasonFromAdvisories(advisories);
 
-  const disabledReason =
-    !tbl ? 'Pick a target table first.' :
-    !state.recordId ? 'Pick a record to delete.' :
-    !isValidGuid(state.recordId) ? 'Record id is not a valid GUID.' :
-    state.scope.kind === 'single-property' && !state.scope.column ? 'Pick a column to clear.' :
-    state.concurrency.kind === 'etag' && !state.concurrency.etag.trim() ? 'Provide an etag value or switch the concurrency mode.' :
-    state.headers.some(h => h.enabled && !h.name) ? 'Fix empty header name.' :
-    requireTypedConfirm && !primaryName ? 'Waiting for record metadata — pick again or check the GUID.' :
-    requireTypedConfirm && !typedConfirmOk ? `Type the record name "${primaryName}" to confirm.` :
-    requireTypedConfirm && !state.acknowledged ? 'Acknowledge that this action cannot be undone.' :
-    bypassBlocker;
+  const disabledReason = !tbl
+    ? 'Pick a target table first.'
+    : !state.recordId
+      ? 'Pick a record to delete.'
+      : !isValidGuid(state.recordId)
+        ? 'Record id is not a valid GUID.'
+        : state.scope.kind === 'single-property' && !state.scope.column
+          ? 'Pick a column to clear.'
+          : state.concurrency.kind === 'etag' && !state.concurrency.etag.trim()
+            ? 'Provide an etag value or switch the concurrency mode.'
+            : state.headers.some((h) => h.enabled && !h.name)
+              ? 'Fix empty header name.'
+              : requireTypedConfirm && !primaryName
+                ? 'Waiting for record metadata — pick again or check the GUID.'
+                : requireTypedConfirm && !typedConfirmOk
+                  ? `Type the record name "${primaryName}" to confirm.`
+                  : requireTypedConfirm && !state.acknowledged
+                    ? 'Acknowledge that this action cannot be undone.'
+                    : bypassBlocker;
 
   const onExecute = async () => {
     setLoading(true);
@@ -316,15 +384,25 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents(rs => [{
-      id: `r-${Date.now()}`, modeId: 'delete',
-      url: built.relativeUrl, method: 'DELETE', ts: Date.now(),
-      status: res.status, ms: res.ms, rowCount: res.ok ? 1 : 0,
-    }, ...rs].slice(0, 8));
+    setRecents((rs) =>
+      [
+        {
+          id: `r-${Date.now()}`,
+          modeId: 'delete',
+          url: built.relativeUrl,
+          method: 'DELETE',
+          ts: Date.now(),
+          status: res.status,
+          ms: res.ms,
+          rowCount: res.ok ? 1 : 0,
+        },
+        ...rs,
+      ].slice(0, 8),
+    );
     // Reset typed confirmation so a follow-up delete requires a fresh ack.
     // Also clear `dirty` (Save button settles to clean if the user wants
     // to persist the now-completed shape).
-    setState(s => ({ ...s, dirty: new Set(), confirmText: '', acknowledged: false }));
+    setState((s) => ({ ...s, dirty: new Set(), confirmText: '', acknowledged: false }));
   };
 
   const effectiveHeaders = useMemo<HeaderItem[]>(() => {
@@ -334,95 +412,132 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     if (cc) {
       h.push({
         id: `__cc__${cc.name}`,
-        name: cc.name, value: cc.value, enabled: true, builtin: true,
+        name: cc.name,
+        value: cc.value,
+        enabled: true,
+        builtin: true,
         hint: 'Auto-composed from the Concurrency pane.',
       });
     }
     // Legacy field — kept in state for backward-compat. When true and the new
     // bypass UI is at 'none', we mirror it forward to bypass.businessLogic='sync'
     // + bypass.useLegacyHeader=true at compose time.
-    const effectiveBypass = state.bypassCustomPlugins && state.bypass.businessLogic === 'none'
-      ? { ...state.bypass, businessLogic: 'sync' as const, useLegacyHeader: true }
-      : state.bypass;
+    const effectiveBypass =
+      state.bypassCustomPlugins && state.bypass.businessLogic === 'none'
+        ? { ...state.bypass, businessLogic: 'sync' as const, useLegacyHeader: true }
+        : state.bypass;
     h = applyBypassToHeaders(h, effectiveBypass);
     return h;
   }, [state.headers, state.concurrency, state.bypassCustomPlugins, state.bypass]);
 
-  const scopeBadge = state.scope.kind === 'whole-row' ? 'row' : `clear ${state.scope.column ?? '?'}`;
+  const scopeBadge =
+    state.scope.kind === 'whole-row' ? 'row' : `clear ${state.scope.column ?? '?'}`;
   // DELETE only supports `If-Match: "<etag>"` per docs — no `*` form,
   // no `If-None-Match`. Two badge states only.
-  const concurrencyBadge =
-    state.concurrency.kind === 'etag' ? 'If-Match: etag' : 'none';
+  const concurrencyBadge = state.concurrency.kind === 'etag' ? 'If-Match: etag' : 'none';
 
   const isWholeRow = state.scope.kind === 'whole-row';
-  const confirmOk = !isWholeRow || (state.confirmText.trim() === primaryName.trim() && primaryName.length > 0 && state.acknowledged);
+  const confirmOk =
+    !isWholeRow ||
+    (state.confirmText.trim() === primaryName.trim() &&
+      primaryName.length > 0 &&
+      state.acknowledged);
   const sections = [
     {
-      id: 'target', label: 'Target',
+      id: 'target',
+      label: 'Target',
       meta: tbl ? `${tbl.displayName} record` : 'Pick a table',
       items: [
         {
           id: 'target',
-          icon: Table20Regular, iconFilled: Table20Filled,
-          label: state.recordId ? (primaryName || `${tbl?.displayName ?? ''} (selected)`) : 'Pick a record',
+          icon: Table20Regular,
+          iconFilled: Table20Filled,
+          label: state.recordId
+            ? primaryName || `${tbl?.displayName ?? ''} (selected)`
+            : 'Pick a record',
           dirty: state.dirty.has('target'),
         },
         {
           id: 'scope',
-          icon: Delete20Regular, iconFilled: Delete20Filled,
-          label: state.scope.kind === 'whole-row' ? 'Whole row' : `Clear ${state.scope.column || '?'}`,
+          icon: Delete20Regular,
+          iconFilled: Delete20Filled,
+          label:
+            state.scope.kind === 'whole-row' ? 'Whole row' : `Clear ${state.scope.column || '?'}`,
           code: state.scope.kind === 'single-property',
-          badge: scopeBadge, badgeAppearance: 'ghost' as const,
+          badge: scopeBadge,
+          badgeAppearance: 'ghost' as const,
           dirty: state.dirty.has('scope'),
         },
       ],
     },
     {
-      id: 'confirmation', label: 'Confirmation',
+      id: 'confirmation',
+      label: 'Confirmation',
       meta: isWholeRow ? (confirmOk ? '✓ ready' : 'incomplete') : 'n/a for single property',
-      items: [{
-        id: 'confirmation',
-        icon: ShieldLock20Regular, iconFilled: ShieldLock20Filled,
-        label: 'Type-to-confirm + ack',
-        badge: isWholeRow ? (confirmOk ? '✓' : 'required') : 'skipped',
-        badgeAppearance: 'tint' as const,
-        badgeColor: isWholeRow ? (confirmOk ? ('success' as const) : ('danger' as const)) : ('subtle' as const),
-        dirty: state.dirty.has('confirmation'),
-      }],
+      items: [
+        {
+          id: 'confirmation',
+          icon: ShieldLock20Regular,
+          iconFilled: ShieldLock20Filled,
+          label: 'Type-to-confirm + ack',
+          badge: isWholeRow ? (confirmOk ? '✓' : 'required') : 'skipped',
+          badgeAppearance: 'tint' as const,
+          badgeColor: isWholeRow
+            ? confirmOk
+              ? ('success' as const)
+              : ('danger' as const)
+            : ('subtle' as const),
+          dirty: state.dirty.has('confirmation'),
+        },
+      ],
     },
     // Per unified write-mode layout: Precondition is a top-level section
     // (consistent with Update / Upsert) rather than a sub-item under
     // Headers. Same `state.concurrency` field underneath — just promoted
     // visually.
     {
-      id: 'precondition', label: 'Precondition',
+      id: 'precondition',
+      label: 'Precondition',
       meta: concurrencyBadge,
-      items: [{
-        id: 'precondition',
-        icon: ShieldLock20Regular, iconFilled: ShieldLock20Filled,
-        label: 'Optimistic concurrency',
-        badge: concurrencyBadge, badgeAppearance: 'ghost' as const,
-        dirty: state.dirty.has('precondition'),
-      }],
+      items: [
+        {
+          id: 'precondition',
+          icon: ShieldLock20Regular,
+          iconFilled: ShieldLock20Filled,
+          label: 'Optimistic concurrency',
+          badge: concurrencyBadge,
+          badgeAppearance: 'ghost' as const,
+          dirty: state.dirty.has('precondition'),
+        },
+      ],
     },
     {
-      id: 'headers', label: 'Headers',
-      meta: `${state.headers.filter(h => h.enabled).length + (state.concurrency.kind !== 'none' ? 1 : 0)} active`,
+      id: 'headers',
+      label: 'Headers',
+      meta: `${state.headers.filter((h) => h.enabled).length + (state.concurrency.kind !== 'none' ? 1 : 0)} active`,
       items: [
         {
           id: 'headers',
-          icon: LineHorizontal320Regular, iconFilled: LineHorizontal320Filled,
+          icon: LineHorizontal320Regular,
+          iconFilled: LineHorizontal320Filled,
           label: 'HTTP headers',
-          badge: state.headers.filter(h => h.enabled).length || null,
+          badge: state.headers.filter((h) => h.enabled).length || null,
           dirty: state.dirty.has('headers'),
         },
         {
           id: 'bypass',
-          icon: Warning20Filled, iconFilled: Warning20Filled,
+          icon: Warning20Filled,
+          iconFilled: Warning20Filled,
           label: 'Bypass logic',
           badge: summarizeBypass(state.bypass),
-          badgeAppearance: state.bypass.businessLogic !== 'none' || state.bypass.suppressFlows ? 'tint' as const : 'ghost' as const,
-          badgeColor: state.bypass.businessLogic !== 'none' || state.bypass.suppressFlows ? 'warning' as const : 'subtle' as const,
+          badgeAppearance:
+            state.bypass.businessLogic !== 'none' || state.bypass.suppressFlows
+              ? ('tint' as const)
+              : ('ghost' as const),
+          badgeColor:
+            state.bypass.businessLogic !== 'none' || state.bypass.suppressFlows
+              ? ('warning' as const)
+              : ('subtle' as const),
           dirty: state.dirty.has('bypass'),
         },
       ],
@@ -443,8 +558,8 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
           rowError={pickedRowError}
           primaryName={primaryName}
           tbl={tbl}
-          onTableChange={t => {
-            setState(s => ({
+          onTableChange={(t) => {
+            setState((s) => ({
               ...s,
               table: t,
               recordId: null,
@@ -481,7 +596,13 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
       );
       break;
     case 'scope':
-      pane = <ScopeEditor table={state.table} scope={state.scope} setScope={(sc) => set('scope', sc, 'scope')} />;
+      pane = (
+        <ScopeEditor
+          table={state.table}
+          scope={state.scope}
+          setScope={(sc) => set('scope', sc, 'scope')}
+        />
+      );
       break;
     case 'precondition':
       pane = (
@@ -502,7 +623,7 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
       pane = (
         <HeadersEditor
           items={state.headers}
-          setItems={h => set('headers', h, 'headers')}
+          setItems={(h) => set('headers', h, 'headers')}
           group="write"
         />
       );
@@ -511,7 +632,7 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
       pane = (
         <BypassEditor
           value={state.bypass}
-          onChange={b => set('bypass', b, 'bypass')}
+          onChange={(b) => set('bypass', b, 'bypass')}
           group="write"
         />
       );
@@ -534,7 +655,10 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
           urlPreview={built.relativeNoBase}
           sections={sections}
           activeNode={activePath}
-          onSelect={(id) => setActivePath(id)}
+          onSelect={(id) => {
+            setActivePath(id);
+            setTab('builder');
+          }}
           recents={recents}
         />
       }
@@ -556,7 +680,7 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     >
       <MainTabs tab={tab} onTabChange={setTab} resultCount={result?.ok ? 1 : null}>
         {tab === 'builder' && pane}
-        {tab === 'code'    && <CodeView themeMode={themeMode} inputs={codeInputs} />}
+        {tab === 'code' && <CodeView themeMode={themeMode} inputs={codeInputs} />}
         {tab === 'results' && (
           <ResultsView
             result={result}
@@ -591,8 +715,15 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
 // entries to one combined pane and duplicated everything.
 // ──────────────────────────────────────────────────────────────
 function DeleteTargetPane({
-  state, row, rowLoading, rowError, primaryName, tbl,
-  onTableChange, onRecordChange, onProceedToConfirmation,
+  state,
+  row,
+  rowLoading,
+  rowError,
+  primaryName,
+  tbl,
+  onTableChange,
+  onRecordChange,
+  onProceedToConfirmation,
 }: {
   state: DeleteState;
   row: Record<string, unknown> | null;
@@ -623,18 +754,33 @@ function DeleteTargetPane({
     <div>
       <PaneHead
         icon={Delete20Filled}
-        title={isWholeRow
-          ? (primaryName ? `Delete ${primaryName}` : 'Delete record')
-          : `Clear ${state.scope.kind === 'single-property' ? state.scope.column : ''}`}
-        sub={isWholeRow
-          ? `This will issue DELETE on the row with ID ${state.recordId ?? '<no id>'}`
-          : `This will clear a single column on row ${state.recordId ?? '<no id>'}`}
+        title={
+          isWholeRow
+            ? primaryName
+              ? `Delete ${primaryName}`
+              : 'Delete record'
+            : `Clear ${state.scope.kind === 'single-property' ? state.scope.column : ''}`
+        }
+        sub={
+          isWholeRow
+            ? `This will issue DELETE on the row with ID ${state.recordId ?? '<no id>'}`
+            : `This will clear a single column on row ${state.recordId ?? '<no id>'}`
+        }
         group="write"
       />
 
-      <MessageBar layout="multiline" intent={isWholeRow ? 'error' : 'warning'} icon={<Warning20Filled />} style={{ marginBottom: 14 }}>
+      <MessageBar
+        layout="multiline"
+        intent={isWholeRow ? 'error' : 'warning'}
+        icon={<Warning20Filled />}
+        style={{ marginBottom: 14 }}
+      >
         <MessageBarBody>
-          <MessageBarTitle>{isWholeRow ? 'This is a destructive, irreversible request.' : 'Clearing a column is also irreversible.'}</MessageBarTitle>
+          <MessageBarTitle>
+            {isWholeRow
+              ? 'This is a destructive, irreversible request.'
+              : 'Clearing a column is also irreversible.'}
+          </MessageBarTitle>
           {isWholeRow
             ? 'Pick the record below. The Confirmation pane will show which relationships may cascade and require a typed name + acknowledgement before Execute lights up.'
             : 'The column value is set to null on the row. Other columns are unaffected.'}
@@ -692,13 +838,13 @@ function DeleteTargetPane({
                   name={primaryName}
                   primaryText={primaryName}
                   secondaryText={`${tbl.primaryKey}: ${String((row && row[tbl.primaryKey]) ?? state.recordId)}`}
-                  tertiaryText={
-                    [
-                      `${tbl.displayName} · ${tbl.entitySetName}`,
-                      secondary,
-                      rowLoading ? 'resolving extra fields…' : null,
-                    ].filter(Boolean).join(' · ')
-                  }
+                  tertiaryText={[
+                    `${tbl.displayName} · ${tbl.entitySetName}`,
+                    secondary,
+                    rowLoading ? 'resolving extra fields…' : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                   avatar={{ color: 'red' }}
                 />
               </>
@@ -711,24 +857,30 @@ function DeleteTargetPane({
               </>
             ) : (
               <>
-                <Warning20Filled style={{ color: tokens.colorPaletteRedForeground1, width: 32, height: 32 }} />
+                <Warning20Filled
+                  style={{ color: tokens.colorPaletteRedForeground1, width: 32, height: 32 }}
+                />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>
                     Couldn&apos;t resolve this record
                   </div>
                   <Caption1 style={{ color: tokens.colorNeutralForeground3, marginTop: 4 }}>
-                    GUID <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{state.recordId}</code>{' '}
-                    didn&apos;t resolve in <code>{state.table}</code>. The record may already be deleted,
-                    you might not have read access, or the metadata is still loading.
+                    GUID{' '}
+                    <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{state.recordId}</code>{' '}
+                    didn&apos;t resolve in <code>{state.table}</code>. The record may already be
+                    deleted, you might not have read access, or the metadata is still loading.
                     {rowError && (
-                      <> Server response: <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{rowError}</code></>
+                      <>
+                        {' '}
+                        Server response:{' '}
+                        <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{rowError}</code>
+                      </>
                     )}
                   </Caption1>
                 </div>
               </>
             )}
           </div>
-
         </div>
       )}
 
@@ -741,7 +893,8 @@ function DeleteTargetPane({
             Continue &rarr;
           </Button>
           <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-            Next: review the relationships that may be affected, then type the record name to confirm.
+            Next: review the relationships that may be affected, then type the record name to
+            confirm.
           </Caption1>
         </div>
       )}
@@ -764,8 +917,13 @@ function DeleteTargetPane({
 // so this pane shows a short note + Back button instead.
 // ──────────────────────────────────────────────────────────────
 function DeleteConfirmationPane({
-  state, row, primaryName, tbl,
-  onConfirmText, onAck, onBackToTarget,
+  state,
+  row,
+  primaryName,
+  tbl,
+  onConfirmText,
+  onAck,
+  onBackToTarget,
 }: {
   state: DeleteState;
   row: Record<string, unknown> | null;
@@ -809,7 +967,8 @@ function DeleteConfirmationPane({
         />
         <MessageBar layout="multiline" intent="info" style={{ marginBottom: 14, maxWidth: 720 }}>
           <MessageBarBody>
-            Execute clears <code>{state.scope.kind === 'single-property' ? state.scope.column : ''}</code> on{' '}
+            Execute clears{' '}
+            <code>{state.scope.kind === 'single-property' ? state.scope.column : ''}</code> on{' '}
             <strong>{primaryName || state.recordId}</strong> ({tbl?.displayName ?? state.table}).
             Other columns are untouched.
           </MessageBarBody>
@@ -828,13 +987,15 @@ function DeleteConfirmationPane({
   // outer pane. `minHeight: 0` on the middle is the canonical flex trick
   // that lets an `overflow: auto` child shrink below its content size.
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100%',
-      minHeight: 0,
-      gap: 0,
-    }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        minHeight: 0,
+        gap: 0,
+      }}
+    >
       <div style={{ flexShrink: 0 }}>
         <PaneHead
           icon={ShieldLock20Filled}
@@ -874,32 +1035,43 @@ function DeleteConfirmationPane({
       {/* Cascade impact preview — scrolls internally so the confirm form
           stays pinned at the bottom of the pane regardless of how many
           relationships the entity has. */}
-      {tbl && tbl.navigationProperties.some(n => n.cardinality !== 'ManyToOne') && (
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          flex: '1 1 0',
-          minHeight: 0,
-          marginBottom: 14,
-        }}>
+      {tbl && tbl.navigationProperties.some((n) => n.cardinality !== 'ManyToOne') && (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            flex: '1 1 0',
+            minHeight: 0,
+            marginBottom: 14,
+          }}
+        >
           <strong style={{ fontSize: 12, display: 'block', marginBottom: 6, flexShrink: 0 }}>
             Related relationships that may be affected
           </strong>
-          <div style={{
-            flex: '1 1 0',
-            minHeight: 120,                  // never collapse below useful height
-            overflow: 'auto',
-            border: `1px solid ${tokens.colorNeutralStroke2}`,
-            borderRadius: tokens.borderRadiusMedium,
-            background: tokens.colorNeutralBackground1,
-          }}>
+          <div
+            style={{
+              flex: '1 1 0',
+              minHeight: 120, // never collapse below useful height
+              overflow: 'auto',
+              border: `1px solid ${tokens.colorNeutralStroke2}`,
+              borderRadius: tokens.borderRadiusMedium,
+              background: tokens.colorNeutralBackground1,
+            }}
+          >
             <CascadeTable table={state.table} />
           </div>
-          <Caption1 style={{ display: 'block', marginTop: 6, color: tokens.colorNeutralForeground3, flexShrink: 0 }}>
+          <Caption1
+            style={{
+              display: 'block',
+              marginTop: 6,
+              color: tokens.colorNeutralForeground3,
+              flexShrink: 0,
+            }}
+          >
             Sorted by severity — <strong>Cascade</strong> (parental — children will be deleted) and{' '}
             <strong>Restrict</strong> (delete blocked if children exist) are highlighted at the top.
-            Behaviors come from each relationship&apos;s <code>CascadeConfiguration.Delete</code>; row counts
-            aren&apos;t shown.
+            Behaviors come from each relationship&apos;s <code>CascadeConfiguration.Delete</code>;
+            row counts aren&apos;t shown.
           </Caption1>
         </div>
       )}
@@ -918,8 +1090,19 @@ function DeleteConfirmationPane({
             Type the record name to confirm
           </strong>
           <Field
-            label={<span>Expected: <strong style={{ fontFamily: tokens.fontFamilyMonospace }}>{primaryName}</strong></span>}
-            validationState={state.confirmText && state.confirmText.trim() === primaryName.trim() ? 'success' : (state.confirmText ? 'error' : 'none')}
+            label={
+              <span>
+                Expected:{' '}
+                <strong style={{ fontFamily: tokens.fontFamilyMonospace }}>{primaryName}</strong>
+              </span>
+            }
+            validationState={
+              state.confirmText && state.confirmText.trim() === primaryName.trim()
+                ? 'success'
+                : state.confirmText
+                  ? 'error'
+                  : 'none'
+            }
             validationMessage={
               state.confirmText && state.confirmText.trim() !== primaryName.trim()
                 ? "Doesn't match — copy the name above exactly."
@@ -933,9 +1116,9 @@ function DeleteConfirmationPane({
               onChange={(_, d) => onConfirmText(d.value)}
               placeholder="Type to confirm…"
               contentAfter={
-                state.confirmText.trim() === primaryName.trim() && primaryName.length > 0
-                  ? <Checkmark20Filled style={{ color: tokens.colorPaletteGreenForeground1 }} />
-                  : undefined
+                state.confirmText.trim() === primaryName.trim() && primaryName.length > 0 ? (
+                  <Checkmark20Filled style={{ color: tokens.colorPaletteGreenForeground1 }} />
+                ) : undefined
               }
             />
           </Field>
@@ -985,15 +1168,14 @@ function CascadeTable({ table }: { table: string }) {
   //   3. Ties broken by target display name (alphabetical)
   const rels = useMemo(() => {
     if (!tbl) return [];
-    const byName = new Map(cascade.rows.map(r => [r.schemaName, r.deleteBehavior]));
+    const byName = new Map(cascade.rows.map((r) => [r.schemaName, r.deleteBehavior]));
     const items = tbl.navigationProperties
-      .filter(n => n.cardinality !== 'ManyToOne')
-      .map(n => {
+      .filter((n) => n.cardinality !== 'ManyToOne')
+      .map((n) => {
         const targetTbl = findTable(n.targetEntity);
         const display = targetTbl?.displayName ?? n.targetEntity;
         const behavior: CascadeBehavior | null =
-          n.cardinality === 'ManyToMany' ? 'RemoveLink' :
-          (byName.get(n.relationshipName) ?? null);
+          n.cardinality === 'ManyToMany' ? 'RemoveLink' : (byName.get(n.relationshipName) ?? null);
         return { nav: n, display, behavior };
       });
     items.sort((a, b) => {
@@ -1033,42 +1215,56 @@ function CascadeTable({ table }: { table: string }) {
                table body uses, plus a bottom border for visual anchor.
           z-index keeps the header above row content. */}
       <TableHeader>
-        <TableRow style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 1,
-          backgroundColor: tokens.colorNeutralBackground1,
-        }}>
-          <TableHeaderCell style={{
-            minWidth: 180,
-            position: 'sticky', top: 0,
+        <TableRow
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 1,
             backgroundColor: tokens.colorNeutralBackground1,
-            borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-          }}>
+          }}
+        >
+          <TableHeaderCell
+            style={{
+              minWidth: 180,
+              position: 'sticky',
+              top: 0,
+              backgroundColor: tokens.colorNeutralBackground1,
+              borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+            }}
+          >
             Related table
           </TableHeaderCell>
-          <TableHeaderCell style={{
-            minWidth: 80,
-            position: 'sticky', top: 0,
-            backgroundColor: tokens.colorNeutralBackground1,
-            borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-          }}>
+          <TableHeaderCell
+            style={{
+              minWidth: 80,
+              position: 'sticky',
+              top: 0,
+              backgroundColor: tokens.colorNeutralBackground1,
+              borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+            }}
+          >
             Cardinality
           </TableHeaderCell>
-          <TableHeaderCell style={{
-            minWidth: 260,
-            position: 'sticky', top: 0,
-            backgroundColor: tokens.colorNeutralBackground1,
-            borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-          }}>
+          <TableHeaderCell
+            style={{
+              minWidth: 260,
+              position: 'sticky',
+              top: 0,
+              backgroundColor: tokens.colorNeutralBackground1,
+              borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+            }}
+          >
             Schema name
           </TableHeaderCell>
-          <TableHeaderCell style={{
-            minWidth: 180,
-            position: 'sticky', top: 0,
-            backgroundColor: tokens.colorNeutralBackground1,
-            borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-          }}>
+          <TableHeaderCell
+            style={{
+              minWidth: 180,
+              position: 'sticky',
+              top: 0,
+              backgroundColor: tokens.colorNeutralBackground1,
+              borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+            }}
+          >
             Delete behavior
           </TableHeaderCell>
         </TableRow>
@@ -1083,8 +1279,11 @@ function CascadeTable({ table }: { table: string }) {
           const isP = !!behavior && isParental(behavior);
           const isRestrict = behavior === 'Restrict';
           const behaviorLabel = behavior ?? (cascade.loading ? 'loading…' : 'unknown');
-          const behaviorColor: 'danger' | 'warning' | 'subtle' =
-            isP ? 'danger' : isRestrict ? 'warning' : 'subtle';
+          const behaviorColor: 'danger' | 'warning' | 'subtle' = isP
+            ? 'danger'
+            : isRestrict
+              ? 'warning'
+              : 'subtle';
           return (
             <TableRow
               key={nav.name}
@@ -1105,16 +1304,22 @@ function CascadeTable({ table }: { table: string }) {
               </TableCell>
               <TableCell style={{ minWidth: 80 }}>
                 <Badge appearance="ghost">
-                  {nav.cardinality === 'OneToMany' ? '1:N' : nav.cardinality === 'ManyToMany' ? 'N:N' : 'N:1'}
+                  {nav.cardinality === 'OneToMany'
+                    ? '1:N'
+                    : nav.cardinality === 'ManyToMany'
+                      ? 'N:N'
+                      : 'N:1'}
                 </Badge>
               </TableCell>
               <TableCell style={{ minWidth: 260 }}>
-                <code style={{
-                  fontFamily: tokens.fontFamilyMonospace,
-                  fontSize: 11,
-                  color: tokens.colorNeutralForeground3,
-                  whiteSpace: 'nowrap',
-                }}>
+                <code
+                  style={{
+                    fontFamily: tokens.fontFamilyMonospace,
+                    fontSize: 11,
+                    color: tokens.colorNeutralForeground3,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
                   {nav.name}
                 </code>
               </TableCell>
@@ -1140,7 +1345,9 @@ function CascadeTable({ table }: { table: string }) {
 // Scope editor — whole-row delete vs single-property clear.
 // ──────────────────────────────────────────────────────────────
 function ScopeEditor({
-  table, scope, setScope,
+  table,
+  scope,
+  setScope,
 }: {
   table: string;
   scope: DeleteScope;
@@ -1148,15 +1355,17 @@ function ScopeEditor({
 }) {
   const tbl = findTable(table);
   const clearable = useMemo(
-    () => (tbl?.columns ?? [])
-      .filter(c =>
-        c.attributeType !== 'Uniqueidentifier' &&
-        c.attributeType !== 'File' &&
-        c.attributeType !== 'Image' &&
-        !c.required,
-      )
-      .slice()
-      .sort((a, b) => a.displayName.localeCompare(b.displayName)),
+    () =>
+      (tbl?.columns ?? [])
+        .filter(
+          (c) =>
+            c.attributeType !== 'Uniqueidentifier' &&
+            c.attributeType !== 'File' &&
+            c.attributeType !== 'Image' &&
+            !c.required,
+        )
+        .slice()
+        .sort((a, b) => a.displayName.localeCompare(b.displayName)),
     [tbl],
   );
   // `search` is the user's currently-typed filter text. While typing, the
@@ -1175,18 +1384,21 @@ function ScopeEditor({
     }
   }, [scope]);
 
-  const selectedColumn = scope.kind === 'single-property'
-    ? clearable.find(c => c.logicalName === scope.column)
-    : undefined;
-  const selectedLabel = selectedColumn?.displayName ?? (scope.kind === 'single-property' ? scope.column : '');
+  const selectedColumn =
+    scope.kind === 'single-property'
+      ? clearable.find((c) => c.logicalName === scope.column)
+      : undefined;
+  const selectedLabel =
+    selectedColumn?.displayName ?? (scope.kind === 'single-property' ? scope.column : '');
 
   const filtered = useMemo(() => {
     if (!search) return clearable;
     const q = search.toLowerCase();
-    return clearable.filter(c =>
-      c.displayName.toLowerCase().includes(q) ||
-      c.logicalName.toLowerCase().includes(q) ||
-      c.attributeType.toLowerCase().includes(q),
+    return clearable.filter(
+      (c) =>
+        c.displayName.toLowerCase().includes(q) ||
+        c.logicalName.toLowerCase().includes(q) ||
+        c.attributeType.toLowerCase().includes(q),
     );
   }, [clearable, search]);
 
@@ -1194,14 +1406,20 @@ function ScopeEditor({
 
   return (
     <div>
-      <PaneHead icon={Delete20Filled} title="Delete scope" sub="Remove the entire row, or just clear one column's value." group="write" />
+      <PaneHead
+        icon={Delete20Filled}
+        title="Delete scope"
+        sub="Remove the entire row, or just clear one column's value."
+        group="write"
+      />
       {scope.kind === 'single-property' && (
         <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 14, maxWidth: 720 }}>
           <MessageBarBody>
             <MessageBarTitle>Author-only inside PPTB</MessageBarTitle>
-            PPTB&apos;s <code>dataverseAPI</code> doesn&apos;t expose property-path DELETE — only whole-row.
-            DRS shows the correct URL + code so you can copy it for use outside (Postman, curl, SDK, Flow).
-            To clear one column from inside PPTB, use <strong>Update mode</strong> and set the column to <code>null</code>.
+            PPTB&apos;s <code>dataverseAPI</code> doesn&apos;t expose property-path DELETE — only
+            whole-row. DRS shows the correct URL + code so you can copy it for use outside (Postman,
+            curl, SDK, Flow). To clear one column from inside PPTB, use <strong>Update mode</strong>{' '}
+            and set the column to <code>null</code>.
           </MessageBarBody>
         </MessageBar>
       )}
@@ -1211,16 +1429,30 @@ function ScopeEditor({
             value={scope.kind}
             onChange={(_, d) => {
               if (d.value === 'whole-row') setScope({ kind: 'whole-row' });
-              else setScope({ kind: 'single-property', column: scope.kind === 'single-property' ? scope.column : '' });
+              else
+                setScope({
+                  kind: 'single-property',
+                  column: scope.kind === 'single-property' ? scope.column : '',
+                });
             }}
           >
             <Radio
               value="whole-row"
               label={
                 <span>
-                  <strong>Whole row</strong> · <code style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 11 }}>DELETE /{tbl?.entitySetName ?? 'set'}(&lt;id&gt;)</code>
-                  <Caption1 style={{ display: 'block', color: tokens.colorNeutralForeground3, marginTop: 2 }}>
-                    Removes the entire record. Cascading delete behavior follows the relationship configuration.
+                  <strong>Whole row</strong> ·{' '}
+                  <code style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 11 }}>
+                    DELETE /{tbl?.entitySetName ?? 'set'}(&lt;id&gt;)
+                  </code>
+                  <Caption1
+                    style={{
+                      display: 'block',
+                      color: tokens.colorNeutralForeground3,
+                      marginTop: 2,
+                    }}
+                  >
+                    Removes the entire record. Cascading delete behavior follows the relationship
+                    configuration.
                   </Caption1>
                 </span>
               }
@@ -1229,9 +1461,19 @@ function ScopeEditor({
               value="single-property"
               label={
                 <span>
-                  <strong>Single property</strong> · <code style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 11 }}>DELETE /{tbl?.entitySetName ?? 'set'}(&lt;id&gt;)/&lt;column&gt;</code>
-                  <Caption1 style={{ display: 'block', color: tokens.colorNeutralForeground3, marginTop: 2 }}>
-                    Clears the value of one column. Required columns and lookups (single-valued navigation properties) aren&apos;t supported via this path.
+                  <strong>Single property</strong> ·{' '}
+                  <code style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 11 }}>
+                    DELETE /{tbl?.entitySetName ?? 'set'}(&lt;id&gt;)/&lt;column&gt;
+                  </code>
+                  <Caption1
+                    style={{
+                      display: 'block',
+                      color: tokens.colorNeutralForeground3,
+                      marginTop: 2,
+                    }}
+                  >
+                    Clears the value of one column. Required columns and lookups (single-valued
+                    navigation properties) aren&apos;t supported via this path.
                   </Caption1>
                 </span>
               }
@@ -1282,12 +1524,15 @@ function ScopeEditor({
                     </Caption1>
                   </Option>
                 )}
-                {filtered.map(c => (
+                {filtered.map((c) => (
                   <Option key={c.logicalName} value={c.logicalName} text={c.displayName}>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <span>{c.displayName}</span>
                       <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-                        {c.logicalName} · <span style={{ color: tokens.colorBrandForeground2 }}>{c.attributeType}</span>
+                        {c.logicalName} ·{' '}
+                        <span style={{ color: tokens.colorBrandForeground2 }}>
+                          {c.attributeType}
+                        </span>
                       </Caption1>
                     </div>
                   </Option>

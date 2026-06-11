@@ -11,14 +11,24 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Flash20Regular, Flash20Filled,
-  DocumentSettings20Regular, DocumentSettings20Filled,
-  Table20Regular, Table20Filled,
-  LineHorizontal320Regular, LineHorizontal320Filled,
-  Settings20Regular, Settings20Filled,
+  Flash20Regular,
+  Flash20Filled,
+  DocumentSettings20Regular,
+  DocumentSettings20Filled,
+  Table20Regular,
+  Table20Filled,
+  LineHorizontal320Regular,
+  LineHorizontal320Filled,
+  Settings20Regular,
+  Settings20Filled,
 } from '@fluentui/react-icons';
 import {
-  Switch, Caption1, tokens, MessageBar, MessageBarBody, MessageBarTitle,
+  Switch,
+  Caption1,
+  tokens,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
 } from '@fluentui/react-components';
 import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
@@ -43,8 +53,11 @@ import type { RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { useScopedEntities } from '../host/useScopedEntities';
 import {
-  serializeExecuteFunction, deserializeExecuteFunction, hashState,
-  type SavedRequest, type SerializedExecuteFunctionState,
+  serializeExecuteFunction,
+  deserializeExecuteFunction,
+  hashState,
+  type SavedRequest,
+  type SerializedExecuteFunctionState,
 } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
 
@@ -77,11 +90,16 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
   const [fn, setFn] = useState<CsdlAction | undefined>(undefined);
   useEffect(() => {
     let cancelled = false;
-    if (!state.functionName) { setFn(undefined); return; }
-    actionsProvider.find(state.functionName).then(a => {
+    if (!state.functionName) {
+      setFn(undefined);
+      return;
+    }
+    actionsProvider.find(state.functionName).then((a) => {
       if (!cancelled) setFn(a);
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [state.functionName]);
 
   // Save / Load
@@ -90,25 +108,41 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
   const [boundRecordName, setBoundRecordName] = useState<string>('');
 
-  const markDirty = (id: string) => setState(s => { const d = new Set(s.dirty); d.add(id); return { ...s, dirty: d }; });
-  const set = <K extends keyof ExecuteFunctionState>(k: K, v: ExecuteFunctionState[K], dirtyId?: string) => {
-    setState(s => ({ ...s, [k]: v }));
+  const markDirty = (id: string) =>
+    setState((s) => {
+      const d = new Set(s.dirty);
+      d.add(id);
+      return { ...s, dirty: d };
+    });
+  const set = <K extends keyof ExecuteFunctionState>(
+    k: K,
+    v: ExecuteFunctionState[K],
+    dirtyId?: string,
+  ) => {
+    setState((s) => ({ ...s, [k]: v }));
     if (dirtyId) markDirty(dirtyId);
   };
 
   const requiresBoundRecord = fn?.binding.kind === 'entity';
   const boundEntity = fn?.binding.kind === 'entity' ? fn.binding.entityType : null;
-  const missingRequired = (fn?.parameters ?? []).filter(p => p.required).filter(p => {
-    const v = state.paramValues[p.name];
-    return v == null || (typeof v === 'string' && v === '') || (Array.isArray(v) && v.length === 0);
-  });
+  const missingRequired = (fn?.parameters ?? [])
+    .filter((p) => p.required)
+    .filter((p) => {
+      const v = state.paramValues[p.name];
+      return (
+        v == null || (typeof v === 'string' && v === '') || (Array.isArray(v) && v.length === 0)
+      );
+    });
 
-  const disabledReason =
-    !fn ? 'Pick a function.' :
-    requiresBoundRecord && !state.boundRecordId ? `Function '${fn.name}' is bound to ${boundEntity} — supply a source record.` :
-    missingRequired.length > 0 ? `${missingRequired.length} required param${missingRequired.length === 1 ? '' : 's'} unset.` :
-    state.headers.some(h => h.enabled && !h.name) ? 'Fix empty header name.' :
-    null;
+  const disabledReason = !fn
+    ? 'Pick a function.'
+    : requiresBoundRecord && !state.boundRecordId
+      ? `Function '${fn.name}' is bound to ${boundEntity} — supply a source record.`
+      : missingRequired.length > 0
+        ? `${missingRequired.length} required param${missingRequired.length === 1 ? '' : 's'} unset.`
+        : state.headers.some((h) => h.enabled && !h.name)
+          ? 'Fix empty header name.'
+          : null;
 
   const onExecute = async () => {
     setLoading(true);
@@ -116,12 +150,22 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents(rs => [{
-      id: `r-${Date.now()}`, modeId: 'exec-function',
-      url: built.relativeUrl, method: 'GET', ts: Date.now(),
-      status: res.status, ms: res.ms, rowCount: res.ok ? 1 : 0,
-    }, ...rs].slice(0, 8));
-    setState(s => ({ ...s, dirty: new Set() }));
+    setRecents((rs) =>
+      [
+        {
+          id: `r-${Date.now()}`,
+          modeId: 'exec-function',
+          url: built.relativeUrl,
+          method: 'GET',
+          ts: Date.now(),
+          status: res.status,
+          ms: res.ms,
+          rowCount: res.ok ? 1 : 0,
+        },
+        ...rs,
+      ].slice(0, 8),
+    );
+    setState((s) => ({ ...s, dirty: new Set() }));
   };
 
   // ── Save / Load ──
@@ -136,10 +180,14 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
   const onLoadSaved = (entry: SavedRequest) => {
     if (entry.modeId !== 'exec-function') return;
     const snap = entry.state as SerializedExecuteFunctionState;
-    if (boundEntity && entities.length > 0 && !entities.some(e => e.logicalName === boundEntity)) {
+    if (
+      boundEntity &&
+      entities.length > 0 &&
+      !entities.some((e) => e.logicalName === boundEntity)
+    ) {
       window.alert(
         `Can't load "${entry.name}": bound entity \`${boundEntity}\` ` +
-        `isn't available in this environment.`,
+          `isn't available in this environment.`,
       );
       return;
     }
@@ -151,98 +199,139 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
     setActivePath('pick');
   };
 
-  usePublishSaveContext(useMemo(() => {
-    if (!state.functionName) return null;
-    return {
-      state: currentSerialized,
-      modeId: 'exec-function' as const,
-      dirty: isDirty,
-      lastSavedId,
-      onSaved,
-      onLoadSaved,
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentSerialized, isDirty, lastSavedId, state.functionName]));
+  usePublishSaveContext(
+    useMemo(() => {
+      if (!state.functionName) return null;
+      return {
+        state: currentSerialized,
+        modeId: 'exec-function' as const,
+        dirty: isDirty,
+        lastSavedId,
+        onSaved,
+        onLoadSaved,
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentSerialized, isDirty, lastSavedId, state.functionName]),
+  );
 
   const sections = [
     {
-      id: 'function', label: 'Function',
-      meta: fn ? (fn.binding.kind === 'unbound' ? 'unbound' : `bound to ${boundEntity}`) : 'pick one',
-      items: [{
-        id: 'pick',
-        icon: Flash20Regular, iconFilled: Flash20Filled,
-        label: fn?.displayName ?? fn?.name ?? 'Pick function',
-        code: !!fn,
-        // Method already lives on the URL bar pill; no sidebar badge needed.
-        dirty: state.dirty.has('pick'),
-      }],
+      id: 'function',
+      label: 'Function',
+      meta: fn
+        ? fn.binding.kind === 'unbound'
+          ? 'unbound'
+          : `bound to ${boundEntity}`
+        : 'pick one',
+      items: [
+        {
+          id: 'pick',
+          icon: Flash20Regular,
+          iconFilled: Flash20Filled,
+          label: fn?.displayName ?? fn?.name ?? 'Pick function',
+          code: !!fn,
+          // Method already lives on the URL bar pill; no sidebar badge needed.
+          dirty: state.dirty.has('pick'),
+        },
+      ],
     },
-    ...(requiresBoundRecord && boundEntity ? [{
-      id: 'binding', label: `Bound to ${boundEntity}`,
-      meta: state.boundRecordId ? '✓ record selected' : 'pick a record',
-      items: [{
-        id: 'target',
-        icon: Table20Regular, iconFilled: Table20Filled,
-        label: 'Source record',
-        badge: state.boundRecordId ? '✓' : null,
-        badgeAppearance: 'ghost' as const,
-        dirty: state.dirty.has('target'),
-      }],
-    }] : []),
-    ...(fn && fn.parameters.length > 0 ? [{
-      id: 'params', label: 'Parameters',
-      meta: `${Object.values(state.paramValues).filter(v => v != null && v !== '').length} of ${fn.parameters.length} set`,
-      items: [{
-        id: 'params',
-        icon: DocumentSettings20Regular, iconFilled: DocumentSettings20Filled,
-        label: 'Function parameters',
-        badge: missingRequired.length > 0 ? `${missingRequired.length} req unset` : null,
-        badgeAppearance: 'tint' as const,
-        badgeColor: missingRequired.length > 0 ? ('danger' as const) : ('subtle' as const),
-        dirty: state.dirty.has('params'),
-        // Sidebar surfaces ONLY REQUIRED params; optional live in the
-        // accordion in the main Parameters pane.
-        children: fn?.parameters.filter(p => p.required).map(p => {
-          const v = state.paramValues[p.name];
-          const isSet = !(v == null || v === '' || (Array.isArray(v) && v.length === 0));
-          return {
-            id: `param:${p.name}`,
-            icon: DocumentSettings20Regular,
-            label: p.name,
-            code: true,
-            badge: isSet ? '✓' : 'req',
-            badgeAppearance: 'ghost' as const,
-            badgeColor: !isSet ? ('danger' as const) : ('subtle' as const),
-          };
-        }) ?? [],
-      }],
-    }] : []),
+    ...(requiresBoundRecord && boundEntity
+      ? [
+          {
+            id: 'binding',
+            label: `Bound to ${boundEntity}`,
+            meta: state.boundRecordId ? '✓ record selected' : 'pick a record',
+            items: [
+              {
+                id: 'target',
+                icon: Table20Regular,
+                iconFilled: Table20Filled,
+                label: 'Source record',
+                badge: state.boundRecordId ? '✓' : null,
+                badgeAppearance: 'ghost' as const,
+                dirty: state.dirty.has('target'),
+              },
+            ],
+          },
+        ]
+      : []),
+    ...(fn && fn.parameters.length > 0
+      ? [
+          {
+            id: 'params',
+            label: 'Parameters',
+            meta: `${Object.values(state.paramValues).filter((v) => v != null && v !== '').length} of ${fn.parameters.length} set`,
+            items: [
+              {
+                id: 'params',
+                icon: DocumentSettings20Regular,
+                iconFilled: DocumentSettings20Filled,
+                label: 'Function parameters',
+                badge: missingRequired.length > 0 ? `${missingRequired.length} req unset` : null,
+                badgeAppearance: 'tint' as const,
+                badgeColor: missingRequired.length > 0 ? ('danger' as const) : ('subtle' as const),
+                dirty: state.dirty.has('params'),
+                // Sidebar surfaces ONLY REQUIRED params; optional live in the
+                // accordion in the main Parameters pane.
+                children:
+                  fn?.parameters
+                    .filter((p) => p.required)
+                    .map((p) => {
+                      const v = state.paramValues[p.name];
+                      const isSet = !(
+                        v == null ||
+                        v === '' ||
+                        (Array.isArray(v) && v.length === 0)
+                      );
+                      return {
+                        id: `param:${p.name}`,
+                        icon: DocumentSettings20Regular,
+                        label: p.name,
+                        code: true,
+                        badge: isSet ? '✓' : 'req',
+                        badgeAppearance: 'ghost' as const,
+                        badgeColor: !isSet ? ('danger' as const) : ('subtle' as const),
+                      };
+                    }) ?? [],
+              },
+            ],
+          },
+        ]
+      : []),
     {
       // Section label is "Aliasing" — choice between Aliased and Inline encoding.
-      id: 'options', label: 'Aliasing',
+      id: 'options',
+      label: 'Aliasing',
       meta: state.useParamAliases ? 'param aliases' : 'inline literals',
-      items: [{
-        id: 'options',
-        icon: Settings20Regular, iconFilled: Settings20Filled,
-        label: 'Parameter encoding',
-        // The user-facing state label is the encoding *style*, not the
-        // raw OData prefix. Mirror the editor's prose copy
-        // ("aliased" / "inline") rather than the literal "@aliases" token.
-        badge: state.useParamAliases ? 'aliased' : 'inline',
-        badgeAppearance: 'ghost' as const,
-        dirty: state.dirty.has('options'),
-      }],
+      items: [
+        {
+          id: 'options',
+          icon: Settings20Regular,
+          iconFilled: Settings20Filled,
+          label: 'Parameter encoding',
+          // The user-facing state label is the encoding *style*, not the
+          // raw OData prefix. Mirror the editor's prose copy
+          // ("aliased" / "inline") rather than the literal "@aliases" token.
+          badge: state.useParamAliases ? 'aliased' : 'inline',
+          badgeAppearance: 'ghost' as const,
+          dirty: state.dirty.has('options'),
+        },
+      ],
     },
     {
-      id: 'headers', label: 'Headers',
-      meta: `${state.headers.filter(h => h.enabled).length} active`,
-      items: [{
-        id: 'headers',
-        icon: LineHorizontal320Regular, iconFilled: LineHorizontal320Filled,
-        label: 'HTTP headers',
-        badge: state.headers.filter(h => h.enabled).length || null,
-        dirty: state.dirty.has('headers'),
-      }],
+      id: 'headers',
+      label: 'Headers',
+      meta: `${state.headers.filter((h) => h.enabled).length} active`,
+      items: [
+        {
+          id: 'headers',
+          icon: LineHorizontal320Regular,
+          iconFilled: LineHorizontal320Filled,
+          label: 'HTTP headers',
+          badge: state.headers.filter((h) => h.enabled).length || null,
+          dirty: state.dirty.has('headers'),
+        },
+      ],
     },
   ];
 
@@ -262,8 +351,10 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
           sub="Functions are read-only operations exposed via GET. Composable functions accept $select/$filter for column scoping."
           value={state.functionName}
           onChange={(name) => {
-            setState(s => ({ ...s, functionName: name, paramValues: {}, boundRecordId: null }));
-            markDirty('pick'); markDirty('params'); markDirty('target');
+            setState((s) => ({ ...s, functionName: name, paramValues: {}, boundRecordId: null }));
+            markDirty('pick');
+            markDirty('params');
+            markDirty('target');
           }}
           group="execute"
         />
@@ -290,7 +381,9 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
           <ActionParamForm
             action={fn}
             values={state.paramValues}
-            setValue={(name, v) => set('paramValues', { ...state.paramValues, [name]: v }, 'params')}
+            setValue={(name, v) =>
+              set('paramValues', { ...state.paramValues, [name]: v }, 'params')
+            }
             setValues={(next) => set('paramValues', next, 'params')}
             group="execute"
             themeMode={themeMode}
@@ -312,16 +405,37 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
             group="execute"
           />
           <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ padding: 12, border: `1px solid ${tokens.colorNeutralStroke2}`, borderRadius: tokens.borderRadiusMedium }}>
+            <div
+              style={{
+                padding: 12,
+                border: `1px solid ${tokens.colorNeutralStroke2}`,
+                borderRadius: tokens.borderRadiusMedium,
+              }}
+            >
               <Switch
                 checked={state.useParamAliases}
                 onChange={(_, d) => set('useParamAliases', d.checked, 'options')}
                 label={
                   <span>
                     <strong>Use parameter aliases</strong>{' '}
-                    <code style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 11, color: tokens.colorBrandForeground2 }}>(p1=@p1)?@p1=value</code>
-                    <Caption1 style={{ display: 'block', color: tokens.colorNeutralForeground3, marginTop: 2 }}>
-                      Recommended by docs — avoids the 400 Bad Request thrown on long URLs and the DateTimeOffset inline-encoding bug.
+                    <code
+                      style={{
+                        fontFamily: tokens.fontFamilyMonospace,
+                        fontSize: 11,
+                        color: tokens.colorBrandForeground2,
+                      }}
+                    >
+                      (p1=@p1)?@p1=value
+                    </code>
+                    <Caption1
+                      style={{
+                        display: 'block',
+                        color: tokens.colorNeutralForeground3,
+                        marginTop: 2,
+                      }}
+                    >
+                      Recommended by docs — avoids the 400 Bad Request thrown on long URLs and the
+                      DateTimeOffset inline-encoding bug.
                     </Caption1>
                   </span>
                 }
@@ -329,10 +443,20 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
             </div>
             <MessageBar layout="multiline" intent={state.useParamAliases ? 'info' : 'warning'}>
               <MessageBarBody>
-                <MessageBarTitle>{state.useParamAliases ? 'Param aliases are on.' : 'Inline literals are on.'}</MessageBarTitle>
-                {state.useParamAliases
-                  ? <>Each param becomes <code>p=@pN</code> in the URL path, with values in the query string. Strings stay single-quoted; numbers/booleans/GUIDs go bare.</>
-                  : <>Params are written inline like <code>(p='val',q=42)</code>. Faster to read but breaks for long URLs and DateTimeOffset.</>}
+                <MessageBarTitle>
+                  {state.useParamAliases ? 'Param aliases are on.' : 'Inline literals are on.'}
+                </MessageBarTitle>
+                {state.useParamAliases ? (
+                  <>
+                    Each param becomes <code>p=@pN</code> in the URL path, with values in the query
+                    string. Strings stay single-quoted; numbers/booleans/GUIDs go bare.
+                  </>
+                ) : (
+                  <>
+                    Params are written inline like <code>(p='val',q=42)</code>. Faster to read but
+                    breaks for long URLs and DateTimeOffset.
+                  </>
+                )}
               </MessageBarBody>
             </MessageBar>
           </div>
@@ -343,7 +467,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
       pane = (
         <HeadersEditor
           items={state.headers}
-          setItems={h => set('headers', h, 'headers')}
+          setItems={(h) => set('headers', h, 'headers')}
           group="execute"
         />
       );
@@ -366,7 +490,10 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
           urlPreview={built.relativeNoBase}
           sections={sections}
           activeNode={activePath}
-          onSelect={(id) => setActivePath(id)}
+          onSelect={(id) => {
+            setActivePath(id);
+            setTab('builder');
+          }}
           recents={recents}
         />
       }
@@ -384,7 +511,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
     >
       <MainTabs tab={tab} onTabChange={setTab} resultCount={result?.ok ? 1 : null}>
         {tab === 'builder' && pane}
-        {tab === 'code'    && <CodeView themeMode={themeMode} inputs={codeInputs} />}
+        {tab === 'code' && <CodeView themeMode={themeMode} inputs={codeInputs} />}
         {tab === 'results' && (
           <ResultsView
             result={result}
