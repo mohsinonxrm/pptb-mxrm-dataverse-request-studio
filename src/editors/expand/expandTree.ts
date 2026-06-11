@@ -36,7 +36,7 @@ export function findExpandParentEntity(
       if (it.id === targetExpandId) return parentEntity;
       if (it.nestedExpand && it.nestedExpand.length > 0) {
         const tbl = findTable(parentEntity);
-        const nav = tbl?.navigationProperties.find(n => n.name === it.nav);
+        const nav = tbl?.navigationProperties.find((n) => n.name === it.nav);
         if (nav) {
           const found = walk(it.nestedExpand, nav.targetEntity);
           if (found) return found;
@@ -49,16 +49,19 @@ export function findExpandParentEntity(
 }
 
 /** Returns the related-table metadata for the target of an expand item. */
-export function getExpandTarget(parentTableLogical: string, expand: ExpandSpec): TableMeta | undefined {
+export function getExpandTarget(
+  parentTableLogical: string,
+  expand: ExpandSpec,
+): TableMeta | undefined {
   const parent = findTable(parentTableLogical);
-  const nav = parent?.navigationProperties.find(n => n.name === expand.nav);
+  const nav = parent?.navigationProperties.find((n) => n.name === expand.nav);
   return nav ? findTable(nav.targetEntity) : undefined;
 }
 
 /** True when the expand's nav is collection-valued (1:N or N:N). */
 export function isCollectionExpand(parentTableLogical: string, expand: ExpandSpec): boolean {
   const parent = findTable(parentTableLogical);
-  const nav = parent?.navigationProperties.find(n => n.name === expand.nav);
+  const nav = parent?.navigationProperties.find((n) => n.name === expand.nav);
   return nav?.cardinality === 'OneToMany' || nav?.cardinality === 'ManyToMany';
 }
 
@@ -70,7 +73,7 @@ export function updateExpand(
   id: string,
   patch: Partial<ExpandSpec>,
 ): ExpandSpec[] {
-  return items.map(it => {
+  return items.map((it) => {
     if (it.id === id) return { ...it, ...patch };
     if (it.nestedExpand) return { ...it, nestedExpand: updateExpand(it.nestedExpand, id, patch) };
     return it;
@@ -79,10 +82,10 @@ export function updateExpand(
 
 export function removeExpand(items: ExpandSpec[], id: string): ExpandSpec[] {
   return items
-    .filter(it => it.id !== id)
-    .map(it => it.nestedExpand
-      ? { ...it, nestedExpand: removeExpand(it.nestedExpand, id) }
-      : it);
+    .filter((it) => it.id !== id)
+    .map((it) =>
+      it.nestedExpand ? { ...it, nestedExpand: removeExpand(it.nestedExpand, id) } : it,
+    );
 }
 
 /**
@@ -96,11 +99,12 @@ export function addExpand(
 ): ExpandSpec[] {
   const child = makeExpandSpec(navName);
   if (parentId === null) return [...items, child];
-  return items.map(it => {
+  return items.map((it) => {
     if (it.id === parentId) {
       return { ...it, nestedExpand: [...(it.nestedExpand ?? []), child] };
     }
-    if (it.nestedExpand) return { ...it, nestedExpand: addExpand(it.nestedExpand, parentId, navName) };
+    if (it.nestedExpand)
+      return { ...it, nestedExpand: addExpand(it.nestedExpand, parentId, navName) };
     return it;
   });
 }
@@ -157,8 +161,8 @@ export function availableNavsAt(
   if (opts.parentCardinality === 'ManyToMany') return [];
   const parent = findTable(parentTableLogical);
   if (!parent) return [];
-  const used = new Set(existingAtLevel.map(e => e.nav));
-  return parent.navigationProperties.filter(n => {
+  const used = new Set(existingAtLevel.map((e) => e.nav));
+  return parent.navigationProperties.filter((n) => {
     if (used.has(n.name)) return false;
     // Inside a 1:N collection, N:N navs are not safely nestable in
     // Dataverse (the docs' "N:N when nested $expand exists in the query"
@@ -184,9 +188,8 @@ export function totalExpandCount(items: ExpandSpec[]): number {
 export function maxExpandDepth(items: ExpandSpec[]): number {
   let max = 0;
   for (const it of items) {
-    const inner = it.nestedExpand && it.nestedExpand.length > 0
-      ? 1 + maxExpandDepth(it.nestedExpand)
-      : 1;
+    const inner =
+      it.nestedExpand && it.nestedExpand.length > 0 ? 1 + maxExpandDepth(it.nestedExpand) : 1;
     if (inner > max) max = inner;
   }
   return max;
@@ -249,7 +252,7 @@ function containsCollectionExpand(items: ExpandSpec[], parentEntity: string): bo
   const parent = findTable(parentEntity);
   if (!parent) return false;
   for (const it of items) {
-    const nav = parent.navigationProperties.find(n => n.name === it.nav);
+    const nav = parent.navigationProperties.find((n) => n.name === it.nav);
     if (!nav) continue;
     if (nav.cardinality === 'OneToMany' || nav.cardinality === 'ManyToMany') return true;
     if (it.nestedExpand && containsCollectionExpand(it.nestedExpand, nav.targetEntity)) return true;

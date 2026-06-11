@@ -51,7 +51,10 @@ export function getFormattedValue(record: Record<string, unknown>, column: strin
  * (e.g. `account` or `contact` for `_customerid_value`). Returns `undefined`
  * for non-lookup columns or when the annotation is absent.
  */
-export function getLookupTargetEntity(record: Record<string, unknown>, column: string): string | undefined {
+export function getLookupTargetEntity(
+  record: Record<string, unknown>,
+  column: string,
+): string | undefined {
   if (!record || !column) return undefined;
   const direct = record[`${column}${LOOKUP_LOGICAL_SUFFIX}`];
   if (typeof direct === 'string') return direct;
@@ -67,7 +70,10 @@ export function getLookupTargetEntity(record: Record<string, unknown>, column: s
  * uses for this row's specific target (e.g. `customerid_account` when the
  * Customer happens to point at an account row).
  */
-export function getAssociatedNavProperty(record: Record<string, unknown>, column: string): string | undefined {
+export function getAssociatedNavProperty(
+  record: Record<string, unknown>,
+  column: string,
+): string | undefined {
   if (!record || !column) return undefined;
   const direct = record[`${column}${ASSOC_NAV_SUFFIX}`];
   if (typeof direct === 'string') return direct;
@@ -83,7 +89,10 @@ export function getAssociatedNavProperty(record: Record<string, unknown>, column
  * the `AttributeName` annotation. Used by the column header resolver to
  * pull the right `DisplayName` from metadata.
  */
-export function getOriginalAttributeName(record: Record<string, unknown>, column: string): string | undefined {
+export function getOriginalAttributeName(
+  record: Record<string, unknown>,
+  column: string,
+): string | undefined {
   if (!record || !column) return undefined;
   const v = record[`${column}${ATTRIBUTE_NAME_SUFFIX}`];
   return typeof v === 'string' ? v : undefined;
@@ -110,7 +119,7 @@ export function isAnnotationColumn(columnName: string): boolean {
 /** Drop annotation keys from a column list — leaves only displayable cols. */
 export function filterDisplayableColumns(columns: string[]): string[] {
   if (!columns) return [];
-  return columns.filter(c => !isAnnotationColumn(c));
+  return columns.filter((c) => !isAnnotationColumn(c));
 }
 
 /** Fast check: does this row carry any formatted-value annotation at all? */

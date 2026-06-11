@@ -18,8 +18,14 @@
 // up in `metadataProvider.ts`.
 
 import type {
-  EntityMetadata, AttributeMetadata, RelationshipMetadata, EntityKeyMetadata,
-  Publisher, Solution, PublisherWithSolutions, SolutionComponent,
+  EntityMetadata,
+  AttributeMetadata,
+  RelationshipMetadata,
+  EntityKeyMetadata,
+  Publisher,
+  Solution,
+  PublisherWithSolutions,
+  SolutionComponent,
 } from './pptbClient';
 
 interface CacheEntry<T> {
@@ -45,11 +51,14 @@ class MetadataCache {
   // with keys like "${logical}_${attr}_optionset" / "_detailed".
   private entityAttributes: Map<string, CacheEntry<AttributeMetadata[]>> = new Map();
   // Entity relationships — key: "${logicalName}_${advancedFindOnly}".
-  private entityRelationships: Map<string, CacheEntry<{
-    oneToMany: RelationshipMetadata[];
-    manyToOne: RelationshipMetadata[];
-    manyToMany: RelationshipMetadata[];
-  }>> = new Map();
+  private entityRelationships: Map<
+    string,
+    CacheEntry<{
+      oneToMany: RelationshipMetadata[];
+      manyToOne: RelationshipMetadata[];
+      manyToMany: RelationshipMetadata[];
+    }>
+  > = new Map();
   // Entity alternate keys — key: logicalName (advancedFindOnly doesn't
   // apply; Keys is its own child collection). Loaded eagerly when the
   // table loads so Upsert mode can populate its alt-key picker without
@@ -171,10 +180,10 @@ class MetadataCache {
     return this.fresh(this.filteredEntitiesCache.get(this.filteredEntitiesKey(solutionIds)));
   }
   setFilteredEntities(solutionIds: string[], data: EntityMetadata[]): void {
-    this.filteredEntitiesCache.set(
-      this.filteredEntitiesKey(solutionIds),
-      { data, timestamp: Date.now() },
-    );
+    this.filteredEntitiesCache.set(this.filteredEntitiesKey(solutionIds), {
+      data,
+      timestamp: Date.now(),
+    });
   }
 
   // ── Solution components ─────────────────────────────────────────────
@@ -185,10 +194,10 @@ class MetadataCache {
     return this.fresh(this.solutionComponentsCache.get(this.solutionComponentsKey(solutionIds)));
   }
   setSolutionComponents(solutionIds: string[], data: SolutionComponent[]): void {
-    this.solutionComponentsCache.set(
-      this.solutionComponentsKey(solutionIds),
-      { data, timestamp: Date.now() },
-    );
+    this.solutionComponentsCache.set(this.solutionComponentsKey(solutionIds), {
+      data,
+      timestamp: Date.now(),
+    });
   }
 
   // ── filterCachedEntitiesByNames — used by publisher/solution filter hooks
@@ -196,7 +205,7 @@ class MetadataCache {
     const all = this.fresh(this.allEntitiesCache) ?? [];
     if (logicalNames.length === 0) return all;
     const set = new Set(logicalNames);
-    return all.filter(e => set.has(e.LogicalName));
+    return all.filter((e) => set.has(e.LogicalName));
   }
 
   // ── Cache management ────────────────────────────────────────────────

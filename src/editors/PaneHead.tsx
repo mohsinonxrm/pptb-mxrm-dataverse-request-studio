@@ -4,7 +4,11 @@ import { groupColorVar } from '../theme/theme';
 import type { RequestGroup } from '../registry/requestTypes';
 
 export function PaneHead({
-  icon: Icon, title, sub, group = 'read', children,
+  icon: Icon,
+  title,
+  sub,
+  group = 'read',
+  children,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   icon?: FC<any>;

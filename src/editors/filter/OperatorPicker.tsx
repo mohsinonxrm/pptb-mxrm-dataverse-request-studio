@@ -1,14 +1,27 @@
 import { useMemo } from 'react';
 import {
-  Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuGroupHeader, MenuDivider,
-  Button, tokens, Tooltip,
+  Menu,
+  MenuTrigger,
+  MenuPopover,
+  MenuList,
+  MenuItem,
+  MenuGroupHeader,
+  MenuDivider,
+  Button,
+  tokens,
+  Tooltip,
 } from '@fluentui/react-components';
 import { ChevronDown20Regular } from '@fluentui/react-icons';
 import { OP_CATEGORIES, operatorsFor, findOperator, type OpCategory } from './operators';
 import type { ColumnMeta } from '../../mock/metadata';
 
 export function OperatorPicker({
-  table, col, value, onChange, size = 'small', only,
+  table,
+  col,
+  value,
+  onChange,
+  size = 'small',
+  only,
 }: {
   table: string;
   col: ColumnMeta | undefined;
@@ -20,16 +33,16 @@ export function OperatorPicker({
 }) {
   const ops = useMemo(() => {
     const all = col ? operatorsFor(col.attributeType, table) : [];
-    return only ? all.filter(o => only.includes(o.category)) : all;
+    return only ? all.filter((o) => only.includes(o.category)) : all;
   }, [col, table, only]);
 
   const grouped = useMemo(() => {
     const m = new Map<OpCategory, typeof ops>();
-    ops.forEach(o => {
+    ops.forEach((o) => {
       if (!m.has(o.category)) m.set(o.category, []);
       m.get(o.category)!.push(o);
     });
-    return OP_CATEGORIES.filter(c => m.has(c.id)).map(c => ({ ...c, items: m.get(c.id)! }));
+    return OP_CATEGORIES.filter((c) => m.has(c.id)).map((c) => ({ ...c, items: m.get(c.id)! }));
   }, [ops]);
 
   const cur = findOperator(value);
@@ -65,15 +78,30 @@ export function OperatorPicker({
             <span key={g.id}>
               {i > 0 && <MenuDivider />}
               <MenuGroupHeader>{g.label}</MenuGroupHeader>
-              {g.items.map(o => (
-                <Tooltip key={o.id} content={o.hint ?? o.label} relationship="description" positioning="after">
+              {g.items.map((o) => (
+                <Tooltip
+                  key={o.id}
+                  content={o.hint ?? o.label}
+                  relationship="description"
+                  positioning="after"
+                >
                   <MenuItem onClick={() => onChange(o.id)}>
-                    <span style={{ display: 'flex', justifyContent: 'space-between', gap: 12, width: '100%' }}>
+                    <span
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        width: '100%',
+                      }}
+                    >
                       <span style={{ fontWeight: o.id === value ? 600 : 400 }}>{o.label}</span>
-                      <span style={{
-                        fontFamily: tokens.fontFamilyMonospace, fontSize: 10,
-                        color: tokens.colorNeutralForeground3,
-                      }}>
+                      <span
+                        style={{
+                          fontFamily: tokens.fontFamilyMonospace,
+                          fontSize: 10,
+                          color: tokens.colorNeutralForeground3,
+                        }}
+                      >
                         {o.odata.replace('Microsoft.Dynamics.CRM.', '')}
                       </span>
                     </span>

@@ -1,8 +1,21 @@
 import { useMemo, useState } from 'react';
 import {
-  Button, mergeClasses, tokens, MessageBar, MessageBarBody, Badge, Input,
-  TableCellLayout, createTableColumn, type TableColumnDefinition,
-  DataGrid, DataGridHeader, DataGridHeaderCell, DataGridBody, DataGridRow, DataGridCell,
+  Button,
+  mergeClasses,
+  tokens,
+  MessageBar,
+  MessageBarBody,
+  Badge,
+  Input,
+  TableCellLayout,
+  createTableColumn,
+  type TableColumnDefinition,
+  DataGrid,
+  DataGridHeader,
+  DataGridHeaderCell,
+  DataGridBody,
+  DataGridRow,
+  DataGridCell,
 } from '@fluentui/react-components';
 // Plain (non-virtualized) Fluent v9 DataGrid. We tried the
 // `@fluentui-contrib/react-data-grid-react-window` variant for wide-
@@ -11,8 +24,10 @@ import {
 // browser scroll handles that fine. Revisit virtualization if/when a
 // real customer reports perf issues on a wider table.
 import {
-  TextBulletList20Filled, ChevronRight20Regular,
-  Checkmark20Filled, Search20Regular,
+  TextBulletList20Filled,
+  ChevronRight20Regular,
+  Checkmark20Filled,
+  Search20Regular,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from './PaneHead';
@@ -31,7 +46,13 @@ export interface SelectEditorProps {
   applyActive?: boolean;
 }
 
-export function SelectEditor({ table, selectedIds, setSelectedIds, group = 'read', applyActive }: SelectEditorProps) {
+export function SelectEditor({
+  table,
+  selectedIds,
+  setSelectedIds,
+  group = 'read',
+  applyActive,
+}: SelectEditorProps) {
   const s = useStudioStyles();
   const tbl = findTable(table);
   const [pickSel, setPickSel] = useState<string | null>(null);
@@ -52,12 +73,14 @@ export function SelectEditor({ table, selectedIds, setSelectedIds, group = 'read
     //      reports it wrong on inherited entities (task, email, etc.).
     //      See pptbClient.getEntityAttributes for the full story.
     const all = (tbl?.columns ?? [])
-      .filter(c => c.isValidForRead !== false)
-      .filter(c => !isCompanionLogicalReadOnly(c));
+      .filter((c) => c.isValidForRead !== false)
+      .filter((c) => !isCompanionLogicalReadOnly(c));
     const filtered = (cs: ColumnMeta[]) => {
       if (!search) return cs;
       const q = search.toLowerCase();
-      return cs.filter(c => c.displayName.toLowerCase().includes(q) || c.logicalName.toLowerCase().includes(q));
+      return cs.filter(
+        (c) => c.displayName.toLowerCase().includes(q) || c.logicalName.toLowerCase().includes(q),
+      );
     };
     // Multi-select bulk-pick UX: the left "Columns" pane shows EVERY column
     // regardless of selection state. A Fluent v9 Checkbox per row reflects
@@ -74,8 +97,8 @@ export function SelectEditor({ table, selectedIds, setSelectedIds, group = 'read
     // "All columns (no $select emitted)" while the encoder still emits the
     // orphan id — a confusing UX mismatch.
     let orphans = 0;
-    const sel2: ColumnMeta[] = selectedIds.map(id => {
-      const hit = all.find(c => c.logicalName === id);
+    const sel2: ColumnMeta[] = selectedIds.map((id) => {
+      const hit = all.find((c) => c.logicalName === id);
       if (hit) return hit;
       orphans++;
       // Synthetic ColumnMeta for display + click handlers. The
@@ -93,7 +116,6 @@ export function SelectEditor({ table, selectedIds, setSelectedIds, group = 'read
     return { available: avail, selected: sel2, orphanCount: orphans };
   }, [tbl, selectedIds, search]);
 
-
   // ── DataGrid setup for the Columns pane ──
   //
   // Single source of truth: `selectedIds` (ordered). DataGrid's
@@ -106,52 +128,56 @@ export function SelectEditor({ table, selectedIds, setSelectedIds, group = 'read
   // Name, Attribute Type. Each is sortable via the built-in compare fns.
   type GridItem = { logicalName: string; displayName: string; attributeType: string };
   const gridItems: GridItem[] = useMemo(
-    () => available.map(c => ({
-      logicalName: c.logicalName,
-      displayName: c.displayName,
-      attributeType: c.attributeType,
-    })),
+    () =>
+      available.map((c) => ({
+        logicalName: c.logicalName,
+        displayName: c.displayName,
+        attributeType: c.attributeType,
+      })),
     [available],
   );
 
-  const gridColumns: TableColumnDefinition<GridItem>[] = useMemo(() => [
-    createTableColumn<GridItem>({
-      columnId: 'displayName',
-      compare: (a, b) => a.displayName.localeCompare(b.displayName),
-      renderHeaderCell: () => 'Display name',
-      renderCell: (item) => (
-        <TableCellLayout truncate>
-          {item.displayName}
-        </TableCellLayout>
-      ),
-    }),
-    createTableColumn<GridItem>({
-      columnId: 'logicalName',
-      compare: (a, b) => a.logicalName.localeCompare(b.logicalName),
-      renderHeaderCell: () => 'Logical name',
-      renderCell: (item) => (
-        <TableCellLayout truncate>
-          <code style={{
-            fontFamily: tokens.fontFamilyMonospace,
-            fontSize: tokens.fontSizeBase200,
-            color: tokens.colorNeutralForeground2,
-          }}>
-            {item.logicalName}
-          </code>
-        </TableCellLayout>
-      ),
-    }),
-    createTableColumn<GridItem>({
-      columnId: 'attributeType',
-      compare: (a, b) => a.attributeType.localeCompare(b.attributeType),
-      renderHeaderCell: () => 'Type',
-      renderCell: (item) => (
-        <TableCellLayout>
-          <Badge appearance="outline" size="small">{item.attributeType}</Badge>
-        </TableCellLayout>
-      ),
-    }),
-  ], []);
+  const gridColumns: TableColumnDefinition<GridItem>[] = useMemo(
+    () => [
+      createTableColumn<GridItem>({
+        columnId: 'displayName',
+        compare: (a, b) => a.displayName.localeCompare(b.displayName),
+        renderHeaderCell: () => 'Display name',
+        renderCell: (item) => <TableCellLayout truncate>{item.displayName}</TableCellLayout>,
+      }),
+      createTableColumn<GridItem>({
+        columnId: 'logicalName',
+        compare: (a, b) => a.logicalName.localeCompare(b.logicalName),
+        renderHeaderCell: () => 'Logical name',
+        renderCell: (item) => (
+          <TableCellLayout truncate>
+            <code
+              style={{
+                fontFamily: tokens.fontFamilyMonospace,
+                fontSize: tokens.fontSizeBase200,
+                color: tokens.colorNeutralForeground2,
+              }}
+            >
+              {item.logicalName}
+            </code>
+          </TableCellLayout>
+        ),
+      }),
+      createTableColumn<GridItem>({
+        columnId: 'attributeType',
+        compare: (a, b) => a.attributeType.localeCompare(b.attributeType),
+        renderHeaderCell: () => 'Type',
+        renderCell: (item) => (
+          <TableCellLayout>
+            <Badge appearance="outline" size="small">
+              {item.attributeType}
+            </Badge>
+          </TableCellLayout>
+        ),
+      }),
+    ],
+    [],
+  );
 
   const selectedSetForGrid = useMemo(() => new Set<string | number>(selectedIds), [selectedIds]);
 
@@ -160,7 +186,7 @@ export function SelectEditor({ table, selectedIds, setSelectedIds, group = 'read
   // the survivors).
   const onGridSelectionChange = (_evt: unknown, data: { selectedItems: Set<string | number> }) => {
     const incoming = data.selectedItems;
-    const survivors = selectedIds.filter(id => incoming.has(id));
+    const survivors = selectedIds.filter((id) => incoming.has(id));
     const additions: string[] = [];
     for (const id of incoming) {
       const s = String(id);
@@ -171,7 +197,7 @@ export function SelectEditor({ table, selectedIds, setSelectedIds, group = 'read
 
   const moveLeft = () => {
     if (pickSel) {
-      setSelectedIds(selectedIds.filter(id => id !== pickSel));
+      setSelectedIds(selectedIds.filter((id) => id !== pickSel));
       setPickSel(null);
     }
   };
@@ -224,7 +250,8 @@ export function SelectEditor({ table, selectedIds, setSelectedIds, group = 'read
       {selectedIds.length === 0 && (
         <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 12 }}>
           <MessageBarBody>
-            No <code>$select</code> — Dataverse will return <strong>all columns</strong>. Pick a subset to keep responses small.
+            No <code>$select</code> — Dataverse will return <strong>all columns</strong>. Pick a
+            subset to keep responses small.
           </MessageBarBody>
         </MessageBar>
       )}
@@ -235,7 +262,10 @@ export function SelectEditor({ table, selectedIds, setSelectedIds, group = 'read
       {orphanCount > 0 && (
         <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 12 }}>
           <MessageBarBody>
-            <strong>{orphanCount}</strong> selected column{orphanCount === 1 ? '' : 's'} not found in this entity's metadata — likely an unknown <code>_&lt;x&gt;_value</code> form pasted from a URL. They're kept in state for round-trip faithfulness (the encoder still emits them), but DRS can't type-check them. Remove if unintended.
+            <strong>{orphanCount}</strong> selected column{orphanCount === 1 ? '' : 's'} not found
+            in this entity's metadata — likely an unknown <code>_&lt;x&gt;_value</code> form pasted
+            from a URL. They're kept in state for round-trip faithfulness (the encoder still emits
+            them), but DRS can't type-check them. Remove if unintended.
           </MessageBarBody>
         </MessageBar>
       )}
@@ -245,7 +275,9 @@ export function SelectEditor({ table, selectedIds, setSelectedIds, group = 'read
           <div className={s.colListH}>
             Columns · {available.length}
             {selectedIds.length > 0 && (
-              <span style={{ marginLeft: 'auto', fontSize: 10, color: tokens.colorNeutralForeground3 }}>
+              <span
+                style={{ marginLeft: 'auto', fontSize: 10, color: tokens.colorNeutralForeground3 }}
+              >
                 {selectedIds.length} selected
               </span>
             )}
@@ -263,7 +295,14 @@ export function SelectEditor({ table, selectedIds, setSelectedIds, group = 'read
               a customer reports perf on a wide entity. */}
           <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
             {available.length === 0 ? (
-              <div style={{ padding: '20px 14px', textAlign: 'center', fontSize: 12, color: tokens.colorNeutralForeground3 }}>
+              <div
+                style={{
+                  padding: '20px 14px',
+                  textAlign: 'center',
+                  fontSize: 12,
+                  color: tokens.colorNeutralForeground3,
+                }}
+              >
                 <em>No columns match "{search}"</em>
               </div>
             ) : (
@@ -279,7 +318,9 @@ export function SelectEditor({ table, selectedIds, setSelectedIds, group = 'read
                 style={{ minWidth: 0 }}
               >
                 <DataGridHeader>
-                  <DataGridRow selectionCell={{ checkboxIndicator: { 'aria-label': 'Select all columns' } }}>
+                  <DataGridRow
+                    selectionCell={{ checkboxIndicator: { 'aria-label': 'Select all columns' } }}
+                  >
                     {({ renderHeaderCell }) => (
                       <DataGridHeaderCell>{renderHeaderCell()}</DataGridHeaderCell>
                     )}
@@ -289,11 +330,11 @@ export function SelectEditor({ table, selectedIds, setSelectedIds, group = 'read
                   {({ item, rowId }) => (
                     <DataGridRow<GridItem>
                       key={rowId}
-                      selectionCell={{ checkboxIndicator: { 'aria-label': `Select ${item.displayName}` } }}
+                      selectionCell={{
+                        checkboxIndicator: { 'aria-label': `Select ${item.displayName}` },
+                      }}
                     >
-                      {({ renderCell }) => (
-                        <DataGridCell>{renderCell(item)}</DataGridCell>
-                      )}
+                      {({ renderCell }) => <DataGridCell>{renderCell(item)}</DataGridCell>}
                     </DataGridRow>
                   )}
                 </DataGridBody>
@@ -307,19 +348,48 @@ export function SelectEditor({ table, selectedIds, setSelectedIds, group = 'read
             removes from Selected for keyboard-only users; up/down reorders
             Selected for parity with DnD. */}
         <div className={s.colArrows}>
-          <Button icon={<ChevronRight20Regular style={{ transform: 'rotate(180deg)' }} />} appearance="subtle" onClick={moveLeft} disabled={!pickSel} aria-label="Remove from selected" />
-          <Button icon={<ChevronRight20Regular style={{ transform: 'rotate(-90deg)' }} />} appearance="subtle" onClick={moveUp}   disabled={!pickSel} aria-label="Move up" />
-          <Button icon={<ChevronRight20Regular style={{ transform: 'rotate(90deg)' }} />}  appearance="subtle" onClick={moveDown} disabled={!pickSel} aria-label="Move down" />
+          <Button
+            icon={<ChevronRight20Regular style={{ transform: 'rotate(180deg)' }} />}
+            appearance="subtle"
+            onClick={moveLeft}
+            disabled={!pickSel}
+            aria-label="Remove from selected"
+          />
+          <Button
+            icon={<ChevronRight20Regular style={{ transform: 'rotate(-90deg)' }} />}
+            appearance="subtle"
+            onClick={moveUp}
+            disabled={!pickSel}
+            aria-label="Move up"
+          />
+          <Button
+            icon={<ChevronRight20Regular style={{ transform: 'rotate(90deg)' }} />}
+            appearance="subtle"
+            onClick={moveDown}
+            disabled={!pickSel}
+            aria-label="Move down"
+          />
         </div>
 
         <div className={s.colList}>
           <div className={s.colListH}>
             Selected · {selectedIds.length}
-            <span style={{ marginLeft: 'auto', fontSize: 10, color: tokens.colorNeutralForeground3 }}>order matters</span>
+            <span
+              style={{ marginLeft: 'auto', fontSize: 10, color: tokens.colorNeutralForeground3 }}
+            >
+              order matters
+            </span>
           </div>
           <div className={s.colListBody}>
             {selectedIds.length === 0 && (
-              <div style={{ padding: '20px 14px', textAlign: 'center', fontSize: 12, color: tokens.colorNeutralForeground3 }}>
+              <div
+                style={{
+                  padding: '20px 14px',
+                  textAlign: 'center',
+                  fontSize: 12,
+                  color: tokens.colorNeutralForeground3,
+                }}
+              >
                 <em>All columns</em> (no <code>$select</code> emitted)
               </div>
             )}
@@ -337,16 +407,21 @@ export function SelectEditor({ table, selectedIds, setSelectedIds, group = 'read
                 setSelectedIds(next);
               }}
             >
-              {selected.map(c => {
+              {selected.map((c) => {
                 const isOrphan = c.displayName.startsWith('(unknown) ');
                 return (
                   <SortableItem key={c.logicalName} id={c.logicalName}>
                     {({ gripProps, Grip }) => (
                       <button
                         type="button"
-                        className={mergeClasses(s.colRow, pickSel === c.logicalName && s.colRowSelected)}
+                        className={mergeClasses(
+                          s.colRow,
+                          pickSel === c.logicalName && s.colRowSelected,
+                        )}
                         onClick={() => setPickSel(c.logicalName)}
-                        onDoubleClick={() => setSelectedIds(selectedIds.filter(id => id !== c.logicalName))}
+                        onDoubleClick={() =>
+                          setSelectedIds(selectedIds.filter((id) => id !== c.logicalName))
+                        }
                         style={isOrphan ? { fontStyle: 'italic', opacity: 0.85 } : undefined}
                       >
                         <span {...gripProps} aria-label={`Drag to reorder ${c.displayName}`}>
@@ -354,13 +429,18 @@ export function SelectEditor({ table, selectedIds, setSelectedIds, group = 'read
                         </span>
                         <Checkmark20Filled
                           style={{
-                            width: 14, height: 14,
-                            color: isOrphan ? tokens.colorPaletteRedForeground1 : groupColorVar(group),
+                            width: 14,
+                            height: 14,
+                            color: isOrphan
+                              ? tokens.colorPaletteRedForeground1
+                              : groupColorVar(group),
                           }}
                         />
                         <span>{c.displayName}</span>
                         {isOrphan ? (
-                          <Badge appearance="tint" color="warning" size="small">unknown</Badge>
+                          <Badge appearance="tint" color="warning" size="small">
+                            unknown
+                          </Badge>
                         ) : (
                           <span className={s.colTypeBadge}>{c.attributeType}</span>
                         )}

@@ -21,11 +21,20 @@
 
 import { useState } from 'react';
 import {
-  Popover, PopoverTrigger, PopoverSurface,
-  Badge, Button, Tooltip, tokens, mergeClasses,
+  Popover,
+  PopoverTrigger,
+  PopoverSurface,
+  Badge,
+  Button,
+  Tooltip,
+  tokens,
+  mergeClasses,
 } from '@fluentui/react-components';
 import {
-  Warning20Filled, Info20Filled, ErrorCircle20Filled, Open20Regular,
+  Warning20Filled,
+  Info20Filled,
+  ErrorCircle20Filled,
+  Open20Regular,
   ChevronDown16Regular,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from './styles';
@@ -41,9 +50,12 @@ export interface AdvisoryDrawerProps {
 // Icon + color per severity — kept tiny and consistent with v2.2 chrome.
 function severityIcon(s: AdvisorySeverity) {
   switch (s) {
-    case 'error':   return <ErrorCircle20Filled style={{ color: tokens.colorPaletteRedForeground1 }} />;
-    case 'warning': return <Warning20Filled style={{ color: tokens.colorPaletteDarkOrangeForeground1 }} />;
-    case 'info':    return <Info20Filled style={{ color: tokens.colorBrandForeground1 }} />;
+    case 'error':
+      return <ErrorCircle20Filled style={{ color: tokens.colorPaletteRedForeground1 }} />;
+    case 'warning':
+      return <Warning20Filled style={{ color: tokens.colorPaletteDarkOrangeForeground1 }} />;
+    case 'info':
+      return <Info20Filled style={{ color: tokens.colorBrandForeground1 }} />;
   }
 }
 
@@ -64,9 +76,10 @@ export function AdvisoryDrawer({ advisories, onFocusNode }: AdvisoryDrawerProps)
 
   // Build the chip tooltip — a one-line summary so users can hover before opening.
   const tipParts: string[] = [];
-  if (errors.length)   tipParts.push(`${errors.length} blocker${errors.length === 1 ? '' : 's'}`);
-  if (warnings.length) tipParts.push(`${warnings.length} warning${warnings.length === 1 ? '' : 's'}`);
-  if (infos.length)    tipParts.push(`${infos.length} info`);
+  if (errors.length) tipParts.push(`${errors.length} blocker${errors.length === 1 ? '' : 's'}`);
+  if (warnings.length)
+    tipParts.push(`${warnings.length} warning${warnings.length === 1 ? '' : 's'}`);
+  if (infos.length) tipParts.push(`${infos.length} info`);
   const tooltip = tipParts.join(' · ');
 
   return (
@@ -78,7 +91,7 @@ export function AdvisoryDrawer({ advisories, onFocusNode }: AdvisoryDrawerProps)
           <button
             type="button"
             className={mergeClasses(s.advisoryChip, open && s.advisoryChipOpen)}
-            onClick={() => setOpen(o => !o)}
+            onClick={() => setOpen((o) => !o)}
             aria-label={`Advisories — ${tooltip}`}
           >
             {severityIcon(topSeverity)}
@@ -98,10 +111,20 @@ export function AdvisoryDrawer({ advisories, onFocusNode }: AdvisoryDrawerProps)
         </div>
         {/* Errors first — they're blockers and the user must address them. */}
         {errors.length > 0 && (
-          <AdvisorySection title="Blockers" list={errors} onFocusNode={onFocusNode} setOpen={setOpen} />
+          <AdvisorySection
+            title="Blockers"
+            list={errors}
+            onFocusNode={onFocusNode}
+            setOpen={setOpen}
+          />
         )}
         {warnings.length > 0 && (
-          <AdvisorySection title="Warnings" list={warnings} onFocusNode={onFocusNode} setOpen={setOpen} />
+          <AdvisorySection
+            title="Warnings"
+            list={warnings}
+            onFocusNode={onFocusNode}
+            setOpen={setOpen}
+          />
         )}
         {infos.length > 0 && (
           <AdvisorySection title="Notes" list={infos} onFocusNode={onFocusNode} setOpen={setOpen} />
@@ -112,7 +135,10 @@ export function AdvisoryDrawer({ advisories, onFocusNode }: AdvisoryDrawerProps)
 }
 
 function AdvisorySection({
-  title, list, onFocusNode, setOpen,
+  title,
+  list,
+  onFocusNode,
+  setOpen,
 }: {
   title: string;
   list: Advisory[];
@@ -122,8 +148,10 @@ function AdvisorySection({
   const s = useStudioStyles();
   return (
     <div className={s.advisorySection}>
-      <div className={s.advisorySectionHead}>{title} · {list.length}</div>
-      {list.map(a => (
+      <div className={s.advisorySectionHead}>
+        {title} · {list.length}
+      </div>
+      {list.map((a) => (
         <div key={a.id} className={s.advisoryRow}>
           <span className={s.advisoryRowIcon}>{severityIcon(a.severity)}</span>
           <div style={{ flex: 1, minWidth: 0 }}>

@@ -1,98 +1,101 @@
 {
-	"name": "@mohsinonxrm/pptb-dataverse-request-studio",
-	"version": "1.1.2",
-	"publishConfig": {
-		"access": "public"
-	},
-	"type": "module",
-	"displayName": "Dataverse Request Studio",
-	"description": "Compose, preview, and execute Microsoft Dataverse Web API requests — a metadata-driven studio for OData queries, record writes, associations, action/function/workflow invocation, and file/image/attachment operations. Embeds in Power Platform ToolBox.",
-	"homepage": "https://dataverserequest.studio",
-	"author": "Mohsin On xRM",
-	"main": "index.html",
-	"icon": "icons/icon.svg",
-	"license": "AGPL-3.0-only",
-	"contributors": [
-		{
-			"name": "Mohsin On xRM",
-			"url": "https://github.com/mohsinonxrm"
-		},
-		{
-			"name": "Guido Preite",
-			"url": "https://github.com/GuidoPreite"
-		}
-	],
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio.git"
-	},
-	"bugs": {
-		"url": "https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues"
-	},
-	"keywords": [
-		"dataverse",
-		"power-platform",
-		"power-apps",
-		"dynamics-365",
-		"webapi",
-		"odata",
-		"request-builder",
-		"studio",
-		"pptb",
-		"toolbox",
-		"attribute-metadata",
-		"fetchxml",
-		"crm",
-		"xrm",
-		"microsoft"
-	],
-	"features": {
-		"multiConnection": "none",
-		"minAPI": "1.2.0"
-	},
-	"configurations": {
-		"repository": "https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio",
-		"website": "https://dataverserequest.studio",
-		"readmeUrl": "https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/README.md"
-	},
-	"files": [
-		"dist",
-		"icons",
-		"index.html",
-		"LICENSE",
-		"README.md",
-		"CHANGELOG.md",
-		"SECURITY.md",
-		"npm-shrinkwrap.json"
-	],
-	"scripts": {
-		"dev": "vite",
-		"build": "tsc -b && vite build",
-		"preview": "vite preview",
-		"typecheck": "tsc -b --noEmit",
-		"validate": "pptb-validate",
-		"finalize-package": "npm run validate && npm run build && npm shrinkwrap"
-	},
-	"dependencies": {
-		"@dnd-kit/core": "^6.3.1",
-		"@dnd-kit/sortable": "^10.0.0",
-		"@dnd-kit/utilities": "^3.2.2",
-		"@fluentui-contrib/react-data-grid-react-window": "^1.4.2",
-		"@fluentui/react-components": "^9.73.8",
-		"@fluentui/react-datepicker-compat": "^0.6.31",
-		"@fluentui/react-icons": "^2.0.326",
-		"@fluentui/react-timepicker-compat": "^0.4.34",
-		"@monaco-editor/react": "^4.7.0",
-		"monaco-editor": "^0.54.0",
-		"react": "^18.3.1",
-		"react-dom": "^18.3.1"
-	},
-	"devDependencies": {
-		"@pptb/types": "^1.2.1",
-		"@types/react": "^18.3.28",
-		"@types/react-dom": "^18.3.7",
-		"@vitejs/plugin-react": "^5.2.0",
-		"typescript": "~5.9.3",
-		"vite": "^7.3.3"
-	}
+  "name": "@mohsinonxrm/pptb-dataverse-request-studio",
+  "version": "1.1.2",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "displayName": "Dataverse Request Studio",
+  "description": "Compose, preview, and execute Microsoft Dataverse Web API requests — a metadata-driven studio for OData queries, record writes, associations, action/function/workflow invocation, and file/image/attachment operations. Embeds in Power Platform ToolBox.",
+  "homepage": "https://dataverserequest.studio",
+  "author": "Mohsin On xRM",
+  "main": "index.html",
+  "icon": "icons/icon.svg",
+  "license": "AGPL-3.0-only",
+  "contributors": [
+    {
+      "name": "Mohsin On xRM",
+      "url": "https://github.com/mohsinonxrm"
+    },
+    {
+      "name": "Guido Preite",
+      "url": "https://github.com/GuidoPreite"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues"
+  },
+  "keywords": [
+    "dataverse",
+    "power-platform",
+    "power-apps",
+    "dynamics-365",
+    "webapi",
+    "odata",
+    "request-builder",
+    "studio",
+    "pptb",
+    "toolbox",
+    "attribute-metadata",
+    "fetchxml",
+    "crm",
+    "xrm",
+    "microsoft"
+  ],
+  "features": {
+    "multiConnection": "none",
+    "minAPI": "1.2.0"
+  },
+  "configurations": {
+    "repository": "https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio",
+    "website": "https://dataverserequest.studio",
+    "readmeUrl": "https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/README.md"
+  },
+  "files": [
+    "dist",
+    "icons",
+    "index.html",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "npm-shrinkwrap.json"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "validate": "pptb-validate",
+    "finalize-package": "npm run validate && npm run build && npm shrinkwrap"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@fluentui-contrib/react-data-grid-react-window": "^1.4.2",
+    "@fluentui/react-components": "^9.73.8",
+    "@fluentui/react-datepicker-compat": "^0.6.31",
+    "@fluentui/react-icons": "^2.0.326",
+    "@fluentui/react-timepicker-compat": "^0.4.34",
+    "@monaco-editor/react": "^4.7.0",
+    "monaco-editor": "^0.54.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@pptb/types": "^1.2.1",
+    "@types/react": "^18.3.28",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^5.2.0",
+    "prettier": "^3.8.4",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.3"
+  }
 }

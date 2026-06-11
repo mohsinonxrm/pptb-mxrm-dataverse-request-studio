@@ -37,7 +37,11 @@
 
 import { dvHost } from './pptbBridge';
 import type {
-  CsdlAction, ActionParam, ActionBinding, ActionReturnType, EdmType,
+  CsdlAction,
+  ActionParam,
+  ActionBinding,
+  ActionReturnType,
+  EdmType,
 } from '../mock/actionsCsdl';
 
 // Tiny inline memoizer — CSDL is fetched at most twice per session (raw XML
@@ -98,13 +102,17 @@ export interface ActionsProvider {
 // throws `HostNotAvailableError` and consumers handle the failure
 // appropriately (picker shows an error message).
 export const actions: ActionsProvider = {
-  loadAll() { return fetchCsdlActions(); },
-  async find(name) { return (await fetchCsdlActions()).find(a => a.name === name); },
+  loadAll() {
+    return fetchCsdlActions();
+  },
+  async find(name) {
+    return (await fetchCsdlActions()).find((a) => a.name === name);
+  },
   async byCategory(cat) {
-    return (await fetchCsdlActions()).filter(a => a.source === cat && a.kind === 'Action');
+    return (await fetchCsdlActions()).filter((a) => a.source === cat && a.kind === 'Action');
   },
   async functionsByCategory(cat) {
-    return (await fetchCsdlActions()).filter(a => a.source === cat && a.kind === 'Function');
+    return (await fetchCsdlActions()).filter((a) => a.source === cat && a.kind === 'Function');
   },
 };
 
@@ -126,7 +134,7 @@ export const actions: ActionsProvider = {
 export function findActionSync(name: string): CsdlAction | undefined {
   if (!name) return undefined;
   const cached = csdlCache.get(K_CSDL_ACTIONS) as CsdlAction[] | undefined;
-  return cached?.find(a => a.name === name);
+  return cached?.find((a) => a.name === name);
 }
 
 /** Raw `$metadata` XML — exposed for debug/inspection. Rarely needed by app
@@ -271,13 +279,13 @@ function parseEnumType(el: Element): EnumTypeDef | null {
   if (!name) return null;
   const underlyingType = el.getAttribute('UnderlyingType') ?? 'Edm.Int32';
   const members = Array.from(el.getElementsByTagName('Member'))
-    .map(m => ({
+    .map((m) => ({
       name: m.getAttribute('Name') ?? '',
       // Some declarations omit Value (auto-increment from 0). When present
       // it's always a string; coerce to number.
       value: Number(m.getAttribute('Value') ?? '0'),
     }))
-    .filter(m => m.name);
+    .filter((m) => m.name);
   return { name, underlyingType, members };
 }
 
@@ -313,7 +321,9 @@ function parseComplexType(el: Element): ComplexTypeDef | null {
 }
 
 function parseActionOrFunction(
-  el: Element, namespace: string, kind: 'Action' | 'Function',
+  el: Element,
+  namespace: string,
+  kind: 'Action' | 'Function',
 ): CsdlAction | null {
   const name = el.getAttribute('Name');
   if (!name) return null;
@@ -345,13 +355,9 @@ function parseActionOrFunction(
       // Binding: `mscrm.<entity>` for bound-to-entity,
       // `Collection(mscrm.<entity>)` for bound-to-collection.
       const isCollection = rawType.startsWith('Collection(');
-      const stripped = isCollection
-        ? rawType.replace(/^Collection\((.+)\)$/, '$1')
-        : rawType;
+      const stripped = isCollection ? rawType.replace(/^Collection\((.+)\)$/, '$1') : rawType;
       const entityType = stripped.replace(/^mscrm\./, '');
-      binding = isCollection
-        ? { kind: 'collection', entityType }
-        : { kind: 'entity', entityType };
+      binding = isCollection ? { kind: 'collection', entityType } : { kind: 'entity', entityType };
       continue;
     }
 
@@ -371,7 +377,7 @@ function parseActionOrFunction(
         name: pName,
         type: 'OptionSetValue',
         required,
-        optionSet: enumDef.members.map(m => ({ value: m.value, label: m.name })),
+        optionSet: enumDef.members.map((m) => ({ value: m.value, label: m.name })),
       });
     } else if (complexDef) {
       params.push({
@@ -390,14 +396,13 @@ function parseActionOrFunction(
         required,
         // Per-type metadata (entityType for refs) — for EntityReference /
         // EntitySpecific / EntityCollection only.
-        ...(typeMetadataFromRaw(rawType)),
+        ...typeMetadataFromRaw(rawType),
       });
     }
   }
 
   const returnType = parseReturnType(el);
-  const isComposable =
-    kind === 'Function' && el.getAttribute('IsComposable') === 'true';
+  const isComposable = kind === 'Function' && el.getAttribute('IsComposable') === 'true';
 
   // Detect Dataverse query functions — they share a recognizable CSDL
   // signature: IsBound="true", first parameter named "PropertyName" of
@@ -410,9 +415,10 @@ function parseActionOrFunction(
   let isQueryFunction = false;
   if (kind === 'Function' && isBound && returnType.typeName === 'Edm.Boolean') {
     const first = paramEls[0];
-    if (first
-      && first.getAttribute('Name') === 'PropertyName'
-      && first.getAttribute('Type') === 'Edm.String'
+    if (
+      first &&
+      first.getAttribute('Name') === 'PropertyName' &&
+      first.getAttribute('Type') === 'Edm.String'
     ) {
       isQueryFunction = true;
     }
@@ -442,10 +448,7 @@ function parseActionOrFunction(
  * self-referencing types. Dataverse CSDL doesn't currently emit cycles but
  * defensive guard is cheap.
  */
-function resolveComplexFields(
-  def: ComplexTypeDef,
-  seen: Set<string> = new Set(),
-): ActionParam[] {
+function resolveComplexFields(def: ComplexTypeDef, seen: Set<string> = new Set()): ActionParam[] {
   if (seen.has(def.name)) return [];
   const nextSeen = new Set(seen);
   nextSeen.add(def.name);
@@ -458,14 +461,14 @@ function resolveComplexFields(
     if (base) inherited.push(...resolveComplexFields(base, nextSeen));
   }
 
-  const own: ActionParam[] = def.properties.map(p => {
+  const own: ActionParam[] = def.properties.map((p) => {
     const enumDef = lookupEnumType(p.type);
     if (enumDef) {
       return {
         name: p.name,
         type: 'OptionSetValue' as const,
         required: !p.nullable,
-        optionSet: enumDef.members.map(m => ({ value: m.value, label: m.name })),
+        optionSet: enumDef.members.map((m) => ({ value: m.value, label: m.name })),
       };
     }
     const childComplex = lookupComplexType(p.type);
@@ -484,7 +487,7 @@ function resolveComplexFields(
       name: p.name,
       type: csdlTypeToEdm(p.type),
       required: !p.nullable,
-      ...(typeMetadataFromRaw(p.type)),
+      ...typeMetadataFromRaw(p.type),
     };
   });
 
@@ -521,18 +524,18 @@ function parseReturnType(el: Element): ActionReturnType {
 // ── Type translation ────────────────────────────────────────────────────
 
 const PRIMITIVE_EDM: Record<string, EdmType> = {
-  'Edm.String':          'Edm.String',
-  'Edm.Int32':           'Edm.Int32',
-  'Edm.Int64':           'Edm.Int64',
-  'Edm.Boolean':         'Edm.Boolean',
-  'Edm.DateTimeOffset':  'Edm.DateTimeOffset',
-  'Edm.Guid':            'Edm.Guid',
-  'Edm.Decimal':         'Edm.Decimal',
-  'Edm.Double':          'Edm.Double',
-  'Edm.Binary':          'Edm.Binary',
+  'Edm.String': 'Edm.String',
+  'Edm.Int32': 'Edm.Int32',
+  'Edm.Int64': 'Edm.Int64',
+  'Edm.Boolean': 'Edm.Boolean',
+  'Edm.DateTimeOffset': 'Edm.DateTimeOffset',
+  'Edm.Guid': 'Edm.Guid',
+  'Edm.Decimal': 'Edm.Decimal',
+  'Edm.Double': 'Edm.Double',
+  'Edm.Binary': 'Edm.Binary',
   'Collection(Edm.String)': 'Collection(Edm.String)',
-  'Collection(Edm.Int32)':  'Collection(Edm.Int32)',
-  'Collection(Edm.Guid)':   'Collection(Edm.Guid)',
+  'Collection(Edm.Int32)': 'Collection(Edm.Int32)',
+  'Collection(Edm.Guid)': 'Collection(Edm.Guid)',
 };
 
 function csdlTypeToEdm(raw: string): EdmType {

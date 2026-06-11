@@ -25,14 +25,26 @@
 
 import { useMemo, useState } from 'react';
 import {
-  Settings20Regular, Settings20Filled,
-  LineHorizontal320Regular, LineHorizontal320Filled,
-  ChevronRight20Regular, ChevronRight20Filled,
-  Open20Regular, ClipboardPaste20Regular, Dismiss20Regular,
+  Settings20Regular,
+  Settings20Filled,
+  LineHorizontal320Regular,
+  LineHorizontal320Filled,
+  ChevronRight20Regular,
+  ChevronRight20Filled,
+  Open20Regular,
+  ClipboardPaste20Regular,
+  Dismiss20Regular,
 } from '@fluentui/react-icons';
 import {
-  Field, Textarea, MessageBar, MessageBarBody, MessageBarTitle, Caption1,
-  tokens, Button, Tooltip,
+  Field,
+  Textarea,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
+  Caption1,
+  tokens,
+  Button,
+  Tooltip,
 } from '@fluentui/react-components';
 import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
@@ -81,8 +93,14 @@ interface NextLinkAnalysis {
 
 function analyzeNextLink(raw: string, currentHost: string): NextLinkAnalysis {
   const empty: NextLinkAnalysis = {
-    ok: false, url: null, host: '', path: '', entitySet: null,
-    skiptoken: null, params: [], errors: [],
+    ok: false,
+    url: null,
+    host: '',
+    path: '',
+    entitySet: null,
+    skiptoken: null,
+    params: [],
+    errors: [],
   };
   if (!raw.trim()) return empty;
   let url: URL;
@@ -96,13 +114,15 @@ function analyzeNextLink(raw: string, currentHost: string): NextLinkAnalysis {
   // Web-API path shape: /api/data/v<n>.<n>/<entitySet>[?...]
   const apiMatch = url.pathname.match(/^\/api\/data\/v\d+\.\d+\/([^/?]+)/);
   if (!apiMatch) {
-    errors.push('Path doesn\'t look like a Dataverse Web API URL (expected /api/data/v<x>.<x>/<entityset>).');
+    errors.push(
+      "Path doesn't look like a Dataverse Web API URL (expected /api/data/v<x>.<x>/<entityset>).",
+    );
   }
   // Cross-org check — pasted URL must point at the currently-connected host.
   if (currentHost && url.host && url.host.toLowerCase() !== currentHost.toLowerCase()) {
     errors.push(
       `URL host (${url.host}) doesn't match the connected environment (${currentHost}). ` +
-      'Switch connections or paste a URL from the current org.',
+        'Switch connections or paste a URL from the current org.',
     );
   }
   const params: { key: string; value: string }[] = [];
@@ -133,9 +153,18 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
   const built = useMemo(() => buildRetrieveNextLink(state), [state]);
   const analysis = useMemo(() => analyzeNextLink(state.url, env.host), [state.url, env.host]);
 
-  const markDirty = (id: ClauseId) => setState(s => { const d = new Set(s.dirty); d.add(id); return { ...s, dirty: d }; });
-  const set = <K extends keyof RetrieveNextLinkState>(k: K, v: RetrieveNextLinkState[K], dirtyId?: ClauseId) => {
-    setState(s => ({ ...s, [k]: v }));
+  const markDirty = (id: ClauseId) =>
+    setState((s) => {
+      const d = new Set(s.dirty);
+      d.add(id);
+      return { ...s, dirty: d };
+    });
+  const set = <K extends keyof RetrieveNextLinkState>(
+    k: K,
+    v: RetrieveNextLinkState[K],
+    dirtyId?: ClauseId,
+  ) => {
+    setState((s) => ({ ...s, [k]: v }));
     if (dirtyId) markDirty(dirtyId);
   };
 
@@ -160,19 +189,29 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents(rs => [{
-      id: `r-${Date.now()}`, modeId: 'retrieve-nextlink',
-      url: state.url, method: 'GET', ts: Date.now(),
-      status: res.status, ms: res.ms,
-      rowCount: ((res.body as { value?: unknown[] } | null)?.value?.length) ?? 0,
-    }, ...rs].slice(0, 8));
-    setState(s => ({ ...s, dirty: new Set() }));
+    setRecents((rs) =>
+      [
+        {
+          id: `r-${Date.now()}`,
+          modeId: 'retrieve-nextlink',
+          url: state.url,
+          method: 'GET',
+          ts: Date.now(),
+          status: res.status,
+          ms: res.ms,
+          rowCount: (res.body as { value?: unknown[] } | null)?.value?.length ?? 0,
+        },
+        ...rs,
+      ].slice(0, 8),
+    );
+    setState((s) => ({ ...s, dirty: new Set() }));
   };
 
-  const disabledReason =
-    !state.url.trim() ? 'Paste an @odata.nextLink URL first.' :
-    !analysis.ok ? (analysis.errors[0] ?? 'URL is not safe to follow.') :
-    null;
+  const disabledReason = !state.url.trim()
+    ? 'Paste an @odata.nextLink URL first.'
+    : !analysis.ok
+      ? (analysis.errors[0] ?? 'URL is not safe to follow.')
+      : null;
 
   const onPaste = async () => {
     try {
@@ -185,158 +224,206 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const sections = [
     {
-      id: 'url', label: 'Target', meta: 'Server-issued',
-      items: [{
-        id: 'url',
-        icon: ChevronRight20Regular, iconFilled: ChevronRight20Filled,
-        label: '@odata.nextLink',
-        badge: analysis.entitySet ?? (state.url ? 'invalid' : 'empty'),
-        badgeAppearance: 'ghost' as const,
-        badgeColor: analysis.errors.length ? ('danger' as const) : analysis.entitySet ? ('informative' as const) : ('subtle' as const),
-        dirty: state.dirty.has('url'),
-      }],
+      id: 'url',
+      label: 'Target',
+      meta: 'Server-issued',
+      items: [
+        {
+          id: 'url',
+          icon: ChevronRight20Regular,
+          iconFilled: ChevronRight20Filled,
+          label: '@odata.nextLink',
+          badge: analysis.entitySet ?? (state.url ? 'invalid' : 'empty'),
+          badgeAppearance: 'ghost' as const,
+          badgeColor: analysis.errors.length
+            ? ('danger' as const)
+            : analysis.entitySet
+              ? ('informative' as const)
+              : ('subtle' as const),
+          dirty: state.dirty.has('url'),
+        },
+      ],
     },
     {
-      id: 'prefer', label: 'Prefer',
-      items: [{
-        id: 'prefer',
-        icon: Settings20Regular, iconFilled: Settings20Filled,
-        label: 'Prefer header',
-        badge: preferToHeaderString(state.prefer) ? 'on' : null, badgeAppearance: 'ghost' as const,
-        dirty: state.dirty.has('prefer'),
-      }],
+      id: 'prefer',
+      label: 'Prefer',
+      items: [
+        {
+          id: 'prefer',
+          icon: Settings20Regular,
+          iconFilled: Settings20Filled,
+          label: 'Prefer header',
+          badge: preferToHeaderString(state.prefer) ? 'on' : null,
+          badgeAppearance: 'ghost' as const,
+          dirty: state.dirty.has('prefer'),
+        },
+      ],
     },
     {
-      id: 'headers', label: 'Headers', meta: `${state.headers.filter(h => h.enabled).length} active`,
-      items: [{
-        id: 'headers', icon: LineHorizontal320Regular, iconFilled: LineHorizontal320Filled,
-        label: 'HTTP headers',
-        badge: state.headers.filter(h => h.enabled).length || null,
-        dirty: state.dirty.has('headers'),
-      }],
+      id: 'headers',
+      label: 'Headers',
+      meta: `${state.headers.filter((h) => h.enabled).length} active`,
+      items: [
+        {
+          id: 'headers',
+          icon: LineHorizontal320Regular,
+          iconFilled: LineHorizontal320Filled,
+          label: 'HTTP headers',
+          badge: state.headers.filter((h) => h.enabled).length || null,
+          dirty: state.dirty.has('headers'),
+        },
+      ],
     },
   ];
 
   let pane: React.ReactNode;
   switch (activeNode) {
-    case 'url': pane = (
-      <div>
-        <PaneHead
-          icon={ChevronRight20Filled}
-          title="Next-link URL"
-          sub="Paste the @odata.nextLink returned by the previous page. The URL is opaque — clauses are not editable here."
-        />
-
-        <MessageBar layout="multiline" intent="info" style={{ marginBottom: 12 }}>
-          <MessageBarBody>
-            <MessageBarTitle>Why no clause editor?</MessageBarTitle>
-            The next page must use the <strong>same shape</strong> as the original query. Dataverse
-            encodes paging state in a <code>$skiptoken</code> cookie — editing any other clause
-            invalidates the cursor.
-          </MessageBarBody>
-        </MessageBar>
-
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          <Tooltip content="Paste from clipboard" relationship="label">
-            <Button
-              icon={<ClipboardPaste20Regular />}
-              appearance="outline"
-              size="small"
-              onClick={onPaste}
-            >
-              Paste
-            </Button>
-          </Tooltip>
-          <Tooltip content="Clear the URL field" relationship="label">
-            <Button
-              icon={<Dismiss20Regular />}
-              appearance="subtle"
-              size="small"
-              disabled={!state.url}
-              onClick={() => set('url', '', 'url')}
-            >
-              Clear
-            </Button>
-          </Tooltip>
-        </div>
-
-        <Field label="@odata.nextLink" hint="The full URL including https://. Skiptoken cookies are URL-encoded inside.">
-          <Textarea
-            rows={6}
-            value={state.url}
-            onChange={(_, d) => set('url', d.value, 'url')}
-            placeholder={`https://${env.host}/api/data/v9.2/<entityset>?$select=…&$skiptoken=…`}
-            style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 11 }}
+    case 'url':
+      pane = (
+        <div>
+          <PaneHead
+            icon={ChevronRight20Filled}
+            title="Next-link URL"
+            sub="Paste the @odata.nextLink returned by the previous page. The URL is opaque — clauses are not editable here."
           />
-        </Field>
 
-        {/* Errors stack — one MessageBar per error so each is independently readable.
-            Mirrors what the URL-bar AdvisoryDrawer shows; redundancy is intentional
-            because the pane is where users land when they click an advisory's "Open". */}
-        {analysis.errors.map((err, i) => (
-          <MessageBar key={i} intent="error" layout="multiline" style={{ marginTop: 12 }}>
+          <MessageBar layout="multiline" intent="info" style={{ marginBottom: 12 }}>
             <MessageBarBody>
-              <MessageBarTitle>Can&apos;t follow this URL</MessageBarTitle>
-              {err}
+              <MessageBarTitle>Why no clause editor?</MessageBarTitle>
+              The next page must use the <strong>same shape</strong> as the original query.
+              Dataverse encodes paging state in a <code>$skiptoken</code> cookie — editing any other
+              clause invalidates the cursor.
             </MessageBarBody>
           </MessageBar>
-        ))}
 
-        {analysis.url && analysis.ok && (
-          <div style={{
-            marginTop: 16,
-            padding: 12,
-            border: `1px solid ${tokens.colorNeutralStroke2}`,
-            borderRadius: tokens.borderRadiusMedium,
-            background: tokens.colorNeutralBackground1,
-          }}>
-            <Caption1 style={{
-              display: 'block',
-              fontWeight: 600,
-              marginBottom: 8,
-              color: tokens.colorNeutralForeground2,
-            }}>
-              Parsed (read-only)
-            </Caption1>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '120px 1fr',
-              rowGap: 4,
-              columnGap: 12,
-              fontFamily: tokens.fontFamilyMonospace,
-              fontSize: 11,
-            }}>
-              <span style={{ color: tokens.colorNeutralForeground3 }}>host</span>
-              <span>{analysis.host}</span>
-              <span style={{ color: tokens.colorNeutralForeground3 }}>entityset</span>
-              <span>{analysis.entitySet ?? '—'}</span>
-              {analysis.params.map((p, i) => (
-                <span key={i} style={{ display: 'contents' }}>
-                  <span style={{ color: tokens.colorBrandForeground1 }}>{p.key}</span>
-                  <span style={{ wordBreak: 'break-all' }}>{decodeURIComponent(p.value)}</span>
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {analysis.ok && (
-          <div style={{ marginTop: 16 }}>
-            <Tooltip content="Open the parsed URL in a new tab (auth will be required)" relationship="description">
-              <Button icon={<Open20Regular />} appearance="outline" onClick={() => window.open(state.url, '_blank', 'noopener')}>
-                Open in new tab
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            <Tooltip content="Paste from clipboard" relationship="label">
+              <Button
+                icon={<ClipboardPaste20Regular />}
+                appearance="outline"
+                size="small"
+                onClick={onPaste}
+              >
+                Paste
+              </Button>
+            </Tooltip>
+            <Tooltip content="Clear the URL field" relationship="label">
+              <Button
+                icon={<Dismiss20Regular />}
+                appearance="subtle"
+                size="small"
+                disabled={!state.url}
+                onClick={() => set('url', '', 'url')}
+              >
+                Clear
               </Button>
             </Tooltip>
           </div>
-        )}
-      </div>
-    ); break;
-    case 'prefer':  pane = <PreferEditor spec={state.prefer} setSpec={p => set('prefer', p, 'prefer')} />; break;
-    case 'headers': pane = <HeadersEditor items={state.headers} setItems={h => set('headers', h, 'headers')} />; break;
+
+          <Field
+            label="@odata.nextLink"
+            hint="The full URL including https://. Skiptoken cookies are URL-encoded inside."
+          >
+            <Textarea
+              rows={6}
+              value={state.url}
+              onChange={(_, d) => set('url', d.value, 'url')}
+              placeholder={`https://${env.host}/api/data/v9.2/<entityset>?$select=…&$skiptoken=…`}
+              style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 11 }}
+            />
+          </Field>
+
+          {/* Errors stack — one MessageBar per error so each is independently readable.
+            Mirrors what the URL-bar AdvisoryDrawer shows; redundancy is intentional
+            because the pane is where users land when they click an advisory's "Open". */}
+          {analysis.errors.map((err, i) => (
+            <MessageBar key={i} intent="error" layout="multiline" style={{ marginTop: 12 }}>
+              <MessageBarBody>
+                <MessageBarTitle>Can&apos;t follow this URL</MessageBarTitle>
+                {err}
+              </MessageBarBody>
+            </MessageBar>
+          ))}
+
+          {analysis.url && analysis.ok && (
+            <div
+              style={{
+                marginTop: 16,
+                padding: 12,
+                border: `1px solid ${tokens.colorNeutralStroke2}`,
+                borderRadius: tokens.borderRadiusMedium,
+                background: tokens.colorNeutralBackground1,
+              }}
+            >
+              <Caption1
+                style={{
+                  display: 'block',
+                  fontWeight: 600,
+                  marginBottom: 8,
+                  color: tokens.colorNeutralForeground2,
+                }}
+              >
+                Parsed (read-only)
+              </Caption1>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '120px 1fr',
+                  rowGap: 4,
+                  columnGap: 12,
+                  fontFamily: tokens.fontFamilyMonospace,
+                  fontSize: 11,
+                }}
+              >
+                <span style={{ color: tokens.colorNeutralForeground3 }}>host</span>
+                <span>{analysis.host}</span>
+                <span style={{ color: tokens.colorNeutralForeground3 }}>entityset</span>
+                <span>{analysis.entitySet ?? '—'}</span>
+                {analysis.params.map((p, i) => (
+                  <span key={i} style={{ display: 'contents' }}>
+                    <span style={{ color: tokens.colorBrandForeground1 }}>{p.key}</span>
+                    <span style={{ wordBreak: 'break-all' }}>{decodeURIComponent(p.value)}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {analysis.ok && (
+            <div style={{ marginTop: 16 }}>
+              <Tooltip
+                content="Open the parsed URL in a new tab (auth will be required)"
+                relationship="description"
+              >
+                <Button
+                  icon={<Open20Regular />}
+                  appearance="outline"
+                  onClick={() => window.open(state.url, '_blank', 'noopener')}
+                >
+                  Open in new tab
+                </Button>
+              </Tooltip>
+            </div>
+          )}
+        </div>
+      );
+      break;
+    case 'prefer':
+      pane = <PreferEditor spec={state.prefer} setSpec={(p) => set('prefer', p, 'prefer')} />;
+      break;
+    case 'headers':
+      pane = <HeadersEditor items={state.headers} setItems={(h) => set('headers', h, 'headers')} />;
+      break;
   }
 
   const headersMap = headerItemsToObject(state.headers, preferToHeaderString(state.prefer));
-  const codeInputs = { method: 'GET', built, headers: headersMap, isNextLink: true, rawNextLink: state.url };
+  const codeInputs = {
+    method: 'GET',
+    built,
+    headers: headersMap,
+    isNextLink: true,
+    rawNextLink: state.url,
+  };
 
   return (
     <ModeShell
@@ -346,7 +433,10 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
           urlPreview={built.relativeNoBase}
           sections={sections}
           activeNode={activeNode}
-          onSelect={(id) => setActiveNode(id as ClauseId)}
+          onSelect={(id) => {
+            setActiveNode(id as ClauseId);
+            setTab('builder');
+          }}
           recents={recents}
         />
       }
@@ -363,9 +453,13 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
         />
       }
     >
-      <MainTabs tab={tab} onTabChange={setTab} resultCount={(result?.body as { value?: unknown[] } | null)?.value?.length ?? null}>
+      <MainTabs
+        tab={tab}
+        onTabChange={setTab}
+        resultCount={(result?.body as { value?: unknown[] } | null)?.value?.length ?? null}
+      >
         {tab === 'builder' && pane}
-        {tab === 'code'    && <CodeView themeMode={themeMode} inputs={codeInputs} />}
+        {tab === 'code' && <CodeView themeMode={themeMode} inputs={codeInputs} />}
         {tab === 'results' && <ResultsView result={result} mode="next" />}
       </MainTabs>
     </ModeShell>

@@ -14,20 +14,45 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Dialog, DialogTrigger, DialogSurface, DialogTitle, DialogBody, DialogActions, DialogContent,
-  Popover, PopoverTrigger, PopoverSurface,
-  Button, Input, Caption1, Badge, tokens, Tooltip,
-  MessageBar, MessageBarBody, MessageBarTitle,
-  mergeClasses, makeStyles,
+  Dialog,
+  DialogTrigger,
+  DialogSurface,
+  DialogTitle,
+  DialogBody,
+  DialogActions,
+  DialogContent,
+  Popover,
+  PopoverTrigger,
+  PopoverSurface,
+  Button,
+  Input,
+  Caption1,
+  Badge,
+  tokens,
+  Tooltip,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
+  mergeClasses,
+  makeStyles,
 } from '@fluentui/react-components';
 import {
-  Save20Regular, Save20Filled, BookmarkMultiple20Regular,
-  Delete20Regular, Edit20Regular, Dismiss20Regular, Open16Regular,
+  Save20Regular,
+  Save20Filled,
+  BookmarkMultiple20Regular,
+  Delete20Regular,
+  Edit20Regular,
+  Dismiss20Regular,
+  Open16Regular,
   Checkmark16Filled,
 } from '@fluentui/react-icons';
 import {
-  autoSuggestName, newSavedId, getOrgScope, tableNameFromState,
-  type SavedRequest, type SavedModeId,
+  autoSuggestName,
+  newSavedId,
+  getOrgScope,
+  tableNameFromState,
+  type SavedRequest,
+  type SavedModeId,
 } from '../state/savedRequests';
 import { useSavedRequests } from '../state/useSavedRequests';
 
@@ -172,9 +197,7 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
     <Dialog open={open} onOpenChange={(_, d) => setOpen(d.open)}>
       <DialogTrigger disableButtonEnhancement>
         <Tooltip
-          content={dirty
-            ? 'Save current request (unsaved changes)'
-            : 'No changes since last save'}
+          content={dirty ? 'Save current request (unsaved changes)' : 'No changes since last save'}
           relationship="label"
         >
           <Button
@@ -199,15 +222,20 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
             Save request
           </DialogTitle>
           <DialogContent>
-            <Caption1 style={{ display: 'block', marginBottom: 6, color: tokens.colorNeutralForeground2 }}>
+            <Caption1
+              style={{ display: 'block', marginBottom: 6, color: tokens.colorNeutralForeground2 }}
+            >
               Saved requests live in this browser&apos;s storage, scoped to{' '}
-              <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{getOrgScope()}</code>.
-              Other Dataverse connections have their own saved-request lists. Name auto-suggested
-              from the current entity, select, and filter counts.
+              <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{getOrgScope()}</code>. Other
+              Dataverse connections have their own saved-request lists. Name auto-suggested from the
+              current entity, select, and filter counts.
             </Caption1>
             <Input
               value={name}
-              onChange={(_, d) => { setName(d.value); setConfirmOverwrite(false); }}
+              onChange={(_, d) => {
+                setName(d.value);
+                setConfirmOverwrite(false);
+              }}
               placeholder="Untitled request"
               style={{ width: '100%' }}
               autoFocus
@@ -221,9 +249,9 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
             {confirmOverwrite && (
               <MessageBar layout="multiline" intent="warning" style={{ marginTop: 12 }}>
                 <MessageBarBody>
-                  <MessageBarTitle>Name in use</MessageBarTitle>
-                  A saved request already uses <code>{name.trim()}</code>. Save again to overwrite
-                  it, or change the name above and Save.
+                  <MessageBarTitle>Name in use</MessageBarTitle>A saved request already uses{' '}
+                  <code>{name.trim()}</code>. Save again to overwrite it, or change the name above
+                  and Save.
                 </MessageBarBody>
               </MessageBar>
             )}
@@ -290,9 +318,10 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
   // with modeId at save time.
   const scope = getOrgScope();
   const list = useMemo(
-    () => saved
-      .filter(e => e.modeId === modeId && (!e.orgScope || e.orgScope === scope))
-      .sort((a, b) => b.savedAt - a.savedAt),
+    () =>
+      saved
+        .filter((e) => e.modeId === modeId && (!e.orgScope || e.orgScope === scope))
+        .sort((a, b) => b.savedAt - a.savedAt),
     [saved, modeId, scope],
   );
 
@@ -304,7 +333,13 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
   };
 
   return (
-    <Popover open={open} onOpenChange={(_, d) => { setOpen(d.open); setRenameId(null); }}>
+    <Popover
+      open={open}
+      onOpenChange={(_, d) => {
+        setOpen(d.open);
+        setRenameId(null);
+      }}
+    >
       <PopoverTrigger disableButtonEnhancement>
         <Tooltip content="Open saved requests" relationship="label">
           <Button
@@ -322,7 +357,9 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
         </Tooltip>
       </PopoverTrigger>
       <PopoverSurface style={{ padding: 8 }}>
-        <Caption1 style={{ display: 'block', padding: '6px 10px', color: tokens.colorNeutralForeground3 }}>
+        <Caption1
+          style={{ display: 'block', padding: '6px 10px', color: tokens.colorNeutralForeground3 }}
+        >
           {list.length === 0
             ? 'No saved requests yet — click Save to create one.'
             : `${list.length} saved · click to load, hover for rename/delete`}
@@ -334,14 +371,21 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
           </div>
         ) : (
           <div className={s.libraryList}>
-            {list.map(entry => {
+            {list.map((entry) => {
               const isCurrent = entry.id === currentId;
               const isRenaming = entry.id === renameId;
               return (
                 <div
                   key={entry.id}
                   className={mergeClasses(s.libraryRow)}
-                  style={isCurrent ? { borderColor: tokens.colorBrandStroke1, backgroundColor: tokens.colorBrandBackground2 } : undefined}
+                  style={
+                    isCurrent
+                      ? {
+                          borderColor: tokens.colorBrandStroke1,
+                          backgroundColor: tokens.colorBrandBackground2,
+                        }
+                      : undefined
+                  }
                   onClick={() => {
                     if (isRenaming) return;
                     onLoad(entry);
@@ -352,7 +396,11 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
                     appearance="tint"
                     color={isCurrent ? 'brand' : 'informative'}
                     size="small"
-                    style={{ fontFamily: tokens.fontFamilyMonospace, minWidth: 80, justifyContent: 'center' }}
+                    style={{
+                      fontFamily: tokens.fontFamilyMonospace,
+                      minWidth: 80,
+                      justifyContent: 'center',
+                    }}
                   >
                     {modeIdShort(entry.modeId)}
                   </Badge>
@@ -365,8 +413,14 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
                         style={{ width: '100%' }}
                         onClick={(e) => e.stopPropagation()}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') { e.preventDefault(); onCommitRename(); }
-                          if (e.key === 'Escape') { e.preventDefault(); setRenameId(null); }
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            onCommitRename();
+                          }
+                          if (e.key === 'Escape') {
+                            e.preventDefault();
+                            setRenameId(null);
+                          }
                         }}
                         onBlur={onCommitRename}
                         autoFocus

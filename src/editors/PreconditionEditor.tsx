@@ -26,7 +26,13 @@
 // "Advanced" sub-pane like Upsert previously had.
 
 import {
-  Field, Input, Button, Caption1, Radio, RadioGroup, tokens,
+  Field,
+  Input,
+  Button,
+  Caption1,
+  Radio,
+  RadioGroup,
+  tokens,
   mergeClasses,
 } from '@fluentui/react-components';
 import { ShieldLock20Filled } from '@fluentui/react-icons';
@@ -60,22 +66,22 @@ export interface PreconditionEditorProps {
 /** Static label + description for each kind. Stays the same across modes; the
  *  caller only controls availability. */
 const KIND_META: Record<PreconditionKind, { title: string; header: string; body: string }> = {
-  'none': {
+  none: {
     title: 'None',
     header: '(no header)',
-    body: 'Proceed regardless of the row\'s state. Server decides what to do (default for Upsert: create if missing, update if present).',
+    body: "Proceed regardless of the row's state. Server decides what to do (default for Upsert: create if missing, update if present).",
   },
   'update-only': {
     title: 'Require existing record',
     header: 'If-Match: *',
-    body: 'Fail with 412 Precondition Failed if no record matches the addressed key. Use to guarantee you\'re updating an existing row.',
+    body: "Fail with 412 Precondition Failed if no record matches the addressed key. Use to guarantee you're updating an existing row.",
   },
   'create-only': {
     title: 'Require absent record',
     header: 'If-None-Match: *',
     body: 'Fail with 412 Precondition Failed if a record already matches the addressed key. Upsert "insert-only" — never overwrite.',
   },
-  'etag': {
+  etag: {
     title: 'Match specific version (ETag)',
     header: 'If-Match: "<etag>"',
     body: 'Fail with 412 Precondition Failed if the record has been modified since the supplied ETag was issued. Classic optimistic concurrency.',
@@ -85,7 +91,11 @@ const KIND_META: Record<PreconditionKind, { title: string; header: string; body:
 const ALL_KINDS: PreconditionKind[] = ['none', 'update-only', 'create-only', 'etag'];
 
 export function PreconditionEditor({
-  mode, setMode, available = ALL_KINDS, currentEtag, group = 'write',
+  mode,
+  setMode,
+  available = ALL_KINDS,
+  currentEtag,
+  group = 'write',
 }: PreconditionEditorProps) {
   const s = useStudioStyles();
   const selected = mode.kind;
@@ -110,11 +120,8 @@ export function PreconditionEditor({
       />
 
       <div style={{ maxWidth: 720 }}>
-        <RadioGroup
-          value={selected}
-          onChange={(_, d) => onPick(d.value as PreconditionKind)}
-        >
-          {available.map(kind => {
+        <RadioGroup value={selected} onChange={(_, d) => onPick(d.value as PreconditionKind)}>
+          {available.map((kind) => {
             const meta = KIND_META[kind];
             const isSelected = selected === kind;
             return (
@@ -135,16 +142,25 @@ export function PreconditionEditor({
                   value={kind}
                   label={
                     <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 4 }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          flexWrap: 'wrap',
+                        }}
+                      >
                         <strong style={{ fontSize: 13 }}>{meta.title}</strong>
-                        <code style={{
-                          fontFamily: tokens.fontFamilyMonospace,
-                          fontSize: 11,
-                          color: tokens.colorBrandForeground2,
-                          background: tokens.colorBrandBackground2Hover,
-                          padding: '2px 6px',
-                          borderRadius: tokens.borderRadiusSmall,
-                        }}>
+                        <code
+                          style={{
+                            fontFamily: tokens.fontFamilyMonospace,
+                            fontSize: 11,
+                            color: tokens.colorBrandForeground2,
+                            background: tokens.colorBrandBackground2Hover,
+                            padding: '2px 6px',
+                            borderRadius: tokens.borderRadiusSmall,
+                          }}
+                        >
                           {meta.header}
                         </code>
                       </span>
@@ -158,10 +174,19 @@ export function PreconditionEditor({
                 {/* ETag input renders inline under the radio when "etag" is selected.
                     Replaces the old separate "Advanced" sub-pane in Upsert. */}
                 {kind === 'etag' && isSelected && (
-                  <div style={{ marginTop: 10, marginLeft: 26, display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 520 }}>
+                  <div
+                    style={{
+                      marginTop: 10,
+                      marginLeft: 26,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 6,
+                      maxWidth: 520,
+                    }}
+                  >
                     <Field
                       label="ETag value"
-                      hint="Pulled from a previous response's @odata.etag — looks like `W/&quot;7281965&quot;`."
+                      hint='Pulled from a previous response&apos;s @odata.etag — looks like `W/"7281965"`.'
                     >
                       <span style={{ display: 'flex', gap: 6 }}>
                         <Input
@@ -203,8 +228,10 @@ export function PreconditionEditor({
  */
 export function preconditionToHeader(m: ConcurrencyMode): { name: string; value: string } | null {
   switch (m.kind) {
-    case 'update-only': return { name: 'If-Match',      value: '*' };
-    case 'create-only': return { name: 'If-None-Match', value: '*' };
+    case 'update-only':
+      return { name: 'If-Match', value: '*' };
+    case 'create-only':
+      return { name: 'If-None-Match', value: '*' };
     case 'etag':
       if (!m.etag.trim()) return null;
       return { name: 'If-Match', value: m.etag };

@@ -16,9 +16,7 @@ export function ModeCard({ type, urlPreview }: { type: RequestType; urlPreview: 
           matches every other hover surface in the app, and we get
           keyboard-focus tooltips for free. */}
       <Tooltip content={urlPreview} relationship="description" positioning="below">
-        <div className={s.modeCardUrl}>
-          {urlPreview}
-        </div>
+        <div className={s.modeCardUrl}>{urlPreview}</div>
       </Tooltip>
     </div>
   );

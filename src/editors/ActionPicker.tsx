@@ -12,7 +12,17 @@
 //   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/use-web-api-functions
 
 import { useEffect, useMemo, useState } from 'react';
-import { Field, Combobox, Option, Badge, Caption1, tokens, Spinner, MessageBar, MessageBarBody } from '@fluentui/react-components';
+import {
+  Field,
+  Combobox,
+  Option,
+  Badge,
+  Caption1,
+  tokens,
+  Spinner,
+  MessageBar,
+  MessageBarBody,
+} from '@fluentui/react-components';
 import { Flash20Filled, Code20Filled, BoxMultiple20Regular } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
 import { type CsdlAction } from '../mock/actionsCsdl';
@@ -43,7 +53,12 @@ const SCOPE_UNBOUND = '__unbound__';
 const SCOPE_EMPTY = '';
 
 export function ActionPicker({
-  filter, value, title, sub, onChange, group = 'execute',
+  filter,
+  value,
+  title,
+  sub,
+  onChange,
+  group = 'execute',
 }: ActionPickerProps) {
   // Two-dropdown UX. Each has TWO state fields:
   //   • The committed value (`scope` / `value` — the latter is parent-owned)
@@ -62,10 +77,17 @@ export function ActionPicker({
   const [loadError, setLoadError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
-    actionsProvider.loadAll()
-      .then(list => { if (!cancelled) setLoaded(list); })
-      .catch(e => { if (!cancelled) setLoadError(e instanceof Error ? e.message : String(e)); });
-    return () => { cancelled = true; };
+    actionsProvider
+      .loadAll()
+      .then((list) => {
+        if (!cancelled) setLoaded(list);
+      })
+      .catch((e) => {
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const loading = loaded === null && !loadError;
@@ -102,15 +124,14 @@ export function ActionPicker({
   const filteredEntities = useMemo(() => {
     if (!isFilteringScope) return scopeOptions.entities;
     const q = scopeQuery;
-    return scopeOptions.entities.filter(s => {
+    return scopeOptions.entities.filter((s) => {
       if (s.logicalName.toLowerCase().includes(q)) return true;
       const tt = findTable(s.logicalName);
       return tt ? tt.displayName.toLowerCase().includes(q) : false;
     });
   }, [scopeOptions.entities, isFilteringScope, scopeQuery]);
   const showUnboundOption =
-    scopeOptions.unboundCount > 0 &&
-    (!isFilteringScope || 'unbound'.includes(scopeQuery));
+    scopeOptions.unboundCount > 0 && (!isFilteringScope || 'unbound'.includes(scopeQuery));
 
   // ── Operation list filtered by scope + search ──
   //
@@ -121,22 +142,24 @@ export function ActionPicker({
   // scope at all.
   const inScope = useMemo(() => {
     if (scope === SCOPE_EMPTY) return [] as CsdlAction[];
-    if (scope === SCOPE_UNBOUND) return all.filter(a => a.binding.kind === 'unbound');
-    return all.filter(a => a.binding.kind !== 'unbound' && a.binding.entityType === scope);
+    if (scope === SCOPE_UNBOUND) return all.filter((a) => a.binding.kind === 'unbound');
+    return all.filter((a) => a.binding.kind !== 'unbound' && a.binding.entityType === scope);
   }, [all, scope]);
 
   // Op-input is freeform — treat it as a filter unless it already matches the
   // committed selection's display name (post-selection state).
-  const current = value ? all.find(a => a.name === value) : undefined;
+  const current = value ? all.find((a) => a.name === value) : undefined;
   const committedOpDisplay = current?.displayName ?? current?.name ?? '';
   const isFilteringOp = opInput.trim().length > 0 && opInput.trim() !== committedOpDisplay;
   const filtered = useMemo(() => {
     if (!isFilteringOp) return inScope;
     const q = opInput.toLowerCase();
-    return inScope.filter(a =>
-      a.name.toLowerCase().includes(q) ||
-      (a.displayName?.toLowerCase().includes(q) ?? false) ||
-      (a.description?.toLowerCase().includes(q) ?? false));
+    return inScope.filter(
+      (a) =>
+        a.name.toLowerCase().includes(q) ||
+        (a.displayName?.toLowerCase().includes(q) ?? false) ||
+        (a.description?.toLowerCase().includes(q) ?? false),
+    );
   }, [inScope, opInput, isFilteringOp]);
 
   // Sync the op-input text to the selected operation's display name when
@@ -184,11 +207,9 @@ export function ActionPicker({
     if (!value) return;
     if (scope !== SCOPE_EMPTY) return;
     if (!loaded) return;
-    const action = loaded.find(a => a.name === value);
+    const action = loaded.find((a) => a.name === value);
     if (!action) return;
-    const derived = action.binding.kind === 'unbound'
-      ? SCOPE_UNBOUND
-      : action.binding.entityType;
+    const derived = action.binding.kind === 'unbound' ? SCOPE_UNBOUND : action.binding.entityType;
     setScope(derived);
   }, [value, loaded, scope]);
 
@@ -209,7 +230,9 @@ export function ActionPicker({
     }
     const matches =
       (scope === SCOPE_UNBOUND && current.binding.kind === 'unbound') ||
-      (scope !== SCOPE_UNBOUND && current.binding.kind !== 'unbound' && current.binding.entityType === scope);
+      (scope !== SCOPE_UNBOUND &&
+        current.binding.kind !== 'unbound' &&
+        current.binding.entityType === scope);
     if (!matches) {
       onChange(null);
       setOpInput('');
@@ -229,16 +252,18 @@ export function ActionPicker({
             so the user can filter by typing into it directly. The separate
             "Filter…" input that lived here was redundant and conflicted
             with the combobox's own search state. */}
-        {loading
-          ? <Badge appearance="ghost" icon={<Spinner size="extra-tiny" />}>loading CSDL…</Badge>
-          : <Badge appearance="ghost">{all.length} available</Badge>}
+        {loading ? (
+          <Badge appearance="ghost" icon={<Spinner size="extra-tiny" />}>
+            loading CSDL…
+          </Badge>
+        ) : (
+          <Badge appearance="ghost">{all.length} available</Badge>
+        )}
       </PaneHead>
 
       {loadError && (
         <MessageBar intent="error" layout="multiline" style={{ marginBottom: 12, maxWidth: 760 }}>
-          <MessageBarBody>
-            Couldn't load CSDL metadata: {loadError}
-          </MessageBarBody>
+          <MessageBarBody>Couldn't load CSDL metadata: {loadError}</MessageBarBody>
         </MessageBar>
       )}
 
@@ -250,7 +275,10 @@ export function ActionPicker({
           scope row shows the count of operations under it so the user
           can see at-a-glance which entities have coverage.
         */}
-        <Field label="Scope" hint="Pick Unbound or a binding entity. Required before choosing an operation.">
+        <Field
+          label="Scope"
+          hint="Pick Unbound or a binding entity. Required before choosing an operation."
+        >
           <Combobox
             freeform
             clearable
@@ -268,16 +296,15 @@ export function ActionPicker({
               setScope(next);
               // Sync the input text immediately so the dropdown closes with
               // the picked value displayed (not the typed filter text).
-              const display =
-                next === SCOPE_EMPTY ? '' :
-                next === SCOPE_UNBOUND ? 'Unbound' :
-                next;
+              const display = next === SCOPE_EMPTY ? '' : next === SCOPE_UNBOUND ? 'Unbound' : next;
               setScopeInput(display);
             }}
             placeholder={
-              loading ? 'Loading…' :
-              all.length === 0 ? 'No operations available' :
-              `Pick scope · ${scopeOptions.unboundCount} unbound, ${scopeOptions.entities.length} entit${scopeOptions.entities.length === 1 ? 'y' : 'ies'}`
+              loading
+                ? 'Loading…'
+                : all.length === 0
+                  ? 'No operations available'
+                  : `Pick scope · ${scopeOptions.unboundCount} unbound, ${scopeOptions.entities.length} entit${scopeOptions.entities.length === 1 ? 'y' : 'ies'}`
             }
             disabled={loading || all.length === 0}
             listbox={{ style: { maxHeight: 360 } }}
@@ -286,26 +313,33 @@ export function ActionPicker({
             {showUnboundOption && (
               <Option value={SCOPE_UNBOUND} text="Unbound">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Badge appearance="ghost" size="extra-small">Unbound</Badge>
+                  <Badge appearance="ghost" size="extra-small">
+                    Unbound
+                  </Badge>
                   <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-                    {scopeOptions.unboundCount} op{scopeOptions.unboundCount === 1 ? '' : 's'} · invoked without a source record
+                    {scopeOptions.unboundCount} op{scopeOptions.unboundCount === 1 ? '' : 's'} ·
+                    invoked without a source record
                   </Caption1>
                 </div>
               </Option>
             )}
-            {filteredEntities.map(s => {
+            {filteredEntities.map((s) => {
               const tt = findTable(s.logicalName);
               return (
                 <Option key={s.logicalName} value={s.logicalName} text={s.logicalName}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                    <span style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: 600 }}>{s.logicalName}</span>
+                    <span style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: 600 }}>
+                      {s.logicalName}
+                    </span>
                     {tt && (
                       <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
                         {tt.displayName}
                       </Caption1>
                     )}
                     <span style={{ flexGrow: 1 }} />
-                    <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>{s.count} op{s.count === 1 ? '' : 's'}</Caption1>
+                    <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
+                      {s.count} op{s.count === 1 ? '' : 's'}
+                    </Caption1>
                   </div>
                 </Option>
               );
@@ -340,7 +374,7 @@ export function ActionPicker({
               const next = d.optionValue ?? null;
               onChange(next);
               if (next) {
-                const picked = all.find(a => a.name === next);
+                const picked = all.find((a) => a.name === next);
                 setOpInput(picked?.displayName ?? picked?.name ?? '');
               } else {
                 setOpInput('');
@@ -348,23 +382,29 @@ export function ActionPicker({
             }}
             disabled={loading || scope === SCOPE_EMPTY}
             placeholder={
-              loading ? 'Loading actions from $metadata…' :
-              loadError ? 'CSDL load failed — see error above' :
-              scope === SCOPE_EMPTY ? 'Pick a scope above first' :
-              inScope.length === 0 ? `No ${all[0]?.kind?.toLowerCase() ?? 'operation'}s in this scope` :
-              `Search ${inScope.length} ${all[0]?.kind ?? 'item'}${inScope.length === 1 ? '' : 's'}…`
+              loading
+                ? 'Loading actions from $metadata…'
+                : loadError
+                  ? 'CSDL load failed — see error above'
+                  : scope === SCOPE_EMPTY
+                    ? 'Pick a scope above first'
+                    : inScope.length === 0
+                      ? `No ${all[0]?.kind?.toLowerCase() ?? 'operation'}s in this scope`
+                      : `Search ${inScope.length} ${all[0]?.kind ?? 'item'}${inScope.length === 1 ? '' : 's'}…`
             }
             listbox={{ style: { maxHeight: 420 } }}
             style={{ width: '100%' }}
           >
-            {filtered.map(a => (
+            {filtered.map((a) => (
               <Option key={a.name} value={a.name} text={a.displayName ?? a.name}>
                 <ActionOptionRow action={a} />
               </Option>
             ))}
             {filtered.length === 0 && (
               <Option value="__none" text="" disabled>
-                <span style={{ color: tokens.colorNeutralForeground3, fontSize: 12 }}>No matches</span>
+                <span style={{ color: tokens.colorNeutralForeground3, fontSize: 12 }}>
+                  No matches
+                </span>
               </Option>
             )}
           </Combobox>
@@ -384,42 +424,80 @@ function ActionOptionRow({ action }: { action: CsdlAction }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: 600 }}>{action.name}</span>
-        <Badge appearance="ghost" size="extra-small">{action.kind}</Badge>
-        {action.isComposable && <Badge appearance="ghost" size="extra-small">composable</Badge>}
+        <span style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: 600 }}>
+          {action.name}
+        </span>
+        <Badge appearance="ghost" size="extra-small">
+          {action.kind}
+        </Badge>
+        {action.isComposable && (
+          <Badge appearance="ghost" size="extra-small">
+            composable
+          </Badge>
+        )}
         <Badge appearance="tint" color="brand" size="extra-small" style={{ marginLeft: 'auto' }}>
           {action.kind === 'Action' ? 'POST' : 'GET'}
         </Badge>
       </div>
       <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
         {bindingDescription(action)}
-        {action.description && <> · {action.description.slice(0, 110)}{action.description.length > 110 ? '…' : ''}</>}
+        {action.description && (
+          <>
+            {' '}
+            · {action.description.slice(0, 110)}
+            {action.description.length > 110 ? '…' : ''}
+          </>
+        )}
       </Caption1>
     </div>
   );
 }
 
 function ActionSummaryCard({ action }: { action: CsdlAction }) {
-  const boundTbl = action.binding.kind !== 'unbound' ? findTable(action.binding.entityType) : undefined;
+  const boundTbl =
+    action.binding.kind !== 'unbound' ? findTable(action.binding.entityType) : undefined;
   return (
-    <div style={{
-      border: `1px solid ${tokens.colorNeutralStroke2}`,
-      borderRadius: tokens.borderRadiusMedium,
-      padding: 12,
-      background: tokens.colorNeutralBackground1,
-    }}>
+    <div
+      style={{
+        border: `1px solid ${tokens.colorNeutralStroke2}`,
+        borderRadius: tokens.borderRadiusMedium,
+        padding: 12,
+        background: tokens.colorNeutralBackground1,
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        {action.kind === 'Function' ? <Code20Filled style={{ color: tokens.colorBrandForeground1 }} /> : <Flash20Filled style={{ color: tokens.colorBrandForeground1 }} />}
-        <strong style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 13 }}>{action.name}</strong>
-        <Badge appearance="tint" color="brand">{action.kind}</Badge>
-        {action.isComposable && <Badge appearance="ghost" icon={<BoxMultiple20Regular style={{ width: 10, height: 10 }} />}>composable</Badge>}
+        {action.kind === 'Function' ? (
+          <Code20Filled style={{ color: tokens.colorBrandForeground1 }} />
+        ) : (
+          <Flash20Filled style={{ color: tokens.colorBrandForeground1 }} />
+        )}
+        <strong style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 13 }}>
+          {action.name}
+        </strong>
+        <Badge appearance="tint" color="brand">
+          {action.kind}
+        </Badge>
+        {action.isComposable && (
+          <Badge
+            appearance="ghost"
+            icon={<BoxMultiple20Regular style={{ width: 10, height: 10 }} />}
+          >
+            composable
+          </Badge>
+        )}
         <span style={{ flexGrow: 1 }} />
-        <Badge appearance="filled" color={action.kind === 'Action' ? 'success' : 'brand'} style={{ fontWeight: 700 }}>
+        <Badge
+          appearance="filled"
+          color={action.kind === 'Action' ? 'success' : 'brand'}
+          style={{ fontWeight: 700 }}
+        >
           {action.kind === 'Action' ? 'POST' : 'GET'}
         </Badge>
       </div>
       {action.description && (
-        <Caption1 style={{ color: tokens.colorNeutralForeground2, display: 'block', marginBottom: 8 }}>
+        <Caption1
+          style={{ color: tokens.colorNeutralForeground2, display: 'block', marginBottom: 8 }}
+        >
           {action.description}
         </Caption1>
       )}
@@ -427,26 +505,58 @@ function ActionSummaryCard({ action }: { action: CsdlAction }) {
         <span style={{ color: tokens.colorNeutralForeground3 }}>Namespace</span>
         <span style={{ fontFamily: tokens.fontFamilyMonospace }}>{action.namespace}</span>
         <span style={{ color: tokens.colorNeutralForeground3 }}>Binding</span>
-        <span>{bindingDescription(action)}{boundTbl && <> · <span style={{ fontFamily: tokens.fontFamilyMonospace, color: tokens.colorNeutralForeground3 }}>{boundTbl.entitySetName}</span></>}</span>
+        <span>
+          {bindingDescription(action)}
+          {boundTbl && (
+            <>
+              {' '}
+              ·{' '}
+              <span
+                style={{
+                  fontFamily: tokens.fontFamilyMonospace,
+                  color: tokens.colorNeutralForeground3,
+                }}
+              >
+                {boundTbl.entitySetName}
+              </span>
+            </>
+          )}
+        </span>
         <span style={{ color: tokens.colorNeutralForeground3 }}>Parameters</span>
         <span>
-          {action.parameters.length === 0
-            ? <em style={{ color: tokens.colorNeutralForeground3 }}>(none)</em>
-            : action.parameters.map(p => (
-                <Badge key={p.name} appearance="ghost" size="extra-small" style={{ marginRight: 4, fontFamily: tokens.fontFamilyMonospace }}>
-                  {p.name}: {p.type}{p.required ? ' *' : ''}
-                </Badge>
-              ))}
+          {action.parameters.length === 0 ? (
+            <em style={{ color: tokens.colorNeutralForeground3 }}>(none)</em>
+          ) : (
+            action.parameters.map((p) => (
+              <Badge
+                key={p.name}
+                appearance="ghost"
+                size="extra-small"
+                style={{ marginRight: 4, fontFamily: tokens.fontFamilyMonospace }}
+              >
+                {p.name}: {p.type}
+                {p.required ? ' *' : ''}
+              </Badge>
+            ))
+          )}
         </span>
         <span style={{ color: tokens.colorNeutralForeground3 }}>Return type</span>
         <span style={{ fontFamily: tokens.fontFamilyMonospace }}>
           {action.returnType.typeName}
-          <Caption1 style={{ marginLeft: 6, color: tokens.colorNeutralForeground3, fontFamily: tokens.fontFamilyBase }}>
+          <Caption1
+            style={{
+              marginLeft: 6,
+              color: tokens.colorNeutralForeground3,
+              fontFamily: tokens.fontFamilyBase,
+            }}
+          >
             ({action.returnType.kind})
           </Caption1>
         </span>
         <span style={{ color: tokens.colorNeutralForeground3 }}>Source</span>
-        <span><Badge appearance="ghost">{action.source}</Badge></span>
+        <span>
+          <Badge appearance="ghost">{action.source}</Badge>
+        </span>
       </div>
     </div>
   );
@@ -454,8 +564,11 @@ function ActionSummaryCard({ action }: { action: CsdlAction }) {
 
 function bindingDescription(action: CsdlAction): string {
   switch (action.binding.kind) {
-    case 'unbound':    return 'Unbound';
-    case 'entity':     return `Bound to ${action.binding.entityType}`;
-    case 'collection': return `Bound to ${action.binding.entityType} collection`;
+    case 'unbound':
+      return 'Unbound';
+    case 'entity':
+      return `Bound to ${action.binding.entityType}`;
+    case 'collection':
+      return `Bound to ${action.binding.entityType} collection`;
   }
 }

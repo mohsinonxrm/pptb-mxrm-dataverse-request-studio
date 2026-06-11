@@ -4,7 +4,9 @@ import { tokens } from '@fluentui/react-components';
 import type { HttpMethod } from '../registry/requestTypes';
 
 export function MethodPill({
-  method, altMethod, size = 'md',
+  method,
+  altMethod,
+  size = 'md',
 }: {
   method: HttpMethod;
   /** Optional secondary verb — when set, the pill renders both with a slash

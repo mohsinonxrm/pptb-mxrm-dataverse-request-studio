@@ -14,15 +14,36 @@
 
 import { useMemo, useState } from 'react';
 import {
-  Dialog, DialogTrigger, DialogSurface, DialogTitle, DialogBody, DialogActions, DialogContent,
-  Button, Textarea, Caption1, tokens, Badge, MessageBar, MessageBarBody, MessageBarTitle,
-  Spinner, Link,
+  Dialog,
+  DialogTrigger,
+  DialogSurface,
+  DialogTitle,
+  DialogBody,
+  DialogActions,
+  DialogContent,
+  Button,
+  Textarea,
+  Caption1,
+  tokens,
+  Badge,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
+  Spinner,
+  Link,
 } from '@fluentui/react-components';
 import {
-  ClipboardPaste20Regular, ArrowDownload20Regular, Dismiss20Regular,
+  ClipboardPaste20Regular,
+  ArrowDownload20Regular,
+  Dismiss20Regular,
   Open16Regular,
 } from '@fluentui/react-icons';
-import { parseODataUrl, type ParsedRequest, type ParseResult, type ParseIssue } from '../engine/odataParser';
+import {
+  parseODataUrl,
+  type ParsedRequest,
+  type ParseResult,
+  type ParseIssue,
+} from '../engine/odataParser';
 import { useScopedEntities } from '../host/useScopedEntities';
 import { metadata } from '../host/metadataProvider';
 
@@ -43,22 +64,23 @@ export function PasteODataDialog({ children, onApply }: PasteODataDialogProps) {
 
   const resolveEntitySet = useMemo(() => {
     return (entitySetName: string): string | undefined => {
-      const hit = entities.find(e => e.entitySetName === entitySetName);
+      const hit = entities.find((e) => e.entitySetName === entitySetName);
       return hit?.logicalName;
     };
   }, [entities]);
 
   const onParse = async () => {
-    if (!text.trim()) { setResult(null); return; }
+    if (!text.trim()) {
+      setResult(null);
+      return;
+    }
     setParsing(true);
     try {
       // The third arg is the async metadata loader. The parser calls it for
       // the root entity + every $expand target so column / nav references
       // can be validated against actual metadata.
-      const r = await parseODataUrl(
-        text,
-        resolveEntitySet,
-        (logical) => metadata.getTable(logical),
+      const r = await parseODataUrl(text, resolveEntitySet, (logical) =>
+        metadata.getTable(logical),
       );
       setResult(r);
     } finally {
@@ -74,7 +96,10 @@ export function PasteODataDialog({ children, onApply }: PasteODataDialogProps) {
     setResult(null);
   };
 
-  const onReset = () => { setText(''); setResult(null); };
+  const onReset = () => {
+    setText('');
+    setResult(null);
+  };
 
   // Apply is only enabled when the parse succeeded with zero errors AND a
   // table was resolved. Warnings don't block — they're informational.
@@ -101,11 +126,14 @@ export function PasteODataDialog({ children, onApply }: PasteODataDialogProps) {
             Parse an OData URL into the builder
           </DialogTitle>
           <DialogContent>
-            <Caption1 style={{ display: 'block', marginBottom: 8, color: tokens.colorNeutralForeground2 }}>
-              Paste a Dataverse Web API URL (absolute or relative). DRS will parse the URL,
-              validate every option / function / column / nav against your environment's metadata,
-              and only enable <strong>Apply</strong> if there are no errors. Warnings are advisory —
-              they describe lossy but legal patterns that DRS can still represent (e.g. <code>not Microsoft.Dynamics.CRM.X(...)</code>
+            <Caption1
+              style={{ display: 'block', marginBottom: 8, color: tokens.colorNeutralForeground2 }}
+            >
+              Paste a Dataverse Web API URL (absolute or relative). DRS will parse the URL, validate
+              every option / function / column / nav against your environment's metadata, and only
+              enable <strong>Apply</strong> if there are no errors. Warnings are advisory — they
+              describe lossy but legal patterns that DRS can still represent (e.g.{' '}
+              <code>not Microsoft.Dynamics.CRM.X(...)</code>
               dropping the <code>not</code>).
             </Caption1>
 
@@ -132,7 +160,11 @@ export function PasteODataDialog({ children, onApply }: PasteODataDialogProps) {
               >
                 {parsing ? 'Parsing & validating…' : 'Parse'}
               </Button>
-              <Button appearance="subtle" onClick={onReset} disabled={parsing || (!text && !result)}>
+              <Button
+                appearance="subtle"
+                onClick={onReset}
+                disabled={parsing || (!text && !result)}
+              >
                 Clear
               </Button>
               {parsing && (
@@ -161,7 +193,8 @@ export function PasteODataDialog({ children, onApply }: PasteODataDialogProps) {
                   <MessageBar layout="multiline" intent="error">
                     <MessageBarBody>
                       <MessageBarTitle>
-                        Won&apos;t apply — {result.errors.length} error{result.errors.length === 1 ? '' : 's'} found
+                        Won&apos;t apply — {result.errors.length} error
+                        {result.errors.length === 1 ? '' : 's'} found
                       </MessageBarTitle>
                       <IssueList items={result.errors} />
                     </MessageBarBody>
@@ -173,7 +206,8 @@ export function PasteODataDialog({ children, onApply }: PasteODataDialogProps) {
                   <MessageBar layout="multiline" intent="warning">
                     <MessageBarBody>
                       <MessageBarTitle>
-                        {result.warnings.length} warning{result.warnings.length === 1 ? '' : 's'} (apply still allowed)
+                        {result.warnings.length} warning{result.warnings.length === 1 ? '' : 's'}{' '}
+                        (apply still allowed)
                       </MessageBarTitle>
                       <IssueList items={result.warnings} />
                     </MessageBarBody>
@@ -244,9 +278,7 @@ function Summary({ parsed }: { parsed: ParsedRequest }) {
       <Badge appearance="tint" color="brand">
         table: <code>{parsed.table || parsed.entitySet}</code>
       </Badge>
-      {parsed.select.length > 0 && (
-        <Badge appearance="tint">$select: {parsed.select.length}</Badge>
-      )}
+      {parsed.select.length > 0 && <Badge appearance="tint">$select: {parsed.select.length}</Badge>}
       {parsed.filter.rules.length > 0 && (
         <Badge appearance="tint">$filter: {parsed.filter.rules.length} root nodes</Badge>
       )}
@@ -255,12 +287,8 @@ function Summary({ parsed }: { parsed: ParsedRequest }) {
       )}
       {parsed.top != null && <Badge appearance="tint">$top: {parsed.top}</Badge>}
       {parsed.countOn && <Badge appearance="tint">$count: true</Badge>}
-      {parsed.expand.length > 0 && (
-        <Badge appearance="tint">$expand: {parsed.expand.length}</Badge>
-      )}
-      {parsed.apply?.enabled && (
-        <Badge appearance="tint">$apply: on</Badge>
-      )}
+      {parsed.expand.length > 0 && <Badge appearance="tint">$expand: {parsed.expand.length}</Badge>}
+      {parsed.apply?.enabled && <Badge appearance="tint">$apply: on</Badge>}
     </div>
   );
 }

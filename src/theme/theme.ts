@@ -17,8 +17,7 @@ export function applyThemeAttr(mode: ThemeMode): void {
 }
 
 // Group → CSS-var name. Used everywhere a "request group color" is needed.
-export const groupColorVar = (group: string): string =>
-  `var(--color-request-${group})`;
+export const groupColorVar = (group: string): string => `var(--color-request-${group})`;
 
 export const methodColorVar = (method: string): string =>
   `var(--color-method-${method.toLowerCase()})`;

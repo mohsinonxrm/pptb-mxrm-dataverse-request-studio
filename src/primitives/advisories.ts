@@ -40,13 +40,13 @@ export type AdvisorySeverity = 'error' | 'warning' | 'info';
  * the drawer.
  */
 export type AdvisorySource =
-  | 'wildcard'         // wildcard characters (rewrites, stripped leading wildcards)
-  | 'antipattern'      // query anti-patterns
-  | 'bypass'           // bypass custom business logic
-  | 'flow-bypass'      // bypass Power Automate flows
-  | 'privilege'        // cross-cutting privilege requirements
-  | 'header'           // header conflicts / auto-injection notice
-  | 'validation';      // missing required field / shape error
+  | 'wildcard' // wildcard characters (rewrites, stripped leading wildcards)
+  | 'antipattern' // query anti-patterns
+  | 'bypass' // bypass custom business logic
+  | 'flow-bypass' // bypass Power Automate flows
+  | 'privilege' // cross-cutting privilege requirements
+  | 'header' // header conflicts / auto-injection notice
+  | 'validation'; // missing required field / shape error
 
 export interface Advisory {
   /** Stable id for React keys + dedupe across re-renders. */
@@ -72,12 +72,30 @@ export interface Advisory {
 // ── Helpers — short factories for the common cases ───────────────────────────
 
 export const adv = {
-  err: (id: string, source: AdvisorySource, title: string, body?: ReactNode, focusNode?: string, learnMoreUrl?: string): Advisory =>
-    ({ id, severity: 'error', source, title, body, focusNode, learnMoreUrl }),
-  warn: (id: string, source: AdvisorySource, title: string, body?: ReactNode, focusNode?: string, learnMoreUrl?: string): Advisory =>
-    ({ id, severity: 'warning', source, title, body, focusNode, learnMoreUrl }),
-  info: (id: string, source: AdvisorySource, title: string, body?: ReactNode, focusNode?: string, learnMoreUrl?: string): Advisory =>
-    ({ id, severity: 'info', source, title, body, focusNode, learnMoreUrl }),
+  err: (
+    id: string,
+    source: AdvisorySource,
+    title: string,
+    body?: ReactNode,
+    focusNode?: string,
+    learnMoreUrl?: string,
+  ): Advisory => ({ id, severity: 'error', source, title, body, focusNode, learnMoreUrl }),
+  warn: (
+    id: string,
+    source: AdvisorySource,
+    title: string,
+    body?: ReactNode,
+    focusNode?: string,
+    learnMoreUrl?: string,
+  ): Advisory => ({ id, severity: 'warning', source, title, body, focusNode, learnMoreUrl }),
+  info: (
+    id: string,
+    source: AdvisorySource,
+    title: string,
+    body?: ReactNode,
+    focusNode?: string,
+    learnMoreUrl?: string,
+  ): Advisory => ({ id, severity: 'info', source, title, body, focusNode, learnMoreUrl }),
 };
 
 /**
@@ -85,9 +103,9 @@ export const adv = {
  * (errors first, then warnings, then info) and to drive the counter chip.
  */
 export function bucketAdvisories(advisories: Advisory[]) {
-  const errors:   Advisory[] = [];
+  const errors: Advisory[] = [];
   const warnings: Advisory[] = [];
-  const infos:    Advisory[] = [];
+  const infos: Advisory[] = [];
   for (const a of advisories) {
     if (a.severity === 'error') errors.push(a);
     else if (a.severity === 'warning') warnings.push(a);
@@ -103,7 +121,7 @@ export function bucketAdvisories(advisories: Advisory[]) {
  * tooltip on the disabled Execute button.
  */
 export function disabledReasonFromAdvisories(advisories: Advisory[]): string | null {
-  const errs = advisories.filter(a => a.severity === 'error');
+  const errs = advisories.filter((a) => a.severity === 'error');
   if (errs.length === 0) return null;
   if (errs.length === 1) return errs[0].title;
   return `${errs.length} blockers — open Advisories to review.`;

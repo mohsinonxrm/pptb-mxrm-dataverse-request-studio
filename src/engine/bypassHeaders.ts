@@ -28,19 +28,21 @@ export interface BypassPrivilege {
 export const PRV_BYPASS_BUSINESS_LOGIC: BypassPrivilege = {
   name: 'prvBypassCustomBusinessLogic',
   id: '0ea552b0-a491-4470-9a1b-82068deccf66',
-  description: 'Required to use MSCRM.BypassBusinessLogicExecution + MSCRM.BypassBusinessLogicExecutionStepIds. By default only the System Administrator role has this privilege.',
+  description:
+    'Required to use MSCRM.BypassBusinessLogicExecution + MSCRM.BypassBusinessLogicExecutionStepIds. By default only the System Administrator role has this privilege.',
 };
 
 export const PRV_BYPASS_CUSTOM_PLUGINS: BypassPrivilege = {
   name: 'prvBypassCustomPlugins',
   id: '148a9eaf-d0c4-4196-9852-c3a38e35f6a1',
-  description: 'Required to use the legacy MSCRM.BypassCustomPluginExecution header. By default only the System Administrator role has this privilege.',
+  description:
+    'Required to use the legacy MSCRM.BypassCustomPluginExecution header. By default only the System Administrator role has this privilege.',
 };
 
 /** Default Dataverse cap for BypassBusinessLogicExecutionStepIds — configurable
  *  via the OrgDbOrgSettings tool, max recommended is 10. */
 export const STEP_IDS_DEFAULT_LIMIT = 3;
-export const STEP_IDS_MAX_LIMIT     = 10;
+export const STEP_IDS_MAX_LIMIT = 10;
 
 /** Internal id prefix so the user can spot composer-generated rows in the
  *  HeadersEditor table and the central composer can update them on each render. */
@@ -55,33 +57,43 @@ export function composeBypassHeaders(b: BypassOptions): HeaderItem[] {
 
   switch (b.businessLogic) {
     case 'sync':
-      out.push(b.useLegacyHeader
-        ? {
-            id: `${PREFIX}plugin-legacy`,
-            name: 'MSCRM.BypassCustomPluginExecution', value: 'true',
-            enabled: true, builtin: true,
-            hint: 'LEGACY — prefer MSCRM.BypassBusinessLogicExecution: CustomSync (requires prvBypassCustomBusinessLogic).',
-          }
-        : {
-            id: `${PREFIX}bl-sync`,
-            name: 'MSCRM.BypassBusinessLogicExecution', value: 'CustomSync',
-            enabled: true, builtin: true,
-            hint: 'Bypass custom synchronous plug-ins/workflows for this request. Requires prvBypassCustomBusinessLogic.',
-          });
+      out.push(
+        b.useLegacyHeader
+          ? {
+              id: `${PREFIX}plugin-legacy`,
+              name: 'MSCRM.BypassCustomPluginExecution',
+              value: 'true',
+              enabled: true,
+              builtin: true,
+              hint: 'LEGACY — prefer MSCRM.BypassBusinessLogicExecution: CustomSync (requires prvBypassCustomBusinessLogic).',
+            }
+          : {
+              id: `${PREFIX}bl-sync`,
+              name: 'MSCRM.BypassBusinessLogicExecution',
+              value: 'CustomSync',
+              enabled: true,
+              builtin: true,
+              hint: 'Bypass custom synchronous plug-ins/workflows for this request. Requires prvBypassCustomBusinessLogic.',
+            },
+      );
       break;
     case 'async':
       out.push({
         id: `${PREFIX}bl-async`,
-        name: 'MSCRM.BypassBusinessLogicExecution', value: 'CustomAsync',
-        enabled: true, builtin: true,
+        name: 'MSCRM.BypassBusinessLogicExecution',
+        value: 'CustomAsync',
+        enabled: true,
+        builtin: true,
         hint: 'Bypass custom asynchronous logic. Requires prvBypassCustomBusinessLogic.',
       });
       break;
     case 'both':
       out.push({
         id: `${PREFIX}bl-both`,
-        name: 'MSCRM.BypassBusinessLogicExecution', value: 'CustomSync,CustomAsync',
-        enabled: true, builtin: true,
+        name: 'MSCRM.BypassBusinessLogicExecution',
+        value: 'CustomSync,CustomAsync',
+        enabled: true,
+        builtin: true,
         hint: 'Bypass both synchronous and asynchronous custom logic. Requires prvBypassCustomBusinessLogic.',
       });
       break;
@@ -92,8 +104,10 @@ export function composeBypassHeaders(b: BypassOptions): HeaderItem[] {
       if (ids) {
         out.push({
           id: `${PREFIX}bl-steps`,
-          name: 'MSCRM.BypassBusinessLogicExecutionStepIds', value: ids,
-          enabled: true, builtin: true,
+          name: 'MSCRM.BypassBusinessLogicExecutionStepIds',
+          value: ids,
+          enabled: true,
+          builtin: true,
           hint: `Bypass these specific plug-in step registrations. Default cap is ${STEP_IDS_DEFAULT_LIMIT} (max ${STEP_IDS_MAX_LIMIT}). Requires prvBypassCustomBusinessLogic.`,
         });
       }
@@ -107,8 +121,10 @@ export function composeBypassHeaders(b: BypassOptions): HeaderItem[] {
   if (b.suppressFlows) {
     out.push({
       id: `${PREFIX}flows`,
-      name: 'MSCRM.SuppressCallbackRegistrationExpanderJob', value: 'true',
-      enabled: true, builtin: true,
+      name: 'MSCRM.SuppressCallbackRegistrationExpanderJob',
+      value: 'true',
+      enabled: true,
+      builtin: true,
       hint: 'Skip Power Automate flow triggers from Dataverse events. No privilege required, but flow owners are not notified that their logic was bypassed.',
     });
   }
@@ -121,8 +137,11 @@ export function composeBypassHeaders(b: BypassOptions): HeaderItem[] {
  * synthetic rows (those with id starting with `__bypass_`) with the new ones,
  * preserving the user's hand-added headers in place.
  */
-export function applyBypassToHeaders(userHeaders: HeaderItem[], bypass: BypassOptions): HeaderItem[] {
-  const cleaned = userHeaders.filter(h => !h.id.startsWith(PREFIX));
-  const synth   = composeBypassHeaders(bypass);
+export function applyBypassToHeaders(
+  userHeaders: HeaderItem[],
+  bypass: BypassOptions,
+): HeaderItem[] {
+  const cleaned = userHeaders.filter((h) => !h.id.startsWith(PREFIX));
+  const synth = composeBypassHeaders(bypass);
   return [...cleaned, ...synth];
 }

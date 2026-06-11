@@ -47,19 +47,19 @@ export function makeExpandSpec(navName: string): ExpandSpec {
 
 /** Encode the items as the value of `$expand=`. Supports nested $expand recursively per spec §10. */
 export function expandToOData(items: ExpandSpec[], parentTableLogical: string): string {
-  return items.map(it => emitOne(it, parentTableLogical)).join(',');
+  return items.map((it) => emitOne(it, parentTableLogical)).join(',');
 }
 
 function emitOne(it: ExpandSpec, parentTableLogical: string): string {
   const inner: string[] = [];
   const parentTbl = findTable(parentTableLogical);
-  const nav = parentTbl?.navigationProperties.find(n => n.name === it.nav);
+  const nav = parentTbl?.navigationProperties.find((n) => n.name === it.nav);
   // Resolve the target entity so we can encode the inner $select's
   // lookup columns as `_<logical>_value` instead of the nav name.
   const targetTbl = nav ? findTable(nav.targetEntity) : undefined;
 
   if (it.select.length) {
-    const encoded = it.select.map(c => attrRefByName(targetTbl, c)).join(',');
+    const encoded = it.select.map((c) => attrRefByName(targetTbl, c)).join(',');
     inner.push(`$select=${encoded}`);
   }
   if (it.filter && it.filter.rules.length > 0 && nav) {
@@ -72,9 +72,7 @@ function emitOne(it: ExpandSpec, parentTableLogical: string): string {
   if (it.orderby.length) inner.push(`$orderby=${orderbyToOData(it.orderby)}`);
   if (it.top != null && it.top > 0) inner.push(`$top=${it.top}`);
   if (it.nestedExpand && it.nestedExpand.length > 0 && nav) {
-    const child = it.nestedExpand
-      .map(c => emitOne(c, nav.targetEntity))
-      .join(',');
+    const child = it.nestedExpand.map((c) => emitOne(c, nav.targetEntity)).join(',');
     if (child) inner.push(`$expand=${child}`);
   }
   return inner.length ? `${it.nav}(${inner.join(';')})` : it.nav;

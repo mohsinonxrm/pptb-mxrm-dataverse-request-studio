@@ -8,7 +8,7 @@ import type { RequestType } from '../registry/requestTypes';
 import type { RecentRun } from '../state/readState';
 
 export interface SidebarClauseItem {
-  id: string;            // selectable key
+  id: string; // selectable key
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   icon: FC<any>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,7 +17,15 @@ export interface SidebarClauseItem {
   code?: boolean;
   badge?: ReactNode;
   badgeAppearance?: 'tint' | 'ghost' | 'filled' | 'outline';
-  badgeColor?: 'brand' | 'danger' | 'success' | 'warning' | 'informative' | 'subtle' | 'severe' | 'important';
+  badgeColor?:
+    | 'brand'
+    | 'danger'
+    | 'success'
+    | 'warning'
+    | 'informative'
+    | 'subtle'
+    | 'severe'
+    | 'important';
   dirty?: boolean;
   /** Children rendered with depth=1 */
   children?: SidebarClauseItem[];
@@ -40,18 +48,26 @@ export interface SidebarProps {
   onRecentClick?: (r: RecentRun) => void;
 }
 
-export function Sidebar({ type, urlPreview, sections, activeNode, onSelect, recents, onRecentClick }: SidebarProps) {
+export function Sidebar({
+  type,
+  urlPreview,
+  sections,
+  activeNode,
+  onSelect,
+  recents,
+  onRecentClick,
+}: SidebarProps) {
   const s = useStudioStyles();
   return (
     <aside className={s.sidebar}>
       <ModeCard type={type} urlPreview={urlPreview} />
 
       <div className={s.sidebarScroll}>
-        {sections.map(sec => (
+        {sections.map((sec) => (
           <span key={sec.id}>
             <SectionHeader meta={sec.meta}>{sec.label}</SectionHeader>
             <ClauseTreeList ariaLabel={sec.label}>
-              {sec.items.map(item => (
+              {sec.items.map((item) => (
                 <SidebarItemRenderer
                   key={item.id}
                   item={item}
@@ -71,12 +87,21 @@ export function Sidebar({ type, urlPreview, sections, activeNode, onSelect, rece
             time the user clicks Execute. */}
         {recents.length > 0 && (
           <>
-            <SectionHeader meta={`${recents.length} run${recents.length === 1 ? '' : 's'}`}>Recent runs</SectionHeader>
+            <SectionHeader meta={`${recents.length} run${recents.length === 1 ? '' : 's'}`}>
+              Recent runs
+            </SectionHeader>
             <div style={{ padding: '4px 0' }}>
-              {recents.map(r => (
+              {recents.map((r) => (
                 <div key={r.id} className={s.recentRow} onClick={() => onRecentClick?.(r)}>
                   <MethodPill method={r.method as never} size="sm" />
-                  <span style={{ flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span
+                    style={{
+                      flexGrow: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
                     {timeAgo(r.ts)} · {r.status} · {r.rowCount ?? '—'} rows
                   </span>
                 </div>
@@ -90,7 +115,11 @@ export function Sidebar({ type, urlPreview, sections, activeNode, onSelect, rece
 }
 
 function SidebarItemRenderer({
-  item, activeNode, onSelect, group, depth,
+  item,
+  activeNode,
+  onSelect,
+  group,
+  depth,
 }: {
   item: SidebarClauseItem;
   activeNode: string;
@@ -118,7 +147,7 @@ function SidebarItemRenderer({
         group={group}
         depth={depth}
       />
-      {item.children?.map(child => (
+      {item.children?.map((child) => (
         <SidebarItemRenderer
           key={child.id}
           item={child}

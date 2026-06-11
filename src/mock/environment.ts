@@ -62,8 +62,12 @@ export const ENV: StudioEnv = new Proxy({} as StudioEnv, {
     const e = getEnv();
     return (e as unknown as Record<string | symbol, unknown>)[key];
   },
-  has(_t, key) { return key in getEnv(); },
-  ownKeys() { return Object.keys(getEnv()); },
+  has(_t, key) {
+    return key in getEnv();
+  },
+  ownKeys() {
+    return Object.keys(getEnv());
+  },
   getOwnPropertyDescriptor(_t, key) {
     return {
       enumerable: true,

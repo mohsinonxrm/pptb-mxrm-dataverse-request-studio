@@ -32,7 +32,11 @@ import { type CsdlAction, type ActionParam } from '../mock/actionsCsdl';
 // snippets and missing body previews.
 import { findActionSync } from '../host/csdlProvider';
 import type { BuiltRequest } from './urlBuilder';
-import type { ExecuteActionState, ExecuteFunctionState, ExecuteWorkflowState } from '../state/executeState';
+import type {
+  ExecuteActionState,
+  ExecuteFunctionState,
+  ExecuteWorkflowState,
+} from '../state/executeState';
 import type { CreateFieldValue } from '../state/writeState';
 
 // ──────────────────────────────────────────────────────────────
@@ -42,7 +46,14 @@ import type { CreateFieldValue } from '../state/writeState';
 export function buildExecuteAction(s: ExecuteActionState): BuiltRequest {
   const action = s.actionName ? findActionSync(s.actionName) : undefined;
   if (!action || action.kind !== 'Action') {
-    return { relativeUrl: '', relativeNoBase: '', bytes: 0, queryParts: [], entitySet: '', entityLogical: '' };
+    return {
+      relativeUrl: '',
+      relativeNoBase: '',
+      bytes: 0,
+      queryParts: [],
+      entitySet: '',
+      entityLogical: '',
+    };
   }
 
   const { segment, entitySet, entityLogical } = buildActionUrlSegment(action, s.boundRecordId);
@@ -83,10 +94,21 @@ export function buildExecuteActionBody(s: ExecuteActionState): Record<string, un
 export function buildExecuteFunction(s: ExecuteFunctionState): BuiltRequest {
   const fn = s.functionName ? findActionSync(s.functionName) : undefined;
   if (!fn || fn.kind !== 'Function') {
-    return { relativeUrl: '', relativeNoBase: '', bytes: 0, queryParts: [], entitySet: '', entityLogical: '' };
+    return {
+      relativeUrl: '',
+      relativeNoBase: '',
+      bytes: 0,
+      queryParts: [],
+      entitySet: '',
+      entityLogical: '',
+    };
   }
 
-  const { segment: baseSegment, entitySet, entityLogical } = buildActionUrlSegment(fn, s.boundRecordId);
+  const {
+    segment: baseSegment,
+    entitySet,
+    entityLogical,
+  } = buildActionUrlSegment(fn, s.boundRecordId);
 
   // Compose the parameter portion: either inline literals or alias placeholders
   const namedParams = fn.parameters;
@@ -118,11 +140,12 @@ export function buildExecuteFunction(s: ExecuteFunctionState): BuiltRequest {
         if (v === undefined || v === null) continue;
         inlinePairs.push(`${param.name}=${encodeParamForUrl(param, v, /*aliased*/ false)}`);
       }
-      segment = inlinePairs.length > 0 ? `${baseSegment}(${inlinePairs.join(',')})` : `${baseSegment}()`;
+      segment =
+        inlinePairs.length > 0 ? `${baseSegment}(${inlinePairs.join(',')})` : `${baseSegment}()`;
     }
   }
 
-  const qs = queryParts.map(p => `${p.key}=${p.value}`).join('&');
+  const qs = queryParts.map((p) => `${p.key}=${p.value}`).join('&');
   const path = `${ENV.apiBase}${segment}${qs ? `?${qs}` : ''}`;
   const noBase = `${segment}${qs ? `?${qs}` : ''}`;
   return {
@@ -222,7 +245,10 @@ export function encodeParamForBody(param: ActionParam, value: unknown): unknown 
     case 'Edm.String':
     case 'Edm.Guid':
       return String(value);
-    case 'Edm.Int32': case 'Edm.Int64': case 'Edm.Decimal': case 'Edm.Double':
+    case 'Edm.Int32':
+    case 'Edm.Int64':
+    case 'Edm.Decimal':
+    case 'Edm.Double':
     case 'OptionSetValue':
       return Number(value);
     case 'Edm.Boolean':
@@ -264,10 +290,14 @@ export function encodeParamForBody(param: ActionParam, value: unknown): unknown 
       if (!tbl) return body;
       for (const [field, raw] of Object.entries(fieldValues)) {
         if (raw == null) continue;
-        const col = tbl.columns.find(c => c.logicalName === field);
+        const col = tbl.columns.find((c) => c.logicalName === field);
         if (!col) continue;
         // Lookup-like → @odata.bind
-        if (col.attributeType === 'Lookup' || col.attributeType === 'Customer' || col.attributeType === 'Owner') {
+        if (
+          col.attributeType === 'Lookup' ||
+          col.attributeType === 'Customer' ||
+          col.attributeType === 'Owner'
+        ) {
           const lk = raw as { id?: string; targetEntity?: string };
           if (!lk?.id) continue;
           const target = lk.targetEntity ?? col.targets[0];
@@ -290,7 +320,7 @@ export function encodeParamForBody(param: ActionParam, value: unknown): unknown 
     case 'EntityCollection': {
       const arr = value as Array<{ id: string; entityType?: string }>;
       if (!Array.isArray(arr)) return [];
-      return arr.map(ref => {
+      return arr.map((ref) => {
         const entityType = ref.entityType ?? param.entityType ?? '';
         const tbl = findTable(entityType);
         const pk = tbl?.primaryKey ?? `${entityType}id`;
@@ -345,18 +375,21 @@ export function encodeParamForUrl(param: ActionParam, value: unknown, aliased: b
     }
     case 'Edm.Guid':
       return String(value);
-    case 'Edm.Int32': case 'Edm.Int64': case 'Edm.Decimal': case 'Edm.Double':
+    case 'Edm.Int32':
+    case 'Edm.Int64':
+    case 'Edm.Decimal':
+    case 'Edm.Double':
     case 'OptionSetValue':
       return String(Number(value));
     case 'Edm.Boolean':
-      return (value === true || value === 'true' || value === 1) ? 'true' : 'false';
+      return value === true || value === 'true' || value === 1 ? 'true' : 'false';
     case 'Collection(Edm.String)': {
       const arr = (value as string[]) ?? [];
-      return `[${arr.map(s => `'${String(s).replace(/'/g, "''")}'`).join(',')}]`;
+      return `[${arr.map((s) => `'${String(s).replace(/'/g, "''")}'`).join(',')}]`;
     }
     case 'Collection(Edm.Int32)': {
       const arr = (value as number[]) ?? [];
-      return `[${arr.map(n => Number(n)).join(',')}]`;
+      return `[${arr.map((n) => Number(n)).join(',')}]`;
     }
     case 'Collection(Edm.Guid)': {
       const arr = (value as string[]) ?? [];
@@ -380,24 +413,37 @@ export function encodeParamForUrl(param: ActionParam, value: unknown, aliased: b
 // Placeholder used in body preview when a required param is unset
 function paramPlaceholder(param: ActionParam): unknown {
   switch (param.type) {
-    case 'Edm.String':       return '<string>';
-    case 'Edm.Guid':         return '<guid>';
-    case 'Edm.Int32': case 'Edm.Int64':
-    case 'Edm.Decimal': case 'Edm.Double':
-    case 'OptionSetValue':   return 0;
-    case 'Edm.Boolean':      return false;
-    case 'Edm.DateTimeOffset': return '<iso-8601-datetime>';
-    case 'Collection(Edm.String)': return [];
-    case 'Collection(Edm.Int32)':  return [];
-    case 'Collection(Edm.Guid)':   return [];
+    case 'Edm.String':
+      return '<string>';
+    case 'Edm.Guid':
+      return '<guid>';
+    case 'Edm.Int32':
+    case 'Edm.Int64':
+    case 'Edm.Decimal':
+    case 'Edm.Double':
+    case 'OptionSetValue':
+      return 0;
+    case 'Edm.Boolean':
+      return false;
+    case 'Edm.DateTimeOffset':
+      return '<iso-8601-datetime>';
+    case 'Collection(Edm.String)':
+      return [];
+    case 'Collection(Edm.Int32)':
+      return [];
+    case 'Collection(Edm.Guid)':
+      return [];
     case 'EntityReference':
     case 'EntitySpecific':
       return {
         '@odata.type': `Microsoft.Dynamics.CRM.${param.entityType ?? '<entity>'}`,
         [param.entityType ? `${param.entityType}id` : '<entity>id']: '<guid>',
       };
-    case 'EntityCollection': return [];
-    case 'ComplexType':      return {};
-    case 'Edm.Binary':       return '<base64>';
+    case 'EntityCollection':
+      return [];
+    case 'ComplexType':
+      return {};
+    case 'Edm.Binary':
+      return '<base64>';
   }
 }

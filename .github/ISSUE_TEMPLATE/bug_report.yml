@@ -1,7 +1,7 @@
 name: 🐛 Bug report
 description: Something isn't working as expected.
-title: "[Bug]: "
-labels: ["bug", "needs-triage"]
+title: '[Bug]: '
+labels: ['bug', 'needs-triage']
 assignees: []
 body:
   - type: markdown
@@ -25,7 +25,7 @@ body:
     attributes:
       label: App version
       description: Version number or commit SHA.
-      placeholder: "e.g., v1.0.0 or 1a2b3c4"
+      placeholder: 'e.g., v1.0.0 or 1a2b3c4'
     validations:
       required: true
 
@@ -68,14 +68,14 @@ body:
   - type: input
     attributes:
       label: Browser (if applicable)
-      placeholder: "e.g., Edge 121 / Chrome 120"
+      placeholder: 'e.g., Edge 121 / Chrome 120'
     validations:
       required: false
 
   - type: input
     attributes:
       label: OS
-      placeholder: "e.g., Windows 11 / macOS 14"
+      placeholder: 'e.g., Windows 11 / macOS 14'
     validations:
       required: false
 
@@ -83,7 +83,7 @@ body:
     attributes:
       label: What happened?
       description: A clear and concise description of the bug.
-      placeholder: "Describe what you observed..."
+      placeholder: 'Describe what you observed...'
     validations:
       required: true
 
@@ -103,14 +103,14 @@ body:
   - type: textarea
     attributes:
       label: Expected behavior
-      placeholder: "What should have happened?"
+      placeholder: 'What should have happened?'
     validations:
       required: true
 
   - type: textarea
     attributes:
       label: Actual behavior
-      placeholder: "What actually happened?"
+      placeholder: 'What actually happened?'
     validations:
       required: true
 

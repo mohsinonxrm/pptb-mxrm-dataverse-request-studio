@@ -17,11 +17,23 @@
 
 import { useState } from 'react';
 import {
-  Caption1, Badge, Tooltip, Button, Persona, MessageBar,
-  MessageBarBody, MessageBarTitle, tokens, mergeClasses, Field,
+  Caption1,
+  Badge,
+  Tooltip,
+  Button,
+  Persona,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
+  tokens,
+  mergeClasses,
+  Field,
 } from '@fluentui/react-components';
 import {
-  Link20Filled, Dismiss20Regular, BoxMultiple20Regular, Add20Regular,
+  Link20Filled,
+  Dismiss20Regular,
+  BoxMultiple20Regular,
+  Add20Regular,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from './PaneHead';
@@ -53,9 +65,14 @@ export interface AssociateTargetsEditorProps {
 }
 
 export function AssociateTargetsEditor({
-  table, navProperty, targets, setTargets,
-  targetNames: targetNamesProp, setTargetNames: setTargetNamesProp,
-  group = 'relate', resolvedMethod,
+  table,
+  navProperty,
+  targets,
+  setTargets,
+  targetNames: targetNamesProp,
+  setTargetNames: setTargetNamesProp,
+  group = 'relate',
+  resolvedMethod,
 }: AssociateTargetsEditorProps) {
   // Callers that don't track names externally get a transient session map.
   // Defined alongside the controlled path so the editor's display logic
@@ -65,7 +82,9 @@ export function AssociateTargetsEditor({
   const setTargetNames = setTargetNamesProp ?? setInternalNames;
   const s = useStudioStyles();
   const tbl = findTable(table);
-  const nav = navProperty ? tbl?.navigationProperties.find(n => n.name === navProperty) : undefined;
+  const nav = navProperty
+    ? tbl?.navigationProperties.find((n) => n.name === navProperty)
+    : undefined;
   const targetTbl = nav ? findTable(nav.targetEntity) : undefined;
   const singleValued = nav?.cardinality === 'ManyToOne';
   const maxTargets = singleValued ? 1 : Infinity;
@@ -78,10 +97,16 @@ export function AssociateTargetsEditor({
   if (!nav) {
     return (
       <div>
-        <PaneHead icon={Link20Filled} title="Target records" sub="Pick a navigation property first." group={group} />
+        <PaneHead
+          icon={Link20Filled}
+          title="Target records"
+          sub="Pick a navigation property first."
+          group={group}
+        />
         <MessageBar layout="multiline" intent="info" style={{ maxWidth: 720 }}>
           <MessageBarBody>
-            Switch to the <strong>Navigation property</strong> pane and pick one — the target entity comes from there.
+            Switch to the <strong>Navigation property</strong> pane and pick one — the target entity
+            comes from there.
           </MessageBarBody>
         </MessageBar>
       </div>
@@ -97,11 +122,11 @@ export function AssociateTargetsEditor({
     const nextTargets = singleValued ? [id] : [...targets, id];
     setTargets(nextTargets);
     if (name) setTargetNames({ ...targetNames, [id]: name });
-    setPickerKey(k => k + 1); // remount the picker so the typeahead clears
+    setPickerKey((k) => k + 1); // remount the picker so the typeahead clears
   };
 
   const onRemove = (id: string) => {
-    setTargets(targets.filter(t => t !== id));
+    setTargets(targets.filter((t) => t !== id));
     if (targetNames[id] != null) {
       const next = { ...targetNames };
       delete next[id];
@@ -116,9 +141,17 @@ export function AssociateTargetsEditor({
         title={singleValued ? 'Target record' : 'Target records'}
         sub={
           <span>
-            {singleValued
-              ? <>One target is allowed for <code>{nav.cardinality}</code> nav props — the server PUT sets the lookup.</>
-              : <>One or more targets — each fires a separate POST request. For many targets, Dataverse recommends a <code>$batch</code> request.</>}
+            {singleValued ? (
+              <>
+                One target is allowed for <code>{nav.cardinality}</code> nav props — the server PUT
+                sets the lookup.
+              </>
+            ) : (
+              <>
+                One or more targets — each fires a separate POST request. For many targets,
+                Dataverse recommends a <code>$batch</code> request.
+              </>
+            )}
           </span>
         }
         group={group}
@@ -127,13 +160,23 @@ export function AssociateTargetsEditor({
           {targets.length} target{targets.length === 1 ? '' : 's'}
         </Badge>
         {resolvedMethod && (
-          <Badge appearance="filled" color={resolvedMethod === 'POST' ? 'success' : 'informative'} style={{ fontWeight: 700 }}>
+          <Badge
+            appearance="filled"
+            color={resolvedMethod === 'POST' ? 'success' : 'informative'}
+            style={{ fontWeight: 700 }}
+          >
             {resolvedMethod}
           </Badge>
         )}
         {!singleValued && targets.length > 1 && (
-          <Tooltip content="Will fire one request per target — Dataverse recommends $batch for large counts. Batch transport lands in a later pass." relationship="description">
-            <Badge appearance="ghost" icon={<BoxMultiple20Regular style={{ width: 12, height: 12 }} />}>
+          <Tooltip
+            content="Will fire one request per target — Dataverse recommends $batch for large counts. Batch transport lands in a later pass."
+            relationship="description"
+          >
+            <Badge
+              appearance="ghost"
+              icon={<BoxMultiple20Regular style={{ width: 12, height: 12 }} />}
+            >
               {targets.length} requests queued
             </Badge>
           </Tooltip>
@@ -141,10 +184,24 @@ export function AssociateTargetsEditor({
       </PaneHead>
 
       {/* Selected targets card */}
-      <div className={mergeClasses(s.inlineCard)} style={{ padding: 12, marginBottom: 14, maxWidth: 880 }}>
+      <div
+        className={mergeClasses(s.inlineCard)}
+        style={{ padding: 12, marginBottom: 14, maxWidth: 880 }}
+      >
         {targets.length === 0 ? (
-          <Caption1 style={{ padding: '12px 4px', color: tokens.colorNeutralForeground3, fontStyle: 'italic', display: 'block', textAlign: 'center' }}>
-            No targets selected — use the picker below to choose {singleValued ? 'one' : 'one or more'} <strong>{targetTbl?.displayName ?? nav.targetEntity}</strong> record{singleValued ? '' : 's'}.
+          <Caption1
+            style={{
+              padding: '12px 4px',
+              color: tokens.colorNeutralForeground3,
+              fontStyle: 'italic',
+              display: 'block',
+              textAlign: 'center',
+            }}
+          >
+            No targets selected — use the picker below to choose{' '}
+            {singleValued ? 'one' : 'one or more'}{' '}
+            <strong>{targetTbl?.displayName ?? nav.targetEntity}</strong> record
+            {singleValued ? '' : 's'}.
           </Caption1>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -158,15 +215,28 @@ export function AssociateTargetsEditor({
                     alignItems: 'center',
                     gap: 10,
                     padding: '8px 4px',
-                    borderBottom: idx < targets.length - 1 ? `1px solid ${tokens.colorNeutralStroke3}` : 'none',
+                    borderBottom:
+                      idx < targets.length - 1 ? `1px solid ${tokens.colorNeutralStroke3}` : 'none',
                   }}
                 >
                   <Persona size="small" name={name ?? '?'} avatar={{ color: 'colorful' }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 600 }}>
-                      {name ?? <span style={{ fontStyle: 'italic', color: tokens.colorNeutralForeground3 }}>(name not resolved)</span>}
+                      {name ?? (
+                        <span
+                          style={{ fontStyle: 'italic', color: tokens.colorNeutralForeground3 }}
+                        >
+                          (name not resolved)
+                        </span>
+                      )}
                     </div>
-                    <div style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 10, color: tokens.colorNeutralForeground3 }}>
+                    <div
+                      style={{
+                        fontFamily: tokens.fontFamilyMonospace,
+                        fontSize: 10,
+                        color: tokens.colorNeutralForeground3,
+                      }}
+                    >
                       /{targetTbl?.entitySetName ?? '?'}({id})
                     </div>
                   </div>
@@ -207,8 +277,11 @@ export function AssociateTargetsEditor({
             />
           </Field>
           {!singleValued && (
-            <Caption1 style={{ display: 'block', marginTop: 6, color: tokens.colorNeutralForeground3 }}>
-              <Add20Regular style={{ width: 12, height: 12, verticalAlign: 'middle' }} /> picking a record adds it to the queue and resets the picker for the next pick.
+            <Caption1
+              style={{ display: 'block', marginTop: 6, color: tokens.colorNeutralForeground3 }}
+            >
+              <Add20Regular style={{ width: 12, height: 12, verticalAlign: 'middle' }} /> picking a
+              record adds it to the queue and resets the picker for the next pick.
             </Caption1>
           )}
         </div>
@@ -218,7 +291,8 @@ export function AssociateTargetsEditor({
         <MessageBar layout="multiline" intent="info" style={{ maxWidth: 720, marginTop: 12 }}>
           <MessageBarBody>
             <MessageBarTitle>Single-valued nav property — one target only.</MessageBarTitle>
-            To change the target, remove the current one first. The server PUT atomically replaces the previous lookup value.
+            To change the target, remove the current one first. The server PUT atomically replaces
+            the previous lookup value.
           </MessageBarBody>
         </MessageBar>
       )}

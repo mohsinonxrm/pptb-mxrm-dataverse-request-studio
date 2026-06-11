@@ -1,6 +1,10 @@
 import type { FC, ReactNode } from 'react';
 import { Badge, mergeClasses } from '@fluentui/react-components';
-import { ChevronRight20Regular, ChevronDown20Regular, Checkmark16Filled } from '@fluentui/react-icons';
+import {
+  ChevronRight20Regular,
+  ChevronDown20Regular,
+  Checkmark16Filled,
+} from '@fluentui/react-icons';
 import { useStudioStyles } from './styles';
 import { groupColorVar } from '../theme/theme';
 import type { RequestGroup } from '../registry/requestTypes';
@@ -23,7 +27,15 @@ export interface ClauseTreeItemProps {
   badge?: ReactNode;
   badgeAppearance?: 'tint' | 'ghost' | 'filled' | 'outline';
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  badgeColor?: 'brand' | 'danger' | 'success' | 'warning' | 'informative' | 'subtle' | 'severe' | 'important';
+  badgeColor?:
+    | 'brand'
+    | 'danger'
+    | 'success'
+    | 'warning'
+    | 'informative'
+    | 'subtle'
+    | 'severe'
+    | 'important';
   /** Whether this row expands children */
   expandable?: boolean;
   expanded?: boolean;
@@ -39,15 +51,31 @@ export interface ClauseTreeItemProps {
 export function ClauseTreeItem(props: ClauseTreeItemProps) {
   const s = useStudioStyles();
   const {
-    icon: Icon, iconFilled: IconFilled, label, code, selected, dirty,
-    badge, badgeAppearance = 'tint', badgeColor = 'brand',
-    expandable, expanded, onToggle, onSelect, depth = 0, group = 'read',
+    icon: Icon,
+    iconFilled: IconFilled,
+    label,
+    code,
+    selected,
+    dirty,
+    badge,
+    badgeAppearance = 'tint',
+    badgeColor = 'brand',
+    expandable,
+    expanded,
+    onToggle,
+    onSelect,
+    depth = 0,
+    group = 'read',
   } = props;
   const ResolvedIcon = selected && IconFilled ? IconFilled : Icon;
   const indentClass =
-    depth === 1 ? s.ctiIndent1 :
-    depth === 2 ? s.ctiIndent2 :
-    depth === 3 ? s.ctiIndent3 : undefined;
+    depth === 1
+      ? s.ctiIndent1
+      : depth === 2
+        ? s.ctiIndent2
+        : depth === 3
+          ? s.ctiIndent3
+          : undefined;
 
   return (
     <button
@@ -75,7 +103,11 @@ export function ClauseTreeItem(props: ClauseTreeItemProps) {
         style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
       >
         {expandable ? (
-          expanded ? <ChevronDown20Regular className={s.ctiChev} /> : <ChevronRight20Regular className={s.ctiChev} />
+          expanded ? (
+            <ChevronDown20Regular className={s.ctiChev} />
+          ) : (
+            <ChevronRight20Regular className={s.ctiChev} />
+          )
         ) : (
           <span style={{ width: 14 }} aria-hidden />
         )}
@@ -86,12 +118,18 @@ export function ClauseTreeItem(props: ClauseTreeItemProps) {
       />
       <span className={mergeClasses(s.ctiLabel, code && s.ctiCodeLabel)}>{label}</span>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifySelf: 'end' }}>
-        {dirty && <span className={s.ctiDirty} aria-label="Modified">•</span>}
-        {badge !== undefined && badge !== null && badge !== false && (
+        {dirty && (
+          <span className={s.ctiDirty} aria-label="Modified">
+            •
+          </span>
+        )}
+        {badge !== undefined &&
+          badge !== null &&
+          badge !== false &&
           /* Replace the literal '✓' string badge (reads as data, not state)
              with an iconic Checkmark in a success-tinted badge — handled
              here so callsites don't each have to import the icon. */
-          badge === '✓' ? (
+          (badge === '✓' ? (
             <Badge
               size="extra-small"
               appearance="tint"
@@ -103,14 +141,19 @@ export function ClauseTreeItem(props: ClauseTreeItemProps) {
             <Badge size="extra-small" appearance={badgeAppearance} color={badgeColor}>
               {badge}
             </Badge>
-          )
-        )}
+          ))}
       </span>
     </button>
   );
 }
 
-export function ClauseTreeList({ children, ariaLabel }: { children: ReactNode; ariaLabel?: string }) {
+export function ClauseTreeList({
+  children,
+  ariaLabel,
+}: {
+  children: ReactNode;
+  ariaLabel?: string;
+}) {
   const s = useStudioStyles();
   return (
     <ul role="tree" aria-label={ariaLabel} className={s.ctiList}>

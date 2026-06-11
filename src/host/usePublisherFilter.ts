@@ -32,7 +32,9 @@ import { metadataCache } from './cache';
 
 export function usePublisherFilter() {
   // ── Layer 1: publishers + solutions (combined) ──
-  const [publishersWithSolutions, setPublishersWithSolutions] = useState<PublisherWithSolutions[]>([]);
+  const [publishersWithSolutions, setPublishersWithSolutions] = useState<PublisherWithSolutions[]>(
+    [],
+  );
   const [publishersLoading, setPublishersLoading] = useState(false);
   const [publishersError, setPublishersError] = useState<string | null>(null);
 
@@ -54,7 +56,10 @@ export function usePublisherFilter() {
 
     async function loadPublishersWithSolutions() {
       const cached = metadataCache.getPublishersWithSolutions();
-      if (cached) { setPublishersWithSolutions(cached); return; }
+      if (cached) {
+        setPublishersWithSolutions(cached);
+        return;
+      }
 
       try {
         setPublishersLoading(true);
@@ -72,7 +77,9 @@ export function usePublisherFilter() {
     }
 
     loadPublishersWithSolutions();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // ── Effect 2: cascade publisher → solution selection ──
@@ -85,16 +92,16 @@ export function usePublisherFilter() {
 
     const selectedPublisherSet = new Set(selectedPublisherIds);
     const filteredSolutions = publishersWithSolutions
-      .filter(pws => selectedPublisherSet.has(pws.publisher.publisherid))
-      .flatMap(pws => pws.solutions);
+      .filter((pws) => selectedPublisherSet.has(pws.publisher.publisherid))
+      .flatMap((pws) => pws.solutions);
 
     setSolutions(filteredSolutions);
 
     // Drop any selected solution that no longer maps to a selected publisher.
-    setSelectedSolutionIds(current => {
+    setSelectedSolutionIds((current) => {
       if (current.length === 0) return current;
-      const availableIds = new Set(filteredSolutions.map(s => s.solutionid));
-      const validIds = current.filter(id => availableIds.has(id));
+      const availableIds = new Set(filteredSolutions.map((s) => s.solutionid));
+      const validIds = current.filter((id) => availableIds.has(id));
       return validIds.length === current.length ? current : validIds;
     });
   }, [selectedPublisherIds, publishersWithSolutions]);
@@ -111,7 +118,10 @@ export function usePublisherFilter() {
 
     async function loadEntities() {
       const cached = metadataCache.getFilteredEntities(selectedSolutionIds);
-      if (cached) { setEntities(cached); return; }
+      if (cached) {
+        setEntities(cached);
+        return;
+      }
 
       try {
         setEntitiesLoading(true);
@@ -119,7 +129,7 @@ export function usePublisherFilter() {
 
         const components = await getSolutionComponents(selectedSolutionIds);
         const logicalNames = Array.from(
-          new Set(components.map(c => c.msdyn_name).filter(Boolean))
+          new Set(components.map((c) => c.msdyn_name).filter(Boolean)),
         );
         const data = filterCachedEntitiesByNames(logicalNames);
 
@@ -135,7 +145,9 @@ export function usePublisherFilter() {
     }
 
     loadEntities();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [selectedSolutionIds]);
 
   const updateSelectedPublishers = useCallback((ids: string[]) => {
@@ -147,7 +159,7 @@ export function usePublisherFilter() {
 
   return {
     // Publishers
-    publishers: publishersWithSolutions.map(pws => pws.publisher),
+    publishers: publishersWithSolutions.map((pws) => pws.publisher),
     publishersWithSolutions,
     publishersLoading,
     publishersError,

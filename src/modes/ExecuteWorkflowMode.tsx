@@ -13,12 +13,23 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Flowchart20Regular, Flowchart20Filled,
-  Table20Regular, Table20Filled,
-  LineHorizontal320Regular, LineHorizontal320Filled,
+  Flowchart20Regular,
+  Flowchart20Filled,
+  Table20Regular,
+  Table20Filled,
+  LineHorizontal320Regular,
+  LineHorizontal320Filled,
 } from '@fluentui/react-icons';
 import {
-  Field, Combobox, Option, Caption1, Badge, tokens, MessageBar, MessageBarBody, MessageBarTitle,
+  Field,
+  Combobox,
+  Option,
+  Caption1,
+  Badge,
+  tokens,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
   Spinner,
 } from '@fluentui/react-components';
 import { Sidebar } from '../shell/Sidebar';
@@ -41,8 +52,11 @@ import type { ThemeMode } from '../theme/theme';
 import { useScopedEntities } from '../host/useScopedEntities';
 import { useLiveTable } from '../host/useLiveMetadata';
 import {
-  serializeExecuteWorkflow, deserializeExecuteWorkflow, hashState,
-  type SavedRequest, type SerializedExecuteWorkflowState,
+  serializeExecuteWorkflow,
+  deserializeExecuteWorkflow,
+  hashState,
+  type SavedRequest,
+  type SerializedExecuteWorkflowState,
 } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
 
@@ -108,26 +122,33 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
       `workflows?$select=workflowid,name,uniquename,primaryentity,description` +
       `&$filter=(statecode eq 1 and type eq 1 and ondemand eq true and category eq 0)` +
       `&$orderby=name asc`;
-    window.dataverseAPI.queryData(query).then(res => {
-      if (cancelled) return;
-      const rows = (res as { value?: Array<Record<string, unknown>> })?.value ?? [];
-      setWorkflows(rows.map(r => ({
-        id: String(r.workflowid ?? ''),
-        name: String(r.name ?? '(unnamed)'),
-        uniqueName: r.uniquename != null ? String(r.uniquename) : null,
-        primaryEntity: String(r.primaryentity ?? ''),
-        description: r.description != null ? String(r.description) : null,
-      })));
-      setWorkflowsLoading(false);
-    }).catch(e => {
-      if (cancelled) return;
-      setWorkflowsError(e instanceof Error ? e.message : String(e));
-      setWorkflowsLoading(false);
-    });
-    return () => { cancelled = true; };
+    window.dataverseAPI
+      .queryData(query)
+      .then((res) => {
+        if (cancelled) return;
+        const rows = (res as { value?: Array<Record<string, unknown>> })?.value ?? [];
+        setWorkflows(
+          rows.map((r) => ({
+            id: String(r.workflowid ?? ''),
+            name: String(r.name ?? '(unnamed)'),
+            uniqueName: r.uniquename != null ? String(r.uniquename) : null,
+            primaryEntity: String(r.primaryentity ?? ''),
+            description: r.description != null ? String(r.description) : null,
+          })),
+        );
+        setWorkflowsLoading(false);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setWorkflowsError(e instanceof Error ? e.message : String(e));
+        setWorkflowsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const wf = state.workflowId ? workflows.find(w => w.id === state.workflowId) : undefined;
+  const wf = state.workflowId ? workflows.find((w) => w.id === state.workflowId) : undefined;
   // Warm the workflow's primary-entity metadata as soon as a workflow is
   // picked. findTable() reads synchronously from the live registry; the
   // hook below kicks off the fetch when needed and triggers a re-render
@@ -142,17 +163,28 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
   const [entityRecordName, setEntityRecordName] = useState<string>('');
 
-  const markDirty = (id: string) => setState(s => { const d = new Set(s.dirty); d.add(id); return { ...s, dirty: d }; });
-  const set = <K extends keyof ExecuteWorkflowState>(k: K, v: ExecuteWorkflowState[K], dirtyId?: string) => {
-    setState(s => ({ ...s, [k]: v }));
+  const markDirty = (id: string) =>
+    setState((s) => {
+      const d = new Set(s.dirty);
+      d.add(id);
+      return { ...s, dirty: d };
+    });
+  const set = <K extends keyof ExecuteWorkflowState>(
+    k: K,
+    v: ExecuteWorkflowState[K],
+    dirtyId?: string,
+  ) => {
+    setState((s) => ({ ...s, [k]: v }));
     if (dirtyId) markDirty(dirtyId);
   };
 
-  const disabledReason =
-    !wf ? 'Pick a workflow.' :
-    !state.entityId ? `Pick a ${wf.primaryEntity} record to run the workflow on.` :
-    state.headers.some(h => h.enabled && !h.name) ? 'Fix empty header name.' :
-    null;
+  const disabledReason = !wf
+    ? 'Pick a workflow.'
+    : !state.entityId
+      ? `Pick a ${wf.primaryEntity} record to run the workflow on.`
+      : state.headers.some((h) => h.enabled && !h.name)
+        ? 'Fix empty header name.'
+        : null;
 
   const onExecute = async () => {
     setLoading(true);
@@ -160,12 +192,22 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents(rs => [{
-      id: `r-${Date.now()}`, modeId: 'exec-workflow',
-      url: built.relativeUrl, method: 'POST', ts: Date.now(),
-      status: res.status, ms: res.ms, rowCount: res.ok ? 1 : 0,
-    }, ...rs].slice(0, 8));
-    setState(s => ({ ...s, dirty: new Set() }));
+    setRecents((rs) =>
+      [
+        {
+          id: `r-${Date.now()}`,
+          modeId: 'exec-workflow',
+          url: built.relativeUrl,
+          method: 'POST',
+          ts: Date.now(),
+          status: res.status,
+          ms: res.ms,
+          rowCount: res.ok ? 1 : 0,
+        },
+        ...rs,
+      ].slice(0, 8),
+    );
+    setState((s) => ({ ...s, dirty: new Set() }));
   };
 
   // ── Save / Load ──
@@ -182,11 +224,15 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
     const snap = entry.state as SerializedExecuteWorkflowState;
     // Entity-existence guard on the workflow's primary entity (resolved
     // from the live workflows list after rehydration).
-    const targetWf = workflows.find(w => w.id === snap.workflowId);
-    if (targetWf && entities.length > 0 && !entities.some(e => e.logicalName === targetWf.primaryEntity)) {
+    const targetWf = workflows.find((w) => w.id === snap.workflowId);
+    if (
+      targetWf &&
+      entities.length > 0 &&
+      !entities.some((e) => e.logicalName === targetWf.primaryEntity)
+    ) {
       window.alert(
         `Can't load "${entry.name}": workflow's primary entity \`${targetWf.primaryEntity}\` ` +
-        `isn't available in this environment.`,
+          `isn't available in this environment.`,
       );
       return;
     }
@@ -198,56 +244,70 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
     setActivePath('pick');
   };
 
-  usePublishSaveContext(useMemo(() => {
-    if (!state.workflowId) return null;
-    return {
-      state: currentSerialized,
-      modeId: 'exec-workflow' as const,
-      dirty: isDirty,
-      lastSavedId,
-      onSaved,
-      onLoadSaved,
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentSerialized, isDirty, lastSavedId, state.workflowId, workflows]));
+  usePublishSaveContext(
+    useMemo(() => {
+      if (!state.workflowId) return null;
+      return {
+        state: currentSerialized,
+        modeId: 'exec-workflow' as const,
+        dirty: isDirty,
+        lastSavedId,
+        onSaved,
+        onLoadSaved,
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentSerialized, isDirty, lastSavedId, state.workflowId, workflows]),
+  );
 
   const sections = [
     {
       // The Workflow itself IS the target; the record context is "Bound to".
-      id: 'workflow', label: 'Target',
+      id: 'workflow',
+      label: 'Target',
       meta: wf?.name ?? 'pick one',
-      items: [{
-        id: 'pick',
-        icon: Flowchart20Regular, iconFilled: Flowchart20Filled,
-        label: wf?.name ?? 'Pick on-demand workflow',
-        // Method already lives on the URL bar pill; no sidebar badge needed.
-        dirty: state.dirty.has('pick'),
-      }],
+      items: [
+        {
+          id: 'pick',
+          icon: Flowchart20Regular,
+          iconFilled: Flowchart20Filled,
+          label: wf?.name ?? 'Pick on-demand workflow',
+          // Method already lives on the URL bar pill; no sidebar badge needed.
+          dirty: state.dirty.has('pick'),
+        },
+      ],
     },
     {
       // The record context is labeled "Bound to" (not "Target") — the workflow
       // itself is the target.
-      id: 'target', label: 'Bound to',
+      id: 'target',
+      label: 'Bound to',
       meta: wf ? `${tbl?.displayName ?? wf.primaryEntity} record` : '—',
-      items: [{
-        id: 'target',
-        icon: Table20Regular, iconFilled: Table20Filled,
-        label: state.entityId ? `${tbl?.displayName ?? ''} (selected)` : 'Pick a record',
-        badge: state.entityId ? '✓' : null,
-        badgeAppearance: 'ghost' as const,
-        dirty: state.dirty.has('target'),
-      }],
+      items: [
+        {
+          id: 'target',
+          icon: Table20Regular,
+          iconFilled: Table20Filled,
+          label: state.entityId ? `${tbl?.displayName ?? ''} (selected)` : 'Pick a record',
+          badge: state.entityId ? '✓' : null,
+          badgeAppearance: 'ghost' as const,
+          dirty: state.dirty.has('target'),
+        },
+      ],
     },
     {
-      id: 'headers', label: 'Headers',
-      meta: `${state.headers.filter(h => h.enabled).length} active`,
-      items: [{
-        id: 'headers',
-        icon: LineHorizontal320Regular, iconFilled: LineHorizontal320Filled,
-        label: 'HTTP headers',
-        badge: state.headers.filter(h => h.enabled).length || null,
-        dirty: state.dirty.has('headers'),
-      }],
+      id: 'headers',
+      label: 'Headers',
+      meta: `${state.headers.filter((h) => h.enabled).length} active`,
+      items: [
+        {
+          id: 'headers',
+          icon: LineHorizontal320Regular,
+          iconFilled: LineHorizontal320Filled,
+          label: 'HTTP headers',
+          badge: state.headers.filter((h) => h.enabled).length || null,
+          dirty: state.dirty.has('headers'),
+        },
+      ],
     },
   ];
 
@@ -262,9 +322,10 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
           error={workflowsError}
           workflowId={state.workflowId}
           setWorkflowId={(id) => {
-            setState(s => ({ ...s, workflowId: id, entityId: null }));
+            setState((s) => ({ ...s, workflowId: id, entityId: null }));
             setEntityRecordName('');
-            markDirty('pick'); markDirty('target');
+            markDirty('pick');
+            markDirty('target');
           }}
         />
       );
@@ -292,7 +353,7 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
               <RecordPicker
                 table={wf.primaryEntity}
                 selectedId={state.entityId}
-                onPick={r => {
+                onPick={(r) => {
                   set('entityId', r?.id ?? null, 'target');
                   setEntityRecordName(r?.primary ?? '');
                 }}
@@ -302,14 +363,16 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
           </div>
         </div>
       ) : (
-        <MessageBar layout="multiline" intent="info"><MessageBarBody>Pick a workflow first.</MessageBarBody></MessageBar>
+        <MessageBar layout="multiline" intent="info">
+          <MessageBarBody>Pick a workflow first.</MessageBarBody>
+        </MessageBar>
       );
       break;
     case 'headers':
       pane = (
         <HeadersEditor
           items={state.headers}
-          setItems={h => set('headers', h, 'headers')}
+          setItems={(h) => set('headers', h, 'headers')}
           group="execute"
         />
       );
@@ -333,7 +396,10 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
           urlPreview={built.relativeNoBase}
           sections={sections}
           activeNode={activePath}
-          onSelect={(id) => setActivePath(id)}
+          onSelect={(id) => {
+            setActivePath(id);
+            setTab('builder');
+          }}
           recents={recents}
         />
       }
@@ -351,7 +417,7 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
     >
       <MainTabs tab={tab} onTabChange={setTab} resultCount={result?.ok ? 1 : null}>
         {tab === 'builder' && pane}
-        {tab === 'code'    && <CodeView themeMode={themeMode} inputs={codeInputs} />}
+        {tab === 'code' && <CodeView themeMode={themeMode} inputs={codeInputs} />}
         {tab === 'results' && (
           <ResultsView
             result={result}
@@ -372,7 +438,11 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
 }
 
 function WorkflowPickerPane({
-  workflows, loading, error, workflowId, setWorkflowId,
+  workflows,
+  loading,
+  error,
+  workflowId,
+  setWorkflowId,
 }: {
   workflows: WorkflowRow[];
   loading: boolean;
@@ -380,7 +450,7 @@ function WorkflowPickerPane({
   workflowId: string | null;
   setWorkflowId: (id: string | null) => void;
 }) {
-  const wf = workflowId ? workflows.find(w => w.id === workflowId) : undefined;
+  const wf = workflowId ? workflows.find((w) => w.id === workflowId) : undefined;
 
   // Typed-input filter for the Combobox (freeform + clearable). The Combobox's
   // own input value tracks both the user's typed filter AND the picked
@@ -396,11 +466,13 @@ function WorkflowPickerPane({
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q || q === (wf?.name ?? '').toLowerCase()) return workflows;
-    return workflows.filter(w =>
-      w.name.toLowerCase().includes(q) ||
-      (w.uniqueName?.toLowerCase().includes(q) ?? false) ||
-      w.primaryEntity.toLowerCase().includes(q) ||
-      (w.description?.toLowerCase().includes(q) ?? false));
+    return workflows.filter(
+      (w) =>
+        w.name.toLowerCase().includes(q) ||
+        (w.uniqueName?.toLowerCase().includes(q) ?? false) ||
+        w.primaryEntity.toLowerCase().includes(q) ||
+        (w.description?.toLowerCase().includes(q) ?? false),
+    );
   }, [workflows, search, wf]);
   return (
     <div>
@@ -410,9 +482,15 @@ function WorkflowPickerPane({
         sub="Pick an activated workflow (type=Definition, category=Workflow). The workflow's primary entity drives the Target picker."
         group="execute"
       >
-        {loading
-          ? <Badge appearance="ghost" icon={<Spinner size="extra-tiny" />}>loading…</Badge>
-          : <Badge appearance="ghost">{workflows.length} workflow{workflows.length === 1 ? '' : 's'}</Badge>}
+        {loading ? (
+          <Badge appearance="ghost" icon={<Spinner size="extra-tiny" />}>
+            loading…
+          </Badge>
+        ) : (
+          <Badge appearance="ghost">
+            {workflows.length} workflow{workflows.length === 1 ? '' : 's'}
+          </Badge>
+        )}
       </PaneHead>
       {error && (
         <MessageBar intent="error" layout="multiline" style={{ marginBottom: 12, maxWidth: 760 }}>
@@ -437,16 +515,18 @@ function WorkflowPickerPane({
               const next = d.optionValue ?? null;
               setWorkflowId(next);
               if (next) {
-                const picked = workflows.find(w => w.id === next);
+                const picked = workflows.find((w) => w.id === next);
                 setSearch(picked?.name ?? '');
               } else {
                 setSearch('');
               }
             }}
             placeholder={
-              loading ? 'Loading workflows…' :
-              workflows.length === 0 ? 'No activated workflows in this environment' :
-              'Search workflows…'
+              loading
+                ? 'Loading workflows…'
+                : workflows.length === 0
+                  ? 'No activated workflows in this environment'
+                  : 'Search workflows…'
             }
             disabled={loading || workflows.length === 0}
             listbox={{ style: { maxHeight: 420 } }}
@@ -458,12 +538,15 @@ function WorkflowPickerPane({
                 </Caption1>
               </Option>
             )}
-            {filtered.map(w => (
+            {filtered.map((w) => (
               <Option key={w.id} value={w.id} text={w.name}>
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <span>{w.name}</span>
                   <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-                    Primary entity: <span style={{ fontFamily: tokens.fontFamilyMonospace }}>{w.primaryEntity}</span>
+                    Primary entity:{' '}
+                    <span style={{ fontFamily: tokens.fontFamilyMonospace }}>
+                      {w.primaryEntity}
+                    </span>
                     {w.description ? ` · ${w.description}` : ''}
                   </Caption1>
                 </div>
@@ -473,20 +556,27 @@ function WorkflowPickerPane({
         </Field>
 
         {wf && (
-          <div style={{
-            marginTop: 16, padding: 12,
-            border: `1px solid ${tokens.colorNeutralStroke2}`,
-            borderRadius: tokens.borderRadiusMedium,
-            background: tokens.colorNeutralBackground1,
-          }}>
+          <div
+            style={{
+              marginTop: 16,
+              padding: 12,
+              border: `1px solid ${tokens.colorNeutralStroke2}`,
+              borderRadius: tokens.borderRadiusMedium,
+              background: tokens.colorNeutralBackground1,
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <Flowchart20Filled style={{ color: tokens.colorBrandForeground1 }} />
               <strong style={{ fontSize: 13 }}>{wf.name}</strong>
               <Badge appearance="ghost">{wf.primaryEntity}</Badge>
               <span style={{ flexGrow: 1 }} />
-              <Badge appearance="filled" color="success" style={{ fontWeight: 700 }}>POST</Badge>
+              <Badge appearance="filled" color="success" style={{ fontWeight: 700 }}>
+                POST
+              </Badge>
             </div>
-            <Caption1 style={{ color: tokens.colorNeutralForeground2, display: 'block', marginBottom: 8 }}>
+            <Caption1
+              style={{ color: tokens.colorNeutralForeground2, display: 'block', marginBottom: 8 }}
+            >
               {wf.description}
             </Caption1>
             {/* Use the shared KvGrid primitive instead of a hand-rolled
@@ -497,7 +587,11 @@ function WorkflowPickerPane({
               rows={[
                 { k: 'Workflow id', v: wf.id, mono: true },
                 { k: 'Primary entity', v: wf.primaryEntity, mono: true },
-                { k: 'URL shape', v: `POST /workflows(${wf.id})/Microsoft.Dynamics.CRM.ExecuteWorkflow`, mono: true },
+                {
+                  k: 'URL shape',
+                  v: `POST /workflows(${wf.id})/Microsoft.Dynamics.CRM.ExecuteWorkflow`,
+                  mono: true,
+                },
                 { k: 'Body shape', v: '{ "EntityId": "<target-guid>" }', mono: true },
                 { k: 'Response', v: '204 No Content — workflow runs async' },
               ]}
@@ -505,7 +599,10 @@ function WorkflowPickerPane({
             <MessageBar layout="multiline" intent="info" style={{ marginTop: 12 }}>
               <MessageBarBody>
                 <MessageBarTitle>Workflow runs are asynchronous.</MessageBarTitle>
-                The 204 only confirms the request was accepted. Check the <code>workflowlogs</code> / <code>asyncoperations</code> tables for completion + result.
+                The 204 only confirms the request was accepted. Check the <code>
+                  workflowlogs
+                </code>{' '}
+                / <code>asyncoperations</code> tables for completion + result.
               </MessageBarBody>
             </MessageBar>
           </div>

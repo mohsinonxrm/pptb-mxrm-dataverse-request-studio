@@ -18,18 +18,33 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Table20Regular, Table20Filled,
-  BranchFork20Regular, BranchFork20Filled,
-  FormNew20Regular, FormNew20Filled,
-  TextBulletList20Regular, TextBulletList20Filled,
-  Settings20Regular, Settings20Filled,
-  LineHorizontal320Regular, LineHorizontal320Filled,
-  ShieldLock20Regular, ShieldLock20Filled,
-  ArrowSwap20Regular, ArrowSwap20Filled,
-  Checkmark16Filled, Warning20Filled,
+  Table20Regular,
+  Table20Filled,
+  BranchFork20Regular,
+  BranchFork20Filled,
+  FormNew20Regular,
+  FormNew20Filled,
+  TextBulletList20Regular,
+  TextBulletList20Filled,
+  Settings20Regular,
+  Settings20Filled,
+  LineHorizontal320Regular,
+  LineHorizontal320Filled,
+  ShieldLock20Regular,
+  ShieldLock20Filled,
+  ArrowSwap20Regular,
+  ArrowSwap20Filled,
+  Checkmark16Filled,
+  Warning20Filled,
 } from '@fluentui/react-icons';
 import {
-  Caption1, Combobox, Option, tokens, Field, MessageBar, MessageBarBody,
+  Caption1,
+  Combobox,
+  Option,
+  tokens,
+  Field,
+  MessageBar,
+  MessageBarBody,
   Button,
 } from '@fluentui/react-components';
 import { Sidebar } from '../shell/Sidebar';
@@ -54,14 +69,22 @@ import { findTable, findColumn } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildUpdate, buildUpdateBody } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
-import { defaultBypassOptions, type UpdateState, type CreateFieldValue, type UpdateMethod } from '../state/writeState';
+import {
+  defaultBypassOptions,
+  type UpdateState,
+  type CreateFieldValue,
+  type UpdateMethod,
+} from '../state/writeState';
 import type { RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
 import {
-  serializeUpdate, deserializeUpdate, hashState,
-  type SavedRequest, type SerializedUpdateState,
+  serializeUpdate,
+  deserializeUpdate,
+  hashState,
+  type SavedRequest,
+  type SerializedUpdateState,
 } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
 
@@ -86,10 +109,20 @@ const initialState = (): UpdateState => ({
 // GUID shape — match what RecordPicker accepts. Invalid GUIDs short-circuit
 // the live fetch (no point sending a malformed id over the wire) and
 // surface an advisory instead.
-const GUID_RE = /^[{(]?[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}[)}]?$/;
+const GUID_RE =
+  /^[{(]?[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}[)}]?$/;
 const isValidGuid = (s: string | null | undefined): boolean => !!s && GUID_RE.test(s.trim());
 
-type RootClauseId = 'target' | 'method' | 'diff' | 'fieldset' | 'precondition' | 'prefer' | 'returnselect' | 'headers' | 'bypass';
+type RootClauseId =
+  | 'target'
+  | 'method'
+  | 'diff'
+  | 'fieldset'
+  | 'precondition'
+  | 'prefer'
+  | 'returnselect'
+  | 'headers'
+  | 'bypass';
 
 export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('update');
@@ -100,7 +133,7 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   // (b) tbl metadata resolving from the live registry. Before this, the
   // original-row fetch effect would early-return on the missing tbl, leaving
   // originalLoading=false + originalRow=null → diff renders the error state.
-  const { loading: tableLoading } = useLiveTable((state).table || null);
+  const { loading: tableLoading } = useLiveTable(state.table || null);
   const { entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
@@ -119,9 +152,14 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   const body = useMemo(() => buildUpdateBody(state), [state]);
   const tbl = findTable(state.table);
 
-  const markDirty = (id: string) => setState(s => { const d = new Set(s.dirty); d.add(id); return { ...s, dirty: d }; });
+  const markDirty = (id: string) =>
+    setState((s) => {
+      const d = new Set(s.dirty);
+      d.add(id);
+      return { ...s, dirty: d };
+    });
   const set = <K extends keyof UpdateState>(k: K, v: UpdateState[K], dirtyId?: string) => {
-    setState(s => ({ ...s, [k]: v }));
+    setState((s) => ({ ...s, [k]: v }));
     if (dirtyId) markDirty(dirtyId);
   };
 
@@ -160,40 +198,44 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
     // Use the same leading-slash URL form as executeRetrieveSingle — PPTB's
     // queryData is reliable with this form for single-record fetches.
     const url = `/${tbl.entitySetName}(${state.recordId})`;
-    window.dataverseAPI.queryData(url).then(res => {
-      if (cancelled) return;
-      // PPTB returns single-record responses in one of THREE shapes
-      // depending on the host build + whether $select was applied:
-      //   1. `{ value: <recordObject> }`             — wrapped, object
-      //   2. `{ value: [<recordObject>] }`           — wrapped, single-elt array
-      //   3. `<recordObject>` (no wrapper)            — raw, common when no $select
-      // The signature says (1) but empirically PPTB without $select sometimes
-      // returns shape (3). Defend against all three.
-      const wrappedValue = (res as { value?: unknown } | null)?.value;
-      let row: Record<string, unknown> | null = null;
-      if (Array.isArray(wrappedValue)) {
-        row = (wrappedValue[0] as Record<string, unknown>) ?? null;
-      } else if (wrappedValue && typeof wrappedValue === 'object') {
-        row = wrappedValue as Record<string, unknown>;
-      } else if (res && typeof res === 'object') {
-        // No `value` wrapper. If the response itself has the entity's
-        // primary key OR an `@odata.*` annotation, treat it as the record.
-        const direct = res as Record<string, unknown>;
-        const looksLikeRecord =
-          (tbl.primaryKey in direct) ||
-          Object.keys(direct).some(k => k.startsWith('@odata.'));
-        if (looksLikeRecord) row = direct;
-      }
-      setOriginalRow(row);
-      setOriginalLoading(false);
-    }).catch((e: unknown) => {
-      if (cancelled) return;
-      const msg = e instanceof Error ? e.message : String(e);
-      setOriginalRow(null);
-      setOriginalLoading(false);
-      setOriginalError(msg);
-    });
-    return () => { cancelled = true; };
+    window.dataverseAPI
+      .queryData(url)
+      .then((res) => {
+        if (cancelled) return;
+        // PPTB returns single-record responses in one of THREE shapes
+        // depending on the host build + whether $select was applied:
+        //   1. `{ value: <recordObject> }`             — wrapped, object
+        //   2. `{ value: [<recordObject>] }`           — wrapped, single-elt array
+        //   3. `<recordObject>` (no wrapper)            — raw, common when no $select
+        // The signature says (1) but empirically PPTB without $select sometimes
+        // returns shape (3). Defend against all three.
+        const wrappedValue = (res as { value?: unknown } | null)?.value;
+        let row: Record<string, unknown> | null = null;
+        if (Array.isArray(wrappedValue)) {
+          row = (wrappedValue[0] as Record<string, unknown>) ?? null;
+        } else if (wrappedValue && typeof wrappedValue === 'object') {
+          row = wrappedValue as Record<string, unknown>;
+        } else if (res && typeof res === 'object') {
+          // No `value` wrapper. If the response itself has the entity's
+          // primary key OR an `@odata.*` annotation, treat it as the record.
+          const direct = res as Record<string, unknown>;
+          const looksLikeRecord =
+            tbl.primaryKey in direct || Object.keys(direct).some((k) => k.startsWith('@odata.'));
+          if (looksLikeRecord) row = direct;
+        }
+        setOriginalRow(row);
+        setOriginalLoading(false);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        setOriginalRow(null);
+        setOriginalLoading(false);
+        setOriginalError(msg);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [state.recordId, state.table, tbl]);
 
   // Pull the real ETag out of the fetched row (Dataverse responses carry it
@@ -207,12 +249,12 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Drill into a single column → PUT mode ──
   const onDrillColumn = (column: string) => {
-    setState(s => ({ ...s, method: 'PUT', putColumn: column }));
+    setState((s) => ({ ...s, method: 'PUT', putColumn: column }));
     setActivePath('method');
     markDirty('method');
   };
   const exitPutMode = () => {
-    setState(s => ({ ...s, method: 'PATCH', putColumn: null }));
+    setState((s) => ({ ...s, method: 'PATCH', putColumn: null }));
     markDirty('method');
   };
 
@@ -229,11 +271,11 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   const onLoadSaved = (entry: SavedRequest) => {
     if (entry.modeId !== 'update') return;
     const snap = entry.state as SerializedUpdateState;
-    if (entities.length > 0 && !entities.some(e => e.logicalName === snap.table)) {
+    if (entities.length > 0 && !entities.some((e) => e.logicalName === snap.table)) {
       window.alert(
         `Can't load "${entry.name}": entity \`${snap.table}\` ` +
-        `isn't available in this environment. The solution may have been ` +
-        `removed or you may be connected to a different org.`,
+          `isn't available in this environment. The solution may have been ` +
+          `removed or you may be connected to a different org.`,
       );
       return;
     }
@@ -246,32 +288,48 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // Publish save context. Hidden until the user has a table picked —
   // no point persisting an empty shell.
-  usePublishSaveContext(useMemo(() => {
-    if (!state.table) return null;
-    return {
-      state: currentSerialized,
-      modeId: 'update' as const,
-      dirty: isDirty,
-      lastSavedId,
-      onSaved,
-      onLoadSaved,
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentSerialized, isDirty, lastSavedId, state.table]));
+  usePublishSaveContext(
+    useMemo(() => {
+      if (!state.table) return null;
+      return {
+        state: currentSerialized,
+        modeId: 'update' as const,
+        dirty: isDirty,
+        lastSavedId,
+        onSaved,
+        onLoadSaved,
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentSerialized, isDirty, lastSavedId, state.table]),
+  );
 
   // ── Execute guards ──
   const fieldCount = Object.keys(state.fieldValues).length;
-  const putValueOk = state.method !== 'PUT' || (state.putColumn != null && state.fieldValues[state.putColumn] != null);
-  const disabledReason =
-    !tbl ? 'Pick a target table first.' :
-    !state.recordId ? 'Pick a record to update.' :
-    !isValidGuid(state.recordId) ? 'Record id is not a valid GUID.' :
-    state.method === 'PUT'
-      ? (!state.putColumn ? 'Pick a column for the PUT.' : !putValueOk ? `Set a value for ${state.putColumn}.` : null)
-      : (fieldCount === 0 ? 'No field changes — nothing to PATCH. Pick at least one field to update.' :
-         Object.keys(body).length === 0 ? 'Body is empty — set at least one value.' : null) ||
-    (state.concurrency.kind === 'etag' && !state.concurrency.etag.trim() ? 'Provide an etag value or switch the concurrency mode.' :
-     state.headers.some(h => h.enabled && !h.name) ? 'Fix empty header name.' : null);
+  const putValueOk =
+    state.method !== 'PUT' ||
+    (state.putColumn != null && state.fieldValues[state.putColumn] != null);
+  const disabledReason = !tbl
+    ? 'Pick a target table first.'
+    : !state.recordId
+      ? 'Pick a record to update.'
+      : !isValidGuid(state.recordId)
+        ? 'Record id is not a valid GUID.'
+        : state.method === 'PUT'
+          ? !state.putColumn
+            ? 'Pick a column for the PUT.'
+            : !putValueOk
+              ? `Set a value for ${state.putColumn}.`
+              : null
+          : (fieldCount === 0
+              ? 'No field changes — nothing to PATCH. Pick at least one field to update.'
+              : Object.keys(body).length === 0
+                ? 'Body is empty — set at least one value.'
+                : null) ||
+            (state.concurrency.kind === 'etag' && !state.concurrency.etag.trim()
+              ? 'Provide an etag value or switch the concurrency mode.'
+              : state.headers.some((h) => h.enabled && !h.name)
+                ? 'Fix empty header name.'
+                : null);
 
   const onExecute = async () => {
     setLoading(true);
@@ -279,12 +337,22 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents(rs => [{
-      id: `r-${Date.now()}`, modeId: 'update',
-      url: built.relativeUrl, method: state.method, ts: Date.now(),
-      status: res.status, ms: res.ms, rowCount: res.ok ? 1 : 0,
-    }, ...rs].slice(0, 8));
-    setState(s => ({ ...s, dirty: new Set() }));
+    setRecents((rs) =>
+      [
+        {
+          id: `r-${Date.now()}`,
+          modeId: 'update',
+          url: built.relativeUrl,
+          method: state.method,
+          ts: Date.now(),
+          status: res.status,
+          ms: res.ms,
+          rowCount: res.ok ? 1 : 0,
+        },
+        ...rs,
+      ].slice(0, 8),
+    );
+    setState((s) => ({ ...s, dirty: new Set() }));
   };
 
   // ── Compose effective headers ──
@@ -293,9 +361,23 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
     // Mirror the IfMatch card editor's choice onto a header for execute time
     const m = state.concurrency;
     if (m.kind === 'update-only') {
-      h.push({ id: '__cc__If-Match-any', name: 'If-Match', value: '*', enabled: true, builtin: true, hint: 'Auto-composed from the If-Match pane.' });
+      h.push({
+        id: '__cc__If-Match-any',
+        name: 'If-Match',
+        value: '*',
+        enabled: true,
+        builtin: true,
+        hint: 'Auto-composed from the If-Match pane.',
+      });
     } else if (m.kind === 'etag' && m.etag.trim()) {
-      h.push({ id: '__cc__If-Match-etag', name: 'If-Match', value: m.etag, enabled: true, builtin: true, hint: 'Auto-composed from the If-Match pane.' });
+      h.push({
+        id: '__cc__If-Match-etag',
+        name: 'If-Match',
+        value: m.etag,
+        enabled: true,
+        builtin: true,
+        hint: 'Auto-composed from the If-Match pane.',
+      });
     }
     h = applyBypassToHeaders(h, state.bypass);
     return h;
@@ -327,16 +409,20 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
         severity: 'error',
         source: 'validation',
         focusNode: 'method',
-        title: 'PUT single-column isn\'t supported by the PPTB host',
+        title: "PUT single-column isn't supported by the PPTB host",
         body: (
           <>
             DRS authors the correct request{' '}
-            <code>PUT /{tbl?.entitySetName ?? '&lt;set&gt;'}(&lt;id&gt;)/{state.putColumn ?? '&lt;column&gt;'}</code>{' '}
-            with body <code>{'{ "value": <scalar> }'}</code>, but PPTB&apos;s <code>dataverseAPI.update</code> is
-            PATCH-only — there&apos;s no raw-request hook for property-path URLs. To set one column from inside
-            PPTB, switch back to <strong>PATCH</strong> with a single field in the body — it&apos;s functionally
-            equivalent. To use the PUT pattern, copy the URL + body from the Code tab and run it from
-            Postman / curl / the JS SDK / Power Automate.
+            <code>
+              PUT /{tbl?.entitySetName ?? '&lt;set&gt;'}(&lt;id&gt;)/
+              {state.putColumn ?? '&lt;column&gt;'}
+            </code>{' '}
+            with body <code>{'{ "value": <scalar> }'}</code>, but PPTB&apos;s{' '}
+            <code>dataverseAPI.update</code> is PATCH-only — there&apos;s no raw-request hook for
+            property-path URLs. To set one column from inside PPTB, switch back to{' '}
+            <strong>PATCH</strong> with a single field in the body — it&apos;s functionally
+            equivalent. To use the PUT pattern, copy the URL + body from the Code tab and run it
+            from Postman / curl / the JS SDK / Power Automate.
           </>
         ),
       });
@@ -353,120 +439,169 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
     ? `PUT /${state.putColumn ?? '?'}`
     : `PATCH · ${fieldCount} field${fieldCount === 1 ? '' : 's'}`;
   const ifMatchBadge =
-    state.concurrency.kind === 'update-only' ? '* (any)' :
-    state.concurrency.kind === 'etag' && currentEtag && state.concurrency.etag.includes(currentEtag) ? 'current etag' :
-    state.concurrency.kind === 'etag' ? 'custom etag' :
-    'none';
+    state.concurrency.kind === 'update-only'
+      ? '* (any)'
+      : state.concurrency.kind === 'etag' &&
+          currentEtag &&
+          state.concurrency.etag.includes(currentEtag)
+        ? 'current etag'
+        : state.concurrency.kind === 'etag'
+          ? 'custom etag'
+          : 'none';
 
   const sections = [
     {
-      id: 'target', label: 'Target',
+      id: 'target',
+      label: 'Target',
       meta: tbl
-        ? (originalError ? 'fetch failed — see Diff' : `${tbl.displayName} record`)
+        ? originalError
+          ? 'fetch failed — see Diff'
+          : `${tbl.displayName} record`
         : 'Pick a table',
-      items: [{
-        id: 'target',
-        icon: Table20Regular, iconFilled: Table20Filled,
-        // Source-of-truth chain for the sidebar label:
-        //   1. Picker primary (free, immediate after pick)
-        //   2. Live row's primaryName (after fetch resolves)
-        //   3. Fallback hint
-        label:
-          pickedPrimaryFromPicker ||
-          (originalRow && tbl ? String(originalRow[tbl.primaryName] ?? '') : '') ||
-          (state.recordId ? '(loading record…)' : 'Pick a record'),
-        dirty: state.dirty.has('target'),
-      }],
+      items: [
+        {
+          id: 'target',
+          icon: Table20Regular,
+          iconFilled: Table20Filled,
+          // Source-of-truth chain for the sidebar label:
+          //   1. Picker primary (free, immediate after pick)
+          //   2. Live row's primaryName (after fetch resolves)
+          //   3. Fallback hint
+          label:
+            pickedPrimaryFromPicker ||
+            (originalRow && tbl ? String(originalRow[tbl.primaryName] ?? '') : '') ||
+            (state.recordId ? '(loading record…)' : 'Pick a record'),
+          dirty: state.dirty.has('target'),
+        },
+      ],
     },
     {
-      id: 'method', label: 'Method',
+      id: 'method',
+      label: 'Method',
       meta: methodBadge,
-      items: [{
-        id: 'method',
-        icon: ArrowSwap20Regular, iconFilled: ArrowSwap20Filled,
-        label: isPut ? 'PUT — single column' : 'PATCH — multi-field',
-        badge: methodBadge, badgeAppearance: 'ghost' as const,
-        dirty: state.dirty.has('method'),
-      }],
+      items: [
+        {
+          id: 'method',
+          icon: ArrowSwap20Regular,
+          iconFilled: ArrowSwap20Filled,
+          label: isPut ? 'PUT — single column' : 'PATCH — multi-field',
+          badge: methodBadge,
+          badgeAppearance: 'ghost' as const,
+          dirty: state.dirty.has('method'),
+        },
+      ],
     },
     {
       // Field set goes FIRST (you have to set the values before there's
       // anything to diff against). The natural flow is set → diff, not
       // diff → set; Diff stays empty until Field set is touched.
-      id: 'body', label: 'Field set',
+      id: 'body',
+      label: 'Field set',
       meta: isPut ? 'single column' : `${fieldCount} changed`,
       items: [
         {
           id: 'fieldset',
-          icon: FormNew20Regular, iconFilled: FormNew20Filled,
+          icon: FormNew20Regular,
+          iconFilled: FormNew20Filled,
           label: isPut ? `Value (${state.putColumn ?? '?'})` : 'Field set',
-          badge: isPut ? (putValueOk ? '✓' : '?') : (fieldCount || null),
+          badge: isPut ? (putValueOk ? '✓' : '?') : fieldCount || null,
           badgeAppearance: 'ghost' as const,
           dirty: state.dirty.has('fieldset'),
         },
         // Diff is collapsed under Field set — surfaces what's about to
         // be PATCHed once the user has actually set values.
-        ...(!isPut ? [{
-          id: 'diff',
-          icon: BranchFork20Regular, iconFilled: BranchFork20Filled,
-          label: 'Diff',
-          badge: fieldCount || null,
-          badgeAppearance: 'tint' as const,
-          badgeColor: fieldCount > 0 ? ('brand' as const) : ('subtle' as const),
-          dirty: state.dirty.has('diff'),
-        }] : []),
+        ...(!isPut
+          ? [
+              {
+                id: 'diff',
+                icon: BranchFork20Regular,
+                iconFilled: BranchFork20Filled,
+                label: 'Diff',
+                badge: fieldCount || null,
+                badgeAppearance: 'tint' as const,
+                badgeColor: fieldCount > 0 ? ('brand' as const) : ('subtle' as const),
+                dirty: state.dirty.has('diff'),
+              },
+            ]
+          : []),
       ],
     },
     {
-      id: 'precondition', label: 'Precondition',
+      id: 'precondition',
+      label: 'Precondition',
       meta: ifMatchBadge,
-      items: [{
-        id: 'precondition',
-        icon: ShieldLock20Regular, iconFilled: ShieldLock20Filled,
-        label: 'Optimistic concurrency',
-        badge: ifMatchBadge, badgeAppearance: 'ghost' as const,
-        dirty: state.dirty.has('precondition'),
-      }],
-    },
-    ...(!isPut ? [{
-      id: 'prefer', label: 'Prefer',
-      meta: returnRep ? 'return=representation' : '204 No Content',
       items: [
         {
-          id: 'prefer',
-          icon: Settings20Regular, iconFilled: Settings20Filled,
-          label: 'Prefer header',
-          badge: preferToHeaderString(state.prefer) ? 'on' : null,
+          id: 'precondition',
+          icon: ShieldLock20Regular,
+          iconFilled: ShieldLock20Filled,
+          label: 'Optimistic concurrency',
+          badge: ifMatchBadge,
           badgeAppearance: 'ghost' as const,
-          dirty: state.dirty.has('prefer'),
+          dirty: state.dirty.has('precondition'),
         },
-        ...(returnRep ? [{
-          id: 'returnselect',
-          icon: TextBulletList20Regular, iconFilled: TextBulletList20Filled,
-          label: '$select (response)', code: true,
-          badge: state.returnSelect.length || null,
-          dirty: state.dirty.has('returnselect'),
-        }] : []),
       ],
-    }] : []),
+    },
+    ...(!isPut
+      ? [
+          {
+            id: 'prefer',
+            label: 'Prefer',
+            meta: returnRep ? 'return=representation' : '204 No Content',
+            items: [
+              {
+                id: 'prefer',
+                icon: Settings20Regular,
+                iconFilled: Settings20Filled,
+                label: 'Prefer header',
+                badge: preferToHeaderString(state.prefer) ? 'on' : null,
+                badgeAppearance: 'ghost' as const,
+                dirty: state.dirty.has('prefer'),
+              },
+              ...(returnRep
+                ? [
+                    {
+                      id: 'returnselect',
+                      icon: TextBulletList20Regular,
+                      iconFilled: TextBulletList20Filled,
+                      label: '$select (response)',
+                      code: true,
+                      badge: state.returnSelect.length || null,
+                      dirty: state.dirty.has('returnselect'),
+                    },
+                  ]
+                : []),
+            ],
+          },
+        ]
+      : []),
     {
-      id: 'headers', label: 'Headers',
-      meta: `${state.headers.filter(h => h.enabled).length} active`,
+      id: 'headers',
+      label: 'Headers',
+      meta: `${state.headers.filter((h) => h.enabled).length} active`,
       items: [
         {
           id: 'headers',
-          icon: LineHorizontal320Regular, iconFilled: LineHorizontal320Filled,
+          icon: LineHorizontal320Regular,
+          iconFilled: LineHorizontal320Filled,
           label: 'HTTP headers',
-          badge: state.headers.filter(h => h.enabled).length || null,
+          badge: state.headers.filter((h) => h.enabled).length || null,
           dirty: state.dirty.has('headers'),
         },
         {
           id: 'bypass',
-          icon: Warning20Filled, iconFilled: Warning20Filled,
+          icon: Warning20Filled,
+          iconFilled: Warning20Filled,
           label: 'Bypass logic',
           badge: summarizeBypass(state.bypass),
-          badgeAppearance: state.bypass.businessLogic !== 'none' || state.bypass.suppressFlows ? 'tint' as const : 'ghost' as const,
-          badgeColor: state.bypass.businessLogic !== 'none' || state.bypass.suppressFlows ? 'warning' as const : 'subtle' as const,
+          badgeAppearance:
+            state.bypass.businessLogic !== 'none' || state.bypass.suppressFlows
+              ? ('tint' as const)
+              : ('ghost' as const),
+          badgeColor:
+            state.bypass.businessLogic !== 'none' || state.bypass.suppressFlows
+              ? ('warning' as const)
+              : ('subtle' as const),
           dirty: state.dirty.has('bypass'),
         },
       ],
@@ -481,11 +616,11 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
       pane = (
         <TargetEditor
           table={state.table}
-          onTableChange={t => {
+          onTableChange={(t) => {
             // Switching/clearing the target invalidates every column-bound
             // clause for Update: recordId (not valid on new entity), body
             // fields, the PUT column choice, and the response $select.
-            setState(s => ({
+            setState((s) => ({
               ...s,
               table: t,
               recordId: null,
@@ -538,32 +673,32 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
       );
       break;
     case 'fieldset':
-      pane = isPut
-        ? (
-          <SingleColumnEditor
-            table={state.table}
-            column={state.putColumn}
-            value={state.putColumn ? state.fieldValues[state.putColumn] : undefined}
-            onChange={(v) => {
-              if (!state.putColumn) return;
-              set('fieldValues', { ...state.fieldValues, [state.putColumn]: v }, 'fieldset');
-            }}
-            onSwapMethod={exitPutMode}
-            themeMode={themeMode}
-          />
-        )
-        : (
-          <FieldSetEditor
-            table={state.table}
-            values={state.fieldValues}
-            setValues={(next) => set('fieldValues', next as Record<string, CreateFieldValue>, 'fieldset')}
-            nullFields={state.nullFields}
-            setNullFields={(n) => set('nullFields', n, 'fieldset')}
-            group="write"
-            themeMode={themeMode}
-            purpose="update"
-          />
-        );
+      pane = isPut ? (
+        <SingleColumnEditor
+          table={state.table}
+          column={state.putColumn}
+          value={state.putColumn ? state.fieldValues[state.putColumn] : undefined}
+          onChange={(v) => {
+            if (!state.putColumn) return;
+            set('fieldValues', { ...state.fieldValues, [state.putColumn]: v }, 'fieldset');
+          }}
+          onSwapMethod={exitPutMode}
+          themeMode={themeMode}
+        />
+      ) : (
+        <FieldSetEditor
+          table={state.table}
+          values={state.fieldValues}
+          setValues={(next) =>
+            set('fieldValues', next as Record<string, CreateFieldValue>, 'fieldset')
+          }
+          nullFields={state.nullFields}
+          setNullFields={(n) => set('nullFields', n, 'fieldset')}
+          group="write"
+          themeMode={themeMode}
+          purpose="update"
+        />
+      );
       break;
     case 'precondition':
       pane = (
@@ -579,14 +714,20 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
       );
       break;
     case 'prefer':
-      pane = <PreferEditor spec={state.prefer} setSpec={p => set('prefer', p, 'prefer')} group="write" />;
+      pane = (
+        <PreferEditor
+          spec={state.prefer}
+          setSpec={(p) => set('prefer', p, 'prefer')}
+          group="write"
+        />
+      );
       break;
     case 'returnselect':
       pane = (
         <SelectEditor
           table={state.table}
           selectedIds={state.returnSelect}
-          setSelectedIds={ids => set('returnSelect', ids, 'returnselect')}
+          setSelectedIds={(ids) => set('returnSelect', ids, 'returnselect')}
           group="write"
         />
       );
@@ -595,7 +736,7 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
       pane = (
         <HeadersEditor
           items={state.headers}
-          setItems={h => set('headers', h, 'headers')}
+          setItems={(h) => set('headers', h, 'headers')}
           group="write"
         />
       );
@@ -604,7 +745,7 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
       pane = (
         <BypassEditor
           value={state.bypass}
-          onChange={b => set('bypass', b, 'bypass')}
+          onChange={(b) => set('bypass', b, 'bypass')}
           group="write"
         />
       );
@@ -628,7 +769,10 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
           urlPreview={built.relativeNoBase}
           sections={sections}
           activeNode={activePath}
-          onSelect={(id) => setActivePath(id)}
+          onSelect={(id) => {
+            setActivePath(id);
+            setTab('builder');
+          }}
           recents={recents}
         />
       }
@@ -647,7 +791,7 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
     >
       <MainTabs tab={tab} onTabChange={setTab} resultCount={result?.ok ? 1 : null}>
         {tab === 'builder' && pane}
-        {tab === 'code'    && <CodeView themeMode={themeMode} inputs={codeInputs} />}
+        {tab === 'code' && <CodeView themeMode={themeMode} inputs={codeInputs} />}
         {tab === 'results' && (
           <ResultsView
             result={result}
@@ -672,7 +816,12 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
 // Method pane — PATCH multi-field vs PUT single-column radio cards
 // ──────────────────────────────────────────────────────────────
 function MethodPane({
-  method, putColumn, setMethod, setPutColumn, table, onExitPut,
+  method,
+  putColumn,
+  setMethod,
+  setPutColumn,
+  table,
+  onExitPut,
 }: {
   method: UpdateMethod;
   putColumn: string | null;
@@ -683,19 +832,24 @@ function MethodPane({
 }) {
   const tbl = findTable(table);
   const pickable = useMemo(
-    () => (tbl?.columns ?? [])
-      .filter(c =>
-        c.attributeType !== 'Uniqueidentifier' &&
-        c.attributeType !== 'File' && c.attributeType !== 'Image' &&
-        // Lookups via PUT use $ref form (Associate) — not the property URL path
-        c.attributeType !== 'Lookup' && c.attributeType !== 'Customer' && c.attributeType !== 'Owner' &&
-        // Honor IsValidForUpdate — system-managed audit columns, formula/
-        // rollup outputs, etc. can't be PUT either. `undefined` treated as
-        // permissive in case the host hasn't returned the flag.
-        c.isValidForUpdate !== false
-      )
-      .slice()
-      .sort((a, b) => a.displayName.localeCompare(b.displayName)),
+    () =>
+      (tbl?.columns ?? [])
+        .filter(
+          (c) =>
+            c.attributeType !== 'Uniqueidentifier' &&
+            c.attributeType !== 'File' &&
+            c.attributeType !== 'Image' &&
+            // Lookups via PUT use $ref form (Associate) — not the property URL path
+            c.attributeType !== 'Lookup' &&
+            c.attributeType !== 'Customer' &&
+            c.attributeType !== 'Owner' &&
+            // Honor IsValidForUpdate — system-managed audit columns, formula/
+            // rollup outputs, etc. can't be PUT either. `undefined` treated as
+            // permissive in case the host hasn't returned the flag.
+            c.isValidForUpdate !== false,
+        )
+        .slice()
+        .sort((a, b) => a.displayName.localeCompare(b.displayName)),
     [tbl],
   );
   // Same freeform + clearable Combobox pattern as Delete's ScopeEditor —
@@ -713,16 +867,17 @@ function MethodPane({
     }
   }, [putColumn]);
 
-  const selectedColumn = putColumn ? pickable.find(c => c.logicalName === putColumn) : undefined;
-  const selectedLabel = selectedColumn?.displayName ?? (putColumn ?? '');
+  const selectedColumn = putColumn ? pickable.find((c) => c.logicalName === putColumn) : undefined;
+  const selectedLabel = selectedColumn?.displayName ?? putColumn ?? '';
 
   const filtered = useMemo(() => {
     if (!search) return pickable;
     const q = search.toLowerCase();
-    return pickable.filter(c =>
-      c.displayName.toLowerCase().includes(q) ||
-      c.logicalName.toLowerCase().includes(q) ||
-      c.attributeType.toLowerCase().includes(q),
+    return pickable.filter(
+      (c) =>
+        c.displayName.toLowerCase().includes(q) ||
+        c.logicalName.toLowerCase().includes(q) ||
+        c.attributeType.toLowerCase().includes(q),
     );
   }, [pickable, search]);
 
@@ -737,18 +892,23 @@ function MethodPane({
         group="write"
       />
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(2, 1fr)',
-        gap: 12,
-        maxWidth: 760,
-      }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, 1fr)',
+          gap: 12,
+          maxWidth: 760,
+        }}
+      >
         <MethodCard
           title="PATCH — multi-field"
           description="Send a JSON body of changed fields. Body shape: { col1: val1, col2: val2, ... }"
           syntax={`/{entitySet}({id})`}
           selected={method === 'PATCH'}
-          onClick={() => { setMethod('PATCH'); onExitPut(); }}
+          onClick={() => {
+            setMethod('PATCH');
+            onExitPut();
+          }}
         />
         <MethodCard
           title="PUT — single column"
@@ -801,12 +961,13 @@ function MethodPane({
                   </Caption1>
                 </Option>
               )}
-              {filtered.map(c => (
+              {filtered.map((c) => (
                 <Option key={c.logicalName} value={c.logicalName} text={c.displayName}>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <span>{c.displayName}</span>
                     <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-                      {c.logicalName} · <span style={{ color: tokens.colorBrandForeground2 }}>{c.attributeType}</span>
+                      {c.logicalName} ·{' '}
+                      <span style={{ color: tokens.colorBrandForeground2 }}>{c.attributeType}</span>
                     </Caption1>
                   </div>
                 </Option>
@@ -815,7 +976,15 @@ function MethodPane({
           </Field>
           <MessageBar layout="multiline" intent="info" style={{ marginTop: 14 }}>
             <MessageBarBody>
-              In PUT mode, the URL changes to <code style={{ fontFamily: tokens.fontFamilyMonospace }}>/{tbl?.entitySetName ?? '<set>'}(&lt;id&gt;)/{putColumn ?? '<col>'}</code> and the body is <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{'{ "value": <scalar> }'}</code>. Switch to <strong>Field set</strong> in the sidebar to edit the value.
+              In PUT mode, the URL changes to{' '}
+              <code style={{ fontFamily: tokens.fontFamilyMonospace }}>
+                /{tbl?.entitySetName ?? '<set>'}(&lt;id&gt;)/{putColumn ?? '<col>'}
+              </code>{' '}
+              and the body is{' '}
+              <code style={{ fontFamily: tokens.fontFamilyMonospace }}>
+                {'{ "value": <scalar> }'}
+              </code>
+              . Switch to <strong>Field set</strong> in the sidebar to edit the value.
             </MessageBarBody>
           </MessageBar>
         </div>
@@ -825,7 +994,11 @@ function MethodPane({
 }
 
 function MethodCard({
-  title, description, syntax, selected, onClick,
+  title,
+  description,
+  syntax,
+  selected,
+  onClick,
 }: {
   title: string;
   description: string;
@@ -862,17 +1035,23 @@ function MethodCard({
           />
         )}
       </div>
-      <Caption1 style={{ color: tokens.colorNeutralForeground2, lineHeight: 1.4 }}>{description}</Caption1>
-      <code style={{
-        marginTop: 'auto',
-        fontFamily: tokens.fontFamilyMonospace,
-        fontSize: 10,
-        color: tokens.colorBrandForeground2,
-        background: tokens.colorBrandBackground2Hover,
-        padding: '4px 6px',
-        borderRadius: tokens.borderRadiusSmall,
-        alignSelf: 'flex-start',
-      }}>{syntax}</code>
+      <Caption1 style={{ color: tokens.colorNeutralForeground2, lineHeight: 1.4 }}>
+        {description}
+      </Caption1>
+      <code
+        style={{
+          marginTop: 'auto',
+          fontFamily: tokens.fontFamilyMonospace,
+          fontSize: 10,
+          color: tokens.colorBrandForeground2,
+          background: tokens.colorBrandBackground2Hover,
+          padding: '4px 6px',
+          borderRadius: tokens.borderRadiusSmall,
+          alignSelf: 'flex-start',
+        }}
+      >
+        {syntax}
+      </code>
     </button>
   );
 }
@@ -883,7 +1062,12 @@ function MethodCard({
 // scoped to one column.
 // ──────────────────────────────────────────────────────────────
 function SingleColumnEditor({
-  table, column, value, onChange, onSwapMethod, themeMode,
+  table,
+  column,
+  value,
+  onChange,
+  onSwapMethod,
+  themeMode,
 }: {
   table: string;
   column: string | null;

@@ -20,12 +20,17 @@
 
 import { useMemo, useState } from 'react';
 import {
-  Table, TableHeader, TableHeaderCell, TableBody, TableRow, TableCell,
-  Button, Caption1, tokens,
+  Table,
+  TableHeader,
+  TableHeaderCell,
+  TableBody,
+  TableRow,
+  TableCell,
+  Button,
+  Caption1,
+  tokens,
 } from '@fluentui/react-components';
-import {
-  ChevronRight16Regular, ChevronDown16Regular,
-} from '@fluentui/react-icons';
+import { ChevronRight16Regular, ChevronDown16Regular } from '@fluentui/react-icons';
 import { findTable } from '../../mock/metadata';
 import { partitionRecord, prettifyKey } from './detailFieldPartitioner';
 import { RecordDetailCard } from './RecordDetailCard';
@@ -70,14 +75,11 @@ export function CollectionSubgrid({ rows, entityLogical, level }: CollectionSubg
 
   // Per-row partitions (memoized). We use this to decide whether each
   // row has any nested expands — gates the row-expand toggle.
-  const rowPartitions = useMemo(
-    () => rows.map(r => partitionRecord(r, tbl)),
-    [rows, tbl],
-  );
+  const rowPartitions = useMemo(() => rows.map((r) => partitionRecord(r, tbl)), [rows, tbl]);
 
   const [expandedRowIdx, setExpandedRowIdx] = useState<Set<number>>(new Set());
   const toggleRow = (i: number) => {
-    setExpandedRowIdx(prev => {
+    setExpandedRowIdx((prev) => {
       const next = new Set(prev);
       if (next.has(i)) next.delete(i);
       else next.add(i);
@@ -99,15 +101,15 @@ export function CollectionSubgrid({ rows, entityLogical, level }: CollectionSubg
   // chars before truncation. We don't try to MEASURE — pick by heuristic
   // on the column key + content.
   const columnMinWidth = (key: string): number => {
-    if (/^_.*_value$/.test(key)) return 280;        // lookup wire form (GUID)
+    if (/^_.*_value$/.test(key)) return 280; // lookup wire form (GUID)
     if (key === '@odata.etag') return 90;
-    if (/id$/i.test(key)) return 280;                 // primary key GUIDs
+    if (/id$/i.test(key)) return 280; // primary key GUIDs
     if (/^(state|status|.*code|.*type)$/i.test(key)) return 130;
     if (/(age|count|amount|value|qty|number)$/i.test(key)) return 130;
     return 200;
   };
 
-  const hasToggleColGlobal = rowPartitions.some(p => hasNested(p));
+  const hasToggleColGlobal = rowPartitions.some((p) => hasNested(p));
 
   return (
     <div style={{ overflow: 'auto', maxWidth: '100%' }}>
@@ -122,10 +124,8 @@ export function CollectionSubgrid({ rows, entityLogical, level }: CollectionSubg
       >
         <TableHeader>
           <TableRow>
-            {hasToggleColGlobal && (
-              <TableHeaderCell style={{ width: 32, minWidth: 32 }} />
-            )}
-            {columns.map(k => (
+            {hasToggleColGlobal && <TableHeaderCell style={{ width: 32, minWidth: 32 }} />}
+            {columns.map((k) => (
               <TableHeaderCell key={k} style={{ minWidth: columnMinWidth(k) }}>
                 <span style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 11 }}>
                   {prettifyKey(k)}
@@ -139,7 +139,7 @@ export function CollectionSubgrid({ rows, entityLogical, level }: CollectionSubg
             const p = rowPartitions[i];
             const expanded = expandedRowIdx.has(i);
             const nested = hasNested(p);
-            const hasToggleCol = rowPartitions.some(rp => hasNested(rp));
+            const hasToggleCol = rowPartitions.some((rp) => hasNested(rp));
             return (
               <RowOrSubcard
                 key={i}
@@ -166,8 +166,15 @@ function hasNested(p: ReturnType<typeof partitionRecord>): boolean {
 }
 
 function RowOrSubcard({
-  row, rowPartition, columns, entityLogical, level,
-  expanded, nested, hasToggleCol, onToggle,
+  row,
+  rowPartition,
+  columns,
+  entityLogical,
+  level,
+  expanded,
+  nested,
+  hasToggleCol,
+  onToggle,
 }: {
   row: Record<string, unknown>;
   rowPartition: ReturnType<typeof partitionRecord>;
@@ -229,8 +236,8 @@ function RowOrSubcard({
           ) : null}
         </TableCell>
       )}
-      {columns.map(k => {
-        const scalar = rowPartition.scalars.find(s => s.key === k);
+      {columns.map((k) => {
+        const scalar = rowPartition.scalars.find((s) => s.key === k);
         if (!scalar) {
           return (
             <TableCell key={k}>
@@ -243,12 +250,14 @@ function RowOrSubcard({
           return (
             <TableCell key={k}>
               <span>{scalar.formattedValue}</span>
-              <span style={{
-                marginLeft: 6,
-                fontFamily: tokens.fontFamilyMonospace,
-                fontSize: 10,
-                color: tokens.colorNeutralForeground3,
-              }}>
+              <span
+                style={{
+                  marginLeft: 6,
+                  fontFamily: tokens.fontFamilyMonospace,
+                  fontSize: 10,
+                  color: tokens.colorNeutralForeground3,
+                }}
+              >
                 ({String(scalar.value)})
               </span>
             </TableCell>
@@ -263,8 +272,11 @@ function RowOrSubcard({
         }
         const v = scalar.value;
         const isStringy = typeof v === 'string';
-        const looksLikeGuid = isStringy
-          && /^[{(]?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}[)}]?$/.test(v as string);
+        const looksLikeGuid =
+          isStringy &&
+          /^[{(]?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}[)}]?$/.test(
+            v as string,
+          );
         return (
           <TableCell
             key={k}

@@ -23,15 +23,32 @@
 import { useEffect, useMemo, useState } from 'react';
 import Editor from '@monaco-editor/react';
 import {
-  Filter20Regular, Filter20Filled,
-  AppsList20Regular, AppsList20Filled,
-  NumberSymbol20Regular, NumberSymbol20Filled,
-  Settings20Regular, Settings20Filled,
-  LineHorizontal320Regular, LineHorizontal320Filled,
+  Filter20Regular,
+  Filter20Filled,
+  AppsList20Regular,
+  AppsList20Filled,
+  NumberSymbol20Regular,
+  NumberSymbol20Filled,
+  Settings20Regular,
+  Settings20Filled,
+  LineHorizontal320Regular,
+  LineHorizontal320Filled,
 } from '@fluentui/react-icons';
 import {
-  Field, Combobox, Option, OptionGroup, MessageBar, MessageBarBody, MessageBarTitle,
-  Caption1, tokens, mergeClasses, Spinner, Body1, Badge, Tooltip,
+  Field,
+  Combobox,
+  Option,
+  OptionGroup,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
+  Caption1,
+  tokens,
+  mergeClasses,
+  Spinner,
+  Body1,
+  Badge,
+  Tooltip,
 } from '@fluentui/react-components';
 import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
@@ -54,8 +71,11 @@ import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
 import { useStudioStyles } from '../primitives/styles';
 import {
-  serializePredefinedQuery, deserializePredefinedQuery, hashState,
-  type SavedRequest, type SerializedPredefinedQueryState,
+  serializePredefinedQuery,
+  deserializePredefinedQuery,
+  hashState,
+  type SavedRequest,
+  type SerializedPredefinedQueryState,
 } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
 
@@ -141,7 +161,9 @@ function parseLayoutColumns(layoutXml: string | null): LayoutColumn[] {
     const dotIdx = fullName.indexOf('.');
     if (dotIdx >= 0) {
       out.push({
-        fullName, width, isLink: true,
+        fullName,
+        width,
+        isLink: true,
         linkAlias: fullName.slice(0, dotIdx),
         attr: fullName.slice(dotIdx + 1),
       });
@@ -163,22 +185,38 @@ function parseLayoutColumns(layoutXml: string | null): LayoutColumn[] {
  */
 function queryTypeLabel(qt: number): string {
   switch (qt) {
-    case 0:    return 'Main view';
-    case 1:    return 'Advanced Find';
-    case 2:    return 'Subgrid';
-    case 4:    return 'Quick Find';
-    case 8:    return 'Reserved';
-    case 16:   return 'Lookup';
-    case 32:   return 'Marketing list';
-    case 64:   return 'Address book';
-    case 128:  return 'Main (no subj)';
-    case 256:  return 'Outlook filter';
-    case 512:  return 'Reserved';
-    case 1024: return 'Offline filter';
-    case 2048: return 'Outlook template';
-    case 4096: return 'Reserved';
-    case 8192: return 'Svc mgmt app';
-    default:   return `Type ${qt}`;
+    case 0:
+      return 'Main view';
+    case 1:
+      return 'Advanced Find';
+    case 2:
+      return 'Subgrid';
+    case 4:
+      return 'Quick Find';
+    case 8:
+      return 'Reserved';
+    case 16:
+      return 'Lookup';
+    case 32:
+      return 'Marketing list';
+    case 64:
+      return 'Address book';
+    case 128:
+      return 'Main (no subj)';
+    case 256:
+      return 'Outlook filter';
+    case 512:
+      return 'Reserved';
+    case 1024:
+      return 'Offline filter';
+    case 2048:
+      return 'Outlook template';
+    case 4096:
+      return 'Reserved';
+    case 8192:
+      return 'Svc mgmt app';
+    default:
+      return `Type ${qt}`;
   }
 }
 
@@ -188,7 +226,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   const [state, setState] = useState(initialState);
   // Live-metadata subscription so the entity-set name resolves once the
   // table cache lands.
-  useLiveTable((state).table || null);
+  useLiveTable(state.table || null);
   const { entities } = useScopedEntities();
   const [activeNode, setActiveNode] = useState<ClauseId>('target');
   const [tab, setTab] = useState<MainTab>('builder');
@@ -214,13 +252,13 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const built = useMemo(() => buildPredefinedQuery(state), [state]);
   const tbl = findTable(state.table);
-  const selectedQuery = queries.find(q => q.id === state.queryId) ?? null;
+  const selectedQuery = queries.find((q) => q.id === state.queryId) ?? null;
 
   // Two-group dropdown layout — system views (savedquery) above personal
   // views (userquery). Sorted by isDefault desc + name asc inside each
   // group (the fetch effect already enforces this).
-  const systemQueries = queries.filter(q => q.kind === 'savedQuery');
-  const personalQueries = queries.filter(q => q.kind === 'userQuery');
+  const systemQueries = queries.filter((q) => q.kind === 'savedQuery');
+  const personalQueries = queries.filter((q) => q.kind === 'userQuery');
 
   // Client-side typed filter — Fluent v9 Combobox doesn't auto-filter.
   // Empty input → show everything. Non-empty → substring match on the
@@ -229,12 +267,12 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   const filteredSystem = useMemo(() => {
     const q = comboInput.trim().toLowerCase();
     if (!q) return systemQueries;
-    return systemQueries.filter(x => x.name.toLowerCase().includes(q));
+    return systemQueries.filter((x) => x.name.toLowerCase().includes(q));
   }, [systemQueries, comboInput]);
   const filteredPersonal = useMemo(() => {
     const q = comboInput.trim().toLowerCase();
     if (!q) return personalQueries;
-    return personalQueries.filter(x => x.name.toLowerCase().includes(q));
+    return personalQueries.filter((x) => x.name.toLowerCase().includes(q));
   }, [personalQueries, comboInput]);
 
   // Sync the combobox input text to the selected query's name (and reset
@@ -282,8 +320,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
       `savedqueryid,name,description,fetchxml,layoutxml,returnedtypecode,` +
       `querytype,isdefault,isquickfindquery,iscustomizable,ismanaged`;
     const userSelect =
-      `userqueryid,name,description,fetchxml,layoutxml,returnedtypecode,` +
-      `querytype`;
+      `userqueryid,name,description,fetchxml,layoutxml,returnedtypecode,` + `querytype`;
     const savedUrl =
       `savedqueries?$select=${savedSelect}` +
       `&$filter=returnedtypecode eq '${state.table}' and statecode eq 0` +
@@ -299,79 +336,92 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
         throw e instanceof Error ? e : new Error(String(e));
       }),
       window.dataverseAPI.queryData(userUrl).catch(() => ({ value: [] })),
-    ]).then(([sv, uv]) => {
-      if (cancelled) return;
-      const svRows = (sv as { value?: Array<Record<string, unknown>> })?.value ?? [];
-      const uvRows = (uv as { value?: Array<Record<string, unknown>> })?.value ?? [];
-      const all: QueryRow[] = [
-        ...svRows.map((r) => {
-          const layoutXml = r.layoutxml != null ? String(r.layoutxml) : null;
-          return {
-            id: String(r.savedqueryid ?? ''),
-            name: String(r.name ?? '(unnamed)'),
-            description: r.description != null ? String(r.description) : null,
-            fetchXml: r.fetchxml != null ? String(r.fetchxml) : null,
-            layoutXml,
-            layoutColumns: parseLayoutColumns(layoutXml),
-            returnedTypeCode: String(r.returnedtypecode ?? state.table),
-            queryType: typeof r.querytype === 'number' ? r.querytype : 0,
-            isDefault: r.isdefault === true,
-            isQuickFind: r.isquickfindquery === true,
-            // iscustomizable is a ManagedProperty wrapper `{ Value: bool, CanBeChanged: bool }`
-            isCustom: (r.iscustomizable as { Value?: boolean } | undefined)?.Value === true,
-            isManaged: r.ismanaged === true,
-            kind: 'savedQuery' as const,
-          };
-        }),
-        ...uvRows.map((r) => {
-          const layoutXml = r.layoutxml != null ? String(r.layoutxml) : null;
-          return {
-            id: String(r.userqueryid ?? ''),
-            name: String(r.name ?? '(unnamed)'),
-            description: r.description != null ? String(r.description) : null,
-            fetchXml: r.fetchxml != null ? String(r.fetchxml) : null,
-            layoutXml,
-            layoutColumns: parseLayoutColumns(layoutXml),
-            returnedTypeCode: String(r.returnedtypecode ?? state.table),
-            queryType: typeof r.querytype === 'number' ? r.querytype : 0,
-            // userquery doesn't have these flags — personal views are user-
-            // owned by definition and never "default" / "quick find".
-            isDefault: false,
-            isQuickFind: false,
-            isCustom: true,
-            isManaged: false,
-            kind: 'userQuery' as const,
-          };
-        }),
-      ];
-      // Default views float to the top of their kind — they're what most
-      // users mean when they pick "the Account view".
-      all.sort((a, b) => {
-        if (a.kind !== b.kind) return a.kind === 'savedQuery' ? -1 : 1;
-        if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
-        return a.name.localeCompare(b.name);
+    ])
+      .then(([sv, uv]) => {
+        if (cancelled) return;
+        const svRows = (sv as { value?: Array<Record<string, unknown>> })?.value ?? [];
+        const uvRows = (uv as { value?: Array<Record<string, unknown>> })?.value ?? [];
+        const all: QueryRow[] = [
+          ...svRows.map((r) => {
+            const layoutXml = r.layoutxml != null ? String(r.layoutxml) : null;
+            return {
+              id: String(r.savedqueryid ?? ''),
+              name: String(r.name ?? '(unnamed)'),
+              description: r.description != null ? String(r.description) : null,
+              fetchXml: r.fetchxml != null ? String(r.fetchxml) : null,
+              layoutXml,
+              layoutColumns: parseLayoutColumns(layoutXml),
+              returnedTypeCode: String(r.returnedtypecode ?? state.table),
+              queryType: typeof r.querytype === 'number' ? r.querytype : 0,
+              isDefault: r.isdefault === true,
+              isQuickFind: r.isquickfindquery === true,
+              // iscustomizable is a ManagedProperty wrapper `{ Value: bool, CanBeChanged: bool }`
+              isCustom: (r.iscustomizable as { Value?: boolean } | undefined)?.Value === true,
+              isManaged: r.ismanaged === true,
+              kind: 'savedQuery' as const,
+            };
+          }),
+          ...uvRows.map((r) => {
+            const layoutXml = r.layoutxml != null ? String(r.layoutxml) : null;
+            return {
+              id: String(r.userqueryid ?? ''),
+              name: String(r.name ?? '(unnamed)'),
+              description: r.description != null ? String(r.description) : null,
+              fetchXml: r.fetchxml != null ? String(r.fetchxml) : null,
+              layoutXml,
+              layoutColumns: parseLayoutColumns(layoutXml),
+              returnedTypeCode: String(r.returnedtypecode ?? state.table),
+              queryType: typeof r.querytype === 'number' ? r.querytype : 0,
+              // userquery doesn't have these flags — personal views are user-
+              // owned by definition and never "default" / "quick find".
+              isDefault: false,
+              isQuickFind: false,
+              isCustom: true,
+              isManaged: false,
+              kind: 'userQuery' as const,
+            };
+          }),
+        ];
+        // Default views float to the top of their kind — they're what most
+        // users mean when they pick "the Account view".
+        all.sort((a, b) => {
+          if (a.kind !== b.kind) return a.kind === 'savedQuery' ? -1 : 1;
+          if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
+          return a.name.localeCompare(b.name);
+        });
+        setQueries(all);
+        setQueriesLoading(false);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        setQueriesError(msg);
+        setQueries([]);
+        setQueriesLoading(false);
       });
-      setQueries(all);
-      setQueriesLoading(false);
-    }).catch(e => {
-      if (cancelled) return;
-      const msg = e instanceof Error ? e.message : String(e);
-      setQueriesError(msg);
-      setQueries([]);
-      setQueriesLoading(false);
-    });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [state.table]);
 
-  const markDirty = (id: ClauseId) => setState(ss => { const d = new Set(ss.dirty); d.add(id); return { ...ss, dirty: d }; });
-  const set = <K extends keyof PredefinedQueryState>(k: K, v: PredefinedQueryState[K], dirtyId?: ClauseId) => {
-    setState(ss => ({ ...ss, [k]: v }));
+  const markDirty = (id: ClauseId) =>
+    setState((ss) => {
+      const d = new Set(ss.dirty);
+      d.add(id);
+      return { ...ss, dirty: d };
+    });
+  const set = <K extends keyof PredefinedQueryState>(
+    k: K,
+    v: PredefinedQueryState[K],
+    dirtyId?: ClauseId,
+  ) => {
+    setState((ss) => ({ ...ss, [k]: v }));
     if (dirtyId) markDirty(dirtyId);
   };
 
   const onTableChange = (logical: string) => {
-    setState(ss => ({ ...ss, table: logical, queryId: null }));
+    setState((ss) => ({ ...ss, table: logical, queryId: null }));
     markDirty('target');
   };
 
@@ -381,19 +431,29 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents(rs => [{
-      id: `r-${Date.now()}`, modeId: 'predefined-query',
-      url: built.relativeUrl, method: 'GET', ts: Date.now(),
-      status: res.status, ms: res.ms,
-      rowCount: ((res.body as { value?: unknown[] } | null)?.value?.length) ?? 0,
-    }, ...rs].slice(0, 8));
-    setState(ss => ({ ...ss, dirty: new Set() }));
+    setRecents((rs) =>
+      [
+        {
+          id: `r-${Date.now()}`,
+          modeId: 'predefined-query',
+          url: built.relativeUrl,
+          method: 'GET',
+          ts: Date.now(),
+          status: res.status,
+          ms: res.ms,
+          rowCount: (res.body as { value?: unknown[] } | null)?.value?.length ?? 0,
+        },
+        ...rs,
+      ].slice(0, 8),
+    );
+    setState((ss) => ({ ...ss, dirty: new Set() }));
   };
 
-  const disabledReason =
-    !state.table ? 'Pick a table first.' :
-    !state.queryId ? 'Pick a saved query or user view.' :
-    null;
+  const disabledReason = !state.table
+    ? 'Pick a table first.'
+    : !state.queryId
+      ? 'Pick a saved query or user view.'
+      : null;
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializePredefinedQuery(state), [state]);
@@ -408,11 +468,11 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   const onLoadSaved = (entry: SavedRequest) => {
     if (entry.modeId !== 'predefined-query') return;
     const snap = entry.state as SerializedPredefinedQueryState;
-    if (entities.length > 0 && !entities.some(e => e.logicalName === snap.table)) {
+    if (entities.length > 0 && !entities.some((e) => e.logicalName === snap.table)) {
       window.alert(
         `Can't load "${entry.name}": entity \`${snap.table}\` ` +
-        `isn't available in this environment. The solution may have been ` +
-        `removed or you may be connected to a different org.`,
+          `isn't available in this environment. The solution may have been ` +
+          `removed or you may be connected to a different org.`,
       );
       return;
     }
@@ -423,323 +483,445 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
     setActiveNode('target');
   };
 
-  usePublishSaveContext(useMemo(() => {
-    if (!state.table) return null;
-    return {
-      state: currentSerialized,
-      modeId: 'predefined-query' as const,
-      dirty: isDirty,
-      lastSavedId,
-      onSaved,
-      onLoadSaved,
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentSerialized, isDirty, lastSavedId, state.table]));
+  usePublishSaveContext(
+    useMemo(() => {
+      if (!state.table) return null;
+      return {
+        state: currentSerialized,
+        modeId: 'predefined-query' as const,
+        dirty: isDirty,
+        lastSavedId,
+        onSaved,
+        onLoadSaved,
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentSerialized, isDirty, lastSavedId, state.table]),
+  );
 
   const sections = [
     {
-      id: 'target', label: 'Target', meta: tbl?.displayName,
-      items: [{
-        id: 'target', icon: AppsList20Regular, iconFilled: AppsList20Filled,
-        label: selectedQuery?.name ?? (state.table ? 'Pick a query' : 'Pick a table'),
-        badge: selectedQuery?.kind === 'savedQuery' ? 'system' : selectedQuery?.kind === 'userQuery' ? 'user' : null,
-        badgeAppearance: 'ghost' as const,
-        dirty: state.dirty.has('target'),
-      }],
+      id: 'target',
+      label: 'Target',
+      meta: tbl?.displayName,
+      items: [
+        {
+          id: 'target',
+          icon: AppsList20Regular,
+          iconFilled: AppsList20Filled,
+          label: selectedQuery?.name ?? (state.table ? 'Pick a query' : 'Pick a table'),
+          badge:
+            selectedQuery?.kind === 'savedQuery'
+              ? 'system'
+              : selectedQuery?.kind === 'userQuery'
+                ? 'user'
+                : null,
+          badgeAppearance: 'ghost' as const,
+          dirty: state.dirty.has('target'),
+        },
+      ],
     },
     {
-      id: 'conditions', label: 'Conditions',
-      items: [{
-        id: 'conditions', icon: Filter20Regular, iconFilled: Filter20Filled,
-        label: 'Filter (read-only)',
-        badge: selectedQuery ? 'inherited' : null, badgeAppearance: 'ghost' as const,
-      }],
+      id: 'conditions',
+      label: 'Conditions',
+      items: [
+        {
+          id: 'conditions',
+          icon: Filter20Regular,
+          iconFilled: Filter20Filled,
+          label: 'Filter (read-only)',
+          badge: selectedQuery ? 'inherited' : null,
+          badgeAppearance: 'ghost' as const,
+        },
+      ],
     },
     {
-      id: 'top', label: 'Top',
-      items: [{
-        id: 'top', icon: NumberSymbol20Regular, iconFilled: NumberSymbol20Filled,
-        label: '$top', code: true,
-        badge: state.top ? state.top.toString() : 'default', badgeAppearance: 'ghost' as const,
-        dirty: state.dirty.has('top'),
-      }],
+      id: 'top',
+      label: 'Top',
+      items: [
+        {
+          id: 'top',
+          icon: NumberSymbol20Regular,
+          iconFilled: NumberSymbol20Filled,
+          label: '$top',
+          code: true,
+          badge: state.top ? state.top.toString() : 'default',
+          badgeAppearance: 'ghost' as const,
+          dirty: state.dirty.has('top'),
+        },
+      ],
     },
     {
-      id: 'prefer', label: 'Prefer',
-      items: [{
-        id: 'prefer', icon: Settings20Regular, iconFilled: Settings20Filled,
-        label: 'Prefer header',
-        badge: preferToHeaderString(state.prefer) ? 'on' : null, badgeAppearance: 'ghost' as const,
-        dirty: state.dirty.has('prefer'),
-      }],
+      id: 'prefer',
+      label: 'Prefer',
+      items: [
+        {
+          id: 'prefer',
+          icon: Settings20Regular,
+          iconFilled: Settings20Filled,
+          label: 'Prefer header',
+          badge: preferToHeaderString(state.prefer) ? 'on' : null,
+          badgeAppearance: 'ghost' as const,
+          dirty: state.dirty.has('prefer'),
+        },
+      ],
     },
     {
-      id: 'headers', label: 'Headers', meta: `${state.headers.filter(h => h.enabled).length} active`,
-      items: [{
-        id: 'headers', icon: LineHorizontal320Regular, iconFilled: LineHorizontal320Filled,
-        label: 'HTTP headers',
-        badge: state.headers.filter(h => h.enabled).length || null,
-        dirty: state.dirty.has('headers'),
-      }],
+      id: 'headers',
+      label: 'Headers',
+      meta: `${state.headers.filter((h) => h.enabled).length} active`,
+      items: [
+        {
+          id: 'headers',
+          icon: LineHorizontal320Regular,
+          iconFilled: LineHorizontal320Filled,
+          label: 'HTTP headers',
+          badge: state.headers.filter((h) => h.enabled).length || null,
+          dirty: state.dirty.has('headers'),
+        },
+      ],
     },
   ];
 
   let pane: React.ReactNode;
   switch (activeNode) {
-    case 'target': pane = (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <TargetEditor
-          table={state.table}
-          onTableChange={onTableChange}
-          group="read"
-          sub="Pick the table whose saved queries (system views) or user queries (personal views) you want to execute."
-        />
+    case 'target':
+      pane = (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <TargetEditor
+            table={state.table}
+            onTableChange={onTableChange}
+            group="read"
+            sub="Pick the table whose saved queries (system views) or user queries (personal views) you want to execute."
+          />
 
-        {state.table && (
-          <div style={{ maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {/* One picker, two OptionGroups. Drops the tabs entirely — the
+          {state.table && (
+            <div style={{ maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* One picker, two OptionGroups. Drops the tabs entirely — the
                 group headers ("System views" / "Personal views") communicate
                 kind without needing a second navigation level. Per the
                 Fluent v9 storybook Combobox grouping pattern. */}
-            <Field
-              label="View"
-              hint={
-                queries.length > 0
-                  ? `${systemQueries.length} system · ${personalQueries.length} personal`
-                  : undefined
-              }
-            >
-              <Combobox
-                freeform
-                clearable
-                value={comboInput}
-                selectedOptions={state.queryId ? [state.queryId] : []}
-                placeholder={
-                  queriesLoading ? 'Loading queries…' :
-                  queries.length === 0 ? 'No queries on this table' :
-                  'Search views by name…'
+              <Field
+                label="View"
+                hint={
+                  queries.length > 0
+                    ? `${systemQueries.length} system · ${personalQueries.length} personal`
+                    : undefined
                 }
-                disabled={queriesLoading}
-                onChange={(e) => {
-                  // User typed — treat as a filter, not a selection. If they
-                  // clear the input we also clear the selection (matches
-                  // the `clearable` X behavior).
-                  const next = (e.target as HTMLInputElement).value;
-                  setComboInput(next);
-                  if (next === '' && state.queryId) {
-                    setState(ss => ({ ...ss, queryId: null }));
-                    markDirty('target');
-                  }
-                }}
-                onOptionSelect={(_, d) => {
-                  if (!d.optionValue) {
-                    // Native clearable X dispatches a no-option select.
-                    setState(ss => ({ ...ss, queryId: null }));
-                    setComboInput('');
-                    markDirty('target');
-                    return;
-                  }
-                  const q = queries.find(x => x.id === d.optionValue);
-                  if (!q) return;
-                  setState(ss => ({ ...ss, queryId: q.id, queryType: q.kind }));
-                  setComboInput(q.name);
-                  markDirty('target');
-                }}
-                listbox={{ style: { maxHeight: 420 } }}
               >
-                {filteredSystem.length === 0 && filteredPersonal.length === 0 && comboInput.trim() && (
-                  <Option value="__none" text="" disabled>
-                    <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-                      No views match "{comboInput.trim()}"
-                    </Caption1>
-                  </Option>
-                )}
-                {filteredSystem.length > 0 && (
-                  <OptionGroup label={`System views (${filteredSystem.length})`}>
-                    {filteredSystem.map(q => (
-                      <Option key={q.id} value={q.id} text={q.name}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-                          <Body1 style={{ fontWeight: q.isDefault ? 600 : 400 }}>{q.name}</Body1>
-                          {q.description && (
-                            <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-                              {q.description}
-                            </Caption1>
-                          )}
-                        </div>
+                <Combobox
+                  freeform
+                  clearable
+                  value={comboInput}
+                  selectedOptions={state.queryId ? [state.queryId] : []}
+                  placeholder={
+                    queriesLoading
+                      ? 'Loading queries…'
+                      : queries.length === 0
+                        ? 'No queries on this table'
+                        : 'Search views by name…'
+                  }
+                  disabled={queriesLoading}
+                  onChange={(e) => {
+                    // User typed — treat as a filter, not a selection. If they
+                    // clear the input we also clear the selection (matches
+                    // the `clearable` X behavior).
+                    const next = (e.target as HTMLInputElement).value;
+                    setComboInput(next);
+                    if (next === '' && state.queryId) {
+                      setState((ss) => ({ ...ss, queryId: null }));
+                      markDirty('target');
+                    }
+                  }}
+                  onOptionSelect={(_, d) => {
+                    if (!d.optionValue) {
+                      // Native clearable X dispatches a no-option select.
+                      setState((ss) => ({ ...ss, queryId: null }));
+                      setComboInput('');
+                      markDirty('target');
+                      return;
+                    }
+                    const q = queries.find((x) => x.id === d.optionValue);
+                    if (!q) return;
+                    setState((ss) => ({ ...ss, queryId: q.id, queryType: q.kind }));
+                    setComboInput(q.name);
+                    markDirty('target');
+                  }}
+                  listbox={{ style: { maxHeight: 420 } }}
+                >
+                  {filteredSystem.length === 0 &&
+                    filteredPersonal.length === 0 &&
+                    comboInput.trim() && (
+                      <Option value="__none" text="" disabled>
+                        <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
+                          No views match "{comboInput.trim()}"
+                        </Caption1>
                       </Option>
-                    ))}
-                  </OptionGroup>
-                )}
-                {filteredPersonal.length > 0 && (
-                  <OptionGroup label={`Personal views (${filteredPersonal.length})`}>
-                    {filteredPersonal.map(q => (
-                      <Option key={q.id} value={q.id} text={q.name}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-                          <Body1>{q.name}</Body1>
-                          {q.description && (
-                            <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-                              {q.description}
-                            </Caption1>
-                          )}
-                        </div>
-                      </Option>
-                    ))}
-                  </OptionGroup>
-                )}
-              </Combobox>
-            </Field>
+                    )}
+                  {filteredSystem.length > 0 && (
+                    <OptionGroup label={`System views (${filteredSystem.length})`}>
+                      {filteredSystem.map((q) => (
+                        <Option key={q.id} value={q.id} text={q.name}>
+                          <div
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 1,
+                              minWidth: 0,
+                            }}
+                          >
+                            <Body1 style={{ fontWeight: q.isDefault ? 600 : 400 }}>{q.name}</Body1>
+                            {q.description && (
+                              <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
+                                {q.description}
+                              </Caption1>
+                            )}
+                          </div>
+                        </Option>
+                      ))}
+                    </OptionGroup>
+                  )}
+                  {filteredPersonal.length > 0 && (
+                    <OptionGroup label={`Personal views (${filteredPersonal.length})`}>
+                      {filteredPersonal.map((q) => (
+                        <Option key={q.id} value={q.id} text={q.name}>
+                          <div
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 1,
+                              minWidth: 0,
+                            }}
+                          >
+                            <Body1>{q.name}</Body1>
+                            {q.description && (
+                              <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
+                                {q.description}
+                              </Caption1>
+                            )}
+                          </div>
+                        </Option>
+                      ))}
+                    </OptionGroup>
+                  )}
+                </Combobox>
+              </Field>
 
-            {queriesLoading && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: tokens.colorNeutralForeground3 }}>
-                <Spinner size="tiny" />
-                <Caption1>Fetching saved + user queries…</Caption1>
-              </div>
-            )}
-
-            {queriesError && (
-              <MessageBar intent="error" layout="multiline">
-                <MessageBarBody>
-                  <MessageBarTitle>Couldn't load queries</MessageBarTitle>
-                  {queriesError}
-                </MessageBarBody>
-              </MessageBar>
-            )}
-
-            {selectedQuery && (
-              <div className={mergeClasses(s.inlineCard)} style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {/* Header row — name + flags pile (default/quick-find/managed/custom) */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <Body1 style={{ fontWeight: 600 }}>{selectedQuery.name}</Body1>
-                  <Badge appearance="ghost" size="small">{queryTypeLabel(selectedQuery.queryType)}</Badge>
-                  {selectedQuery.isDefault && (
-                    <Badge appearance="tint" color="brand" size="small">default view</Badge>
-                  )}
-                  {selectedQuery.isQuickFind && (
-                    <Badge appearance="tint" color="informative" size="small">quick find</Badge>
-                  )}
-                  {selectedQuery.kind === 'savedQuery' && selectedQuery.isManaged && (
-                    <Badge appearance="ghost" size="small">managed</Badge>
-                  )}
-                  {selectedQuery.kind === 'savedQuery' && !selectedQuery.isManaged && (
-                    <Badge appearance="ghost" size="small">unmanaged</Badge>
-                  )}
+              {queriesLoading && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    color: tokens.colorNeutralForeground3,
+                  }}
+                >
+                  <Spinner size="tiny" />
+                  <Caption1>Fetching saved + user queries…</Caption1>
                 </div>
+              )}
 
-                {/* GUID */}
-                <div>
-                  <Caption1 style={{ fontWeight: 600, color: tokens.colorNeutralForeground2 }}>Query GUID</Caption1>
-                  <div>
-                    <code style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 11, color: tokens.colorNeutralForeground2 }}>
-                      {selectedQuery.id}
-                    </code>
+              {queriesError && (
+                <MessageBar intent="error" layout="multiline">
+                  <MessageBarBody>
+                    <MessageBarTitle>Couldn't load queries</MessageBarTitle>
+                    {queriesError}
+                  </MessageBarBody>
+                </MessageBar>
+              )}
+
+              {selectedQuery && (
+                <div
+                  className={mergeClasses(s.inlineCard)}
+                  style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}
+                >
+                  {/* Header row — name + flags pile (default/quick-find/managed/custom) */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <Body1 style={{ fontWeight: 600 }}>{selectedQuery.name}</Body1>
+                    <Badge appearance="ghost" size="small">
+                      {queryTypeLabel(selectedQuery.queryType)}
+                    </Badge>
+                    {selectedQuery.isDefault && (
+                      <Badge appearance="tint" color="brand" size="small">
+                        default view
+                      </Badge>
+                    )}
+                    {selectedQuery.isQuickFind && (
+                      <Badge appearance="tint" color="informative" size="small">
+                        quick find
+                      </Badge>
+                    )}
+                    {selectedQuery.kind === 'savedQuery' && selectedQuery.isManaged && (
+                      <Badge appearance="ghost" size="small">
+                        managed
+                      </Badge>
+                    )}
+                    {selectedQuery.kind === 'savedQuery' && !selectedQuery.isManaged && (
+                      <Badge appearance="ghost" size="small">
+                        unmanaged
+                      </Badge>
+                    )}
                   </div>
-                </div>
 
-                {/* Layout-driven columns. The FetchXml may select more attrs than
+                  {/* GUID */}
+                  <div>
+                    <Caption1 style={{ fontWeight: 600, color: tokens.colorNeutralForeground2 }}>
+                      Query GUID
+                    </Caption1>
+                    <div>
+                      <code
+                        style={{
+                          fontFamily: tokens.fontFamilyMonospace,
+                          fontSize: 11,
+                          color: tokens.colorNeutralForeground2,
+                        }}
+                      >
+                        {selectedQuery.id}
+                      </code>
+                    </div>
+                  </div>
+
+                  {/* Layout-driven columns. The FetchXml may select more attrs than
                     these — anything outside the layout still lands on the wire,
                     but the layout is what the maker sees in the model-driven
                     grid. Surfacing it gives the user a quick "this is what's
                     coming back" preview before they hit Execute. */}
-                {selectedQuery.layoutColumns.length > 0 && (
-                  <div>
-                    <Caption1 style={{ fontWeight: 600, color: tokens.colorNeutralForeground2 }}>
-                      Result columns ({selectedQuery.layoutColumns.length}) — from layoutxml
-                    </Caption1>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                      {selectedQuery.layoutColumns.map(c => (
-                        <Tooltip
-                          key={c.fullName}
-                          relationship="label"
-                          content={
-                            c.isLink
-                              ? `${c.fullName} — joined column via link alias \`${c.linkAlias}\` · width ${c.width}px`
-                              : `${c.fullName} — width ${c.width}px`
-                          }
-                        >
-                          <span style={{
-                            fontFamily: tokens.fontFamilyMonospace, fontSize: 11,
-                            padding: '2px 6px', borderRadius: 4,
-                            background: c.isLink ? tokens.colorPaletteBlueBackground2 : tokens.colorNeutralBackground3,
-                            color: c.isLink ? tokens.colorPaletteBlueForeground2 : tokens.colorNeutralForeground1,
-                            cursor: 'help',
-                          }}>
-                            {c.isLink ? `${c.linkAlias}.${c.attr}` : c.attr}
-                          </span>
-                        </Tooltip>
-                      ))}
-                    </div>
-                    {selectedQuery.layoutColumns.some(c => c.isLink) && (
-                      <Caption1 style={{ display: 'block', marginTop: 6, color: tokens.colorNeutralForeground3 }}>
-                        Blue pills are joined columns (link-entity in FetchXml).
+                  {selectedQuery.layoutColumns.length > 0 && (
+                    <div>
+                      <Caption1 style={{ fontWeight: 600, color: tokens.colorNeutralForeground2 }}>
+                        Result columns ({selectedQuery.layoutColumns.length}) — from layoutxml
                       </Caption1>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    ); break;
-    case 'conditions': pane = (
-      <div>
-        <PaneHead icon={Filter20Filled} title="Conditions" sub="Read-only summary — predefined queries embed their own FetchXml. Edit the saved query in the model-driven app to change conditions." />
-        <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 12 }}>
-          <MessageBarBody>
-            <MessageBarTitle>$select / $filter / $orderby / $expand are locked</MessageBarTitle>
-            With <code>?savedQuery=…</code> / <code>?userQuery=…</code>, the FetchXml in the query owns column projection, filter, sort and joins. Only <code>$top</code> and <code>Prefer</code> headers remain editable.
-          </MessageBarBody>
-        </MessageBar>
-        {selectedQuery?.fetchXml ? (
-          // Read-only Monaco — same theme + indent guides + line numbers as
-          // the Code tab. FetchXml is generated by Dataverse so it's already
-          // pretty-printed; we don't apply formatOnType (it's read-only).
-          // `automaticLayout` lets Monaco adapt when the user resizes the
-          // window or toggles the sidebar.
-          <div style={{
-            border: `1px solid ${tokens.colorNeutralStroke2}`,
-            borderRadius: tokens.borderRadiusMedium,
-            overflow: 'hidden',
-            height: 480,
-          }}>
-            <Editor
-              height="100%"
-              language="xml"
-              value={selectedQuery.fetchXml}
-              theme={themeMode === 'dark' ? 'vs-dark' : 'light'}
-              options={{
-                readOnly: true,
-                domReadOnly: true,
-                lineNumbers: 'on',
-                renderLineHighlight: 'line',
-                minimap: { enabled: false },
-                scrollBeyondLastLine: false,
-                fontFamily: 'Cascadia Mono, Consolas, monospace',
-                fontSize: 13,
-                tabSize: 2,
-                wordWrap: 'on',
-                automaticLayout: true,
-                padding: { top: 12, bottom: 12 },
-                bracketPairColorization: { enabled: true },
-                guides: { bracketPairs: true, indentation: true },
-                smoothScrolling: true,
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                        {selectedQuery.layoutColumns.map((c) => (
+                          <Tooltip
+                            key={c.fullName}
+                            relationship="label"
+                            content={
+                              c.isLink
+                                ? `${c.fullName} — joined column via link alias \`${c.linkAlias}\` · width ${c.width}px`
+                                : `${c.fullName} — width ${c.width}px`
+                            }
+                          >
+                            <span
+                              style={{
+                                fontFamily: tokens.fontFamilyMonospace,
+                                fontSize: 11,
+                                padding: '2px 6px',
+                                borderRadius: 4,
+                                background: c.isLink
+                                  ? tokens.colorPaletteBlueBackground2
+                                  : tokens.colorNeutralBackground3,
+                                color: c.isLink
+                                  ? tokens.colorPaletteBlueForeground2
+                                  : tokens.colorNeutralForeground1,
+                                cursor: 'help',
+                              }}
+                            >
+                              {c.isLink ? `${c.linkAlias}.${c.attr}` : c.attr}
+                            </span>
+                          </Tooltip>
+                        ))}
+                      </div>
+                      {selectedQuery.layoutColumns.some((c) => c.isLink) && (
+                        <Caption1
+                          style={{
+                            display: 'block',
+                            marginTop: 6,
+                            color: tokens.colorNeutralForeground3,
+                          }}
+                        >
+                          Blue pills are joined columns (link-entity in FetchXml).
+                        </Caption1>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+      break;
+    case 'conditions':
+      pane = (
+        <div>
+          <PaneHead
+            icon={Filter20Filled}
+            title="Conditions"
+            sub="Read-only summary — predefined queries embed their own FetchXml. Edit the saved query in the model-driven app to change conditions."
+          />
+          <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 12 }}>
+            <MessageBarBody>
+              <MessageBarTitle>$select / $filter / $orderby / $expand are locked</MessageBarTitle>
+              With <code>?savedQuery=…</code> / <code>?userQuery=…</code>, the FetchXml in the query
+              owns column projection, filter, sort and joins. Only <code>$top</code> and{' '}
+              <code>Prefer</code> headers remain editable.
+            </MessageBarBody>
+          </MessageBar>
+          {selectedQuery?.fetchXml ? (
+            // Read-only Monaco — same theme + indent guides + line numbers as
+            // the Code tab. FetchXml is generated by Dataverse so it's already
+            // pretty-printed; we don't apply formatOnType (it's read-only).
+            // `automaticLayout` lets Monaco adapt when the user resizes the
+            // window or toggles the sidebar.
+            <div
+              style={{
+                border: `1px solid ${tokens.colorNeutralStroke2}`,
+                borderRadius: tokens.borderRadiusMedium,
+                overflow: 'hidden',
+                height: 480,
               }}
-            />
-          </div>
-        ) : selectedQuery ? (
-          <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-            (No FetchXml available for this query — it may be a layout-only definition.)
-          </Caption1>
-        ) : (
-          <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-            Pick a query in Target to see its FetchXml.
-          </Caption1>
-        )}
-      </div>
-    ); break;
-    case 'top':     pane = <TopEditor top={state.top} setTop={n => set('top', n, 'top')} maxPageSize={state.prefer.maxpagesize} />; break;
-    case 'prefer':  pane = <PreferEditor spec={state.prefer} setSpec={p => set('prefer', p, 'prefer')} />; break;
-    case 'headers': pane = <HeadersEditor items={state.headers} setItems={h => set('headers', h, 'headers')} />; break;
+            >
+              <Editor
+                height="100%"
+                language="xml"
+                value={selectedQuery.fetchXml}
+                theme={themeMode === 'dark' ? 'vs-dark' : 'light'}
+                options={{
+                  readOnly: true,
+                  domReadOnly: true,
+                  lineNumbers: 'on',
+                  renderLineHighlight: 'line',
+                  minimap: { enabled: false },
+                  scrollBeyondLastLine: false,
+                  fontFamily: 'Cascadia Mono, Consolas, monospace',
+                  fontSize: 13,
+                  tabSize: 2,
+                  wordWrap: 'on',
+                  automaticLayout: true,
+                  padding: { top: 12, bottom: 12 },
+                  bracketPairColorization: { enabled: true },
+                  guides: { bracketPairs: true, indentation: true },
+                  smoothScrolling: true,
+                }}
+              />
+            </div>
+          ) : selectedQuery ? (
+            <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
+              (No FetchXml available for this query — it may be a layout-only definition.)
+            </Caption1>
+          ) : (
+            <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
+              Pick a query in Target to see its FetchXml.
+            </Caption1>
+          )}
+        </div>
+      );
+      break;
+    case 'top':
+      pane = (
+        <TopEditor
+          top={state.top}
+          setTop={(n) => set('top', n, 'top')}
+          maxPageSize={state.prefer.maxpagesize}
+        />
+      );
+      break;
+    case 'prefer':
+      pane = <PreferEditor spec={state.prefer} setSpec={(p) => set('prefer', p, 'prefer')} />;
+      break;
+    case 'headers':
+      pane = <HeadersEditor items={state.headers} setItems={(h) => set('headers', h, 'headers')} />;
+      break;
   }
 
   const headersMap = headerItemsToObject(state.headers, preferToHeaderString(state.prefer));
@@ -753,7 +935,10 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
           urlPreview={built.relativeNoBase}
           sections={sections}
           activeNode={activeNode}
-          onSelect={(id) => setActiveNode(id as ClauseId)}
+          onSelect={(id) => {
+            setActiveNode(id as ClauseId);
+            setTab('builder');
+          }}
           recents={recents}
         />
       }
@@ -768,9 +953,13 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
         />
       }
     >
-      <MainTabs tab={tab} onTabChange={setTab} resultCount={(result?.body as { value?: unknown[] } | null)?.value?.length ?? null}>
+      <MainTabs
+        tab={tab}
+        onTabChange={setTab}
+        resultCount={(result?.body as { value?: unknown[] } | null)?.value?.length ?? null}
+      >
         {tab === 'builder' && pane}
-        {tab === 'code'    && <CodeView themeMode={themeMode} inputs={codeInputs} />}
+        {tab === 'code' && <CodeView themeMode={themeMode} inputs={codeInputs} />}
         {tab === 'results' && (
           <ResultsView
             result={result}
@@ -784,7 +973,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
             // We pass `fullName` (not `attr`) so linked-entity dotted keys
             // like `accountprimarycontactidcontactcontactid.emailaddress1`
             // stay intact.
-            preferredColumnOrder={selectedQuery?.layoutColumns.map(c => c.fullName)}
+            preferredColumnOrder={selectedQuery?.layoutColumns.map((c) => c.fullName)}
           />
         )}
       </MainTabs>

@@ -20,16 +20,39 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  DrawerBody, DrawerHeader, DrawerHeaderTitle, OverlayDrawer,
-  Button, makeStyles, tokens, Text, Switch, Dropdown, Option,
-  Divider, Radio, RadioGroup, Tooltip, Caption1, Spinner,
-  TagPicker, TagPickerControl, TagPickerGroup, TagPickerInput,
-  TagPickerList, TagPickerOption, useTagPickerFilter, Tag,
+  DrawerBody,
+  DrawerHeader,
+  DrawerHeaderTitle,
+  OverlayDrawer,
+  Button,
+  makeStyles,
+  tokens,
+  Text,
+  Switch,
+  Dropdown,
+  Option,
+  Divider,
+  Radio,
+  RadioGroup,
+  Tooltip,
+  Caption1,
+  Spinner,
+  TagPicker,
+  TagPickerControl,
+  TagPickerGroup,
+  TagPickerInput,
+  TagPickerList,
+  TagPickerOption,
+  useTagPickerFilter,
+  Tag,
 } from '@fluentui/react-components';
-import { Dismiss24Regular, Settings20Regular, Info16Regular, ArrowClockwise20Regular } from '@fluentui/react-icons';
-import type {
-  DisplaySettings, ValueDisplayMode, EntityScopeMode,
-} from '../state/displaySettings';
+import {
+  Dismiss24Regular,
+  Settings20Regular,
+  Info16Regular,
+  ArrowClockwise20Regular,
+} from '@fluentui/react-icons';
+import type { DisplaySettings, ValueDisplayMode, EntityScopeMode } from '../state/displaySettings';
 import type { AccessSummary } from '../host/pptbClient';
 import { metadata } from '../host/metadataProvider';
 import { usePublisherFilter } from '../host/usePublisherFilter';
@@ -90,33 +113,55 @@ export interface SettingsDrawerProps {
 }
 
 export function SettingsDrawer({
-  open, settings, onClose, onSettingsChange, accessSummary,
+  open,
+  settings,
+  onClose,
+  onSettingsChange,
+  accessSummary,
 }: SettingsDrawerProps) {
   const styles = useStyles();
 
-  const handleLogicalNamesChange = useCallback((checked: boolean) => {
-    onSettingsChange({ ...settings, useLogicalNames: checked });
-  }, [settings, onSettingsChange]);
+  const handleLogicalNamesChange = useCallback(
+    (checked: boolean) => {
+      onSettingsChange({ ...settings, useLogicalNames: checked });
+    },
+    [settings, onSettingsChange],
+  );
 
-  const handleValueDisplayModeChange = useCallback((mode: ValueDisplayMode) => {
-    onSettingsChange({ ...settings, valueDisplayMode: mode });
-  }, [settings, onSettingsChange]);
+  const handleValueDisplayModeChange = useCallback(
+    (mode: ValueDisplayMode) => {
+      onSettingsChange({ ...settings, valueDisplayMode: mode });
+    },
+    [settings, onSettingsChange],
+  );
 
-  const handleEntityScopeModeChange = useCallback((mode: EntityScopeMode) => {
-    onSettingsChange({ ...settings, entityScopeMode: mode });
-  }, [settings, onSettingsChange]);
+  const handleEntityScopeModeChange = useCallback(
+    (mode: EntityScopeMode) => {
+      onSettingsChange({ ...settings, entityScopeMode: mode });
+    },
+    [settings, onSettingsChange],
+  );
 
-  const handleAdvancedFindOnlyChange = useCallback((checked: boolean) => {
-    onSettingsChange({ ...settings, advancedFindOnly: checked });
-  }, [settings, onSettingsChange]);
+  const handleAdvancedFindOnlyChange = useCallback(
+    (checked: boolean) => {
+      onSettingsChange({ ...settings, advancedFindOnly: checked });
+    },
+    [settings, onSettingsChange],
+  );
 
-  const handlePublisherIdsChange = useCallback((ids: string[]) => {
-    onSettingsChange({ ...settings, selectedPublisherIds: ids });
-  }, [settings, onSettingsChange]);
+  const handlePublisherIdsChange = useCallback(
+    (ids: string[]) => {
+      onSettingsChange({ ...settings, selectedPublisherIds: ids });
+    },
+    [settings, onSettingsChange],
+  );
 
-  const handleSolutionIdsChange = useCallback((ids: string[]) => {
-    onSettingsChange({ ...settings, selectedSolutionIds: ids });
-  }, [settings, onSettingsChange]);
+  const handleSolutionIdsChange = useCallback(
+    (ids: string[]) => {
+      onSettingsChange({ ...settings, selectedSolutionIds: ids });
+    },
+    [settings, onSettingsChange],
+  );
 
   // Refresh metadata — drops every cache entry and re-fetches the
   // currently-loaded tables in place. Used when entity/attribute/relationship
@@ -124,9 +169,13 @@ export function SettingsDrawer({
   const [refreshing, setRefreshing] = useState(false);
   const handleRefreshMetadata = useCallback(async () => {
     setRefreshing(true);
-    try { await metadata.refreshAll(); }
-    catch (e) { console.warn('[SettingsDrawer] refresh metadata failed', e); }
-    finally { setRefreshing(false); }
+    try {
+      await metadata.refreshAll();
+    } catch (e) {
+      console.warn('[SettingsDrawer] refresh metadata failed', e);
+    } finally {
+      setRefreshing(false);
+    }
   }, []);
 
   // Privilege gating — when AccessSummary hasn't loaded yet we allow all
@@ -138,7 +187,9 @@ export function SettingsDrawer({
   return (
     <OverlayDrawer
       open={open}
-      onOpenChange={(_e, data) => { if (!data.open) onClose(); }}
+      onOpenChange={(_e, data) => {
+        if (!data.open) onClose();
+      }}
       position="end"
       size="small"
       className={styles.drawer}
@@ -182,7 +233,9 @@ export function SettingsDrawer({
               onChange={(_e, data) => handleEntityScopeModeChange(data.value as EntityScopeMode)}
             >
               <Tooltip
-                content={!canUsePublisherSolution ? 'Requires prvReadPublisher + prvReadSolution' : ''}
+                content={
+                  !canUsePublisherSolution ? 'Requires prvReadPublisher + prvReadSolution' : ''
+                }
                 relationship="description"
                 positioning="before"
               >
@@ -197,11 +250,7 @@ export function SettingsDrawer({
                 relationship="description"
                 positioning="before"
               >
-                <Radio
-                  value="solution-only"
-                  label="Solution only"
-                  disabled={!canUseSolutionOnly}
-                />
+                <Radio value="solution-only" label="Solution only" disabled={!canUseSolutionOnly} />
               </Tooltip>
               <Radio value="all" label="All Entities" />
             </RadioGroup>
@@ -283,9 +332,11 @@ export function SettingsDrawer({
             <Dropdown
               className={styles.dropdown}
               value={
-                settings.valueDisplayMode === 'formatted' ? 'Formatted' :
-                settings.valueDisplayMode === 'raw' ? 'Raw' :
-                'Both (2 columns per attribute)'
+                settings.valueDisplayMode === 'formatted'
+                  ? 'Formatted'
+                  : settings.valueDisplayMode === 'raw'
+                    ? 'Raw'
+                    : 'Both (2 columns per attribute)'
               }
               selectedOptions={[settings.valueDisplayMode]}
               onOptionSelect={(_e, data) =>
@@ -307,10 +358,13 @@ export function SettingsDrawer({
 
           <div className={styles.settingItem}>
             <Text className={styles.settingLabel}>Refresh metadata</Text>
-            <Text className={styles.settingDescription} block style={{ marginBottom: tokens.spacingVerticalS }}>
-              Re-fetch entity, attribute &amp; relationship definitions from the
-              environment. Use this after publishing schema changes — metadata is
-              otherwise cached for up to an hour.
+            <Text
+              className={styles.settingDescription}
+              block
+              style={{ marginBottom: tokens.spacingVerticalS }}
+            >
+              Re-fetch entity, attribute &amp; relationship definitions from the environment. Use
+              this after publishing schema changes — metadata is otherwise cached for up to an hour.
             </Text>
             <Button
               appearance="outline"
@@ -333,8 +387,10 @@ export function SettingsDrawer({
 // Publisher → Solution cascade picker (entityScopeMode === 'publisher-solution')
 // ───────────────────────────────────────────────────────────────────────
 function PublisherSolutionPickers({
-  selectedPublisherIds, selectedSolutionIds,
-  onPublisherIdsChange, onSolutionIdsChange,
+  selectedPublisherIds,
+  selectedSolutionIds,
+  onPublisherIdsChange,
+  onSolutionIdsChange,
 }: {
   selectedPublisherIds: string[];
   selectedSolutionIds: string[];
@@ -344,10 +400,8 @@ function PublisherSolutionPickers({
   // The hook owns its own internal selection state. We sync settings →
   // hook on mount and hook → settings on any user change below.
   const filter = usePublisherFilter();
-  const {
-    publishers, publishersLoading, publishersError,
-    solutions, updateSelectedPublishers,
-  } = filter;
+  const { publishers, publishersLoading, publishersError, solutions, updateSelectedPublishers } =
+    filter;
 
   // Sync persisted selections into the hook on mount + when settings change.
   useEffect(() => {
@@ -372,13 +426,17 @@ function PublisherSolutionPickers({
         <Text style={{ fontWeight: tokens.fontWeightSemibold, display: 'block', marginBottom: 4 }}>
           Publisher
         </Text>
-        <Caption1 style={{ color: tokens.colorNeutralForeground3, display: 'block', marginBottom: 6 }}>
+        <Caption1
+          style={{ color: tokens.colorNeutralForeground3, display: 'block', marginBottom: 6 }}
+        >
           Pick one or more publishers — only their solutions appear below.
         </Caption1>
         {publishersLoading && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '4px 0' }}>
             <Spinner size="extra-small" />
-            <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>Loading publishers…</Caption1>
+            <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
+              Loading publishers…
+            </Caption1>
           </div>
         )}
         {publishersError && (
@@ -388,7 +446,7 @@ function PublisherSolutionPickers({
         )}
         <MultiPicker
           values={selectedPublisherIds}
-          options={publishers.map(p => p.publisherid)}
+          options={publishers.map((p) => p.publisherid)}
           labelByKey={publisherById}
           placeholder="Search publishers…"
           onChange={onPublisherIdsChange}
@@ -399,14 +457,16 @@ function PublisherSolutionPickers({
         <Text style={{ fontWeight: tokens.fontWeightSemibold, display: 'block', marginBottom: 4 }}>
           Solution
         </Text>
-        <Caption1 style={{ color: tokens.colorNeutralForeground3, display: 'block', marginBottom: 6 }}>
+        <Caption1
+          style={{ color: tokens.colorNeutralForeground3, display: 'block', marginBottom: 6 }}
+        >
           {selectedPublisherIds.length === 0
             ? 'Pick a publisher first to populate this list.'
             : `${solutions.length} solution${solutions.length === 1 ? '' : 's'} from the selected publisher${selectedPublisherIds.length === 1 ? '' : 's'}.`}
         </Caption1>
         <MultiPicker
           values={selectedSolutionIds}
-          options={solutions.map(s => s.solutionid)}
+          options={solutions.map((s) => s.solutionid)}
           labelByKey={solutionById}
           placeholder="Search solutions…"
           onChange={onSolutionIdsChange}
@@ -421,7 +481,8 @@ function PublisherSolutionPickers({
 // Solution-only picker (entityScopeMode === 'solution-only')
 // ───────────────────────────────────────────────────────────────────────
 function SolutionOnlyPicker({
-  selectedSolutionIds, onSolutionIdsChange,
+  selectedSolutionIds,
+  onSolutionIdsChange,
 }: {
   selectedSolutionIds: string[];
   onSolutionIdsChange: (ids: string[]) => void;
@@ -438,7 +499,9 @@ function SolutionOnlyPicker({
       <Text style={{ fontWeight: tokens.fontWeightSemibold, display: 'block', marginBottom: 4 }}>
         Solution
       </Text>
-      <Caption1 style={{ color: tokens.colorNeutralForeground3, display: 'block', marginBottom: 6 }}>
+      <Caption1
+        style={{ color: tokens.colorNeutralForeground3, display: 'block', marginBottom: 6 }}
+      >
         Pick one or more solutions to scope the entity list to their components.
       </Caption1>
       {solutionsLoading && (
@@ -448,13 +511,11 @@ function SolutionOnlyPicker({
         </div>
       )}
       {solutionsError && (
-        <Caption1 style={{ color: tokens.colorPaletteRedForeground1 }}>
-          {solutionsError}
-        </Caption1>
+        <Caption1 style={{ color: tokens.colorPaletteRedForeground1 }}>{solutionsError}</Caption1>
       )}
       <MultiPicker
         values={selectedSolutionIds}
-        options={solutions.map(s => s.solutionid)}
+        options={solutions.map((s) => s.solutionid)}
         labelByKey={solutionById}
         placeholder="Search solutions…"
         onChange={onSolutionIdsChange}
@@ -467,7 +528,12 @@ function SolutionOnlyPicker({
 // Reusable Fluent v9 TagPicker (filterable multi-select over string keys)
 // ───────────────────────────────────────────────────────────────────────
 function MultiPicker({
-  values, options, labelByKey, placeholder, disabled, onChange,
+  values,
+  options,
+  labelByKey,
+  placeholder,
+  disabled,
+  onChange,
 }: {
   values: string[];
   options: string[];
@@ -506,8 +572,12 @@ function MultiPicker({
     >
       <TagPickerControl style={{ minWidth: 0 }}>
         <TagPickerGroup aria-label="Selected">
-          {values.map(k => (
-            <Tag key={k} value={k} shape="rounded" size="small"
+          {values.map((k) => (
+            <Tag
+              key={k}
+              value={k}
+              shape="rounded"
+              size="small"
               dismissible
               dismissIcon={{ 'aria-label': 'remove' }}
             >

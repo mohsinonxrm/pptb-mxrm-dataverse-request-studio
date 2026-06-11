@@ -194,10 +194,20 @@ export interface ResultsGridProps {
 }
 
 export function ResultsGrid({
-  body, table, select, expand, orderby,
-  hasMore, isLoadingMore, onLoadMore, onSelectionChange,
-  searchQuery = '', density = 'cozy',
-  status, serverTotal, preferredColumnOrder,
+  body,
+  table,
+  select,
+  expand,
+  orderby,
+  hasMore,
+  isLoadingMore,
+  onLoadMore,
+  onSelectionChange,
+  searchQuery = '',
+  density = 'cozy',
+  status,
+  serverTotal,
+  preferredColumnOrder,
 }: ResultsGridProps) {
   const styles = useStyles();
   const [settings] = usePersistedSettings();
@@ -226,12 +236,14 @@ export function ResultsGrid({
   const rows = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return allRows;
-    return allRows.filter(r =>
-      Object.keys(r).some(k => {
+    return allRows.filter((r) =>
+      Object.keys(r).some((k) => {
         if (k.includes('@')) return false; // skip annotation keys for the column scan
         const f = getFormattedValue(r, k);
         if (f != null && String(f).toLowerCase().includes(q)) return true;
-        return String(r[k] ?? '').toLowerCase().includes(q);
+        return String(r[k] ?? '')
+          .toLowerCase()
+          .includes(q);
       }),
     );
   }, [allRows, searchQuery]);
@@ -240,7 +252,7 @@ export function ResultsGrid({
   useEffect(() => {
     const node = containerRef.current;
     if (!node) return;
-    const obs = new ResizeObserver(entries => {
+    const obs = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
         setGridDimensions({ width, height });
@@ -407,10 +419,14 @@ export function ResultsGrid({
             {suffix ? ` ${suffix}` : ''}
           </span>
           {sortDir === 'ascending' && (
-            <span className={styles.sortIndicator}><ArrowSortUp16Regular /></span>
+            <span className={styles.sortIndicator}>
+              <ArrowSortUp16Regular />
+            </span>
           )}
           {sortDir === 'descending' && (
-            <span className={styles.sortIndicator}><ArrowSortDown16Regular /></span>
+            <span className={styles.sortIndicator}>
+              <ArrowSortDown16Regular />
+            </span>
           )}
         </span>
       );
@@ -420,9 +436,11 @@ export function ResultsGrid({
         const formatted = getFormattedValue(r, key);
 
         let targetDisplay: string | undefined;
-        if (info.column?.attributeType === 'Lookup'
-          || info.column?.attributeType === 'Customer'
-          || info.column?.attributeType === 'Owner') {
+        if (
+          info.column?.attributeType === 'Lookup' ||
+          info.column?.attributeType === 'Customer' ||
+          info.column?.attributeType === 'Owner'
+        ) {
           // Polymorphic-aware: pull per-row target from the annotation.
           const targetLogical =
             getLookupTargetEntity(r, key) ??
@@ -461,14 +479,18 @@ export function ResultsGrid({
             {raw == null ? (
               <span style={{ color: tokens.colorNeutralForeground4 }}>—</span>
             ) : (
-              <span style={{
-                display: 'block',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                fontFamily: tokens.fontFamilyMonospace,
-                fontSize: tokens.fontSizeBase200,
-              }}>{String(raw)}</span>
+              <span
+                style={{
+                  display: 'block',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  fontFamily: tokens.fontFamilyMonospace,
+                  fontSize: tokens.fontSizeBase200,
+                }}
+              >
+                {String(raw)}
+              </span>
             )}
           </TableCellLayout>
         );
@@ -481,16 +503,18 @@ export function ResultsGrid({
       };
 
       if (valueMode === 'raw') {
-        return [createTableColumn<Record<string, unknown>>({
-          columnId: key,
-          compare: compareFn,
-          renderHeaderCell: renderHeaderCell(),
-          renderCell: renderRaw,
-        })];
+        return [
+          createTableColumn<Record<string, unknown>>({
+            columnId: key,
+            compare: compareFn,
+            renderHeaderCell: renderHeaderCell(),
+            renderCell: renderRaw,
+          }),
+        ];
       }
 
       if (valueMode === 'both') {
-        const anyDiffers = rows.some(r => {
+        const anyDiffers = rows.some((r) => {
           const f = getFormattedValue(r, key);
           return f != null && f !== r[key];
         });
@@ -512,12 +536,14 @@ export function ResultsGrid({
         }
       }
 
-      return [createTableColumn<Record<string, unknown>>({
-        columnId: key,
-        compare: compareFn,
-        renderHeaderCell: renderHeaderCell(),
-        renderCell: renderFormatted,
-      })];
+      return [
+        createTableColumn<Record<string, unknown>>({
+          columnId: key,
+          compare: compareFn,
+          renderHeaderCell: renderHeaderCell(),
+          renderCell: renderFormatted,
+        }),
+      ];
     });
   }, [columnKeys, columnDisplay, sortMap, valueMode, useLogicalNames, rows, styles]);
 
@@ -529,31 +555,38 @@ export function ResultsGrid({
     const out: Record<string, { minWidth: number; defaultWidth: number; idealWidth?: number }> = {};
     const typeMin = (attrType: string | undefined): number => {
       switch (attrType) {
-        case 'Uniqueidentifier': return 260;
-        case 'DateTime':         return 160;
-        case 'Boolean':          return 110;
+        case 'Uniqueidentifier':
+          return 260;
+        case 'DateTime':
+          return 160;
+        case 'Boolean':
+          return 110;
         case 'Lookup':
         case 'Customer':
-        case 'Owner':            return 200;
-        case 'Money':            return 130;
+        case 'Owner':
+          return 200;
+        case 'Money':
+          return 130;
         case 'Picklist':
         case 'State':
-        case 'Status':           return 140;
-        case 'Memo':             return 240;
+        case 'Status':
+          return 140;
+        case 'Memo':
+          return 240;
         case 'Integer':
         case 'BigInt':
         case 'Decimal':
-        case 'Double':           return 110;
-        default:                 return 140;
+        case 'Double':
+          return 110;
+        default:
+          return 140;
       }
     };
     for (const c of columns) {
       const cid = String(c.columnId);
       const baseKey = cid.endsWith('__raw') ? cid.slice(0, -5) : cid;
       const info = columnDisplay.get(baseKey);
-      const label = useLogicalNames
-        ? (info?.logicalName ?? cid)
-        : (info?.displayName ?? cid);
+      const label = useLogicalNames ? (info?.logicalName ?? cid) : (info?.displayName ?? cid);
       // ~7px per char + 56px padding (sort icon + cell padding)
       const headerEstimate = Math.ceil(label.length * 7) + 56;
       const dataMin = typeMin(info?.column?.attributeType);
@@ -637,22 +670,34 @@ export function ResultsGrid({
   if (rows.length === 0) {
     const responseStatus = status?.code;
     return (
-      <div className={styles.emptyState} style={{ flexDirection: 'column', gap: 6, padding: '32px 16px' }}>
+      <div
+        className={styles.emptyState}
+        style={{ flexDirection: 'column', gap: 6, padding: '32px 16px' }}
+      >
         <div style={{ fontSize: tokens.fontSizeBase400, fontWeight: tokens.fontWeightSemibold }}>
           No records matched
         </div>
-        <div style={{ fontSize: tokens.fontSizeBase200, color: tokens.colorNeutralForeground2, textAlign: 'center', maxWidth: 520 }}>
+        <div
+          style={{
+            fontSize: tokens.fontSizeBase200,
+            color: tokens.colorNeutralForeground2,
+            textAlign: 'center',
+            maxWidth: 520,
+          }}
+        >
           {responseStatus === 200
             ? 'The request succeeded but Dataverse returned zero rows. Check your $filter / $top — or try removing conditions to widen the result set.'
             : 'The request returned no rows.'}
         </div>
         {status && (
-          <div style={{
-            fontSize: tokens.fontSizeBase100,
-            fontFamily: tokens.fontFamilyMonospace,
-            color: tokens.colorNeutralForeground3,
-            marginTop: 8,
-          }}>
+          <div
+            style={{
+              fontSize: tokens.fontSizeBase100,
+              fontFamily: tokens.fontFamilyMonospace,
+              color: tokens.colorNeutralForeground3,
+              marginTop: 8,
+            }}
+          >
             HTTP {status.code} · {status.ms} ms · {(status.bytes / 1024).toFixed(1)} KB
           </div>
         )}
@@ -678,7 +723,10 @@ export function ResultsGrid({
             onSelectionChange={handleSelectionChange}
             getRowId={getRowId}
           >
-            <DataGridHeader ref={headerRef as React.RefObject<HTMLDivElement>} style={{ paddingRight: scrollbarWidth }}>
+            <DataGridHeader
+              ref={headerRef as React.RefObject<HTMLDivElement>}
+              style={{ paddingRight: scrollbarWidth }}
+            >
               <DataGridRow
                 style={{ minHeight: '40px', maxHeight: '40px' }}
                 selectionCell={{ checkboxIndicator: { 'aria-label': 'Select all rows' } }}
@@ -722,10 +770,16 @@ export function ResultsGrid({
             <span>
               <strong>{rows.length.toLocaleString()}</strong> row{rows.length === 1 ? '' : 's'}
               {searchQuery && rows.length !== allRows.length && (
-                <> of <strong>{allRows.length.toLocaleString()}</strong></>
+                <>
+                  {' '}
+                  of <strong>{allRows.length.toLocaleString()}</strong>
+                </>
               )}
               {serverTotal != null && serverTotal >= 0 && (
-                <> · server total <strong>{serverTotal.toLocaleString()}</strong></>
+                <>
+                  {' '}
+                  · server total <strong>{serverTotal.toLocaleString()}</strong>
+                </>
               )}
               {hasMore && !isLoadingMore && ' · more available'}
               {isLoadingMore && (

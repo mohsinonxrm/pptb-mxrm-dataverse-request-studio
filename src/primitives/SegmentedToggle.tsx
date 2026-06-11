@@ -58,7 +58,9 @@ const useSegmentedStyles = makeStyles({
 });
 
 export function SegmentedToggle({
-  children, ariaLabel, className,
+  children,
+  ariaLabel,
+  className,
 }: {
   children: ReactNode;
   ariaLabel: string;

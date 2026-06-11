@@ -20,17 +20,28 @@
 
 import { useEffect, useState } from 'react';
 import {
-  findTable, type ColumnMeta, type TableMeta, __registerLiveTable,
-  type PicklistColumnMeta, type StatusColumnMeta, type StateColumnMeta,
-  type BooleanColumnMeta, type LookupColumnMeta, type CustomerColumnMeta,
-  type OwnerColumnMeta, type StringColumnMeta, type MemoColumnMeta,
-  type IntegerColumnMeta, type BigIntColumnMeta, type DecimalColumnMeta,
-  type DoubleColumnMeta, type MoneyColumnMeta, type DateTimeColumnMeta,
+  findTable,
+  type ColumnMeta,
+  type TableMeta,
+  __registerLiveTable,
+  type PicklistColumnMeta,
+  type StatusColumnMeta,
+  type StateColumnMeta,
+  type BooleanColumnMeta,
+  type LookupColumnMeta,
+  type CustomerColumnMeta,
+  type OwnerColumnMeta,
+  type StringColumnMeta,
+  type MemoColumnMeta,
+  type IntegerColumnMeta,
+  type BigIntColumnMeta,
+  type DecimalColumnMeta,
+  type DoubleColumnMeta,
+  type MoneyColumnMeta,
+  type DateTimeColumnMeta,
   type MultiSelectPicklistColumnMeta,
 } from '../mock/metadata';
-import {
-  loadAttributeWithOptionSet, loadAttributeDetailedMetadata,
-} from './dataverseMetadata';
+import { loadAttributeWithOptionSet, loadAttributeDetailedMetadata } from './dataverseMetadata';
 import type { AttributeMetadata } from './pptbClient';
 
 // Per-(entity, attribute) flag so we don't re-fetch on every render.
@@ -79,7 +90,11 @@ function isAlreadyEnriched(col: ColumnMeta): boolean {
     }
     case 'Boolean': {
       const c = col as BooleanColumnMeta;
-      return !!c.trueOption && !!c.falseOption && (c.trueOption.label !== 'Yes' || c.falseOption.label !== 'No');
+      return (
+        !!c.trueOption &&
+        !!c.falseOption &&
+        (c.trueOption.label !== 'Yes' || c.falseOption.label !== 'No')
+      );
     }
     case 'Lookup':
     case 'Customer':
@@ -121,7 +136,7 @@ function isAlreadyEnriched(col: ColumnMeta): boolean {
 // Apply detailed AttributeMetadata onto the column in the live registry
 // and re-register the table so subscribers refresh.
 function patchInto(tbl: TableMeta, columnLogical: string, raw: AttributeMetadata): void {
-  const idx = tbl.columns.findIndex(c => c.logicalName === columnLogical);
+  const idx = tbl.columns.findIndex((c) => c.logicalName === columnLogical);
   if (idx < 0) return;
   const col = tbl.columns[idx];
   const patched: ColumnMeta = { ...col };
@@ -133,17 +148,21 @@ function patchInto(tbl: TableMeta, columnLogical: string, raw: AttributeMetadata
       (patched as LookupColumnMeta).targets = raw.Targets ?? [];
       break;
     case 'String':
-      (patched as StringColumnMeta).maxLength = raw.MaxLength ?? (patched as StringColumnMeta).maxLength;
-      if (raw.Format) (patched as StringColumnMeta).format = raw.Format as StringColumnMeta['format'];
+      (patched as StringColumnMeta).maxLength =
+        raw.MaxLength ?? (patched as StringColumnMeta).maxLength;
+      if (raw.Format)
+        (patched as StringColumnMeta).format = raw.Format as StringColumnMeta['format'];
       break;
     case 'Memo':
-      (patched as MemoColumnMeta).maxLength = raw.MaxLength ?? (patched as MemoColumnMeta).maxLength;
+      (patched as MemoColumnMeta).maxLength =
+        raw.MaxLength ?? (patched as MemoColumnMeta).maxLength;
       if (raw.Format) (patched as MemoColumnMeta).format = raw.Format as MemoColumnMeta['format'];
       break;
     case 'Integer':
       (patched as IntegerColumnMeta).minValue = raw.MinValue;
       (patched as IntegerColumnMeta).maxValue = raw.MaxValue;
-      if (raw.Format) (patched as IntegerColumnMeta).format = raw.Format as IntegerColumnMeta['format'];
+      if (raw.Format)
+        (patched as IntegerColumnMeta).format = raw.Format as IntegerColumnMeta['format'];
       break;
     case 'BigInt':
       (patched as BigIntColumnMeta).minValue = raw.MinValue;
@@ -152,12 +171,14 @@ function patchInto(tbl: TableMeta, columnLogical: string, raw: AttributeMetadata
     case 'Decimal':
       (patched as DecimalColumnMeta).minValue = raw.MinValue;
       (patched as DecimalColumnMeta).maxValue = raw.MaxValue;
-      if (typeof raw.Precision === 'number') (patched as DecimalColumnMeta).precision = raw.Precision;
+      if (typeof raw.Precision === 'number')
+        (patched as DecimalColumnMeta).precision = raw.Precision;
       break;
     case 'Double':
       (patched as DoubleColumnMeta).minValue = raw.MinValue;
       (patched as DoubleColumnMeta).maxValue = raw.MaxValue;
-      if (typeof raw.Precision === 'number') (patched as DoubleColumnMeta).precision = raw.Precision;
+      if (typeof raw.Precision === 'number')
+        (patched as DoubleColumnMeta).precision = raw.Precision;
       break;
     case 'Money':
       (patched as MoneyColumnMeta).minValue = raw.MinValue;
@@ -165,9 +186,11 @@ function patchInto(tbl: TableMeta, columnLogical: string, raw: AttributeMetadata
       if (typeof raw.Precision === 'number') (patched as MoneyColumnMeta).precision = raw.Precision;
       break;
     case 'DateTime':
-      if (raw.Format) (patched as DateTimeColumnMeta).format = raw.Format as DateTimeColumnMeta['format'];
+      if (raw.Format)
+        (patched as DateTimeColumnMeta).format = raw.Format as DateTimeColumnMeta['format'];
       if (raw.DateTimeBehavior?.Value) {
-        (patched as DateTimeColumnMeta).dateTimeBehavior = raw.DateTimeBehavior.Value as DateTimeColumnMeta['dateTimeBehavior'];
+        (patched as DateTimeColumnMeta).dateTimeBehavior = raw.DateTimeBehavior
+          .Value as DateTimeColumnMeta['dateTimeBehavior'];
       }
       break;
     case 'Boolean':
@@ -181,15 +204,16 @@ function patchInto(tbl: TableMeta, columnLogical: string, raw: AttributeMetadata
     case 'Picklist':
     case 'MultiSelectPicklist':
     case 'State': {
-      const opts = (raw.OptionSet?.Options ?? []).map(o => ({
+      const opts = (raw.OptionSet?.Options ?? []).map((o) => ({
         value: o.Value,
         label: o.Label?.UserLocalizedLabel?.Label ?? String(o.Value),
       }));
-      (patched as PicklistColumnMeta | MultiSelectPicklistColumnMeta | StateColumnMeta).options = opts;
+      (patched as PicklistColumnMeta | MultiSelectPicklistColumnMeta | StateColumnMeta).options =
+        opts;
       break;
     }
     case 'Status': {
-      const opts = (raw.OptionSet?.Options ?? []).map(o => ({
+      const opts = (raw.OptionSet?.Options ?? []).map((o) => ({
         value: o.Value,
         label: o.Label?.UserLocalizedLabel?.Label ?? String(o.Value),
         state: 0,
@@ -227,34 +251,45 @@ export function useColumnDetail(
 
     const tbl = findTable(entityLogical);
     if (!tbl) return; // wait until table is loaded
-    const col = tbl.columns.find(c => c.logicalName === columnLogical);
+    const col = tbl.columns.find((c) => c.logicalName === columnLogical);
     if (!col) return;
-    if (isAlreadyEnriched(col)) { __enriched.add(cacheKey); return; }
+    if (isAlreadyEnriched(col)) {
+      __enriched.add(cacheKey);
+      return;
+    }
 
     const which = loaderFor(col);
-    if (!which) { __enriched.add(cacheKey); return; }
+    if (!which) {
+      __enriched.add(cacheKey);
+      return;
+    }
 
     let cancelled = false;
     setLoading(true);
     setError(null);
 
-    const run = which === 'optionset'
-      ? loadAttributeWithOptionSet(entityLogical, columnLogical)
-      : loadAttributeDetailedMetadata(entityLogical, columnLogical, col.attributeType);
+    const run =
+      which === 'optionset'
+        ? loadAttributeWithOptionSet(entityLogical, columnLogical)
+        : loadAttributeDetailedMetadata(entityLogical, columnLogical, col.attributeType);
 
     run
-      .then(raw => {
+      .then((raw) => {
         if (cancelled) return;
         const tbl2 = findTable(entityLogical);
         if (tbl2) patchInto(tbl2, columnLogical, raw);
         __enriched.add(cacheKey);
       })
-      .catch(e => {
+      .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [entityLogical, columnLogical]);
 
   return { loading, error };
