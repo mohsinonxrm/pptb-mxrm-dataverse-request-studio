@@ -17,14 +17,24 @@
 
 import { useMemo, useState } from 'react';
 import {
-  Table20Regular, Table20Filled,
-  Link20Regular, Link20Filled,
-  PersonAccounts20Regular, PersonAccounts20Filled,
-  LineHorizontal320Regular, LineHorizontal320Filled,
+  Table20Regular,
+  Table20Filled,
+  Link20Regular,
+  Link20Filled,
+  PersonAccounts20Regular,
+  PersonAccounts20Filled,
+  LineHorizontal320Regular,
+  LineHorizontal320Filled,
   Code20Filled,
 } from '@fluentui/react-icons';
 import {
-  Caption1, Badge, tokens, MessageBar, MessageBarBody, MessageBarTitle, mergeClasses,
+  Caption1,
+  Badge,
+  tokens,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
+  mergeClasses,
 } from '@fluentui/react-components';
 import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
@@ -49,8 +59,11 @@ import type { ThemeMode } from '../theme/theme';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
 import {
-  serializeAssociate, deserializeAssociate, hashState,
-  type SavedRequest, type SerializedAssociateState,
+  serializeAssociate,
+  deserializeAssociate,
+  hashState,
+  type SavedRequest,
+  type SerializedAssociateState,
 } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
 
@@ -73,7 +86,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('associate');
   const [state, setState] = useState(initialState);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
-  useLiveTable((state).table || null);
+  useLiveTable(state.table || null);
   const { entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('source');
   const [tab, setTab] = useState<MainTab>('builder');
@@ -95,7 +108,9 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
   const requests = useMemo(() => buildAssociateRequests(state), [state]);
 
   const tbl = findTable(state.table);
-  const nav = state.navProperty ? tbl?.navigationProperties.find(n => n.name === state.navProperty) : undefined;
+  const nav = state.navProperty
+    ? tbl?.navigationProperties.find((n) => n.name === state.navProperty)
+    : undefined;
   const singleValued = nav ? isSingleValuedNav(nav) : false;
   // Docs-preferred shape per cardinality:
   //   N:1 → PATCH /<source>(<id>)              (body owns the link)
@@ -104,19 +119,28 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
   // also the only path that actually works in PPTB for single-valued.
   const method: 'POST' | 'PATCH' = singleValued ? 'PATCH' : 'POST';
 
-  const markDirty = (id: string) => setState(s => { const d = new Set(s.dirty); d.add(id); return { ...s, dirty: d }; });
+  const markDirty = (id: string) =>
+    setState((s) => {
+      const d = new Set(s.dirty);
+      d.add(id);
+      return { ...s, dirty: d };
+    });
   const set = <K extends keyof AssociateState>(k: K, v: AssociateState[K], dirtyId?: string) => {
-    setState(s => ({ ...s, [k]: v }));
+    setState((s) => ({ ...s, [k]: v }));
     if (dirtyId) markDirty(dirtyId);
   };
 
-  const disabledReason =
-    !tbl ? 'Pick a source table first.' :
-    !state.sourceId ? 'Pick a source record.' :
-    !state.navProperty ? 'Pick a navigation property.' :
-    state.targets.length === 0 ? 'Pick at least one target record.' :
-    state.headers.some(h => h.enabled && !h.name) ? 'Fix empty header name.' :
-    null;
+  const disabledReason = !tbl
+    ? 'Pick a source table first.'
+    : !state.sourceId
+      ? 'Pick a source record.'
+      : !state.navProperty
+        ? 'Pick a navigation property.'
+        : state.targets.length === 0
+          ? 'Pick at least one target record.'
+          : state.headers.some((h) => h.enabled && !h.name)
+            ? 'Fix empty header name.'
+            : null;
 
   const onExecute = async () => {
     setLoading(true);
@@ -124,12 +148,22 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents(rs => [{
-      id: `r-${Date.now()}`, modeId: 'associate',
-      url: built.relativeUrl, method, ts: Date.now(),
-      status: res.status, ms: res.ms, rowCount: res.ok ? requests.length : 0,
-    }, ...rs].slice(0, 8));
-    setState(s => ({ ...s, dirty: new Set() }));
+    setRecents((rs) =>
+      [
+        {
+          id: `r-${Date.now()}`,
+          modeId: 'associate',
+          url: built.relativeUrl,
+          method,
+          ts: Date.now(),
+          status: res.status,
+          ms: res.ms,
+          rowCount: res.ok ? requests.length : 0,
+        },
+        ...rs,
+      ].slice(0, 8),
+    );
+    setState((s) => ({ ...s, dirty: new Set() }));
   };
 
   // ── Save / Load ──
@@ -145,11 +179,11 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
   const onLoadSaved = (entry: SavedRequest) => {
     if (entry.modeId !== 'associate') return;
     const snap = entry.state as SerializedAssociateState;
-    if (entities.length > 0 && !entities.some(e => e.logicalName === snap.table)) {
+    if (entities.length > 0 && !entities.some((e) => e.logicalName === snap.table)) {
       window.alert(
         `Can't load "${entry.name}": entity \`${snap.table}\` ` +
-        `isn't available in this environment. The solution may have been ` +
-        `removed or you may be connected to a different org.`,
+          `isn't available in this environment. The solution may have been ` +
+          `removed or you may be connected to a different org.`,
       );
       return;
     }
@@ -161,77 +195,104 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
     setActivePath('source');
   };
 
-  usePublishSaveContext(useMemo(() => {
-    if (!state.table) return null;
-    return {
-      state: currentSerialized,
-      modeId: 'associate' as const,
-      dirty: isDirty,
-      lastSavedId,
-      onSaved,
-      onLoadSaved,
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentSerialized, isDirty, lastSavedId, state.table]));
+  usePublishSaveContext(
+    useMemo(() => {
+      if (!state.table) return null;
+      return {
+        state: currentSerialized,
+        modeId: 'associate' as const,
+        dirty: isDirty,
+        lastSavedId,
+        onSaved,
+        onLoadSaved,
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentSerialized, isDirty, lastSavedId, state.table]),
+  );
 
   // ── Sidebar ──
   const sections = [
     {
-      id: 'source', label: 'Target',
+      id: 'source',
+      label: 'Target',
       meta: tbl?.displayName ?? 'Pick a table',
-      items: [{
-        id: 'source',
-        icon: Table20Regular, iconFilled: Table20Filled,
-        label: state.sourceId ? (sourceName || `${tbl?.displayName ?? ''} (selected)`) : 'Pick a record',
-        badge: nav ? method : null,
-        badgeAppearance: 'tint' as const, badgeColor: 'brand' as const,
-        dirty: state.dirty.has('source'),
-      }],
+      items: [
+        {
+          id: 'source',
+          icon: Table20Regular,
+          iconFilled: Table20Filled,
+          label: state.sourceId
+            ? sourceName || `${tbl?.displayName ?? ''} (selected)`
+            : 'Pick a record',
+          badge: nav ? method : null,
+          badgeAppearance: 'tint' as const,
+          badgeColor: 'brand' as const,
+          dirty: state.dirty.has('source'),
+        },
+      ],
     },
     {
-      id: 'relationship', label: 'Relationship',
+      id: 'relationship',
+      label: 'Relationship',
       meta: nav ? cardinalityShort(nav.cardinality) : 'pick one',
-      items: [{
-        id: 'nav',
-        icon: Link20Regular, iconFilled: Link20Filled,
-        label: nav ? nav.name : 'Navigation property',
-        code: !!nav,
-        badge: nav ? cardinalityShort(nav.cardinality) : null,
-        badgeAppearance: 'ghost' as const,
-        dirty: state.dirty.has('nav'),
-      }],
+      items: [
+        {
+          id: 'nav',
+          icon: Link20Regular,
+          iconFilled: Link20Filled,
+          label: nav ? nav.name : 'Navigation property',
+          code: !!nav,
+          badge: nav ? cardinalityShort(nav.cardinality) : null,
+          badgeAppearance: 'ghost' as const,
+          dirty: state.dirty.has('nav'),
+        },
+      ],
     },
     {
-      id: 'targets', label: 'Related',
-      meta: state.targets.length ? `${state.targets.length} target${state.targets.length === 1 ? '' : 's'}` : 'none',
+      id: 'targets',
+      label: 'Related',
+      meta: state.targets.length
+        ? `${state.targets.length} target${state.targets.length === 1 ? '' : 's'}`
+        : 'none',
       items: [
         {
           id: 'targets',
-          icon: PersonAccounts20Regular, iconFilled: PersonAccounts20Filled,
+          icon: PersonAccounts20Regular,
+          iconFilled: PersonAccounts20Filled,
           label: singleValued ? 'Target record' : 'Target records',
           badge: state.targets.length || null,
           badgeAppearance: 'tint' as const,
           badgeColor: state.targets.length > 0 ? ('success' as const) : ('subtle' as const),
           dirty: state.dirty.has('targets'),
         },
-        ...(requests.length > 0 ? [{
-          id: 'preview',
-          icon: Code20Filled, iconFilled: Code20Filled,
-          label: `${requests.length} request${requests.length === 1 ? '' : 's'}`,
-          badge: requests.length, badgeAppearance: 'ghost' as const,
-        }] : []),
+        ...(requests.length > 0
+          ? [
+              {
+                id: 'preview',
+                icon: Code20Filled,
+                iconFilled: Code20Filled,
+                label: `${requests.length} request${requests.length === 1 ? '' : 's'}`,
+                badge: requests.length,
+                badgeAppearance: 'ghost' as const,
+              },
+            ]
+          : []),
       ],
     },
     {
-      id: 'headers', label: 'Headers',
-      meta: `${state.headers.filter(h => h.enabled).length} active`,
-      items: [{
-        id: 'headers',
-        icon: LineHorizontal320Regular, iconFilled: LineHorizontal320Filled,
-        label: 'HTTP headers',
-        badge: state.headers.filter(h => h.enabled).length || null,
-        dirty: state.dirty.has('headers'),
-      }],
+      id: 'headers',
+      label: 'Headers',
+      meta: `${state.headers.filter((h) => h.enabled).length} active`,
+      items: [
+        {
+          id: 'headers',
+          icon: LineHorizontal320Regular,
+          iconFilled: LineHorizontal320Filled,
+          label: 'HTTP headers',
+          badge: state.headers.filter((h) => h.enabled).length || null,
+          dirty: state.dirty.has('headers'),
+        },
+      ],
     },
   ];
 
@@ -243,11 +304,11 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
       pane = (
         <TargetEditor
           table={state.table}
-          onTableChange={t => {
+          onTableChange={(t) => {
             // Switching/clearing the source entity invalidates the source
             // record, the chosen nav property (belongs to the old entity's
             // relationship set), and any target ids picked under it.
-            setState(s => ({
+            setState((s) => ({
               ...s,
               table: t,
               sourceId: null,
@@ -278,8 +339,9 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
             // Switching nav → drop targets (target entity may change).
             // Also drop the name cache since those names belong to the
             // old target entity.
-            setState(s => ({ ...s, navProperty: n, targets: [], targetNames: {} }));
-            markDirty('nav'); markDirty('targets');
+            setState((s) => ({ ...s, navProperty: n, targets: [], targetNames: {} }));
+            markDirty('nav');
+            markDirty('targets');
           }}
           group="relate"
           forOperation="associate"
@@ -287,13 +349,11 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
             <MessageBar layout="multiline" intent="info">
               <MessageBarBody>
                 <MessageBarTitle>How cardinality drives the request</MessageBarTitle>
-                <strong>Collection-valued</strong> (1:N / N:N) → <code>POST /…/$ref</code>{' '}
-                with one request per target.
-                {' '}
-                <strong>Single-valued</strong> (N:1) → <code>PATCH /source(id)</code>{' '}
-                with body <code>{'{ "<nav>@odata.bind": "<target-set>(<id>)" }'}</code>{' '}
-                (one target). This is the docs-preferred shape — the URL bar verb updates automatically.
-                {' '}
+                <strong>Collection-valued</strong> (1:N / N:N) → <code>POST /…/$ref</code> with one
+                request per target. <strong>Single-valued</strong> (N:1) →{' '}
+                <code>PATCH /source(id)</code> with body{' '}
+                <code>{'{ "<nav>@odata.bind": "<target-set>(<id>)" }'}</code> (one target). This is
+                the docs-preferred shape — the URL bar verb updates automatically.{' '}
                 <a
                   href="https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/associate-disassociate-entities-using-web-api"
                   target="_blank"
@@ -329,7 +389,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
       pane = (
         <HeadersEditor
           items={state.headers}
-          setItems={h => set('headers', h, 'headers')}
+          setItems={(h) => set('headers', h, 'headers')}
           group="relate"
         />
       );
@@ -344,14 +404,15 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
     body,
     entityLogical: built.entityLogical,
     // When 2+ targets are queued, surface every request to the code generators
-    multiRequests: requests.length > 1
-      ? requests.map(r => ({
-          method: r.method,
-          relativeUrl: r.relativeUrl,
-          body: r.body as unknown as Record<string, unknown>,
-          description: `target ${r.targetId}`,
-        }))
-      : undefined,
+    multiRequests:
+      requests.length > 1
+        ? requests.map((r) => ({
+            method: r.method,
+            relativeUrl: r.relativeUrl,
+            body: r.body as unknown as Record<string, unknown>,
+            description: `target ${r.targetId}`,
+          }))
+        : undefined,
   };
 
   return (
@@ -362,7 +423,10 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
           urlPreview={built.relativeNoBase}
           sections={sections}
           activeNode={activePath}
-          onSelect={(id) => setActivePath(id)}
+          onSelect={(id) => {
+            setActivePath(id);
+            setTab('builder');
+          }}
           recents={recents}
         />
       }
@@ -379,7 +443,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
     >
       <MainTabs tab={tab} onTabChange={setTab} resultCount={result?.ok ? requests.length : null}>
         {tab === 'builder' && pane}
-        {tab === 'code'    && <CodeView themeMode={themeMode} inputs={codeInputs} />}
+        {tab === 'code' && <CodeView themeMode={themeMode} inputs={codeInputs} />}
         {tab === 'results' && (
           <ResultsView
             result={result}
@@ -393,7 +457,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
               navProperty: state.navProperty ?? undefined,
               targetCount: state.targets.length,
               targetNames: state.targets
-                .map(id => state.targetNames[id])
+                .map((id) => state.targetNames[id])
                 .filter((n): n is string => !!n),
             }}
           />
@@ -406,7 +470,11 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
 // ──────────────────────────────────────────────────────────────
 // RequestsPreview — JSON-style preview of the N requests that will fire
 // ──────────────────────────────────────────────────────────────
-function RequestsPreview({ requests }: { requests: import('../engine/urlBuilder').AssociateRequest[] }) {
+function RequestsPreview({
+  requests,
+}: {
+  requests: import('../engine/urlBuilder').AssociateRequest[];
+}) {
   const s = useStudioStyles();
   return (
     <div>
@@ -416,13 +484,27 @@ function RequestsPreview({ requests }: { requests: import('../engine/urlBuilder'
         sub="Each target queues a separate HTTP request. For large counts, prefer a $batch request."
         group="relate"
       />
-      <div className={mergeClasses(s.inlineCard)} style={{ padding: 12, maxWidth: 980, fontFamily: tokens.fontFamilyMonospace, fontSize: 11 }}>
+      <div
+        className={mergeClasses(s.inlineCard)}
+        style={{ padding: 12, maxWidth: 980, fontFamily: tokens.fontFamilyMonospace, fontSize: 11 }}
+      >
         {requests.map((r, i) => (
-          <div key={r.targetId} style={{
-            display: 'grid', gridTemplateColumns: '60px 1fr', gap: 8, padding: '8px 0',
-            borderBottom: i < requests.length - 1 ? `1px solid ${tokens.colorNeutralStroke3}` : 'none',
-          }}>
-            <Badge appearance="filled" color={r.method === 'POST' ? 'success' : 'warning'} style={{ fontWeight: 700, justifySelf: 'start' }}>
+          <div
+            key={r.targetId}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '60px 1fr',
+              gap: 8,
+              padding: '8px 0',
+              borderBottom:
+                i < requests.length - 1 ? `1px solid ${tokens.colorNeutralStroke3}` : 'none',
+            }}
+          >
+            <Badge
+              appearance="filled"
+              color={r.method === 'POST' ? 'success' : 'warning'}
+              style={{ fontWeight: 700, justifySelf: 'start' }}
+            >
               {r.method}
             </Badge>
             <div style={{ minWidth: 0 }}>
@@ -434,7 +516,15 @@ function RequestsPreview({ requests }: { requests: import('../engine/urlBuilder'
           </div>
         ))}
         {requests.length === 0 && (
-          <Caption1 style={{ color: tokens.colorNeutralForeground3, fontStyle: 'italic', padding: '12px 4px', textAlign: 'center', display: 'block' }}>
+          <Caption1
+            style={{
+              color: tokens.colorNeutralForeground3,
+              fontStyle: 'italic',
+              padding: '12px 4px',
+              textAlign: 'center',
+              display: 'block',
+            }}
+          >
             No requests queued — pick at least one target on the Related pane.
           </Caption1>
         )}
@@ -445,8 +535,11 @@ function RequestsPreview({ requests }: { requests: import('../engine/urlBuilder'
 
 function cardinalityShort(c: import('../mock/metadata').NavProperty['cardinality']): string {
   switch (c) {
-    case 'OneToMany':  return '1:N';
-    case 'ManyToOne':  return 'N:1';
-    case 'ManyToMany': return 'N:N';
+    case 'OneToMany':
+      return '1:N';
+    case 'ManyToOne':
+      return 'N:1';
+    case 'ManyToMany':
+      return 'N:N';
   }
 }

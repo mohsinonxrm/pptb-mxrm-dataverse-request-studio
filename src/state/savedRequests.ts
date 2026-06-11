@@ -22,7 +22,11 @@
 import type { RetrieveMultipleState, RetrieveSingleState, PredefinedQueryState } from './readState';
 import type { DeleteState, UpdateState, CreateState, UpsertState, MergeState } from './writeState';
 import type { AssociateState, DisassociateState } from './relateState';
-import type { ExecuteActionState, ExecuteFunctionState, ExecuteWorkflowState } from './executeState';
+import type {
+  ExecuteActionState,
+  ExecuteFunctionState,
+  ExecuteWorkflowState,
+} from './executeState';
 import type { ManageFileState, ManageImageState, ManageAttachmentState } from './binaryState';
 import { getEnv } from '../mock/environment';
 
@@ -71,16 +75,27 @@ export const SAVED_REQUESTS_KEY = SAVED_REQUESTS_KEY_PREFIX;
 
 /** Union of every mode id that participates in the saved-request library. Add new modes here. */
 export type SavedModeId =
-  | 'retrieve-multiple' | 'retrieve-single' | 'predefined-query'
-  | 'delete' | 'update' | 'create' | 'upsert' | 'merge'
-  | 'associate' | 'disassociate'
+  | 'retrieve-multiple'
+  | 'retrieve-single'
+  | 'predefined-query'
+  | 'delete'
+  | 'update'
+  | 'create'
+  | 'upsert'
+  | 'merge'
+  | 'associate'
+  | 'disassociate'
   // Execute group — exec-action covers OOB / Custom API / Custom Action
   // via state.category; exec-function covers OOB / Custom API functions.
-  | 'exec-action' | 'exec-function' | 'exec-workflow'
+  | 'exec-action'
+  | 'exec-function'
+  | 'exec-workflow'
   // Binary group — file / image / attachment / annotation column or record
   // operations. Each saved under their own id so a saved manage-file can't
   // be loaded into manage-image and vice versa (different state shapes).
-  | 'manage-file' | 'manage-image' | 'manage-attachment';
+  | 'manage-file'
+  | 'manage-image'
+  | 'manage-attachment';
 
 export interface SavedRequest {
   /** Stable random id — never reused across renames; survives content edits. */
@@ -135,7 +150,10 @@ export type SerializedUpsertState = Omit<UpsertState, 'dirty'>;
  * transient live-fetched row snapshots. Snapshots are repopulated on
  * load after MergeMode refires its fetch.
  */
-export type SerializedMergeState = Omit<MergeState, 'dirty' | 'targetSnapshot' | 'subordinateSnapshot'>;
+export type SerializedMergeState = Omit<
+  MergeState,
+  'dirty' | 'targetSnapshot' | 'subordinateSnapshot'
+>;
 /** Same as AssociateState minus the non-serializable `dirty` Set. */
 export type SerializedAssociateState = Omit<AssociateState, 'dirty'>;
 /** Same as DisassociateState minus the non-serializable `dirty` Set. */
@@ -160,14 +178,18 @@ export type SerializedManageAttachmentState = Omit<ManageAttachmentState, 'dirty
 
 // ── Serialize / Deserialize ───────────────────────────────────────────
 
-export function serializeRetrieveMultiple(state: RetrieveMultipleState): SerializedRetrieveMultipleState {
+export function serializeRetrieveMultiple(
+  state: RetrieveMultipleState,
+): SerializedRetrieveMultipleState {
   // Strip the dirty Set; everything else is plain-object-safe (filter
   // tree, expand tree, prefer, headers are all interface-typed).
   const { dirty: _dirty, ...rest } = state;
   return rest;
 }
 
-export function deserializeRetrieveMultiple(snap: SerializedRetrieveMultipleState): RetrieveMultipleState {
+export function deserializeRetrieveMultiple(
+  snap: SerializedRetrieveMultipleState,
+): RetrieveMultipleState {
   return { ...snap, dirty: new Set<string>() };
 }
 
@@ -176,16 +198,22 @@ export function serializeRetrieveSingle(state: RetrieveSingleState): SerializedR
   return rest;
 }
 
-export function deserializeRetrieveSingle(snap: SerializedRetrieveSingleState): RetrieveSingleState {
+export function deserializeRetrieveSingle(
+  snap: SerializedRetrieveSingleState,
+): RetrieveSingleState {
   return { ...snap, dirty: new Set<string>() };
 }
 
-export function serializePredefinedQuery(state: PredefinedQueryState): SerializedPredefinedQueryState {
+export function serializePredefinedQuery(
+  state: PredefinedQueryState,
+): SerializedPredefinedQueryState {
   const { dirty: _dirty, ...rest } = state;
   return rest;
 }
 
-export function deserializePredefinedQuery(snap: SerializedPredefinedQueryState): PredefinedQueryState {
+export function deserializePredefinedQuery(
+  snap: SerializedPredefinedQueryState,
+): PredefinedQueryState {
   return { ...snap, dirty: new Set<string>() };
 }
 
@@ -270,19 +298,27 @@ export function deserializeExecuteAction(snap: SerializedExecuteActionState): Ex
   return { ...snap, dirty: new Set<string>() };
 }
 
-export function serializeExecuteFunction(state: ExecuteFunctionState): SerializedExecuteFunctionState {
+export function serializeExecuteFunction(
+  state: ExecuteFunctionState,
+): SerializedExecuteFunctionState {
   const { dirty: _d, ...rest } = state;
   return rest;
 }
-export function deserializeExecuteFunction(snap: SerializedExecuteFunctionState): ExecuteFunctionState {
+export function deserializeExecuteFunction(
+  snap: SerializedExecuteFunctionState,
+): ExecuteFunctionState {
   return { ...snap, dirty: new Set<string>() };
 }
 
-export function serializeExecuteWorkflow(state: ExecuteWorkflowState): SerializedExecuteWorkflowState {
+export function serializeExecuteWorkflow(
+  state: ExecuteWorkflowState,
+): SerializedExecuteWorkflowState {
   const { dirty: _d, ...rest } = state;
   return rest;
 }
-export function deserializeExecuteWorkflow(snap: SerializedExecuteWorkflowState): ExecuteWorkflowState {
+export function deserializeExecuteWorkflow(
+  snap: SerializedExecuteWorkflowState,
+): ExecuteWorkflowState {
   return { ...snap, dirty: new Set<string>() };
 }
 
@@ -303,11 +339,15 @@ export function deserializeManageImage(snap: SerializedManageImageState): Manage
   return { ...snap, bodyBase64: '', dirty: new Set<string>() };
 }
 
-export function serializeManageAttachment(state: ManageAttachmentState): SerializedManageAttachmentState {
+export function serializeManageAttachment(
+  state: ManageAttachmentState,
+): SerializedManageAttachmentState {
   const { dirty: _d, bodyBase64: _b, ...rest } = state;
   return rest;
 }
-export function deserializeManageAttachment(snap: SerializedManageAttachmentState): ManageAttachmentState {
+export function deserializeManageAttachment(
+  snap: SerializedManageAttachmentState,
+): ManageAttachmentState {
   return { ...snap, bodyBase64: '', dirty: new Set<string>() };
 }
 
@@ -330,15 +370,17 @@ export function loadSaved(): SavedRequest[] {
     // before the field existed (one-time migration; we tag them with the
     // current host since we have no way to know the original).
     return parsed
-      .filter((e): e is SavedRequest =>
-        e != null && typeof e === 'object' &&
-        typeof (e as SavedRequest).id === 'string' &&
-        typeof (e as SavedRequest).name === 'string' &&
-        typeof (e as SavedRequest).modeId === 'string' &&
-        typeof (e as SavedRequest).state === 'object' &&
-        typeof (e as SavedRequest).savedAt === 'number',
+      .filter(
+        (e): e is SavedRequest =>
+          e != null &&
+          typeof e === 'object' &&
+          typeof (e as SavedRequest).id === 'string' &&
+          typeof (e as SavedRequest).name === 'string' &&
+          typeof (e as SavedRequest).modeId === 'string' &&
+          typeof (e as SavedRequest).state === 'object' &&
+          typeof (e as SavedRequest).savedAt === 'number',
       )
-      .map(e => ({ ...e, orgScope: e.orgScope || scope }));
+      .map((e) => ({ ...e, orgScope: e.orgScope || scope }));
   } catch {
     return [];
   }
@@ -463,7 +505,7 @@ function autoSuggestExecuteAction(state: SerializedExecuteActionState): string {
   const parts: string[] = [state.category];
   parts.push(state.actionName || 'untitled');
   if (state.boundRecordId) parts.push(`#${state.boundRecordId.replace(/[{}-]/g, '').slice(0, 8)}`);
-  const n = Object.values(state.paramValues || {}).filter(v => v != null && v !== '').length;
+  const n = Object.values(state.paramValues || {}).filter((v) => v != null && v !== '').length;
   if (n) parts.push(`${n} param${n === 1 ? '' : 's'}`);
   parts.push(new Date().toISOString().slice(0, 10));
   return parts.join(' · ');
@@ -472,7 +514,7 @@ function autoSuggestExecuteFunction(state: SerializedExecuteFunctionState): stri
   const parts: string[] = ['function'];
   parts.push(state.functionName || 'untitled');
   if (state.boundRecordId) parts.push(`#${state.boundRecordId.replace(/[{}-]/g, '').slice(0, 8)}`);
-  const n = Object.values(state.paramValues || {}).filter(v => v != null && v !== '').length;
+  const n = Object.values(state.paramValues || {}).filter((v) => v != null && v !== '').length;
   if (n) parts.push(`${n} param${n === 1 ? '' : 's'}`);
   parts.push(new Date().toISOString().slice(0, 10));
   return parts.join(' · ');
@@ -480,7 +522,7 @@ function autoSuggestExecuteFunction(state: SerializedExecuteFunctionState): stri
 function autoSuggestExecuteWorkflow(state: SerializedExecuteWorkflowState): string {
   const parts: string[] = ['workflow'];
   if (state.workflowId) parts.push(`wf:${state.workflowId.replace(/[{}-]/g, '').slice(0, 8)}`);
-  if (state.entityId)   parts.push(`#${state.entityId.replace(/[{}-]/g, '').slice(0, 8)}`);
+  if (state.entityId) parts.push(`#${state.entityId.replace(/[{}-]/g, '').slice(0, 8)}`);
   parts.push(new Date().toISOString().slice(0, 10));
   return parts.join(' · ');
 }
@@ -489,7 +531,8 @@ function autoSuggestDisassociate(state: SerializedDisassociateState): string {
   const parts: string[] = ['disassociate'];
   parts.push(state.table || 'untitled');
   if (state.navProperty) parts.push(`× ${state.navProperty}`);
-  if (state.targetIds?.length) parts.push(`${state.targetIds.length} target${state.targetIds.length === 1 ? '' : 's'}`);
+  if (state.targetIds?.length)
+    parts.push(`${state.targetIds.length} target${state.targetIds.length === 1 ? '' : 's'}`);
   parts.push(new Date().toISOString().slice(0, 10));
   return parts.join(' · ');
 }
@@ -499,7 +542,8 @@ function autoSuggestAssociate(state: SerializedAssociateState): string {
   const parts: string[] = ['associate'];
   parts.push(state.table || 'untitled');
   if (state.navProperty) parts.push(`→ ${state.navProperty}`);
-  if (state.targets?.length) parts.push(`${state.targets.length} target${state.targets.length === 1 ? '' : 's'}`);
+  if (state.targets?.length)
+    parts.push(`${state.targets.length} target${state.targets.length === 1 ? '' : 's'}`);
   parts.push(new Date().toISOString().slice(0, 10));
   return parts.join(' · ');
 }
@@ -521,8 +565,9 @@ function autoSuggestMerge(state: SerializedMergeState): string {
   const parts: string[] = ['merge'];
   parts.push(state.table || 'untitled');
   if (state.targetId) parts.push(`tgt:${state.targetId.replace(/[{}-]/g, '').slice(0, 8)}`);
-  if (state.subordinateId) parts.push(`sub:${state.subordinateId.replace(/[{}-]/g, '').slice(0, 8)}`);
-  const overrides = Object.values(state.fieldChoices || {}).filter(c => c !== 'target').length;
+  if (state.subordinateId)
+    parts.push(`sub:${state.subordinateId.replace(/[{}-]/g, '').slice(0, 8)}`);
+  const overrides = Object.values(state.fieldChoices || {}).filter((c) => c !== 'target').length;
   if (overrides) parts.push(`${overrides} override${overrides === 1 ? '' : 's'}`);
   parts.push(new Date().toISOString().slice(0, 10));
   return parts.join(' · ');
@@ -582,7 +627,8 @@ function autoSuggestDelete(state: SerializedDeleteState): string {
   parts.push(state.table || 'untitled');
   if (state.recordId) parts.push(`#${state.recordId.replace(/[{}-]/g, '').slice(0, 8)}`);
   if (state.scope.kind === 'single-property') parts.push(`clear ${state.scope.column || '?'}`);
-  if (state.concurrency.kind !== 'none') parts.push(state.concurrency.kind === 'etag' ? 'etag' : 'if-match');
+  if (state.concurrency.kind !== 'none')
+    parts.push(state.concurrency.kind === 'etag' ? 'etag' : 'if-match');
   if (state.bypass.businessLogic !== 'none' || state.bypass.suppressFlows) parts.push('bypass');
   parts.push(new Date().toISOString().slice(0, 10));
   return parts.join(' · ');

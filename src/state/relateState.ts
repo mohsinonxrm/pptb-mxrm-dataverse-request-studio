@@ -97,8 +97,7 @@ export const isCollectionValuedNav = (n: NavProperty): boolean =>
   n.cardinality === 'OneToMany' || n.cardinality === 'ManyToMany';
 
 /** True for ManyToOne nav props (single-valued lookup on the source). */
-export const isSingleValuedNav = (n: NavProperty): boolean =>
-  n.cardinality === 'ManyToOne';
+export const isSingleValuedNav = (n: NavProperty): boolean => n.cardinality === 'ManyToOne';
 
 /** Method that the spec dictates for Associate on this cardinality. */
 export const associateMethodFor = (n: NavProperty): 'POST' | 'PUT' =>

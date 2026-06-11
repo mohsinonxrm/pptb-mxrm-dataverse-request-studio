@@ -69,8 +69,8 @@ export interface ActionReturnType {
 
 export type ActionBinding =
   | { kind: 'unbound' }
-  | { kind: 'entity'; entityType: string }       // bound to a single row
-  | { kind: 'collection'; entityType: string };   // bound to the entire entity collection
+  | { kind: 'entity'; entityType: string } // bound to a single row
+  | { kind: 'collection'; entityType: string }; // bound to the entire entity collection
 
 export interface CsdlAction {
   /** Wire name — what goes in the URL (e.g. "WinOpportunity", "new_AddNoteToContact"). */

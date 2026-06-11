@@ -48,8 +48,8 @@ export type FileOperation = 'upload' | 'download' | 'delete';
 
 export type FileUploadMethod =
   | { kind: 'single-request' }
-  | { kind: 'chunked-patch'; chunkSize: number }                    // chunkSize default = 2 MB (server may set via x-ms-chunk-size)
-  | { kind: 'dataverse-messages'; blockSize: number };              // blockSize default = 4 MB
+  | { kind: 'chunked-patch'; chunkSize: number } // chunkSize default = 2 MB (server may set via x-ms-chunk-size)
+  | { kind: 'dataverse-messages'; blockSize: number }; // blockSize default = 4 MB
 
 export type FileDownloadMethod =
   | { kind: 'single-request' }
@@ -59,9 +59,9 @@ export type FileDownloadMethod =
 
 /** Source of the binary payload during upload. */
 export type BinarySource =
-  | { kind: 'file' }       // user picks a file via <input type="file"> (we read into memory)
-  | { kind: 'base64' }     // user pastes a base64 string
-  | { kind: 'url' };       // informational — references an external URL
+  | { kind: 'file' } // user picks a file via <input type="file"> (we read into memory)
+  | { kind: 'base64' } // user pastes a base64 string
+  | { kind: 'url' }; // informational — references an external URL
 
 export interface ManageFileState {
   /** Source table logical name. */
@@ -125,28 +125,31 @@ export interface ManageImageState {
 export type AttachmentTarget = 'attachment' | 'annotation';
 
 /** Per-target metadata derived from the discriminator — kept in code, not state. */
-export const ATTACHMENT_TARGET_INFO: Record<AttachmentTarget, {
-  /** Table logical name. */
-  entityLogical: string;
-  /** Entity set name (plural). */
-  entitySet: string;
-  /** Primary-key attribute (also the "target id" prop in Initialize* messages). */
-  primaryKey: string;
-  /** Body column logical name — base64-encoded string payload. */
-  bodyColumn: string;
-  /** File name column logical name (always 'filename' for both). */
-  fileNameColumn: string;
-  /** MIME type column logical name (always 'mimetype' for both). */
-  mimeTypeColumn: string;
-  /** Init upload message name. */
-  initUploadMessage: string;
-  /** Commit upload message name. */
-  commitUploadMessage: string;
-  /** Init download message name. */
-  initDownloadMessage: string;
-  /** Caller-supplied id required (annotation) vs server-generated (attachment + email parent). */
-  callerSuppliesId: boolean;
-}> = {
+export const ATTACHMENT_TARGET_INFO: Record<
+  AttachmentTarget,
+  {
+    /** Table logical name. */
+    entityLogical: string;
+    /** Entity set name (plural). */
+    entitySet: string;
+    /** Primary-key attribute (also the "target id" prop in Initialize* messages). */
+    primaryKey: string;
+    /** Body column logical name — base64-encoded string payload. */
+    bodyColumn: string;
+    /** File name column logical name (always 'filename' for both). */
+    fileNameColumn: string;
+    /** MIME type column logical name (always 'mimetype' for both). */
+    mimeTypeColumn: string;
+    /** Init upload message name. */
+    initUploadMessage: string;
+    /** Commit upload message name. */
+    commitUploadMessage: string;
+    /** Init download message name. */
+    initDownloadMessage: string;
+    /** Caller-supplied id required (annotation) vs server-generated (attachment + email parent). */
+    callerSuppliesId: boolean;
+  }
+> = {
   attachment: {
     entityLogical: 'activitymimeattachment',
     entitySet: 'activitymimeattachments',
@@ -174,11 +177,11 @@ export const ATTACHMENT_TARGET_INFO: Record<AttachmentTarget, {
 };
 
 export type AttachmentUploadMethod =
-  | { kind: 'inline-base64' }                                       // PATCH/POST with body column = base64 (≲4 MB)
-  | { kind: 'dataverse-messages'; blockSize: number };              // blockSize default = 4 MB
+  | { kind: 'inline-base64' } // PATCH/POST with body column = base64 (≲4 MB)
+  | { kind: 'dataverse-messages'; blockSize: number }; // blockSize default = 4 MB
 
 export type AttachmentDownloadMethod =
-  | { kind: 'single-request' }                                      // GET /<set>(<id>)/{body|documentbody}/$value
+  | { kind: 'single-request' } // GET /<set>(<id>)/{body|documentbody}/$value
   | { kind: 'dataverse-messages'; blockSize: number };
 
 export interface ManageAttachmentState {
@@ -269,10 +272,13 @@ export function checkUploadSize(
 ): SizeAdvisory | null {
   if (fileSize <= 0) return null; // No payload yet — no advisory.
   const kindLabel =
-    kind === 'file' ? 'file column' :
-    kind === 'image' ? 'image column' :
-    kind === 'attachment' ? 'attachment' :
-    'annotation';
+    kind === 'file'
+      ? 'file column'
+      : kind === 'image'
+        ? 'image column'
+        : kind === 'attachment'
+          ? 'attachment'
+          : 'annotation';
   const fmt = (n: number) => formatBytes(n);
   if (maxBytes === undefined) {
     return {
@@ -309,7 +315,10 @@ function formatBytes(bytes: number): string {
   const units = ['B', 'KB', 'MB', 'GB'];
   let v = bytes;
   let u = 0;
-  while (v >= 1024 && u < units.length - 1) { v /= 1024; u++; }
+  while (v >= 1024 && u < units.length - 1) {
+    v /= 1024;
+    u++;
+  }
   return `${v.toFixed(v < 10 && u > 0 ? 1 : 0)} ${units[u]}`;
 }
 

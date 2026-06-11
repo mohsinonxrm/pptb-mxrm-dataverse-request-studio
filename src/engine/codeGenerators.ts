@@ -10,27 +10,41 @@
 import type { BuiltRequest } from './urlBuilder';
 import { ENV } from '../mock/environment';
 
-export type CodeFormat = 'fetch' | 'xrm' | 'xrm-batch' | 'xhr' | 'powerautomate' | 'csharp' | 'powershell' | 'curl' | 'json';
+export type CodeFormat =
+  | 'fetch'
+  | 'xrm'
+  | 'xrm-batch'
+  | 'xhr'
+  | 'powerautomate'
+  | 'csharp'
+  | 'powershell'
+  | 'curl'
+  | 'json';
 
 export const FORMAT_LABELS: Record<CodeFormat, string> = {
-  fetch:        'fetch',
-  xrm:          'Xrm.WebApi',
-  'xrm-batch':  'Xrm.WebApi.executeMultiple',
-  xhr:          'XMLHttpRequest',
-  powerautomate:'Power Automate',
-  csharp:       'C#',
-  powershell:   'PowerShell',
-  curl:         'cURL',
-  json:         'JSON',
+  fetch: 'fetch',
+  xrm: 'Xrm.WebApi',
+  'xrm-batch': 'Xrm.WebApi.executeMultiple',
+  xhr: 'XMLHttpRequest',
+  powerautomate: 'Power Automate',
+  csharp: 'C#',
+  powershell: 'PowerShell',
+  curl: 'cURL',
+  json: 'JSON',
 };
 
 export const FORMAT_LANG: Record<CodeFormat, string> = {
-  fetch: 'javascript', xrm: 'javascript', 'xrm-batch': 'javascript', xhr: 'javascript',
+  fetch: 'javascript',
+  xrm: 'javascript',
+  'xrm-batch': 'javascript',
+  xhr: 'javascript',
   // Power Automate is rendered as a "Field  Value" cheatsheet you can paste
   // into the Dataverse "List rows" / "Get a row by ID" action — not JSON.
   powerautomate: 'plaintext',
-  csharp: 'csharp', powershell: 'powershell',
-  curl: 'shell', json: 'json',
+  csharp: 'csharp',
+  powershell: 'powershell',
+  curl: 'shell',
+  json: 'json',
 };
 
 export interface CodegenInputs {
@@ -113,15 +127,24 @@ export interface PowerAutomateActionSpec {
 
 export function generateCode(fmt: CodeFormat, i: CodegenInputs): string {
   switch (fmt) {
-    case 'fetch':         return genFetch(i);
-    case 'xrm':           return genXrm(i);
-    case 'xrm-batch':     return genXrmBatch(i);
-    case 'xhr':           return genXhr(i);
-    case 'powerautomate': return genPowerAutomate(i);
-    case 'csharp':        return genCsharp(i);
-    case 'powershell':    return genPowershell(i);
-    case 'curl':          return genCurl(i);
-    case 'json':          return genJson(i);
+    case 'fetch':
+      return genFetch(i);
+    case 'xrm':
+      return genXrm(i);
+    case 'xrm-batch':
+      return genXrmBatch(i);
+    case 'xhr':
+      return genXhr(i);
+    case 'powerautomate':
+      return genPowerAutomate(i);
+    case 'csharp':
+      return genCsharp(i);
+    case 'powershell':
+      return genPowershell(i);
+    case 'curl':
+      return genCurl(i);
+    case 'json':
+      return genJson(i);
   }
 }
 
@@ -169,7 +192,7 @@ function formatJsObject(obj: Record<string, unknown>, baseIndent: string): strin
   const keys = Object.keys(obj);
   if (keys.length === 0) return '{}';
   const nextIndent = baseIndent + '  ';
-  const lines = keys.map(k => {
+  const lines = keys.map((k) => {
     const v = obj[k];
     const keyOut = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k) ? k : `'${jsEscape(k)}'`;
     return `${nextIndent}${keyOut}: ${formatJsValue(v, nextIndent)}`;
@@ -203,11 +226,11 @@ function decodeFunctionAlias(odataLiteral: string): string {
 
 function formatJsValue(v: unknown, indent: string): string {
   if (v === null) return 'null';
-  if (typeof v === 'string')  return `'${jsEscape(v)}'`;
+  if (typeof v === 'string') return `'${jsEscape(v)}'`;
   if (typeof v === 'number' || typeof v === 'boolean') return String(v);
   if (Array.isArray(v)) {
     if (v.length === 0) return '[]';
-    return `[ ${v.map(x => formatJsValue(x, indent)).join(', ')} ]`;
+    return `[ ${v.map((x) => formatJsValue(x, indent)).join(', ')} ]`;
   }
   if (typeof v === 'object') {
     return formatJsObject(v as Record<string, unknown>, indent);
@@ -229,12 +252,8 @@ function genFetch(i: CodegenInputs): string {
   const hdrs = stripAuth(i.headers);
   const headerBlock = jsHeaderObject(hdrs, '      ');
   const isWrite = i.method !== 'GET';
-  const bodyLine = isWrite
-    ? `\n      body: JSON.stringify(payload),`
-    : '';
-  const payloadDecl = isWrite
-    ? `  const payload = ${formatJsObject(i.body ?? {}, '  ')};\n\n`
-    : '';
+  const bodyLine = isWrite ? `\n      body: JSON.stringify(payload),` : '';
+  const payloadDecl = isWrite ? `  const payload = ${formatJsObject(i.body ?? {}, '  ')};\n\n` : '';
 
   return `// Dataverse Web API — fetch
 // Run from a browser context (or Node 18+). Provide a bearer token via the
@@ -284,12 +303,14 @@ function genFetchMulti(i: CodegenInputs): string {
   const hdrs = stripAuth(i.headers);
   const headerBlock = jsHeaderObject(hdrs, '      ');
   const reqs = i.multiRequests ?? [];
-  const requestArray = reqs.map(r => {
-    const url = `https://${ENV.host}${r.relativeUrl}`;
-    const bodyLine = r.body ? `, body: JSON.stringify(${formatJsObject(r.body, '    ')})` : '';
-    const desc = r.description ? `  // ${r.description}\n` : '';
-    return `${desc}  { method: '${r.method}', url: '${url}'${bodyLine} },`;
-  }).join('\n');
+  const requestArray = reqs
+    .map((r) => {
+      const url = `https://${ENV.host}${r.relativeUrl}`;
+      const bodyLine = r.body ? `, body: JSON.stringify(${formatJsObject(r.body, '    ')})` : '';
+      const desc = r.description ? `  // ${r.description}\n` : '';
+      return `${desc}  { method: '${r.method}', url: '${url}'${bodyLine} },`;
+    })
+    .join('\n');
 
   return `// Dataverse Web API — fetch (multi-request)
 //
@@ -314,7 +335,7 @@ ${headerBlock}
     const res = await fetch(r.url, {
       method: r.method,
       headers: sharedHeaders,
-      ${reqs.some(r => r.body) ? 'body: r.body,' : ''}
+      ${reqs.some((r) => r.body) ? 'body: r.body,' : ''}
     });
     if (!res.ok) {
       const err = await res.json().catch(() => null);
@@ -364,7 +385,7 @@ ${genFetchMulti(i)}`;
   const recordId = i.built.recordId;
   // Re-derive the options string from queryParts (decoded for readability inside Xrm.WebApi)
   const optsBody = i.built.queryParts
-    .map(p => `${p.key}=${decodeURIComponent(p.value)}`)
+    .map((p) => `${p.key}=${decodeURIComponent(p.value)}`)
     .join('&');
   const options = optsBody ? `?${optsBody}` : '';
 
@@ -380,11 +401,10 @@ ${genFetchMulti(i)}`;
   // Xrm.WebApi.online.execute({request}) rather than the high-level helpers.
   const url = i.built.relativeUrl;
   const isAction =
-    i.method === 'POST' && (
-      url.includes('/Microsoft.Dynamics.CRM.') ||
+    i.method === 'POST' &&
+    (url.includes('/Microsoft.Dynamics.CRM.') ||
       url.endsWith('/Merge') ||
-      (!recordId && !i.built.entitySet && !!i.body)   // unbound action like POST /WhoAmI(…) is GET so this won't match
-    );
+      (!recordId && !i.built.entitySet && !!i.body)); // unbound action like POST /WhoAmI(…) is GET so this won't match
   const isFunction = i.method === 'GET' && !recordId && !i.built.entitySet;
   const isRef = url.endsWith('/$ref') || /\$ref\?/.test(url);
   const isWorkflow = url.includes('/workflows(');
@@ -398,7 +418,11 @@ ${genFetchMulti(i)}`;
   // for OOB actions, custom APIs, custom actions, and ExecuteWorkflow.
   if (isAction || isWorkflow) {
     const actionMatch = url.match(/\/Microsoft\.Dynamics\.CRM\.([^/?(]+)/);
-    const actionName = actionMatch ? actionMatch[1] : isWorkflow ? 'ExecuteWorkflow' : url.split('/').pop() ?? '';
+    const actionName = actionMatch
+      ? actionMatch[1]
+      : isWorkflow
+        ? 'ExecuteWorkflow'
+        : (url.split('/').pop() ?? '');
     const isBound = !!recordId;
     return `// Xrm.WebApi.online.execute — actions / workflows / custom APIs.
 // Run inside a model-driven app or D365 form script. The request descriptor
@@ -406,7 +430,12 @@ ${genFetchMulti(i)}`;
 
 (async () => {
   const request = {
-${Object.entries(i.body ?? {}).map(([k, v]) => `    ${/^[a-zA-Z_$][\w$]*$/.test(k) ? k : `'${jsEscape(k)}'`}: ${formatJsValue(v, '    ')},`).join('\n')}
+${Object.entries(i.body ?? {})
+  .map(
+    ([k, v]) =>
+      `    ${/^[a-zA-Z_$][\w$]*$/.test(k) ? k : `'${jsEscape(k)}'`}: ${formatJsValue(v, '    ')},`,
+  )
+  .join('\n')}
 ${isBound ? `    entity: { entityType: '${logical}', id: '${recordId}' },\n` : ''}    getMetadata: () => ({
       boundParameter: ${isBound ? `'entity'` : 'null'},
       operationType: 0,  // 0 = Action · 1 = Function · 2 = CRUD
@@ -429,15 +458,22 @@ ${isBound ? `    entity: { entityType: '${logical}', id: '${recordId}' },\n` : '
   // ── Functions ─────────────────────────────────────────────────
   if (isFunction) {
     const fnMatch = url.match(/\/([^/?(]+)(?=\(|$)/);
-    const fnName = fnMatch ? fnMatch[1] : url.split('/').pop() ?? '';
+    const fnName = fnMatch ? fnMatch[1] : (url.split('/').pop() ?? '');
     return `// Xrm.WebApi.online.execute — OData function call.
 // Functions are GET requests; the descriptor sets operationType: 1.
 
 (async () => {
   const request = {
-${Object.entries(i.built.queryParts.filter(p => p.key.startsWith('@'))
-        .reduce<Record<string, string>>((acc, p) => { acc[p.key.replace(/^@/, '')] = p.value; return acc; }, {}))
-        .map(([k, v]) => `    ${k}: ${decodeFunctionAlias(v)},`).join('\n')}
+${Object.entries(
+  i.built.queryParts
+    .filter((p) => p.key.startsWith('@'))
+    .reduce<Record<string, string>>((acc, p) => {
+      acc[p.key.replace(/^@/, '')] = p.value;
+      return acc;
+    }, {}),
+)
+  .map(([k, v]) => `    ${k}: ${decodeFunctionAlias(v)},`)
+  .join('\n')}
     getMetadata: () => ({
       boundParameter: null,
       operationType: 1,  // 1 = Function
@@ -508,16 +544,21 @@ ${genFetchMulti(i)}`;
   // Write group — Create / Update / Delete / Upsert
   if (isWrite) {
     const verb =
-      i.method === 'POST'   ? 'createRecord' :
-      i.method === 'PATCH'  ? 'updateRecord' :
-      i.method === 'DELETE' ? 'deleteRecord' :
-      'execute';
-    const dataLiteral = verb === 'deleteRecord'
-      ? '' // delete doesn't take a body
-      : `  const data = ${formatJsObject(i.body ?? {}, '  ')};\n\n`;
-    const callArgs = verb === 'deleteRecord'
-      ? 'entityLogicalName, id'
-      : `entityLogicalName${recordId ? ', id' : ''}, data`;
+      i.method === 'POST'
+        ? 'createRecord'
+        : i.method === 'PATCH'
+          ? 'updateRecord'
+          : i.method === 'DELETE'
+            ? 'deleteRecord'
+            : 'execute';
+    const dataLiteral =
+      verb === 'deleteRecord'
+        ? '' // delete doesn't take a body
+        : `  const data = ${formatJsObject(i.body ?? {}, '  ')};\n\n`;
+    const callArgs =
+      verb === 'deleteRecord'
+        ? 'entityLogicalName, id'
+        : `entityLogicalName${recordId ? ', id' : ''}, data`;
     return `// Xrm.WebApi.${verb} — write-side request.
 // Run inside a model-driven app / D365 form script.
 //
@@ -581,11 +622,10 @@ function genXrmBatch(i: CodegenInputs): string {
   // GrantAccess, Merge, etc. that otherwise fell into the CRUD-write
   // branch and were emitted as `Create` against `accounts`.
   const isAction =
-    i.method === 'POST' && (
-      url.includes('/Microsoft.Dynamics.CRM.') ||
+    i.method === 'POST' &&
+    (url.includes('/Microsoft.Dynamics.CRM.') ||
       url.endsWith('/Merge') ||
-      (!recordId && !i.built.entitySet && !!i.body)
-    );
+      (!recordId && !i.built.entitySet && !!i.body));
   const isFunction = i.method === 'GET' && !recordId && !i.built.entitySet;
   const isWorkflow = url.includes('/workflows(');
   const isRef = url.endsWith('/$ref') || /\$ref\?/.test(url);
@@ -596,14 +636,18 @@ function genXrmBatch(i: CodegenInputs): string {
   // Re-derive the OData query options string from the request's
   // queryParts (decoded for readability inside the JS snippet).
   const optsBody = i.built.queryParts
-    .map(p => `${p.key}=${decodeURIComponent(p.value)}`)
+    .map((p) => `${p.key}=${decodeURIComponent(p.value)}`)
     .join('&');
   const options = optsBody ? `?${optsBody}` : '';
 
   // ── Action / Workflow ─────────────────────────────────────────
   if (isAction || isWorkflow) {
     const actionMatch = url.match(/\/Microsoft\.Dynamics\.CRM\.([^/?(]+)/);
-    const actionName = actionMatch ? actionMatch[1] : isWorkflow ? 'ExecuteWorkflow' : (url.split('/').pop() ?? '');
+    const actionName = actionMatch
+      ? actionMatch[1]
+      : isWorkflow
+        ? 'ExecuteWorkflow'
+        : (url.split('/').pop() ?? '');
     const isBound = !!recordId;
     const bodyEntries = Object.entries(i.body ?? {});
     return `// Xrm.WebApi.online.executeMultiple — batch one action (extend the array
@@ -673,18 +717,20 @@ ${isBound ? `      entity: { entityType: '${logical}', id: '${recordId}' },\n` :
   if (isRef) {
     const isAssociate = i.method === 'POST';
     const opName = isAssociate ? 'Associate' : 'Disassociate';
-    const sources = i.multiRequests && i.multiRequests.length > 0
-      ? i.multiRequests
-      : [{ url, method: i.method, body: i.body ?? null }];
+    const sources =
+      i.multiRequests && i.multiRequests.length > 0
+        ? i.multiRequests
+        : [{ url, method: i.method, body: i.body ?? null }];
     return `// Xrm.WebApi.online.executeMultiple — ${opName} via CRUD descriptors.
 // Each request describes one (target, relationship, related) tuple.
 
 (async () => {
   const requests = [
-${sources.map(_r => {
-  // Best-effort parse from the existing URL/body. Real callers should
-  // pass the parsed parts in directly.
-  return `    {
+${sources
+  .map((_r) => {
+    // Best-effort parse from the existing URL/body. Real callers should
+    // pass the parsed parts in directly.
+    return `    {
       // target: { entityType: '<table>', id: '<guid>' },
       // relationship: '<schemaName>',
       // relatedEntity: { entityType: '<table>', id: '<guid>' },
@@ -695,7 +741,8 @@ ${sources.map(_r => {
         operationName: '${opName}',
       }),
     },`;
-}).join('\n')}
+  })
+  .join('\n')}
   ];
 
   const results = await Xrm.WebApi.online.executeMultiple(requests);
@@ -770,20 +817,20 @@ ${sources.map(_r => {
   // ── Create / Update / Delete / Upsert ─────────────────────────
   if (isWrite) {
     const opName =
-      i.method === 'POST'   ? 'Create' :
-      i.method === 'PATCH'  ? 'Update' :
-      i.method === 'DELETE' ? 'Delete' :
-      'Update';
-    const bodyLiteral = opName === 'Delete'
-      ? ''
-      : `\n      data: ${formatJsObject(i.body ?? {}, '      ')},\n`;
+      i.method === 'POST'
+        ? 'Create'
+        : i.method === 'PATCH'
+          ? 'Update'
+          : i.method === 'DELETE'
+            ? 'Delete'
+            : 'Update';
+    const bodyLiteral =
+      opName === 'Delete' ? '' : `\n      data: ${formatJsObject(i.body ?? {}, '      ')},\n`;
     // Honest fallback: if neither entitySet nor entityLogical is known we
     // emit a placeholder rather than guessing 'accounts'. The user can fill
     // in the right collection name (or the action detection above should
     // have caught this case — log a console warning if we get here).
-    const collectionName =
-      i.built.entitySet ||
-      (logical ? `${logical}s` : '<entity-set>');
+    const collectionName = i.built.entitySet || (logical ? `${logical}s` : '<entity-set>');
     const entityLine = recordId
       ? `      entity: { entityType: '${logical || '<entity-logical>'}', id: '${recordId}' },`
       : `      collection: '${collectionName}',`;
@@ -884,7 +931,8 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
     return {
       actionName: 'Follow @odata.nextLink',
       connector: 'Generic HTTP action',
-      banner: 'The Dataverse "List rows" action won\'t accept an opaque nextLink — use the generic HTTP action instead. Most flows don\'t need this: set Maximum Pagination Size on "List rows" and the connector iterates pages automatically.',
+      banner:
+        'The Dataverse "List rows" action won\'t accept an opaque nextLink — use the generic HTTP action instead. Most flows don\'t need this: set Maximum Pagination Size on "List rows" and the connector iterates pages automatically.',
       fields: [
         { label: 'Method', value: 'GET' },
         { label: 'URI', value: i.rawNextLink, multiline: true },
@@ -893,18 +941,18 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
   }
 
   const valueOf = (key: string): string => {
-    const p = i.built.queryParts.find(x => x.key === key);
+    const p = i.built.queryParts.find((x) => x.key === key);
     return p ? decodeURIComponent(p.value) : '';
   };
-  const select   = valueOf('$select');
-  const filter   = valueOf('$filter');
-  const orderby  = valueOf('$orderby');
-  const expand   = valueOf('$expand');
-  const top      = valueOf('$top');
-  const apply    = valueOf('$apply');
-  const countOn  = valueOf('$count') === 'true';
-  const savedQ   = valueOf('savedQuery');
-  const userQ    = valueOf('userQuery');
+  const select = valueOf('$select');
+  const filter = valueOf('$filter');
+  const orderby = valueOf('$orderby');
+  const expand = valueOf('$expand');
+  const top = valueOf('$top');
+  const apply = valueOf('$apply');
+  const countOn = valueOf('$count') === 'true';
+  const savedQ = valueOf('savedQuery');
+  const userQ = valueOf('userQuery');
 
   let maxPageSize = '';
   const prefer = i.headers['Prefer'];
@@ -915,18 +963,33 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
 
   const isRetrieveSingle = i.method === 'GET' && !!i.built.recordId;
   const isPredefined = !!savedQ || !!userQ;
-  const isCreate = i.method === 'POST' && !i.built.recordId && !!i.body && !i.built.relativeUrl.includes('/Microsoft.Dynamics.CRM.') && !i.built.relativeUrl.endsWith('/$ref') && !i.built.relativeUrl.includes('/Merge');
+  const isCreate =
+    i.method === 'POST' &&
+    !i.built.recordId &&
+    !!i.body &&
+    !i.built.relativeUrl.includes('/Microsoft.Dynamics.CRM.') &&
+    !i.built.relativeUrl.endsWith('/$ref') &&
+    !i.built.relativeUrl.includes('/Merge');
   const isUpdate = i.method === 'PATCH' && !!i.built.recordId && !!i.body;
-  const isDelete = i.method === 'DELETE' && !!i.built.recordId && !i.built.relativeUrl.endsWith('/$ref');
-  const isAction = i.method === 'POST' && (i.built.relativeUrl.includes('/Microsoft.Dynamics.CRM.') || i.built.relativeUrl.endsWith('/Merge') || (!i.built.recordId && !i.built.entitySet && !!i.body));
+  const isDelete =
+    i.method === 'DELETE' && !!i.built.recordId && !i.built.relativeUrl.endsWith('/$ref');
+  const isAction =
+    i.method === 'POST' &&
+    (i.built.relativeUrl.includes('/Microsoft.Dynamics.CRM.') ||
+      i.built.relativeUrl.endsWith('/Merge') ||
+      (!i.built.recordId && !i.built.entitySet && !!i.body));
   const isFunction = i.method === 'GET' && !i.built.recordId && !i.built.entitySet;
 
   // "Update a row" — Update / Upsert
   if (isUpdate) {
     const body = i.body ?? {};
     const fields: PowerAutomateField[] = [
-      { label: 'Table name', value: i.built.entitySet, hint: 'Entity set name (plural — e.g. accounts)' },
-      { label: 'Row ID',     value: i.built.recordId ?? '', hint: 'GUID of the record to update' },
+      {
+        label: 'Table name',
+        value: i.built.entitySet,
+        hint: 'Entity set name (plural — e.g. accounts)',
+      },
+      { label: 'Row ID', value: i.built.recordId ?? '', hint: 'GUID of the record to update' },
     ];
     for (const [k, v] of Object.entries(body)) {
       if (k.endsWith('@odata.bind')) {
@@ -946,7 +1009,8 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
     return {
       actionName: 'Update a row',
       connector: 'Microsoft Dataverse connector',
-      banner: 'Open the "Update a row" action → pick the table, paste the Row ID, then fill only the columns you want to change. Leave others blank — they\'re left untouched.',
+      banner:
+        'Open the "Update a row" action → pick the table, paste the Row ID, then fill only the columns you want to change. Leave others blank — they\'re left untouched.',
       fields,
       notes: [
         'PATCH semantics: only listed columns are updated. Empty fields stay as-is on the row.',
@@ -961,14 +1025,19 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
     return {
       actionName: 'Delete a row',
       connector: 'Microsoft Dataverse connector',
-      banner: 'Open the "Delete a row" action → pick the table + Row ID. There\'s no body and no "are you sure" — the row is gone on success.',
+      banner:
+        'Open the "Delete a row" action → pick the table + Row ID. There\'s no body and no "are you sure" — the row is gone on success.',
       fields: [
-        { label: 'Table name', value: i.built.entitySet, hint: 'Entity set name (plural — e.g. accounts)' },
-        { label: 'Row ID',     value: i.built.recordId ?? '', hint: 'GUID of the row to delete' },
+        {
+          label: 'Table name',
+          value: i.built.entitySet,
+          hint: 'Entity set name (plural — e.g. accounts)',
+        },
+        { label: 'Row ID', value: i.built.recordId ?? '', hint: 'GUID of the row to delete' },
       ],
       notes: [
         'Deletes cascade per relationship config — review cascade-delete rules first.',
-        'For optimistic concurrency, send an If-Match etag header via the generic HTTP action; the Dataverse connector doesn\'t surface it.',
+        "For optimistic concurrency, send an If-Match etag header via the generic HTTP action; the Dataverse connector doesn't surface it.",
       ],
     };
   }
@@ -976,14 +1045,19 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
   // "Perform an unbound action" / "Perform a bound action" — Execute Action / Custom API / Custom Action
   if (isAction) {
     const isBound = !!i.built.recordId;
-    const actionMatch = i.built.relativeUrl.match(/\/Microsoft\.Dynamics\.CRM\.([^/?(]+)|\/([^/?(]+)$/);
-    const actionName = actionMatch ? (actionMatch[1] || actionMatch[2] || '') : '';
+    const actionMatch = i.built.relativeUrl.match(
+      /\/Microsoft\.Dynamics\.CRM\.([^/?(]+)|\/([^/?(]+)$/,
+    );
+    const actionName = actionMatch ? actionMatch[1] || actionMatch[2] || '' : '';
     const body = i.body ?? {};
     const paramFields: PowerAutomateField[] = Object.entries(body).map(([k, v]) => ({
       label: k,
       value: typeof v === 'string' ? v : JSON.stringify(v, null, 2),
       multiline: typeof v === 'object' && v !== null,
-      hint: typeof v === 'object' && v !== null ? 'Complex / entity-typed param — paste this JSON into the parameter\'s value field' : undefined,
+      hint:
+        typeof v === 'object' && v !== null
+          ? "Complex / entity-typed param — paste this JSON into the parameter's value field"
+          : undefined,
     }));
     return {
       actionName: isBound ? 'Perform a bound action' : 'Perform an unbound action',
@@ -992,11 +1066,23 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
         ? `Open the "Perform a bound action" → pick the table, paste the Row ID, then pick "${actionName}" from the action dropdown. Fill the parameters below.`
         : `Open the "Perform an unbound action" → pick "${actionName}" from the action dropdown (or paste this name). Fill the parameters below.`,
       fields: [
-        { label: 'Action name', value: actionName, hint: 'Microsoft.Dynamics.CRM.<name> for OOB; <publisher>_<name> for custom' },
+        {
+          label: 'Action name',
+          value: actionName,
+          hint: 'Microsoft.Dynamics.CRM.<name> for OOB; <publisher>_<name> for custom',
+        },
         ...(isBound
           ? [
-              { label: 'Table name', value: i.built.entitySet, hint: 'Bound entity\'s entity set name' } as PowerAutomateField,
-              { label: 'Row ID',     value: i.built.recordId ?? '', hint: 'GUID of the bound row' } as PowerAutomateField,
+              {
+                label: 'Table name',
+                value: i.built.entitySet,
+                hint: "Bound entity's entity set name",
+              } as PowerAutomateField,
+              {
+                label: 'Row ID',
+                value: i.built.recordId ?? '',
+                hint: 'GUID of the bound row',
+              } as PowerAutomateField,
             ]
           : []),
         ...paramFields,
@@ -1013,14 +1099,19 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
     return {
       actionName: 'Invoke an HTTP request (function)',
       connector: 'Microsoft Dataverse connector',
-      banner: 'The Dataverse connector doesn\'t expose OData functions directly. Use the connector\'s "Invoke an HTTP request" action (or the generic HTTP action) to GET the function URL.',
+      banner:
+        'The Dataverse connector doesn\'t expose OData functions directly. Use the connector\'s "Invoke an HTTP request" action (or the generic HTTP action) to GET the function URL.',
       fields: [
-        { label: 'Method',   value: 'GET' },
-        { label: 'Relative URI', value: i.built.relativeUrl.replace(/^\/api\/data\/v\d+\.\d+/, ''), hint: 'Strip the /api/data/v9.2 prefix — the connector adds it' },
-        { label: 'Body',     value: '', hint: 'Functions have no body' },
+        { label: 'Method', value: 'GET' },
+        {
+          label: 'Relative URI',
+          value: i.built.relativeUrl.replace(/^\/api\/data\/v\d+\.\d+/, ''),
+          hint: 'Strip the /api/data/v9.2 prefix — the connector adds it',
+        },
+        { label: 'Body', value: '', hint: 'Functions have no body' },
       ],
       notes: [
-        'Use parameter aliases (e.g. @p1) — they\'re recommended for any non-trivial value (long strings, GUIDs, DateTimeOffset).',
+        "Use parameter aliases (e.g. @p1) — they're recommended for any non-trivial value (long strings, GUIDs, DateTimeOffset).",
         'For bound functions, the URL is /<set>(<id>)/Microsoft.Dynamics.CRM.<name>(...). Inline params accepted but aliases preferred.',
       ],
       httpFallback: {
@@ -1039,7 +1130,11 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
     // lookups go into the dropdown of the matching navigation property where
     // the user picks the related row, not pastes a /entitySet(guid) string.
     const fields: PowerAutomateField[] = [
-      { label: 'Table name', value: i.built.entitySet, hint: 'Entity set name (plural — e.g. accounts)' },
+      {
+        label: 'Table name',
+        value: i.built.entitySet,
+        hint: 'Entity set name (plural — e.g. accounts)',
+      },
     ];
     for (const [k, v] of Object.entries(body)) {
       if (k.endsWith('@odata.bind')) {
@@ -1064,7 +1159,8 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
     return {
       actionName: 'Add a new row',
       connector: 'Microsoft Dataverse connector',
-      banner: 'Open the "Add a new row" action in your flow → pick the table, then paste each value into the matching dynamic field. Lookup fields show the related table as a searchable dropdown — paste the GUID or pick the row from there.',
+      banner:
+        'Open the "Add a new row" action in your flow → pick the table, then paste each value into the matching dynamic field. Lookup fields show the related table as a searchable dropdown — paste the GUID or pick the row from there.',
       fields,
       notes: [
         'The Dataverse connector exposes every writable column as a dynamic field — they appear only after you pick the table.',
@@ -1080,12 +1176,22 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
     return {
       actionName: 'Get a row by ID',
       connector: 'Microsoft Dataverse connector',
-      banner: 'Open the action in your flow → paste each value into the matching field. "Get a row by ID" only supports $select and $expand — Dataverse rejects $filter/$orderby/$top on a single-record URL.',
+      banner:
+        'Open the action in your flow → paste each value into the matching field. "Get a row by ID" only supports $select and $expand — Dataverse rejects $filter/$orderby/$top on a single-record URL.',
       fields: [
-        { label: 'Table name',     value: i.built.entitySet, hint: 'Entity set name (plural — e.g. accounts)' },
-        { label: 'Row ID',         value: i.built.recordId ?? '', hint: 'GUID of the record' },
+        {
+          label: 'Table name',
+          value: i.built.entitySet,
+          hint: 'Entity set name (plural — e.g. accounts)',
+        },
+        { label: 'Row ID', value: i.built.recordId ?? '', hint: 'GUID of the record' },
         { label: 'Select Columns', value: select, hint: 'Logical names, comma-separated' },
-        { label: 'Expand Query',   value: expand, multiline: true, hint: 'Nav property name with optional inner ($select=…) in parens' },
+        {
+          label: 'Expand Query',
+          value: expand,
+          multiline: true,
+          hint: 'Nav property name with optional inner ($select=…) in parens',
+        },
       ],
     };
   }
@@ -1095,15 +1201,35 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
     return {
       actionName: 'List rows  ·  Saved / User Query',
       connector: 'Microsoft Dataverse connector',
-      banner: 'When you set Saved Query or User Query, the connector IGNORES the OData fields (Select / Filter / Sort / Expand) — those live inside the FetchXml the saved query embeds. Only Top Count and Maximum Pagination Size remain editable.',
+      banner:
+        'When you set Saved Query or User Query, the connector IGNORES the OData fields (Select / Filter / Sort / Expand) — those live inside the FetchXml the saved query embeds. Only Top Count and Maximum Pagination Size remain editable.',
       fields: [
-        { label: 'Table name',              value: i.built.entitySet, hint: 'Entity set name (plural — e.g. accounts)' },
+        {
+          label: 'Table name',
+          value: i.built.entitySet,
+          hint: 'Entity set name (plural — e.g. accounts)',
+        },
         ...(savedQ
-          ? [{ label: 'Saved Query', value: savedQ, hint: 'GUID of a system saved query' } as PowerAutomateField]
-          : [{ label: 'User Query',  value: userQ,  hint: 'GUID of a personal user query' } as PowerAutomateField]
-        ),
-        { label: 'Top Count',                value: top, hint: 'Optional — limits total rows returned' },
-        { label: 'Maximum Pagination Size',  value: maxPageSize, hint: 'Per-page size; connector auto-iterates pages' },
+          ? [
+              {
+                label: 'Saved Query',
+                value: savedQ,
+                hint: 'GUID of a system saved query',
+              } as PowerAutomateField,
+            ]
+          : [
+              {
+                label: 'User Query',
+                value: userQ,
+                hint: 'GUID of a personal user query',
+              } as PowerAutomateField,
+            ]),
+        { label: 'Top Count', value: top, hint: 'Optional — limits total rows returned' },
+        {
+          label: 'Maximum Pagination Size',
+          value: maxPageSize,
+          hint: 'Per-page size; connector auto-iterates pages',
+        },
       ],
       notes: [
         'Select Columns / Filter Rows / Sort By / Expand Query are intentionally NOT shown — the saved query owns them.',
@@ -1114,17 +1240,51 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
 
   // "List rows" — the common case (Retrieve Multiple)
   const fields: PowerAutomateField[] = [
-    { label: 'Table name',              value: i.built.entitySet, hint: 'Entity set name (plural — e.g. accounts)' },
-    { label: 'Select Columns',          value: select,    hint: 'Logical names, comma-separated (no $select= prefix)' },
-    { label: 'Filter Rows',             value: filter,    multiline: true, hint: 'OData filter expression (no $filter= prefix)' },
-    { label: 'Sort By',                 value: orderby,   hint: '"col asc, col2 desc" (no $orderby= prefix)' },
-    { label: 'Top Count',               value: top,       hint: 'Optional — total rows cap; leave blank to use pagination' },
-    { label: 'Expand Query',            value: expand,    multiline: true, hint: 'Nav properties with optional inner ($select=…;$filter=…) in parens' },
-    { label: 'Row Count',               value: countOn ? 'Yes' : 'No', hint: 'Adds @odata.count to the response when Yes' },
-    { label: 'Maximum Pagination Size', value: maxPageSize, hint: 'Per-page size; connector auto-iterates pages' },
-    { label: 'Fetch Xml Query',         value: '', hint: 'Alternative to OData params above — leave blank when using them' },
-    { label: 'Saved Query',             value: '', hint: 'GUID — for system saved queries' },
-    { label: 'User Query',              value: '', hint: 'GUID — for personal user queries' },
+    {
+      label: 'Table name',
+      value: i.built.entitySet,
+      hint: 'Entity set name (plural — e.g. accounts)',
+    },
+    {
+      label: 'Select Columns',
+      value: select,
+      hint: 'Logical names, comma-separated (no $select= prefix)',
+    },
+    {
+      label: 'Filter Rows',
+      value: filter,
+      multiline: true,
+      hint: 'OData filter expression (no $filter= prefix)',
+    },
+    { label: 'Sort By', value: orderby, hint: '"col asc, col2 desc" (no $orderby= prefix)' },
+    {
+      label: 'Top Count',
+      value: top,
+      hint: 'Optional — total rows cap; leave blank to use pagination',
+    },
+    {
+      label: 'Expand Query',
+      value: expand,
+      multiline: true,
+      hint: 'Nav properties with optional inner ($select=…;$filter=…) in parens',
+    },
+    {
+      label: 'Row Count',
+      value: countOn ? 'Yes' : 'No',
+      hint: 'Adds @odata.count to the response when Yes',
+    },
+    {
+      label: 'Maximum Pagination Size',
+      value: maxPageSize,
+      hint: 'Per-page size; connector auto-iterates pages',
+    },
+    {
+      label: 'Fetch Xml Query',
+      value: '',
+      hint: 'Alternative to OData params above — leave blank when using them',
+    },
+    { label: 'Saved Query', value: '', hint: 'GUID — for system saved queries' },
+    { label: 'User Query', value: '', hint: 'GUID — for personal user queries' },
   ];
   const notes: string[] = [
     'Column names are LOGICAL names (e.g. "name", not "Account Name").',
@@ -1133,20 +1293,25 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
     'Maximum Pagination Size enables auto-iteration of @odata.nextLink — leave Top Count blank when you want ALL matching rows.',
   ];
   if (apply) {
-    notes.unshift('⚠ $apply (groupby / aggregate) is set — the "List rows" action doesn\'t have a field for this. Use the HTTP action below, or rewrite as FetchXml.');
+    notes.unshift(
+      '⚠ $apply (groupby / aggregate) is set — the "List rows" action doesn\'t have a field for this. Use the HTTP action below, or rewrite as FetchXml.',
+    );
   }
 
   return {
     actionName: 'List rows',
     connector: 'Microsoft Dataverse connector',
-    banner: 'Open the "List rows" action in your flow and paste each value into the matching field. Empty fields can stay empty.',
+    banner:
+      'Open the "List rows" action in your flow and paste each value into the matching field. Empty fields can stay empty.',
     fields,
     notes,
-    httpFallback: apply ? {
-      method: i.method,
-      uri: `https://${ENV.host}${i.built.relativeUrl}`,
-      note: 'Use this generic HTTP action because $apply / aggregation isn\'t exposed by the "List rows" action. Replace <access-token> with a valid bearer token.',
-    } : undefined,
+    httpFallback: apply
+      ? {
+          method: i.method,
+          uri: `https://${ENV.host}${i.built.relativeUrl}`,
+          note: 'Use this generic HTTP action because $apply / aggregation isn\'t exposed by the "List rows" action. Replace <access-token> with a valid bearer token.',
+        }
+      : undefined,
   };
 }
 
@@ -1178,18 +1343,18 @@ function genPowerAutomate(i: CodegenInputs): string {
 
   // Pull each query option's value (decoded) from the built request.
   const valueOf = (key: string): string => {
-    const p = i.built.queryParts.find(x => x.key === key);
+    const p = i.built.queryParts.find((x) => x.key === key);
     return p ? decodeURIComponent(p.value) : '';
   };
-  const select   = valueOf('$select');
-  const filter   = valueOf('$filter');
-  const orderby  = valueOf('$orderby');
-  const expand   = valueOf('$expand');
-  const top      = valueOf('$top');
-  const apply    = valueOf('$apply');
-  const countOn  = valueOf('$count') === 'true';
-  const savedQ   = valueOf('savedQuery');
-  const userQ    = valueOf('userQuery');
+  const select = valueOf('$select');
+  const filter = valueOf('$filter');
+  const orderby = valueOf('$orderby');
+  const expand = valueOf('$expand');
+  const top = valueOf('$top');
+  const apply = valueOf('$apply');
+  const countOn = valueOf('$count') === 'true';
+  const savedQ = valueOf('savedQuery');
+  const userQ = valueOf('userQuery');
 
   // Maximum Pagination Size from Prefer: odata.maxpagesize
   let maxPageSize = '';
@@ -1201,14 +1366,24 @@ function genPowerAutomate(i: CodegenInputs): string {
 
   // Aligned "Field name  value" rendering — monospace in the editor lets users
   // double-click a value and Ctrl+C it straight into the flow designer.
-  const row = (label: string, value: string): string =>
-    `${label.padEnd(25)} ${value}`;
+  const row = (label: string, value: string): string => `${label.padEnd(25)} ${value}`;
   const isRetrieveSingle = i.method === 'GET' && !!i.built.recordId;
   const isPredefined = !!savedQ || !!userQ;
-  const isCreate = i.method === 'POST' && !i.built.recordId && !!i.body && !i.built.relativeUrl.includes('/Microsoft.Dynamics.CRM.') && !i.built.relativeUrl.endsWith('/$ref') && !i.built.relativeUrl.includes('/Merge');
+  const isCreate =
+    i.method === 'POST' &&
+    !i.built.recordId &&
+    !!i.body &&
+    !i.built.relativeUrl.includes('/Microsoft.Dynamics.CRM.') &&
+    !i.built.relativeUrl.endsWith('/$ref') &&
+    !i.built.relativeUrl.includes('/Merge');
   const isUpdate = i.method === 'PATCH' && !!i.built.recordId && !!i.body;
-  const isDelete = i.method === 'DELETE' && !!i.built.recordId && !i.built.relativeUrl.endsWith('/$ref');
-  const isAction = i.method === 'POST' && (i.built.relativeUrl.includes('/Microsoft.Dynamics.CRM.') || i.built.relativeUrl.endsWith('/Merge') || (!i.built.recordId && !i.built.entitySet && !!i.body));
+  const isDelete =
+    i.method === 'DELETE' && !!i.built.recordId && !i.built.relativeUrl.endsWith('/$ref');
+  const isAction =
+    i.method === 'POST' &&
+    (i.built.relativeUrl.includes('/Microsoft.Dynamics.CRM.') ||
+      i.built.relativeUrl.endsWith('/Merge') ||
+      (!i.built.recordId && !i.built.entitySet && !!i.body));
   const isFunction = i.method === 'GET' && !i.built.recordId && !i.built.entitySet;
 
   // ── "Update a row" — Update / Upsert
@@ -1250,8 +1425,10 @@ ${row('Row ID', i.built.recordId ?? '')}
   // ── "Perform an (un)bound action" — Action / Custom API / Merge / Custom Action
   if (isAction) {
     const isBound = !!i.built.recordId;
-    const actionMatch = i.built.relativeUrl.match(/\/Microsoft\.Dynamics\.CRM\.([^/?(]+)|\/([^/?(]+)$/);
-    const actionName = actionMatch ? (actionMatch[1] || actionMatch[2] || '') : '';
+    const actionMatch = i.built.relativeUrl.match(
+      /\/Microsoft\.Dynamics\.CRM\.([^/?(]+)|\/([^/?(]+)$/,
+    );
+    const actionName = actionMatch ? actionMatch[1] || actionMatch[2] || '' : '';
     const body = i.body ?? {};
     const paramLines = Object.entries(body).map(([k, v]) => {
       const val = typeof v === 'string' ? v : JSON.stringify(v);
@@ -1327,10 +1504,10 @@ ${lines.join('\n')}
 # Paste each value into the matching field. Leave blank rows alone.
 # (Open the action in your flow → switch each parameter to the value below.)
 
-${row('Table name',      i.built.entitySet)}
-${row('Row ID',          i.built.recordId ?? '')}
-${row('Select Columns',  select)}
-${row('Expand Query',    expand)}
+${row('Table name', i.built.entitySet)}
+${row('Row ID', i.built.recordId ?? '')}
+${row('Select Columns', select)}
+${row('Expand Query', expand)}
 
 # ── Tip ──
 #  • "Get a row by ID" only supports $select and $expand — those are the only
@@ -1347,38 +1524,40 @@ ${row('Expand Query',    expand)}
 # fields (Select / Filter / Sort / Expand) — those live inside the FetchXml the
 # saved query embeds. Top Count and Pagination still apply.
 
-${row('Table name',              i.built.entitySet)}
-${savedQ ? row('Saved Query',    savedQ) : row('User Query', userQ)}
-${row('Top Count',               top)}
+${row('Table name', i.built.entitySet)}
+${savedQ ? row('Saved Query', savedQ) : row('User Query', userQ)}
+${row('Top Count', top)}
 ${row('Maximum Pagination Size', maxPageSize)}
 
 # Leave these blank — the saved query owns them:
-${row('Select Columns',          '')}
-${row('Filter Rows',             '')}
-${row('Sort By',                 '')}
-${row('Expand Query',            '')}
-${row('Row Count',               'No')}
+${row('Select Columns', '')}
+${row('Filter Rows', '')}
+${row('Sort By', '')}
+${row('Expand Query', '')}
+${row('Row Count', 'No')}
 `;
   }
 
   // ── "List rows" — Retrieve Multiple (the common case)
-  const apply_warning = apply ? `\n# ⚠ $apply (groupby/aggregate) — the "List rows" action doesn't expose a field for this.
-#   Use the generic HTTP action below to send the request directly, or move to FetchXml.\n` : '';
+  const apply_warning = apply
+    ? `\n# ⚠ $apply (groupby/aggregate) — the "List rows" action doesn't expose a field for this.
+#   Use the generic HTTP action below to send the request directly, or move to FetchXml.\n`
+    : '';
   return `# Power Automate — Dataverse connector  ⟶  "List rows" action
 # Paste each value into the matching field. Leave blank rows alone.
 # (Open the action in your flow → switch each parameter to the value below.)
 
-${row('Table name',              i.built.entitySet)}
-${row('Select Columns',          select)}
-${row('Filter Rows',             filter)}
-${row('Sort By',                 orderby)}
-${row('Top Count',               top)}
-${row('Expand Query',            expand)}
-${row('Row Count',               countOn ? 'Yes' : 'No')}
+${row('Table name', i.built.entitySet)}
+${row('Select Columns', select)}
+${row('Filter Rows', filter)}
+${row('Sort By', orderby)}
+${row('Top Count', top)}
+${row('Expand Query', expand)}
+${row('Row Count', countOn ? 'Yes' : 'No')}
 ${row('Maximum Pagination Size', maxPageSize)}
-${row('Fetch Xml Query',         '')}
-${row('Saved Query',             '')}
-${row('User Query',              '')}
+${row('Fetch Xml Query', '')}
+${row('Saved Query', '')}
+${row('User Query', '')}
 ${apply_warning}
 # ── Notes ──
 #  • Column names are LOGICAL names (e.g. "name" not "Account Name").
@@ -1409,16 +1588,19 @@ function genCsharp(i: CodegenInputs): string {
     const headerLines = Object.entries(i.headers)
       .filter(([, v]) => v)
       .filter(([k]) => k.toLowerCase() !== 'authorization')
-      .map(([k, v]) => `http.DefaultRequestHeaders.TryAddWithoutValidation("${k}", "${v.replace(/"/g, '\\"')}");`)
+      .map(
+        ([k, v]) =>
+          `http.DefaultRequestHeaders.TryAddWithoutValidation("${k}", "${v.replace(/"/g, '\\"')}");`,
+      )
       .join('\n');
-    const requestObjects = reqs.map(r => {
-      const url = `https://${ENV.host}${r.relativeUrl}`;
-      const desc = r.description ? `        // ${r.description}\n` : '';
-      const body = r.body
-        ? `, content: @"${csharpVerbatimEscape(JSON.stringify(r.body))}"`
-        : '';
-      return `${desc}        new { method = HttpMethod.${methodCsharp(r.method)}, url = "${url}"${body} },`;
-    }).join('\n');
+    const requestObjects = reqs
+      .map((r) => {
+        const url = `https://${ENV.host}${r.relativeUrl}`;
+        const desc = r.description ? `        // ${r.description}\n` : '';
+        const body = r.body ? `, content: @"${csharpVerbatimEscape(JSON.stringify(r.body))}"` : '';
+        return `${desc}        new { method = HttpMethod.${methodCsharp(r.method)}, url = "${url}"${body} },`;
+      })
+      .join('\n');
     return `// .NET 8 — HttpClient (multi-request)
 // Associate / Disassociate over a collection fires one call per related id.
 
@@ -1451,7 +1633,10 @@ Console.WriteLine($"{ok}/{requests.Length} requests succeeded");
   const headerLines = Object.entries(i.headers)
     .filter(([, v]) => v)
     .filter(([k]) => k.toLowerCase() !== 'authorization')
-    .map(([k, v]) => `http.DefaultRequestHeaders.TryAddWithoutValidation("${k}", "${v.replace(/"/g, '\\"')}");`)
+    .map(
+      ([k, v]) =>
+        `http.DefaultRequestHeaders.TryAddWithoutValidation("${k}", "${v.replace(/"/g, '\\"')}");`,
+    )
     .join('\n');
   return `// .NET 8 — HttpClient. For production use Microsoft.PowerPlatform.Dataverse.Client
 // (ServiceClient) instead — it handles auth, retries, and OData parsing for you.
@@ -1480,12 +1665,18 @@ function csharpVerbatimEscape(s: string): string {
 
 function methodCsharp(m: string): string {
   switch (m.toUpperCase()) {
-    case 'GET': return 'Get';
-    case 'POST': return 'Post';
-    case 'PATCH': return 'Patch';
-    case 'PUT': return 'Put';
-    case 'DELETE': return 'Delete';
-    default: return 'Get';
+    case 'GET':
+      return 'Get';
+    case 'POST':
+      return 'Post';
+    case 'PATCH':
+      return 'Patch';
+    case 'PUT':
+      return 'Put';
+    case 'DELETE':
+      return 'Delete';
+    default:
+      return 'Get';
   }
 }
 
@@ -1500,11 +1691,15 @@ function genPowershell(i: CodegenInputs): string {
       .filter(([k]) => k.toLowerCase() !== 'authorization')
       .map(([k, v]) => `  "${k}" = "${v.replace(/"/g, '`"')}"`)
       .join('\n');
-    const lines = reqs.map(r => {
-      const url = `https://${ENV.host}${r.relativeUrl}`;
-      const body = r.body ? ` -ContentType 'application/json' -Body '${JSON.stringify(r.body).replace(/'/g, "''")}'` : '';
-      return `Invoke-RestMethod -Method ${r.method} -Uri "${url}" -Headers $headers${body}`;
-    }).join('\n');
+    const lines = reqs
+      .map((r) => {
+        const url = `https://${ENV.host}${r.relativeUrl}`;
+        const body = r.body
+          ? ` -ContentType 'application/json' -Body '${JSON.stringify(r.body).replace(/'/g, "''")}'`
+          : '';
+        return `Invoke-RestMethod -Method ${r.method} -Uri "${url}" -Headers $headers${body}`;
+      })
+      .join('\n');
     return `# PowerShell — Invoke-RestMethod (multi-request)
 $token = "<access-token>"
 $headers = @{
@@ -1550,12 +1745,16 @@ function genCurl(i: CodegenInputs): string {
       .filter(([, v]) => v)
       .map(([k, v]) => `  -H "${k}: ${v.replace(/"/g, '\\"')}"`)
       .join(' \\\n');
-    const lines = reqs.map(r => {
-      const url = `https://${ENV.host}${r.relativeUrl}`;
-      const desc = r.description ? `# ${r.description}\n` : '';
-      const body = r.body ? ` \\\n  --data-raw '${JSON.stringify(r.body).replace(/'/g, "'\\''")}'` : '';
-      return `${desc}curl -X ${r.method} --globoff "${url}" \\\n  -H "Authorization: Bearer <access-token>" \\\n${hdrLines}${body}`;
-    }).join('\n\n');
+    const lines = reqs
+      .map((r) => {
+        const url = `https://${ENV.host}${r.relativeUrl}`;
+        const desc = r.description ? `# ${r.description}\n` : '';
+        const body = r.body
+          ? ` \\\n  --data-raw '${JSON.stringify(r.body).replace(/'/g, "'\\''")}'`
+          : '';
+        return `${desc}curl -X ${r.method} --globoff "${url}" \\\n  -H "Authorization: Bearer <access-token>" \\\n${hdrLines}${body}`;
+      })
+      .join('\n\n');
     return `# cURL — multi-request (Associate / Disassociate over a collection)\n# Each association is a separate request per the docs.\n\n${lines}\n`;
   }
   const url = fullUrl(i);
@@ -1564,9 +1763,10 @@ function genCurl(i: CodegenInputs): string {
     .filter(([, v]) => v)
     .map(([k, v]) => `  -H "${k}: ${v.replace(/"/g, '\\"')}"`)
     .join(' \\\n');
-  const body = i.method !== 'GET' && i.method !== 'DELETE'
-    ? ` \\\n  --data-raw '${JSON.stringify(i.body ?? {}).replace(/'/g, "'\\''")}'`
-    : '';
+  const body =
+    i.method !== 'GET' && i.method !== 'DELETE'
+      ? ` \\\n  --data-raw '${JSON.stringify(i.body ?? {}).replace(/'/g, "'\\''")}'`
+      : '';
   return `# cURL — shell context
 # --globoff prevents curl from interpreting the literal $ in OData query options
 # --compressed asks the server for gzipped responses
@@ -1585,17 +1785,21 @@ ${hdrLines}${body}
 // ────────────────────────────────────────────────────────────
 function genJson(i: CodegenInputs): string {
   if (i.multiRequests && i.multiRequests.length > 1) {
-    return JSON.stringify({
-      mode: 'multi-request',
-      headers: i.headers,
-      requests: i.multiRequests.map(r => ({
-        method: r.method,
-        url: `https://${ENV.host}${r.relativeUrl}`,
-        relativeUrl: r.relativeUrl,
-        body: r.body,
-        description: r.description,
-      })),
-    }, null, 2);
+    return JSON.stringify(
+      {
+        mode: 'multi-request',
+        headers: i.headers,
+        requests: i.multiRequests.map((r) => ({
+          method: r.method,
+          url: `https://${ENV.host}${r.relativeUrl}`,
+          relativeUrl: r.relativeUrl,
+          body: r.body,
+          description: r.description,
+        })),
+      },
+      null,
+      2,
+    );
   }
   const out: Record<string, unknown> = {
     method: i.method,

@@ -57,18 +57,20 @@ export interface BinaryPipelineStep {
 export function buildFileSingleUpload(s: ManageFileState): BinaryPipelineStep[] {
   const segment = fileSegment(s);
   if (!segment) return [];
-  return [{
-    n: 1,
-    title: 'Upload file (single request)',
-    method: 'PATCH',
-    relativeUrl: segment,
-    headers: {
-      'x-ms-file-name': s.fileName || 'file.bin',
-      'Content-Type': 'application/octet-stream',
+  return [
+    {
+      n: 1,
+      title: 'Upload file (single request)',
+      method: 'PATCH',
+      relativeUrl: segment,
+      headers: {
+        'x-ms-file-name': s.fileName || 'file.bin',
+        'Content-Type': 'application/octet-stream',
+      },
+      body: '<base64 file bytes>',
+      detail: `Single request — server writes ${s.fileName || 'file.bin'} (${formatSize(s.fileSize)}) directly and responds 204 NoContent. Doc-recommended for files up to 128 MB; larger files require chunked upload or the messages path.`,
     },
-    body: '<base64 file bytes>',
-    detail: `Single request — server writes ${s.fileName || 'file.bin'} (${formatSize(s.fileSize)}) directly and responds 204 NoContent. Doc-recommended for files up to 128 MB; larger files require chunked upload or the messages path.`,
-  }];
+  ];
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -94,16 +96,18 @@ export function buildFileChunkedUpload(s: ManageFileState): BinaryPipelineStep[]
   const chunkCount = Math.max(1, Math.ceil(total / chunkSize));
   const fileName = s.fileName || 'file.bin';
 
-  const steps: BinaryPipelineStep[] = [{
-    n: 1,
-    title: 'Initialize chunked upload',
-    method: 'PATCH',
-    relativeUrl: `${segment}?x-ms-file-name=${encodeURIComponent(fileName)}`,
-    headers: {
-      'x-ms-transfer-mode': 'chunked',
+  const steps: BinaryPipelineStep[] = [
+    {
+      n: 1,
+      title: 'Initialize chunked upload',
+      method: 'PATCH',
+      relativeUrl: `${segment}?x-ms-file-name=${encodeURIComponent(fileName)}`,
+      headers: {
+        'x-ms-transfer-mode': 'chunked',
+      },
+      detail: `Filename travels as a query param on init; the only request header is x-ms-transfer-mode. Response 200 → Location: <upload-url with sessiontoken=…> · x-ms-chunk-size: ${chunkSize.toLocaleString()} bytes (≈ ${formatSize(chunkSize)}). Server may override the chunk size — honor x-ms-chunk-size in the response.`,
     },
-    detail: `Filename travels as a query param on init; the only request header is x-ms-transfer-mode. Response 200 → Location: <upload-url with sessiontoken=…> · x-ms-chunk-size: ${chunkSize.toLocaleString()} bytes (≈ ${formatSize(chunkSize)}). Server may override the chunk size — honor x-ms-chunk-size in the response.`,
-  }];
+  ];
 
   // Surface the FIRST chunk PATCH inline so the user sees the shape; the rest
   // are summarized as "N more chunks". We don't emit thousands of steps.
@@ -122,9 +126,10 @@ export function buildFileChunkedUpload(s: ManageFileState): BinaryPipelineStep[]
       'Content-Length': String(firstChunkBytes),
     },
     body: '<chunk bytes>',
-    detail: chunkCount === 1
-      ? 'Single chunk — server commits on receipt and returns 204 NoContent.'
-      : `Intermediate chunks return 206 PartialContent. Repeat with Content-Range stepping by ${chunkSize.toLocaleString()} bytes per chunk; the final chunk's Content-Length may be smaller.`,
+    detail:
+      chunkCount === 1
+        ? 'Single chunk — server commits on receipt and returns 204 NoContent.'
+        : `Intermediate chunks return 206 PartialContent. Repeat with Content-Range stepping by ${chunkSize.toLocaleString()} bytes per chunk; the final chunk's Content-Length may be smaller.`,
   });
 
   if (chunkCount > 1) {
@@ -177,7 +182,8 @@ export function buildFileMessagesUpload(s: ManageFileState): BinaryPipelineStep[
         FileAttributeName: s.fileColumn ?? '<file-column>',
         FileName: s.fileName || 'file.bin',
       },
-      detail: 'Returns FileContinuationToken used by subsequent UploadBlock / CommitFileBlocksUpload calls.',
+      detail:
+        'Returns FileContinuationToken used by subsequent UploadBlock / CommitFileBlocksUpload calls.',
     },
     {
       n: 2,
@@ -220,40 +226,56 @@ export function buildFileDownload(s: ManageFileState): BinaryPipelineStep[] {
   if (!segment) return [];
   switch (s.downloadMethod.kind) {
     case 'single-request':
-      return [{
-        n: 1, title: 'Download file', method: 'GET',
-        relativeUrl: `${segment}/$value`,
-        headers: { Accept: 'application/octet-stream' },
-        detail: `Response 200 OK · binary body · response headers carry x-ms-file-size, x-ms-file-name, mimetype. To know the filename without transferring bytes first, $select the auto-managed companion column: GET /<set>(<id>)?$select=${s.fileColumn ?? '<col>'}_Name. Returns the file in a single response — for >128 MB prefer ranged download or the messages path.`,
-      }];
+      return [
+        {
+          n: 1,
+          title: 'Download file',
+          method: 'GET',
+          relativeUrl: `${segment}/$value`,
+          headers: { Accept: 'application/octet-stream' },
+          detail: `Response 200 OK · binary body · response headers carry x-ms-file-size, x-ms-file-name, mimetype. To know the filename without transferring bytes first, $select the auto-managed companion column: GET /<set>(<id>)?$select=${s.fileColumn ?? '<col>'}_Name. Returns the file in a single response — for >128 MB prefer ranged download or the messages path.`,
+        },
+      ];
     case 'ranged': {
       const r = s.downloadMethod;
-      return [{
-        n: 1, title: 'Download (Range)', method: 'GET',
-        relativeUrl: `${segment}/$value`,
-        headers: {
-          Accept: 'application/octet-stream',
-          Range: `bytes=${r.rangeStart}-${r.rangeEnd}`,
+      return [
+        {
+          n: 1,
+          title: 'Download (Range)',
+          method: 'GET',
+          relativeUrl: `${segment}/$value`,
+          headers: {
+            Accept: 'application/octet-stream',
+            Range: `bytes=${r.rangeStart}-${r.rangeEnd}`,
+          },
+          detail:
+            'Response 206 PartialContent · response headers carry x-ms-file-size (total), x-ms-file-name, x-ms-chunk-size, mimetype. Use x-ms-file-size to drive subsequent Range requests until the whole file is downloaded.',
         },
-        detail: 'Response 206 PartialContent · response headers carry x-ms-file-size (total), x-ms-file-name, x-ms-chunk-size, mimetype. Use x-ms-file-size to drive subsequent Range requests until the whole file is downloaded.',
-      }];
+      ];
     }
     case 'dataverse-messages': {
       const tbl = findTable(s.table);
-      const targetRef = tbl ? {
-        '@odata.type': `Microsoft.Dynamics.CRM.${tbl.logicalName}`,
-        [tbl.primaryKey]: s.recordId ?? '<record-id>',
-      } : {};
+      const targetRef = tbl
+        ? {
+            '@odata.type': `Microsoft.Dynamics.CRM.${tbl.logicalName}`,
+            [tbl.primaryKey]: s.recordId ?? '<record-id>',
+          }
+        : {};
       return [
         {
-          n: 1, title: 'InitializeFileBlocksDownload', method: 'POST',
+          n: 1,
+          title: 'InitializeFileBlocksDownload',
+          method: 'POST',
           relativeUrl: `${ENV.apiBase}/InitializeFileBlocksDownload`,
           headers: { 'Content-Type': 'application/json; charset=utf-8' },
           body: { Target: targetRef, FileAttributeName: s.fileColumn ?? '<file-column>' },
-          detail: 'Returns { FileContinuationToken, FileSizeInBytes, FileName, IsChunkingSupported }. If IsChunkingSupported is false (database-stored files), BlockLength on DownloadBlock must equal FileSizeInBytes — only one call.',
+          detail:
+            'Returns { FileContinuationToken, FileSizeInBytes, FileName, IsChunkingSupported }. If IsChunkingSupported is false (database-stored files), BlockLength on DownloadBlock must equal FileSizeInBytes — only one call.',
         },
         {
-          n: 2, title: 'DownloadBlock × N', method: 'POST',
+          n: 2,
+          title: 'DownloadBlock × N',
+          method: 'POST',
           relativeUrl: `${ENV.apiBase}/DownloadBlock`,
           headers: { 'Content-Type': 'application/json; charset=utf-8' },
           body: {
@@ -261,7 +283,8 @@ export function buildFileDownload(s: ManageFileState): BinaryPipelineStep[] {
             BlockLength: s.downloadMethod.blockSize,
             FileContinuationToken: '<token-from-step-1>',
           },
-          detail: 'Returns { Data: <base64 chunk bytes> }. Increment Offset by BlockLength on each call. Final block may be smaller; BlockLength can stay constant. For image columns this path always returns the FULL-size image — thumbnail-only retrieval requires the $value endpoint instead.',
+          detail:
+            'Returns { Data: <base64 chunk bytes> }. Increment Offset by BlockLength on each call. Final block may be smaller; BlockLength can stay constant. For image columns this path always returns the FULL-size image — thumbnail-only retrieval requires the $value endpoint instead.',
         },
       ];
     }
@@ -269,12 +292,17 @@ export function buildFileDownload(s: ManageFileState): BinaryPipelineStep[] {
       const tbl = findTable(s.table);
       const setName = tbl?.entitySetName ?? '<set>';
       const id = s.recordId ?? '<record-id>';
-      return [{
-        n: 1, title: 'GetFileSasUrl', method: 'GET',
-        relativeUrl: `${ENV.apiBase}/GetFileSasUrl(Target=@t,FileAttributeName=@f)?@t={'@odata.id':'${setName}(${id})'}&@f='${s.fileColumn ?? '<col>'}'`,
-        headers: { Accept: 'application/json' },
-        detail: 'Returns FileName + FileSizeInBytes + MimeType + SasUrl (valid 1 hour). Anyone with the URL can download. Requires full-size image support for image columns.',
-      }];
+      return [
+        {
+          n: 1,
+          title: 'GetFileSasUrl',
+          method: 'GET',
+          relativeUrl: `${ENV.apiBase}/GetFileSasUrl(Target=@t,FileAttributeName=@f)?@t={'@odata.id':'${setName}(${id})'}&@f='${s.fileColumn ?? '<col>'}'`,
+          headers: { Accept: 'application/json' },
+          detail:
+            'Returns FileName + FileSizeInBytes + MimeType + SasUrl (valid 1 hour). Anyone with the URL can download. Requires full-size image support for image columns.',
+        },
+      ];
     }
   }
 }
@@ -288,12 +316,17 @@ export function buildFileDownload(s: ManageFileState): BinaryPipelineStep[] {
 export function buildFileDelete(s: ManageFileState): BinaryPipelineStep[] {
   const segment = fileSegment(s);
   if (!segment) return [];
-  return [{
-    n: 1, title: 'Delete file column value', method: 'DELETE',
-    relativeUrl: segment,
-    headers: { Accept: 'application/json' },
-    detail: 'Response 204 NoContent — clears the column. Alternative form (when you only have the FileId): POST /DeleteFile { "FileId": "<guid>" }. File columns can NOT be cleared via PATCH-to-null — that path is image-only.',
-  }];
+  return [
+    {
+      n: 1,
+      title: 'Delete file column value',
+      method: 'DELETE',
+      relativeUrl: segment,
+      headers: { Accept: 'application/json' },
+      detail:
+        'Response 204 NoContent — clears the column. Alternative form (when you only have the FileId): POST /DeleteFile { "FileId": "<guid>" }. File columns can NOT be cleared via PATCH-to-null — that path is image-only.',
+    },
+  ];
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -314,18 +347,23 @@ export function buildImageUpload(s: ManageImageState): BinaryPipelineStep[] {
   const tbl = findTable(s.table);
   if (!tbl) return [];
   const idSeg = s.recordId ? `(${s.recordId})` : '(<record-id>)';
-  return [{
-    n: 1, title: 'Upload image', method: 'PATCH',
-    relativeUrl: `${ENV.apiBase}/${tbl.entitySetName}${idSeg}`,
-    headers: {
-      'If-Match': '*',
-      'Content-Type': 'application/json; charset=utf-8',
+  return [
+    {
+      n: 1,
+      title: 'Upload image',
+      method: 'PATCH',
+      relativeUrl: `${ENV.apiBase}/${tbl.entitySetName}${idSeg}`,
+      headers: {
+        'If-Match': '*',
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+      body: {
+        [s.imageColumn ?? '<image-column>']: '<base64 image bytes>',
+      },
+      detail:
+        'Response 204 NoContent. Doc-canonical thumbnail upload — image goes in the JSON body as a base 64 string. For full-size uploads on columns with CanStoreFullImage=true, use the file-column chunked-PATCH or InitializeFileBlocksUpload / UploadBlock / CommitFileBlocksUpload sequence (same APIs as file columns).',
     },
-    body: {
-      [s.imageColumn ?? '<image-column>']: '<base64 image bytes>',
-    },
-    detail: 'Response 204 NoContent. Doc-canonical thumbnail upload — image goes in the JSON body as a base 64 string. For full-size uploads on columns with CanStoreFullImage=true, use the file-column chunked-PATCH or InitializeFileBlocksUpload / UploadBlock / CommitFileBlocksUpload sequence (same APIs as file columns).',
-  }];
+  ];
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -339,14 +377,19 @@ export function buildImageDownload(s: ManageImageState): BinaryPipelineStep[] {
   if (!tbl) return [];
   const idSeg = s.recordId ? `(${s.recordId})` : '(<record-id>)';
   const sizeParam = s.downloadSize === 'full' ? '?size=full' : '';
-  return [{
-    n: 1, title: s.downloadSize === 'full' ? 'Download full-size image' : 'Download thumbnail', method: 'GET',
-    relativeUrl: `${ENV.apiBase}/${tbl.entitySetName}${idSeg}/${s.imageColumn ?? '<image-column>'}/$value${sizeParam}`,
-    headers: { Accept: 'image/*' },
-    detail: s.downloadSize === 'full'
-      ? 'Response 200 OK + binary image body when CanStoreFullImage=true. When CanStoreFullImage=false (or the image was uploaded before the flag was enabled), the server returns 204 NoContent with an empty body — not an error.'
-      : 'Response 200 OK + 144×144 thumbnail. Thumbnails are cropped/resized server-side: images ≥144 px on either side are cropped on-center to 144×144; images smaller than 144 px on both sides are cropped square to the smallest side. Append ?size=full for the original (requires CanStoreFullImage=true).',
-  }];
+  return [
+    {
+      n: 1,
+      title: s.downloadSize === 'full' ? 'Download full-size image' : 'Download thumbnail',
+      method: 'GET',
+      relativeUrl: `${ENV.apiBase}/${tbl.entitySetName}${idSeg}/${s.imageColumn ?? '<image-column>'}/$value${sizeParam}`,
+      headers: { Accept: 'image/*' },
+      detail:
+        s.downloadSize === 'full'
+          ? 'Response 200 OK + binary image body when CanStoreFullImage=true. When CanStoreFullImage=false (or the image was uploaded before the flag was enabled), the server returns 204 NoContent with an empty body — not an error.'
+          : 'Response 200 OK + 144×144 thumbnail. Thumbnails are cropped/resized server-side: images ≥144 px on either side are cropped on-center to 144×144; images smaller than 144 px on both sides are cropped square to the smallest side. Append ?size=full for the original (requires CanStoreFullImage=true).',
+    },
+  ];
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -363,12 +406,17 @@ export function buildImageDelete(s: ManageImageState): BinaryPipelineStep[] {
   const tbl = findTable(s.table);
   if (!tbl) return [];
   const idSeg = s.recordId ? `(${s.recordId})` : '(<record-id>)';
-  return [{
-    n: 1, title: 'Delete image (DELETE)', method: 'DELETE',
-    relativeUrl: `${ENV.apiBase}/${tbl.entitySetName}${idSeg}/${s.imageColumn ?? '<image-column>'}`,
-    headers: { Accept: 'application/json' },
-    detail: 'Response 204 NoContent. Three doc-equivalent forms: (a) DELETE on the column URL (shown), (b) PATCH /set(id) with { "<col>": null }, (c) PUT /set(id)/<col> with { "value": null }. Unlike file columns, images can be cleared via PATCH-to-null since they ride inline on the record.',
-  }];
+  return [
+    {
+      n: 1,
+      title: 'Delete image (DELETE)',
+      method: 'DELETE',
+      relativeUrl: `${ENV.apiBase}/${tbl.entitySetName}${idSeg}/${s.imageColumn ?? '<image-column>'}`,
+      headers: { Accept: 'application/json' },
+      detail:
+        'Response 204 NoContent. Three doc-equivalent forms: (a) DELETE on the column URL (shown), (b) PATCH /set(id) with { "<col>": null }, (c) PUT /set(id)/<col> with { "value": null }. Unlike file columns, images can be cleared via PATCH-to-null since they ride inline on the record.',
+    },
+  ];
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -387,7 +435,10 @@ export function formatSize(bytes: number): string {
   const units = ['B', 'KB', 'MB', 'GB'];
   let v = bytes;
   let u = 0;
-  while (v >= 1024 && u < units.length - 1) { v /= 1024; u++; }
+  while (v >= 1024 && u < units.length - 1) {
+    v /= 1024;
+    u++;
+  }
   return `${v.toFixed(v < 10 && u > 0 ? 1 : 0)} ${units[u]}`;
 }
 
@@ -399,13 +450,25 @@ export function formatSize(bytes: number): string {
 /** Returns the FIRST step's URL/method as a BuiltRequest for the URL bar. */
 export function buildManageFile(s: ManageFileState): BuiltRequest {
   const tbl = findTable(s.table);
-  if (!tbl) return { relativeUrl: '', relativeNoBase: '', bytes: 0, queryParts: [], entitySet: '', entityLogical: '' };
+  if (!tbl)
+    return {
+      relativeUrl: '',
+      relativeNoBase: '',
+      bytes: 0,
+      queryParts: [],
+      entitySet: '',
+      entityLogical: '',
+    };
   const steps = manageFilePipeline(s);
   const first = steps[0];
   if (!first) {
     return {
-      relativeUrl: '', relativeNoBase: '', bytes: 0, queryParts: [],
-      entitySet: tbl.entitySetName, entityLogical: tbl.logicalName,
+      relativeUrl: '',
+      relativeNoBase: '',
+      bytes: 0,
+      queryParts: [],
+      entitySet: tbl.entitySetName,
+      entityLogical: tbl.logicalName,
       recordId: s.recordId ?? undefined,
     };
   }
@@ -425,25 +488,42 @@ export function manageFilePipeline(s: ManageFileState): BinaryPipelineStep[] {
   switch (s.operation) {
     case 'upload':
       switch (s.uploadMethod.kind) {
-        case 'single-request':       return buildFileSingleUpload(s);
-        case 'chunked-patch':        return buildFileChunkedUpload(s);
-        case 'dataverse-messages':   return buildFileMessagesUpload(s);
+        case 'single-request':
+          return buildFileSingleUpload(s);
+        case 'chunked-patch':
+          return buildFileChunkedUpload(s);
+        case 'dataverse-messages':
+          return buildFileMessagesUpload(s);
       }
       break;
-    case 'download':                  return buildFileDownload(s);
-    case 'delete':                    return buildFileDelete(s);
+    case 'download':
+      return buildFileDownload(s);
+    case 'delete':
+      return buildFileDelete(s);
   }
 }
 
 export function buildManageImage(s: ManageImageState): BuiltRequest {
   const tbl = findTable(s.table);
-  if (!tbl) return { relativeUrl: '', relativeNoBase: '', bytes: 0, queryParts: [], entitySet: '', entityLogical: '' };
+  if (!tbl)
+    return {
+      relativeUrl: '',
+      relativeNoBase: '',
+      bytes: 0,
+      queryParts: [],
+      entitySet: '',
+      entityLogical: '',
+    };
   const steps = manageImagePipeline(s);
   const first = steps[0];
   if (!first) {
     return {
-      relativeUrl: '', relativeNoBase: '', bytes: 0, queryParts: [],
-      entitySet: tbl.entitySetName, entityLogical: tbl.logicalName,
+      relativeUrl: '',
+      relativeNoBase: '',
+      bytes: 0,
+      queryParts: [],
+      entitySet: tbl.entitySetName,
+      entityLogical: tbl.logicalName,
       recordId: s.recordId ?? undefined,
     };
   }
@@ -461,9 +541,12 @@ export function buildManageImage(s: ManageImageState): BuiltRequest {
 
 export function manageImagePipeline(s: ManageImageState): BinaryPipelineStep[] {
   switch (s.operation) {
-    case 'upload':   return buildImageUpload(s);
-    case 'download': return buildImageDownload(s);
-    case 'delete':   return buildImageDelete(s);
+    case 'upload':
+      return buildImageUpload(s);
+    case 'download':
+      return buildImageDownload(s);
+    case 'delete':
+      return buildImageDelete(s);
   }
 }
 
@@ -492,7 +575,10 @@ export function manageImagePipeline(s: ManageImageState): BinaryPipelineStep[] {
  * Initialize* / Commit* message. The shape differs between create (no id)
  * and update (id required).
  */
-function attachmentTargetRef(s: ManageAttachmentState, includeBodyMeta: boolean): Record<string, unknown> {
+function attachmentTargetRef(
+  s: ManageAttachmentState,
+  includeBodyMeta: boolean,
+): Record<string, unknown> {
   const info = ATTACHMENT_TARGET_INFO[s.target];
   const ref: Record<string, unknown> = {
     '@odata.type': `Microsoft.Dynamics.CRM.${info.entityLogical}`,
@@ -548,17 +634,19 @@ export function buildAttachmentInlineUpload(s: ManageAttachmentState): BinaryPip
   };
   if (!isCreate) headers['If-Match'] = '*';
 
-  return [{
-    n: 1,
-    title: isCreate ? `Create ${s.target} with inline body` : `Update ${s.target} body`,
-    method,
-    relativeUrl: url,
-    headers,
-    body,
-    detail: isCreate
-      ? `Response ${s.target === 'attachment' ? '204 NoContent + OData-EntityId header' : '204 NoContent'} on success. Base 64-encoded payload must fit under Organization.MaxUploadFileSize (default 5 MB, max 128 MB). For larger files use the messages path.`
-      : 'Response 204 NoContent. Replaces the existing body. For files larger than ~4 MB use the messages path instead.',
-  }];
+  return [
+    {
+      n: 1,
+      title: isCreate ? `Create ${s.target} with inline body` : `Update ${s.target} body`,
+      method,
+      relativeUrl: url,
+      headers,
+      body,
+      detail: isCreate
+        ? `Response ${s.target === 'attachment' ? '204 NoContent + OData-EntityId header' : '204 NoContent'} on success. Base 64-encoded payload must fit under Organization.MaxUploadFileSize (default 5 MB, max 128 MB). For larger files use the messages path.`
+        : 'Response 204 NoContent. Replaces the existing body. For files larger than ~4 MB use the messages path instead.',
+    },
+  ];
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -585,9 +673,10 @@ export function buildAttachmentMessagesUpload(s: ManageAttachmentState): BinaryP
       relativeUrl: `${ENV.apiBase}/${info.initUploadMessage}`,
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: { Target: targetEnvelope },
-      detail: s.target === 'attachment'
-        ? 'Returns { FileContinuationToken }. Must include objectid_email@odata.bind on Target — these messages only CREATE attachments; trying to update an existing one returns "record already exists".'
-        : 'Returns { FileContinuationToken }. Annotation must carry a caller-generated annotationid GUID on Target — Dataverse will not auto-assign. The body/documentbody must NOT be set in Target (use UploadBlock instead).',
+      detail:
+        s.target === 'attachment'
+          ? 'Returns { FileContinuationToken }. Must include objectid_email@odata.bind on Target — these messages only CREATE attachments; trying to update an existing one returns "record already exists".'
+          : 'Returns { FileContinuationToken }. Annotation must carry a caller-generated annotationid GUID on Target — Dataverse will not auto-assign. The body/documentbody must NOT be set in Target (use UploadBlock instead).',
     },
     {
       n: 2,
@@ -626,14 +715,16 @@ export function buildAttachmentDownload(s: ManageAttachmentState): BinaryPipelin
   switch (s.downloadMethod.kind) {
     case 'single-request': {
       const id = s.recordId ?? '<record-id>';
-      return [{
-        n: 1,
-        title: `Download ${s.target} body (single request)`,
-        method: 'GET',
-        relativeUrl: `${ENV.apiBase}/${info.entitySet}(${id})/${info.bodyColumn}/$value`,
-        headers: { Accept: 'application/json' },
-        detail: `Response 200 OK · Content-Type: text/plain · body is the BASE 64-encoded blob (not raw bytes). Unlike file columns, this path does NOT return x-ms-file-name / x-ms-file-size / mimetype headers — you must read those via a separate $select on filename/mimetype.`,
-      }];
+      return [
+        {
+          n: 1,
+          title: `Download ${s.target} body (single request)`,
+          method: 'GET',
+          relativeUrl: `${ENV.apiBase}/${info.entitySet}(${id})/${info.bodyColumn}/$value`,
+          headers: { Accept: 'application/json' },
+          detail: `Response 200 OK · Content-Type: text/plain · body is the BASE 64-encoded blob (not raw bytes). Unlike file columns, this path does NOT return x-ms-file-name / x-ms-file-size / mimetype headers — you must read those via a separate $select on filename/mimetype.`,
+        },
+      ];
     }
     case 'dataverse-messages': {
       return [
@@ -644,7 +735,8 @@ export function buildAttachmentDownload(s: ManageAttachmentState): BinaryPipelin
           relativeUrl: `${ENV.apiBase}/${info.initDownloadMessage}`,
           headers: { 'Content-Type': 'application/json; charset=utf-8' },
           body: { Target: attachmentTargetRef(s, false) },
-          detail: 'Returns { FileContinuationToken, FileSizeInBytes, FileName }. Same DownloadBlock action used by file columns is then called repeatedly.',
+          detail:
+            'Returns { FileContinuationToken, FileSizeInBytes, FileName }. Same DownloadBlock action used by file columns is then called repeatedly.',
         },
         {
           n: 2,
@@ -657,7 +749,8 @@ export function buildAttachmentDownload(s: ManageAttachmentState): BinaryPipelin
             BlockLength: s.downloadMethod.blockSize,
             FileContinuationToken: '<token-from-step-1>',
           },
-          detail: 'Returns { Data: <base64 chunk bytes> }. Increment Offset by BlockLength on each call. Per doc note: BlockLength can stay constant — the final block may be smaller and the server returns only the remaining bytes.',
+          detail:
+            'Returns { Data: <base64 chunk bytes> }. Increment Offset by BlockLength on each call. Per doc note: BlockLength can stay constant — the final block may be smaller and the server returns only the remaining bytes.',
         },
       ];
     }
@@ -670,14 +763,16 @@ export function buildAttachmentDownload(s: ManageAttachmentState): BinaryPipelin
 export function buildAttachmentDelete(s: ManageAttachmentState): BinaryPipelineStep[] {
   const info = ATTACHMENT_TARGET_INFO[s.target];
   const id = s.recordId ?? '<record-id>';
-  return [{
-    n: 1,
-    title: `Delete ${s.target} record`,
-    method: 'DELETE',
-    relativeUrl: `${ENV.apiBase}/${info.entitySet}(${id})`,
-    headers: { Accept: 'application/json' },
-    detail: `Response 204 NoContent. Deletes the entire ${s.target} record (including the body). Per attachment-annotation-files doc there's no message form for delete — the record IS the file, so removing the row removes the data. To clear just the body without deleting the record, PATCH ${info.bodyColumn} = null.`,
-  }];
+  return [
+    {
+      n: 1,
+      title: `Delete ${s.target} record`,
+      method: 'DELETE',
+      relativeUrl: `${ENV.apiBase}/${info.entitySet}(${id})`,
+      headers: { Accept: 'application/json' },
+      detail: `Response 204 NoContent. Deletes the entire ${s.target} record (including the body). Per attachment-annotation-files doc there's no message form for delete — the record IS the file, so removing the row removes the data. To clear just the body without deleting the record, PATCH ${info.bodyColumn} = null.`,
+    },
+  ];
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -689,8 +784,12 @@ export function buildManageAttachment(s: ManageAttachmentState): BuiltRequest {
   const first = steps[0];
   if (!first) {
     return {
-      relativeUrl: '', relativeNoBase: '', bytes: 0, queryParts: [],
-      entitySet: info.entitySet, entityLogical: info.entityLogical,
+      relativeUrl: '',
+      relativeNoBase: '',
+      bytes: 0,
+      queryParts: [],
+      entitySet: info.entitySet,
+      entityLogical: info.entityLogical,
       recordId: s.recordId ?? undefined,
     };
   }
@@ -710,12 +809,16 @@ export function manageAttachmentPipeline(s: ManageAttachmentState): BinaryPipeli
   switch (s.operation) {
     case 'upload':
       switch (s.uploadMethod.kind) {
-        case 'inline-base64':      return buildAttachmentInlineUpload(s);
-        case 'dataverse-messages': return buildAttachmentMessagesUpload(s);
+        case 'inline-base64':
+          return buildAttachmentInlineUpload(s);
+        case 'dataverse-messages':
+          return buildAttachmentMessagesUpload(s);
       }
       break;
-    case 'download':               return buildAttachmentDownload(s);
-    case 'delete':                 return buildAttachmentDelete(s);
+    case 'download':
+      return buildAttachmentDownload(s);
+    case 'delete':
+      return buildAttachmentDelete(s);
   }
 }
 

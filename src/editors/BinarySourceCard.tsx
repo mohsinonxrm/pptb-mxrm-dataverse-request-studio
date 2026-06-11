@@ -10,9 +10,23 @@
 
 import { useRef } from 'react';
 import {
-  Field, Input, Button, Textarea, Caption1, Badge, tokens, mergeClasses, Tooltip,
+  Field,
+  Input,
+  Button,
+  Textarea,
+  Caption1,
+  Badge,
+  tokens,
+  mergeClasses,
+  Tooltip,
 } from '@fluentui/react-components';
-import { ArrowUpload20Regular, Link20Regular, Code20Regular, Document20Filled, DocumentArrowUp20Filled } from '@fluentui/react-icons';
+import {
+  ArrowUpload20Regular,
+  Link20Regular,
+  Code20Regular,
+  Document20Filled,
+  DocumentArrowUp20Filled,
+} from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from './PaneHead';
 import { formatSize } from '../engine/binaryBuilders';
@@ -51,10 +65,33 @@ export function BinarySourceCard(props: BinarySourceCardProps) {
       />
 
       {/* Segmented source toggle */}
-      <div style={{ display: 'inline-flex', border: `1px solid ${tokens.colorNeutralStroke2}`, borderRadius: tokens.borderRadiusSmall, overflow: 'hidden', marginBottom: 14 }}>
-        <SourceTab active={props.source.kind === 'file'}   onClick={() => props.setSource({ kind: 'file' })}   icon={<ArrowUpload20Regular />} label="Upload file" />
-        <SourceTab active={props.source.kind === 'url'}    onClick={() => props.setSource({ kind: 'url' })}    icon={<Link20Regular />}        label="From URL" />
-        <SourceTab active={props.source.kind === 'base64'} onClick={() => props.setSource({ kind: 'base64' })} icon={<Code20Regular />}        label="Paste base64" />
+      <div
+        style={{
+          display: 'inline-flex',
+          border: `1px solid ${tokens.colorNeutralStroke2}`,
+          borderRadius: tokens.borderRadiusSmall,
+          overflow: 'hidden',
+          marginBottom: 14,
+        }}
+      >
+        <SourceTab
+          active={props.source.kind === 'file'}
+          onClick={() => props.setSource({ kind: 'file' })}
+          icon={<ArrowUpload20Regular />}
+          label="Upload file"
+        />
+        <SourceTab
+          active={props.source.kind === 'url'}
+          onClick={() => props.setSource({ kind: 'url' })}
+          icon={<Link20Regular />}
+          label="From URL"
+        />
+        <SourceTab
+          active={props.source.kind === 'base64'}
+          onClick={() => props.setSource({ kind: 'base64' })}
+          icon={<Code20Regular />}
+          label="Paste base64"
+        />
       </div>
 
       {props.source.kind === 'file' && (
@@ -75,7 +112,7 @@ export function BinarySourceCard(props: BinarySourceCardProps) {
                 const reader = new FileReader();
                 reader.onload = () => {
                   const result = String(reader.result ?? '');
-                  const b64 = result.startsWith('data:') ? result.split(',')[1] ?? '' : result;
+                  const b64 = result.startsWith('data:') ? (result.split(',')[1] ?? '') : result;
                   props.setBodyBase64(b64);
                 };
                 reader.readAsDataURL(f);
@@ -83,8 +120,20 @@ export function BinarySourceCard(props: BinarySourceCardProps) {
             />
           </Field>
           {props.fileName && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: tokens.colorNeutralBackground2, borderRadius: tokens.borderRadiusSmall, fontSize: 11 }}>
-              <Document20Filled style={{ color: tokens.colorBrandForeground1, width: 18, height: 18 }} />
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 10px',
+                background: tokens.colorNeutralBackground2,
+                borderRadius: tokens.borderRadiusSmall,
+                fontSize: 11,
+              }}
+            >
+              <Document20Filled
+                style={{ color: tokens.colorBrandForeground1, width: 18, height: 18 }}
+              />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600 }}>{props.fileName}</div>
                 <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
@@ -92,7 +141,9 @@ export function BinarySourceCard(props: BinarySourceCardProps) {
                 </Caption1>
               </div>
               <Tooltip content="Pick a different file" relationship="label">
-                <Button size="small" appearance="subtle" onClick={() => inputRef.current?.click()}>Change</Button>
+                <Button size="small" appearance="subtle" onClick={() => inputRef.current?.click()}>
+                  Change
+                </Button>
               </Tooltip>
             </div>
           )}
@@ -103,7 +154,13 @@ export function BinarySourceCard(props: BinarySourceCardProps) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 720 }}>
           <Field
             label="URL"
-            hint={<span style={{ color: tokens.colorNeutralForeground3 }}>Informational — the studio doesn't fetch external URLs at execute time. Use this when the file lives on a CDN and you'll fetch it client-side before calling Dataverse.</span>}
+            hint={
+              <span style={{ color: tokens.colorNeutralForeground3 }}>
+                Informational — the studio doesn't fetch external URLs at execute time. Use this
+                when the file lives on a CDN and you'll fetch it client-side before calling
+                Dataverse.
+              </span>
+            }
           >
             <Input
               value={props.bodyUrl}
@@ -133,14 +190,29 @@ export function BinarySourceCard(props: BinarySourceCardProps) {
       {props.source.kind === 'base64' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Field label="File name">
-            <Input value={props.fileName} onChange={(_, d) => props.setFileName(d.value)} placeholder="file.bin" />
+            <Input
+              value={props.fileName}
+              onChange={(_, d) => props.setFileName(d.value)}
+              placeholder="file.bin"
+            />
           </Field>
           <Field label="MIME type">
-            <Input value={props.mimeType} onChange={(_, d) => props.setMimeType(d.value)} placeholder="application/octet-stream" style={{ fontFamily: tokens.fontFamilyMonospace }} />
+            <Input
+              value={props.mimeType}
+              onChange={(_, d) => props.setMimeType(d.value)}
+              placeholder="application/octet-stream"
+              style={{ fontFamily: tokens.fontFamilyMonospace }}
+            />
           </Field>
           <Field
             label="Base64 body"
-            hint={<span>Raw base64-encoded bytes. <Badge appearance="ghost">{formatSize(estimateBase64Size(props.bodyBase64))}</Badge> after decode.</span>}
+            hint={
+              <span>
+                Raw base64-encoded bytes.{' '}
+                <Badge appearance="ghost">{formatSize(estimateBase64Size(props.bodyBase64))}</Badge>{' '}
+                after decode.
+              </span>
+            }
           >
             <Textarea
               rows={6}
@@ -159,7 +231,17 @@ export function BinarySourceCard(props: BinarySourceCardProps) {
   );
 }
 
-function SourceTab({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactElement; label: string }) {
+function SourceTab({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactElement;
+  label: string;
+}) {
   return (
     <Button
       size="small"

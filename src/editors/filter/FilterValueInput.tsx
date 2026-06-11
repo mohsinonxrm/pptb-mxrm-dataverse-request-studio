@@ -9,11 +9,31 @@
 //     for a same-type column picker (column-vs-column comparison).
 
 import {
-  Input, Switch, SpinButton, Combobox, Option, Tooltip, Button, tokens, Textarea,
-  Persona, MessageBar, MessageBarBody, ToggleButton,
-  InteractionTag, InteractionTagPrimary, InteractionTagSecondary, TagGroup,
-  TagPicker, TagPickerControl, TagPickerGroup, TagPickerInput, TagPickerList,
-  TagPickerOption, useTagPickerFilter, Tag,
+  Input,
+  Switch,
+  SpinButton,
+  Combobox,
+  Option,
+  Tooltip,
+  Button,
+  tokens,
+  Textarea,
+  Persona,
+  MessageBar,
+  MessageBarBody,
+  ToggleButton,
+  InteractionTag,
+  InteractionTagPrimary,
+  InteractionTagSecondary,
+  TagGroup,
+  TagPicker,
+  TagPickerControl,
+  TagPickerGroup,
+  TagPickerInput,
+  TagPickerList,
+  TagPickerOption,
+  useTagPickerFilter,
+  Tag,
 } from '@fluentui/react-components';
 import { useEffect, useMemo, useState } from 'react';
 import { DatePicker } from '@fluentui/react-datepicker-compat';
@@ -21,8 +41,14 @@ import { TimePicker } from '@fluentui/react-timepicker-compat';
 import { Add20Regular, Delete20Regular, Database20Regular } from '@fluentui/react-icons';
 import type { OperatorDef } from './operators';
 import {
-  columnOptions, findTable, type ColumnMeta, type TableMeta, type DateTimeColumnMeta,
-  type StringColumnMeta, type MemoColumnMeta, type IntegerColumnMeta,
+  columnOptions,
+  findTable,
+  type ColumnMeta,
+  type TableMeta,
+  type DateTimeColumnMeta,
+  type StringColumnMeta,
+  type MemoColumnMeta,
+  type IntegerColumnMeta,
 } from '../../mock/metadata';
 import { useLookupRecords } from '../../host/useLookupRecords';
 import { useColumnDetail } from '../../host/useColumnDetail';
@@ -105,7 +131,7 @@ function SingleLiteralInput({ rule, op, col, onChange }: ValueInputProps): JSX.E
     return (
       <NumericInputCtl
         val={rule.val ?? ''}
-        onChange={v => onChange({ val: v })}
+        onChange={(v) => onChange({ val: v })}
         integer
         step={1}
         min={0}
@@ -113,57 +139,118 @@ function SingleLiteralInput({ rule, op, col, onChange }: ValueInputProps): JSX.E
     );
   }
   if (!col) {
-    return <Input size="small" value={rule.val ?? ''} onChange={(_, d) => onChange({ val: d.value })} placeholder="value" />;
+    return (
+      <Input
+        size="small"
+        value={rule.val ?? ''}
+        onChange={(_, d) => onChange({ val: d.value })}
+        placeholder="value"
+      />
+    );
   }
   switch (col.attributeType) {
     case 'Boolean':
-      return <BooleanInput col={col} val={rule.val} onChange={v => onChange({ val: v })} />;
+      return <BooleanInput col={col} val={rule.val} onChange={(v) => onChange({ val: v })} />;
     case 'Picklist':
     case 'State':
     case 'Status':
     case 'EntityName':
-      return <ChoiceComboInput col={col} val={rule.val} onChange={v => onChange({ val: v })} />;
+      return <ChoiceComboInput col={col} val={rule.val} onChange={(v) => onChange({ val: v })} />;
     case 'DateTime':
-      return <DateTimeInputCtl col={col} val={rule.val ?? ''} onChange={v => onChange({ val: v })} />;
+      return (
+        <DateTimeInputCtl col={col} val={rule.val ?? ''} onChange={(v) => onChange({ val: v })} />
+      );
     case 'String':
-      return <StringInputCtl col={col} val={rule.val ?? ''} onChange={v => onChange({ val: v })} />;
+      return (
+        <StringInputCtl col={col} val={rule.val ?? ''} onChange={(v) => onChange({ val: v })} />
+      );
     case 'Memo':
-      return <MemoInputCtl col={col} val={rule.val ?? ''} onChange={v => onChange({ val: v })} />;
+      return <MemoInputCtl col={col} val={rule.val ?? ''} onChange={(v) => onChange({ val: v })} />;
     case 'Integer':
-      return <IntegerInputCtl col={col} op={op} val={rule.val ?? ''} onChange={v => onChange({ val: v })} />;
+      return (
+        <IntegerInputCtl
+          col={col}
+          op={op}
+          val={rule.val ?? ''}
+          onChange={(v) => onChange({ val: v })}
+        />
+      );
     case 'BigInt':
-      return <NumericInputCtl
-        val={rule.val ?? ''} onChange={v => onChange({ val: v })}
-        min={col.minValue} max={col.maxValue} integer step={1} />;
+      return (
+        <NumericInputCtl
+          val={rule.val ?? ''}
+          onChange={(v) => onChange({ val: v })}
+          min={col.minValue}
+          max={col.maxValue}
+          integer
+          step={1}
+        />
+      );
     case 'Decimal':
-      return <NumericInputCtl
-        val={rule.val ?? ''} onChange={v => onChange({ val: v })}
-        min={col.minValue} max={col.maxValue} step={Math.pow(10, -col.precision)} />;
+      return (
+        <NumericInputCtl
+          val={rule.val ?? ''}
+          onChange={(v) => onChange({ val: v })}
+          min={col.minValue}
+          max={col.maxValue}
+          step={Math.pow(10, -col.precision)}
+        />
+      );
     case 'Double':
-      return <NumericInputCtl
-        val={rule.val ?? ''} onChange={v => onChange({ val: v })}
-        min={col.minValue} max={col.maxValue} step={Math.pow(10, -col.precision)} />;
+      return (
+        <NumericInputCtl
+          val={rule.val ?? ''}
+          onChange={(v) => onChange({ val: v })}
+          min={col.minValue}
+          max={col.maxValue}
+          step={Math.pow(10, -col.precision)}
+        />
+      );
     case 'Money':
-      return <MoneyInputCtl precision={col.precision} val={rule.val ?? ''} onChange={v => onChange({ val: v })}
-        min={col.minValue} max={col.maxValue} />;
+      return (
+        <MoneyInputCtl
+          precision={col.precision}
+          val={rule.val ?? ''}
+          onChange={(v) => onChange({ val: v })}
+          min={col.minValue}
+          max={col.maxValue}
+        />
+      );
     case 'Lookup':
     case 'Customer':
     case 'Owner':
-      return <LookupTypeaheadCtl col={col} val={rule.val ?? ''} onChange={v => onChange({ val: v })} />;
+      return (
+        <LookupTypeaheadCtl col={col} val={rule.val ?? ''} onChange={(v) => onChange({ val: v })} />
+      );
     case 'Uniqueidentifier':
-      return <GuidInputCtl val={rule.val ?? ''} onChange={v => onChange({ val: v })} />;
+      return <GuidInputCtl val={rule.val ?? ''} onChange={(v) => onChange({ val: v })} />;
     case 'MultiSelectPicklist':
       // Single-value compare is rarely meaningful — show a Combobox of the options
-      return <ChoiceComboInput col={col} val={rule.val} onChange={v => onChange({ val: v })} />;
+      return <ChoiceComboInput col={col} val={rule.val} onChange={(v) => onChange({ val: v })} />;
     default:
-      return <Input size="small" value={rule.val ?? ''} onChange={(_, d) => onChange({ val: d.value })} placeholder="value" />;
+      return (
+        <Input
+          size="small"
+          value={rule.val ?? ''}
+          onChange={(_, d) => onChange({ val: d.value })}
+          placeholder="value"
+        />
+      );
   }
 }
 
 // ============================================================
 // Per-type controls
 // ============================================================
-function StringInputCtl({ col, val, onChange }: { col: StringColumnMeta; val: string; onChange: (v: string) => void }) {
+function StringInputCtl({
+  col,
+  val,
+  onChange,
+}: {
+  col: StringColumnMeta;
+  val: string;
+  onChange: (v: string) => void;
+}) {
   const isLong = col.format === 'TextArea';
   if (isLong) {
     return (
@@ -177,9 +264,13 @@ function StringInputCtl({ col, val, onChange }: { col: StringColumnMeta; val: st
     );
   }
   const inputType =
-    col.format === 'Email' ? 'email' :
-    col.format === 'Url'   ? 'url' :
-    col.format === 'Phone' ? 'tel' : 'text';
+    col.format === 'Email'
+      ? 'email'
+      : col.format === 'Url'
+        ? 'url'
+        : col.format === 'Phone'
+          ? 'tel'
+          : 'text';
   return (
     <Input
       size="small"
@@ -187,18 +278,30 @@ function StringInputCtl({ col, val, onChange }: { col: StringColumnMeta; val: st
       value={val}
       maxLength={col.maxLength}
       placeholder={
-        col.format === 'Email' ? 'name@example.com' :
-        col.format === 'Url'   ? 'https://example.com' :
-        col.format === 'Phone' ? '+1 (555) 555-0000' :
-        col.format === 'TickerSymbol' ? 'MSFT' :
-        'value'
+        col.format === 'Email'
+          ? 'name@example.com'
+          : col.format === 'Url'
+            ? 'https://example.com'
+            : col.format === 'Phone'
+              ? '+1 (555) 555-0000'
+              : col.format === 'TickerSymbol'
+                ? 'MSFT'
+                : 'value'
       }
       onChange={(_, d) => onChange(d.value)}
     />
   );
 }
 
-function MemoInputCtl({ col, val, onChange }: { col: MemoColumnMeta; val: string; onChange: (v: string) => void }) {
+function MemoInputCtl({
+  col,
+  val,
+  onChange,
+}: {
+  col: MemoColumnMeta;
+  val: string;
+  onChange: (v: string) => void;
+}) {
   const [focused, setFocused] = useState(false);
   // Compact-by-default: matches the height of a regular `<Input>` when
   // blurred so the filter row's visual baseline stays uniform across all
@@ -215,9 +318,9 @@ function MemoInputCtl({ col, val, onChange }: { col: MemoColumnMeta; val: string
       rows={focused ? 3 : 1}
       value={val}
       maxLength={col.maxLength}
-      placeholder={focused
-        ? `Up to ${col.maxLength.toLocaleString()} characters`
-        : 'Click to expand…'}
+      placeholder={
+        focused ? `Up to ${col.maxLength.toLocaleString()} characters` : 'Click to expand…'
+      }
       onChange={(_, d) => onChange(d.value)}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
@@ -234,20 +337,33 @@ function MemoInputCtl({ col, val, onChange }: { col: MemoColumnMeta; val: string
   );
 }
 
-function DateTimeInputCtl({ col, val, onChange }: { col: DateTimeColumnMeta; val: string; onChange: (v: string) => void }) {
+function DateTimeInputCtl({
+  col,
+  val,
+  onChange,
+}: {
+  col: DateTimeColumnMeta;
+  val: string;
+  onChange: (v: string) => void;
+}) {
   // DateOnly behavior or format → DatePicker alone; DateAndTime → DatePicker + TimePicker
   const isDateOnly = col.format === 'DateOnly' || col.dateTimeBehavior === 'DateOnly';
   const behaviorHint =
-    col.dateTimeBehavior === 'UserLocal'  ? 'stored as UTC, displayed in user TZ' :
-    col.dateTimeBehavior === 'DateOnly'   ? 'midnight UTC, no TZ conversion' :
-                                            'wall-clock as UTC (no TZ math)';
+    col.dateTimeBehavior === 'UserLocal'
+      ? 'stored as UTC, displayed in user TZ'
+      : col.dateTimeBehavior === 'DateOnly'
+        ? 'midnight UTC, no TZ conversion'
+        : 'wall-clock as UTC (no TZ math)';
 
   // Parse the stored ISO string back to a Date for the pickers
   const parsed: Date | null = val ? new Date(val) : null;
   const dateOnly: Date | null = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
 
   const writeDate = (d: Date | null | undefined) => {
-    if (!d) { onChange(''); return; }
+    if (!d) {
+      onChange('');
+      return;
+    }
     if (isDateOnly) {
       // ISO yyyy-mm-dd (DateOnly columns)
       const yyyy = d.getFullYear();
@@ -263,7 +379,9 @@ function DateTimeInputCtl({ col, val, onChange }: { col: DateTimeColumnMeta; val
     }
   };
   const writeTime = (d: Date | null | undefined) => {
-    if (!d || !dateOnly) { return; }
+    if (!d || !dateOnly) {
+      return;
+    }
     const next = new Date(dateOnly);
     next.setHours(d.getHours(), d.getMinutes(), 0, 0);
     onChange(next.toISOString());
@@ -271,27 +389,33 @@ function DateTimeInputCtl({ col, val, onChange }: { col: DateTimeColumnMeta; val
 
   if (isDateOnly) {
     return (
-      <Tooltip content={`Behavior: ${col.dateTimeBehavior} — ${behaviorHint}`} relationship="description">
+      <Tooltip
+        content={`Behavior: ${col.dateTimeBehavior} — ${behaviorHint}`}
+        relationship="description"
+      >
         <DatePicker
           size="small"
           value={dateOnly}
           onSelectDate={writeDate}
           placeholder="Pick a date…"
-          formatDate={(d) => d ? d.toLocaleDateString() : ''}
+          formatDate={(d) => (d ? d.toLocaleDateString() : '')}
           allowTextInput
         />
       </Tooltip>
     );
   }
   return (
-    <Tooltip content={`Behavior: ${col.dateTimeBehavior} — ${behaviorHint}`} relationship="description">
+    <Tooltip
+      content={`Behavior: ${col.dateTimeBehavior} — ${behaviorHint}`}
+      relationship="description"
+    >
       <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <DatePicker
           size="small"
           value={dateOnly}
           onSelectDate={writeDate}
           placeholder="Date…"
-          formatDate={(d) => d ? d.toLocaleDateString() : ''}
+          formatDate={(d) => (d ? d.toLocaleDateString() : '')}
           style={{ minWidth: 130 }}
           allowTextInput
         />
@@ -309,7 +433,16 @@ function DateTimeInputCtl({ col, val, onChange }: { col: DateTimeColumnMeta; val
   );
 }
 
-function IntegerInputCtl({ col, val, onChange }: { col: IntegerColumnMeta; op: OperatorDef; val: string; onChange: (v: string) => void }) {
+function IntegerInputCtl({
+  col,
+  val,
+  onChange,
+}: {
+  col: IntegerColumnMeta;
+  op: OperatorDef;
+  val: string;
+  onChange: (v: string) => void;
+}) {
   // Format-driven: Duration → minute presets; Language/Locale/TimeZone → combobox stubs
   if (col.format === 'Duration') {
     const presets = [1, 15, 30, 60, 240, 480, 1440, 10080]; // 1m..1w in minutes
@@ -327,7 +460,7 @@ function IntegerInputCtl({ col, val, onChange }: { col: IntegerColumnMeta; op: O
           }}
         />
         <span style={{ fontSize: 10, color: tokens.colorNeutralForeground3 }}>min</span>
-        {presets.slice(0, 5).map(p => {
+        {presets.slice(0, 5).map((p) => {
           const label = p < 60 ? `${p}m` : p < 1440 ? `${p / 60}h` : `${p / 1440}d`;
           const isActive = String(p) === val;
           return (
@@ -354,11 +487,21 @@ function IntegerInputCtl({ col, val, onChange }: { col: IntegerColumnMeta; op: O
         onOptionSelect={(_, d) => d.optionValue && onChange(d.optionValue)}
         placeholder="LCID"
       >
-        <Option value="1033" text="1033">English (US) · 1033</Option>
-        <Option value="1031" text="1031">German · 1031</Option>
-        <Option value="1036" text="1036">French · 1036</Option>
-        <Option value="1041" text="1041">Japanese · 1041</Option>
-        <Option value="1043" text="1043">Dutch · 1043</Option>
+        <Option value="1033" text="1033">
+          English (US) · 1033
+        </Option>
+        <Option value="1031" text="1031">
+          German · 1031
+        </Option>
+        <Option value="1036" text="1036">
+          French · 1036
+        </Option>
+        <Option value="1041" text="1041">
+          Japanese · 1041
+        </Option>
+        <Option value="1043" text="1043">
+          Dutch · 1043
+        </Option>
       </Combobox>
     );
   }
@@ -371,24 +514,47 @@ function IntegerInputCtl({ col, val, onChange }: { col: IntegerColumnMeta; op: O
         onOptionSelect={(_, d) => d.optionValue && onChange(d.optionValue)}
         placeholder="time zone code"
       >
-        <Option value="4" text="4">Pacific (US&amp;Canada) · 4</Option>
-        <Option value="10" text="10">Eastern (US&amp;Canada) · 10</Option>
-        <Option value="85" text="85">UTC · 85</Option>
-        <Option value="105" text="105">W. Europe · 105</Option>
+        <Option value="4" text="4">
+          Pacific (US&amp;Canada) · 4
+        </Option>
+        <Option value="10" text="10">
+          Eastern (US&amp;Canada) · 10
+        </Option>
+        <Option value="85" text="85">
+          UTC · 85
+        </Option>
+        <Option value="105" text="105">
+          W. Europe · 105
+        </Option>
       </Combobox>
     );
   }
   return (
     <NumericInputCtl
-      val={val} onChange={onChange}
-      min={col.minValue} max={col.maxValue} integer step={1}
+      val={val}
+      onChange={onChange}
+      min={col.minValue}
+      max={col.maxValue}
+      integer
+      step={1}
     />
   );
 }
 
-function NumericInputCtl({ val, onChange, min, max, step, integer }: {
-  val: string; onChange: (v: string) => void;
-  min?: number; max?: number; step?: number; integer?: boolean;
+function NumericInputCtl({
+  val,
+  onChange,
+  min,
+  max,
+  step,
+  integer,
+}: {
+  val: string;
+  onChange: (v: string) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  integer?: boolean;
 }) {
   return (
     <SpinButton
@@ -405,23 +571,50 @@ function NumericInputCtl({ val, onChange, min, max, step, integer }: {
   );
 }
 
-function MoneyInputCtl({ precision, val, onChange, min, max }: {
-  precision: number; val: string; onChange: (v: string) => void;
-  min?: number; max?: number;
+function MoneyInputCtl({
+  precision,
+  val,
+  onChange,
+  min,
+  max,
+}: {
+  precision: number;
+  val: string;
+  onChange: (v: string) => void;
+  min?: number;
+  max?: number;
 }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-      <span style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 12, color: tokens.colorNeutralForeground3 }}>$</span>
+      <span
+        style={{
+          fontFamily: tokens.fontFamilyMonospace,
+          fontSize: 12,
+          color: tokens.colorNeutralForeground3,
+        }}
+      >
+        $
+      </span>
       <NumericInputCtl
-        val={val} onChange={onChange}
-        min={min} max={max}
+        val={val}
+        onChange={onChange}
+        min={min}
+        max={max}
         step={Math.pow(10, -precision)}
       />
     </span>
   );
 }
 
-function BooleanInput({ col, val, onChange }: { col: import('../../mock/metadata').BooleanColumnMeta; val?: string; onChange: (v: string) => void }) {
+function BooleanInput({
+  col,
+  val,
+  onChange,
+}: {
+  col: import('../../mock/metadata').BooleanColumnMeta;
+  val?: string;
+  onChange: (v: string) => void;
+}) {
   // val is '0' / '1' / 'true' / 'false'
   const isTrue = val === '1' || val === 'true';
   return (
@@ -433,9 +626,17 @@ function BooleanInput({ col, val, onChange }: { col: import('../../mock/metadata
   );
 }
 
-function ChoiceComboInput({ col, val, onChange }: { col: ColumnMeta; val?: string; onChange: (v: string) => void }) {
+function ChoiceComboInput({
+  col,
+  val,
+  onChange,
+}: {
+  col: ColumnMeta;
+  val?: string;
+  onChange: (v: string) => void;
+}) {
   const options = columnOptions(col) ?? [];
-  const cur = options.find(o => String(o.value) === val);
+  const cur = options.find((o) => String(o.value) === val);
   return (
     <Combobox
       size="small"
@@ -443,10 +644,17 @@ function ChoiceComboInput({ col, val, onChange }: { col: ColumnMeta; val?: strin
       selectedOptions={val ? [val] : []}
       onOptionSelect={(_, d) => d.optionValue && onChange(d.optionValue)}
     >
-      {options.map(o => (
+      {options.map((o) => (
         <Option key={o.value} value={String(o.value)} text={o.label}>
           {o.label}
-          <span style={{ color: tokens.colorNeutralForeground3, fontFamily: tokens.fontFamilyMonospace, fontSize: 10, marginLeft: 6 }}>
+          <span
+            style={{
+              color: tokens.colorNeutralForeground3,
+              fontFamily: tokens.fontFamilyMonospace,
+              fontSize: 10,
+              marginLeft: 6,
+            }}
+          >
             · {o.value}
           </span>
         </Option>
@@ -455,9 +663,17 @@ function ChoiceComboInput({ col, val, onChange }: { col: ColumnMeta; val?: strin
   );
 }
 
-function LookupTypeaheadCtl({ col, val, onChange }: {
-  col: import('../../mock/metadata').LookupColumnMeta | import('../../mock/metadata').CustomerColumnMeta | import('../../mock/metadata').OwnerColumnMeta;
-  val: string; onChange: (v: string) => void;
+function LookupTypeaheadCtl({
+  col,
+  val,
+  onChange,
+}: {
+  col:
+    | import('../../mock/metadata').LookupColumnMeta
+    | import('../../mock/metadata').CustomerColumnMeta
+    | import('../../mock/metadata').OwnerColumnMeta;
+  val: string;
+  onChange: (v: string) => void;
 }) {
   // Polymorphic-aware typeahead.
   //
@@ -482,7 +698,7 @@ function LookupTypeaheadCtl({ col, val, onChange }: {
 
   const [query, setQuery] = useState('');
   const { rows, loading, error } = useLookupRecords(target || null, query);
-  const selected = rows.find(r => r.id === val);
+  const selected = rows.find((r) => r.id === val);
   const tbl = target ? findTable(target) : undefined;
   const targetLabel = tbl?.displayName ?? target ?? 'record';
 
@@ -534,7 +750,7 @@ function LookupTypeaheadCtl({ col, val, onChange }: {
           }}
           // No fixed width — fills the value column.
         >
-          {col.targets.map(t => {
+          {col.targets.map((t) => {
             const tt = findTable(t);
             return (
               <Option key={t} value={t} text={tt?.displayName ?? t}>
@@ -546,7 +762,13 @@ function LookupTypeaheadCtl({ col, val, onChange }: {
       ) : (
         // Single-target — just show the target as a non-interactive chip
         // for context. The user can't change it.
-        <span style={{ fontSize: 10, color: tokens.colorNeutralForeground3, fontFamily: tokens.fontFamilyMonospace }}>
+        <span
+          style={{
+            fontSize: 10,
+            color: tokens.colorNeutralForeground3,
+            fontFamily: tokens.fontFamilyMonospace,
+          }}
+        >
           → {target}
         </span>
       )}
@@ -554,7 +776,12 @@ function LookupTypeaheadCtl({ col, val, onChange }: {
         size="small"
         value={selected?.name ?? query}
         selectedOptions={val ? [val] : []}
-        onOptionSelect={(_, d) => { if (d.optionValue) { onChange(d.optionValue); setQuery(''); } }}
+        onOptionSelect={(_, d) => {
+          if (d.optionValue) {
+            onChange(d.optionValue);
+            setQuery('');
+          }
+        }}
         onChange={(e) => setQuery((e.target as HTMLInputElement).value)}
         placeholder={`Search ${targetLabel}…`}
       >
@@ -573,9 +800,14 @@ function LookupTypeaheadCtl({ col, val, onChange }: {
             <span style={{ color: tokens.colorNeutralForeground3, fontSize: 11 }}>No matches</span>
           </Option>
         )}
-        {rows.map(r => (
+        {rows.map((r) => (
           <Option key={r.id} value={r.id} text={r.name}>
-            <Persona size="extra-small" name={r.name} secondaryText={r.id} avatar={{ color: 'colorful' }} />
+            <Persona
+              size="extra-small"
+              name={r.name}
+              secondaryText={r.id}
+              avatar={{ color: 'colorful' }}
+            />
           </Option>
         ))}
       </Combobox>
@@ -592,7 +824,13 @@ function GuidInputCtl({ val, onChange }: { val: string; onChange: (v: string) =>
       placeholder="00000000-0000-0000-0000-000000000000"
       onChange={(_, d) => onChange(d.value)}
       style={{ fontFamily: tokens.fontFamilyMonospace }}
-      contentAfter={!valid ? <span style={{ color: tokens.colorPaletteRedForeground1, fontSize: 10 }}>invalid GUID</span> : undefined}
+      contentAfter={
+        !valid ? (
+          <span style={{ color: tokens.colorPaletteRedForeground1, fontSize: 10 }}>
+            invalid GUID
+          </span>
+        ) : undefined
+      }
     />
   );
 }
@@ -636,7 +874,7 @@ function TwoValueInput({ rule, op, col, onChange }: ValueInputProps): JSX.Elemen
   // Date types — render two DatePickers (covers Between / NotBetween on
   // a DateTime column, where both PropertyValues are dates).
   if (col?.attributeType === 'DateTime') {
-    const parse = (s: string) => s ? new Date(s) : null;
+    const parse = (s: string) => (s ? new Date(s) : null);
     const isDateOnly = col.format === 'DateOnly';
     const writeISO = (d: Date | null | undefined) => {
       if (!d) return '';
@@ -656,7 +894,7 @@ function TwoValueInput({ rule, op, col, onChange }: ValueInputProps): JSX.Elemen
           onSelectDate={(d) => onChange({ vals: [writeISO(d), b] })}
           placeholder={placeholderA}
           allowTextInput
-          formatDate={(d) => d ? d.toLocaleDateString() : ''}
+          formatDate={(d) => (d ? d.toLocaleDateString() : '')}
         />
         <span style={{ fontSize: 11, color: tokens.colorNeutralForeground3 }}>and</span>
         <DatePicker
@@ -665,7 +903,7 @@ function TwoValueInput({ rule, op, col, onChange }: ValueInputProps): JSX.Elemen
           onSelectDate={(d) => onChange({ vals: [a, writeISO(d)] })}
           placeholder={placeholderB}
           allowTextInput
-          formatDate={(d) => d ? d.toLocaleDateString() : ''}
+          formatDate={(d) => (d ? d.toLocaleDateString() : '')}
         />
       </div>
     );
@@ -693,11 +931,19 @@ function TwoValueInput({ rule, op, col, onChange }: ValueInputProps): JSX.Elemen
   // Text fallback (shouldn't normally hit — Between is restricted to numbers/dates)
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-      <Input size="small" value={a} placeholder={placeholderA}
-        onChange={(_, d) => onChange({ vals: [d.value, b] })} />
+      <Input
+        size="small"
+        value={a}
+        placeholder={placeholderA}
+        onChange={(_, d) => onChange({ vals: [d.value, b] })}
+      />
       <span style={{ fontSize: 11, color: tokens.colorNeutralForeground3 }}>and</span>
-      <Input size="small" value={b} placeholder={placeholderB}
-        onChange={(_, d) => onChange({ vals: [a, d.value] })} />
+      <Input
+        size="small"
+        value={b}
+        placeholder={placeholderB}
+        onChange={(_, d) => onChange({ vals: [a, d.value] })}
+      />
     </div>
   );
 }
@@ -708,19 +954,38 @@ function TwoValueInput({ rule, op, col, onChange }: ValueInputProps): JSX.Elemen
 function ArrayValueInput({ rule, op, col, onChange }: ValueInputProps): JSX.Element {
   const values = rule.values ?? [];
   // Multi-select choice fns — filterable TagPicker over the option set.
-  if (op.kind === 'dv-fn-array' && col && columnOptions(col) && (op.id === 'ContainValues' || op.id === 'DoesNotContainValues')) {
-    return <ChoiceTagPicker col={col} values={values} onChange={(v) => onChange({ values: v })} placeholder="filter & pick option(s)" />;
+  if (
+    op.kind === 'dv-fn-array' &&
+    col &&
+    columnOptions(col) &&
+    (op.id === 'ContainValues' || op.id === 'DoesNotContainValues')
+  ) {
+    return (
+      <ChoiceTagPicker
+        col={col}
+        values={values}
+        onChange={(v) => onChange({ values: v })}
+        placeholder="filter & pick option(s)"
+      />
+    );
   }
   // In / NotIn on Picklist — same TagPicker treatment, single source of truth.
   if (col && columnOptions(col) && (op.id === 'In' || op.id === 'NotIn')) {
-    return <ChoiceTagPicker col={col} values={values} onChange={(v) => onChange({ values: v })} placeholder="filter & pick value(s)" />;
+    return (
+      <ChoiceTagPicker
+        col={col}
+        values={values}
+        onChange={(v) => onChange({ values: v })}
+        placeholder="filter & pick value(s)"
+      />
+    );
   }
   // Generic tag input — free-form scalars (numbers, strings, GUIDs)
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
       <TagGroup
         size="small"
-        onDismiss={(_, d) => onChange({ values: values.filter(v => v !== d.value) })}
+        onDismiss={(_, d) => onChange({ values: values.filter((v) => v !== d.value) })}
       >
         {values.map((v) => (
           <InteractionTag key={v} size="small" shape="circular" appearance="outline" value={v}>
@@ -731,7 +996,7 @@ function ArrayValueInput({ rule, op, col, onChange }: ValueInputProps): JSX.Elem
           </InteractionTag>
         ))}
       </TagGroup>
-      <ArrayAddInput onAdd={v => onChange({ values: [...values, v] })} intValue={!!op.intValue} />
+      <ArrayAddInput onAdd={(v) => onChange({ values: [...values, v] })} intValue={!!op.intValue} />
     </div>
   );
 }
@@ -778,7 +1043,10 @@ function ArrayAddInput({ onAdd, intValue }: { onAdd: (v: string) => void; intVal
 // display label; typing in the input filters by label.
 // ============================================================
 function ChoiceTagPicker({
-  col, values, onChange, placeholder,
+  col,
+  values,
+  onChange,
+  placeholder,
 }: {
   col: ColumnMeta;
   values: string[];
@@ -793,7 +1061,7 @@ function ChoiceTagPicker({
     for (const o of options) m.set(String(o.value), o.label);
     return m;
   }, [options]);
-  const allKeys = useMemo(() => options.map(o => String(o.value)), [options]);
+  const allKeys = useMemo(() => options.map((o) => String(o.value)), [options]);
 
   const children = useTagPickerFilter({
     query,
@@ -803,7 +1071,13 @@ function ChoiceTagPicker({
       <TagPickerOption key={key} value={key} text={labelByKey.get(key) ?? key}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           {labelByKey.get(key) ?? key}
-          <span style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 10, color: tokens.colorNeutralForeground3 }}>
+          <span
+            style={{
+              fontFamily: tokens.fontFamilyMonospace,
+              fontSize: 10,
+              color: tokens.colorNeutralForeground3,
+            }}
+          >
             · {key}
           </span>
         </span>
@@ -828,7 +1102,7 @@ function ChoiceTagPicker({
     >
       <TagPickerControl style={{ minWidth: 220, maxWidth: 480 }}>
         <TagPickerGroup aria-label="Selected values">
-          {values.map(k => (
+          {values.map((k) => (
             <Tag key={k} value={k} shape="rounded" size="small">
               {labelByKey.get(k) ?? k}
             </Tag>
@@ -851,18 +1125,27 @@ function ChoiceTagPicker({
 // ============================================================
 function ColumnRhsPicker({ rule, col, parentTable, onChange }: ValueInputProps): JSX.Element {
   if (!parentTable || !col) {
-    return <Input size="small" value={rule.val ?? ''} disabled placeholder="(column compare unavailable)" />;
+    return (
+      <Input
+        size="small"
+        value={rule.val ?? ''}
+        disabled
+        placeholder="(column compare unavailable)"
+      />
+    );
   }
   const sameType = parentTable.columns.filter(
-    c => c.attributeType === col.attributeType && c.logicalName !== col.logicalName,
+    (c) => c.attributeType === col.attributeType && c.logicalName !== col.logicalName,
   );
-  const cur = sameType.find(c => c.logicalName === rule.val);
+  const cur = sameType.find((c) => c.logicalName === rule.val);
 
   if (sameType.length === 0) {
     return (
       <MessageBar layout="multiline" intent="warning" style={{ padding: '4px 8px' }}>
         <MessageBarBody>
-          No other <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{col.attributeType}</code> columns on this table to compare against. Switch back to <strong>literal</strong>.
+          No other{' '}
+          <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{col.attributeType}</code>{' '}
+          columns on this table to compare against. Switch back to <strong>literal</strong>.
         </MessageBarBody>
       </MessageBar>
     );
@@ -870,7 +1153,15 @@ function ColumnRhsPicker({ rule, col, parentTable, onChange }: ValueInputProps):
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
       <Database20Regular style={{ width: 14, height: 14, color: tokens.colorBrandForeground1 }} />
-      <span style={{ fontSize: 10, color: tokens.colorNeutralForeground3, fontFamily: tokens.fontFamilyMonospace }}>same-row</span>
+      <span
+        style={{
+          fontSize: 10,
+          color: tokens.colorNeutralForeground3,
+          fontFamily: tokens.fontFamilyMonospace,
+        }}
+      >
+        same-row
+      </span>
       <Combobox
         size="small"
         value={cur?.displayName ?? rule.val ?? ''}
@@ -878,11 +1169,17 @@ function ColumnRhsPicker({ rule, col, parentTable, onChange }: ValueInputProps):
         onOptionSelect={(_, d) => d.optionValue && onChange({ val: d.optionValue })}
         placeholder="pick a column"
       >
-        {sameType.map(c => (
+        {sameType.map((c) => (
           <Option key={c.logicalName} value={c.logicalName} text={c.displayName}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {c.displayName}
-              <span style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 10, color: tokens.colorNeutralForeground3 }}>
+              <span
+                style={{
+                  fontFamily: tokens.fontFamilyMonospace,
+                  fontSize: 10,
+                  color: tokens.colorNeutralForeground3,
+                }}
+              >
                 {c.logicalName}
               </span>
             </span>
@@ -897,5 +1194,8 @@ function ColumnRhsPicker({ rule, col, parentTable, onChange }: ValueInputProps):
 // Helpers
 // ============================================================
 const isNumericLike = (c?: ColumnMeta) =>
-  c?.attributeType === 'Integer' || c?.attributeType === 'BigInt' ||
-  c?.attributeType === 'Decimal' || c?.attributeType === 'Double' || c?.attributeType === 'Money';
+  c?.attributeType === 'Integer' ||
+  c?.attributeType === 'BigInt' ||
+  c?.attributeType === 'Decimal' ||
+  c?.attributeType === 'Double' ||
+  c?.attributeType === 'Money';

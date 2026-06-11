@@ -51,7 +51,7 @@ function addPathEntities(
   let current: TableMeta | undefined = table;
   for (let i = 0; i < segs.length - 1; i++) {
     const nav = current?.navigationProperties.find(
-      n => n.name === segs[i] && n.cardinality === 'ManyToOne',
+      (n) => n.name === segs[i] && n.cardinality === 'ManyToOne',
     );
     if (!nav) return;
     out.add(nav.targetEntity);
@@ -74,7 +74,7 @@ function walkFilter(
     } else if (node.type === 'group') {
       walkFilter(node, table, out, alias);
     } else if (node.type === 'lambda') {
-      const nav = table?.navigationProperties.find(n => n.name === node.nav);
+      const nav = table?.navigationProperties.find((n) => n.name === node.nav);
       if (!nav) continue;
       out.add(nav.targetEntity);
       // Inner predicate is scoped to the lambda's target entity.
@@ -90,7 +90,7 @@ function walkExpand(
   out: Set<string>,
 ): void {
   for (const it of items) {
-    const nav = parentTable?.navigationProperties.find(n => n.name === it.nav);
+    const nav = parentTable?.navigationProperties.find((n) => n.name === it.nav);
     if (!nav) continue;
     out.add(nav.targetEntity);
     const target = findTable(nav.targetEntity);
@@ -116,7 +116,8 @@ export function collectReferencedEntities(
   if (input.filter) walkFilter(input.filter, root, out);
   if (input.apply?.prefilter) walkFilter(input.apply.prefilter, root, out);
   if (input.apply?.groupby) for (const g of input.apply.groupby) addPathEntities(root, g, out);
-  if (input.apply?.aggregates) for (const a of input.apply.aggregates) addPathEntities(root, a.col, out);
+  if (input.apply?.aggregates)
+    for (const a of input.apply.aggregates) addPathEntities(root, a.col, out);
   if (input.orderby) for (const o of input.orderby) addPathEntities(root, o.col, out);
   if (input.expand) walkExpand(input.expand, root, out);
 

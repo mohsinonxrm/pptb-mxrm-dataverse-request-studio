@@ -78,14 +78,20 @@ const listeners = new Set<Listener>();
 function emit(next: HostSession) {
   session = next;
   for (const l of listeners) {
-    try { l(session); } catch (e) { console.error('[pptbBridge] listener threw', e); }
+    try {
+      l(session);
+    } catch (e) {
+      console.error('[pptbBridge] listener threw', e);
+    }
   }
 }
 
 // ──────────────────────────────────────────────────────────────
 // Initial fetch + event subscription (only in embedded mode)
 // ──────────────────────────────────────────────────────────────
-async function fetchInitialTheme(api: NonNullable<Window['toolboxAPI']>): Promise<'light' | 'dark'> {
+async function fetchInitialTheme(
+  api: NonNullable<Window['toolboxAPI']>,
+): Promise<'light' | 'dark'> {
   try {
     const t = await api.utils?.getCurrentTheme?.();
     return String(t ?? 'light').toLowerCase() === 'dark' ? 'dark' : 'light';
@@ -96,7 +102,9 @@ async function fetchInitialTheme(api: NonNullable<Window['toolboxAPI']>): Promis
 }
 
 async function fetchInitialConnection(api: NonNullable<Window['toolboxAPI']>): Promise<{
-  connected: boolean; environmentUrl: string; environment: string;
+  connected: boolean;
+  environmentUrl: string;
+  environment: string;
 }> {
   try {
     const c = await api.connections?.getActiveConnection?.();
@@ -229,18 +237,21 @@ function tb(): ToolBoxAPI.API {
 // ── Dataverse host surface ───────────────────────────────────────────────
 export const dvHost = {
   // CRUD
-  create:   (entity: string, body: Record<string, unknown>) => dv().create(entity, body),
+  create: (entity: string, body: Record<string, unknown>) => dv().create(entity, body),
   retrieve: (entity: string, id: string, columns?: string[]) => dv().retrieve(entity, id, columns),
-  update:   (entity: string, id: string, body: Record<string, unknown>) => dv().update(entity, id, body),
-  delete:   (entity: string, id: string) => dv().delete(entity, id),
+  update: (entity: string, id: string, body: Record<string, unknown>) =>
+    dv().update(entity, id, body),
+  delete: (entity: string, id: string) => dv().delete(entity, id),
 
   // Batch
-  createMultiple: (entity: string, records: Record<string, unknown>[]) => dv().createMultiple(entity, records),
-  updateMultiple: (entity: string, records: Record<string, unknown>[]) => dv().updateMultiple(entity, records),
+  createMultiple: (entity: string, records: Record<string, unknown>[]) =>
+    dv().createMultiple(entity, records),
+  updateMultiple: (entity: string, records: Record<string, unknown>[]) =>
+    dv().updateMultiple(entity, records),
 
   // Queries
-  queryData:      (odata: string) => dv().queryData(odata),
-  fetchXmlQuery:  (xml: string) => dv().fetchXmlQuery(xml),
+  queryData: (odata: string) => dv().queryData(odata),
+  fetchXmlQuery: (xml: string) => dv().fetchXmlQuery(xml),
 
   // Actions / Functions
   execute: (req: {
@@ -252,7 +263,7 @@ export const dvHost = {
   }) => dv().execute(req),
 
   // Relationships
-  associate:    (primary: string, id: string, rel: string, target: string, targetId: string) =>
+  associate: (primary: string, id: string, rel: string, target: string, targetId: string) =>
     dv().associate(primary, id, rel, target, targetId),
   disassociate: (primary: string, id: string, rel: string, targetId: string) =>
     dv().disassociate(primary, id, rel, targetId),
@@ -267,15 +278,16 @@ export const dvHost = {
   metadata: {
     getEntity: (logicalName: string, properties?: string[]) =>
       dv().getEntityMetadata(logicalName, true, properties),
-    getAllEntities: (properties?: string[]) =>
-      dv().getAllEntitiesMetadata(properties),
+    getAllEntities: (properties?: string[]) => dv().getAllEntitiesMetadata(properties),
     /**
      * Strongly-typed related metadata reader. The return type narrows to
      * either a single record or a collection based on the path shape per
      * @pptb/types' EntityRelatedMetadataResponse<P> type.
      */
     getRelated: <P extends DataverseAPI.EntityRelatedMetadataPath>(
-      logicalName: string, path: P, properties?: string[],
+      logicalName: string,
+      path: P,
+      properties?: string[],
     ) => dv().getEntityRelatedMetadata(logicalName, path, properties),
     /**
      * For type-cast OData queries that need $expand or $select-with-cast
@@ -301,21 +313,24 @@ export const dvHost = {
 export const tbHost = {
   fileSystem: {
     /** Native OS save dialog. `content` is `string | Buffer | Uint8Array`. */
-    saveFile: (defaultPath: string, content: string | Uint8Array, filters?: ToolBoxAPI.FileDialogFilter[]) =>
-      tb().fileSystem.saveFile(defaultPath, content, filters),
-    readText:   (path: string) => tb().fileSystem.readText(path),
+    saveFile: (
+      defaultPath: string,
+      content: string | Uint8Array,
+      filters?: ToolBoxAPI.FileDialogFilter[],
+    ) => tb().fileSystem.saveFile(defaultPath, content, filters),
+    readText: (path: string) => tb().fileSystem.readText(path),
     readBinary: (path: string) => tb().fileSystem.readBinary(path),
-    exists:     (path: string) => tb().fileSystem.exists(path),
+    exists: (path: string) => tb().fileSystem.exists(path),
     selectPath: (opts?: ToolBoxAPI.SelectPathOptions) => tb().fileSystem.selectPath(opts),
   },
   utils: {
-    copyToClipboard:  (text: string) => tb().utils.copyToClipboard(text),
+    copyToClipboard: (text: string) => tb().utils.copyToClipboard(text),
     showNotification: (opts: ToolBoxAPI.NotificationOptions) => tb().utils.showNotification(opts),
   },
   settings: {
     /** Strongly-typed get. T is the caller's expected shape; falls back to undefined. */
-    get:    <T>(key: string) => tb().settings.get(key) as Promise<T | undefined>,
-    set:    <T>(key: string, value: T) => tb().settings.set(key, value),
+    get: <T>(key: string) => tb().settings.get(key) as Promise<T | undefined>,
+    set: <T>(key: string, value: T) => tb().settings.set(key, value),
     getAll: <T extends Record<string, unknown>>() => tb().settings.getAll() as Promise<T>,
   },
 };
@@ -337,7 +352,10 @@ export async function copyToClipboardSafe(text: string): Promise<void> {
       await window.toolboxAPI.utils.copyToClipboard(text);
       return;
     } catch (e) {
-      console.warn('[pptbBridge] toolboxAPI.utils.copyToClipboard failed, falling back to navigator.clipboard', e);
+      console.warn(
+        '[pptbBridge] toolboxAPI.utils.copyToClipboard failed, falling back to navigator.clipboard',
+        e,
+      );
     }
   }
   if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -360,7 +378,10 @@ export async function saveFileSafe(
     try {
       return await window.toolboxAPI.fileSystem.saveFile(defaultPath, content, filters);
     } catch (e) {
-      console.warn('[pptbBridge] toolboxAPI.fileSystem.saveFile failed, falling back to browser download', e);
+      console.warn(
+        '[pptbBridge] toolboxAPI.fileSystem.saveFile failed, falling back to browser download',
+        e,
+      );
     }
   }
   // Browser fallback — Blob + anchor download
@@ -368,12 +389,18 @@ export async function saveFileSafe(
     const mimeFromExt = (path: string): string => {
       const ext = path.toLowerCase().split('.').pop() ?? '';
       switch (ext) {
-        case 'xlsx': return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-        case 'csv':  return 'text/csv';
-        case 'json': return 'application/json';
-        case 'xml':  return 'application/xml';
-        case 'txt':  return 'text/plain';
-        default:     return 'application/octet-stream';
+        case 'xlsx':
+          return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        case 'csv':
+          return 'text/csv';
+        case 'json':
+          return 'application/json';
+        case 'xml':
+          return 'application/xml';
+        case 'txt':
+          return 'text/plain';
+        default:
+          return 'application/octet-stream';
       }
     };
     // Cast Uint8Array to BlobPart — BlobPart's typing is overly narrow in

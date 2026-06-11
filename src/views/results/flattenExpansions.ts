@@ -51,7 +51,7 @@ const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   v != null && typeof v === 'object' && !Array.isArray(v);
 
 const isObjectArray = (v: unknown): v is Array<Record<string, unknown>> =>
-  Array.isArray(v) && v.every(x => x != null && typeof x === 'object' && !Array.isArray(x));
+  Array.isArray(v) && v.every((x) => x != null && typeof x === 'object' && !Array.isArray(x));
 
 /** Lift every key in `row` under a `<prefix>.` namespace. Annotation
  *  suffix `@…` is preserved on the column it belongs to. */
@@ -59,9 +59,7 @@ function prefixKeys(row: Record<string, unknown>, prefix: string): Record<string
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(row)) {
     const at = k.indexOf('@');
-    const flatKey = at >= 0
-      ? `${prefix}.${k.slice(0, at)}${k.slice(at)}`
-      : `${prefix}.${k}`;
+    const flatKey = at >= 0 ? `${prefix}.${k.slice(0, at)}${k.slice(at)}` : `${prefix}.${k}`;
     out[flatKey] = v;
   }
   return out;
@@ -75,9 +73,7 @@ function flattenSingleValuedInto(
 ): void {
   for (const [k, v] of Object.entries(row)) {
     const at = k.indexOf('@');
-    const flatKey = at >= 0
-      ? `${prefix}.${k.slice(0, at)}${k.slice(at)}`
-      : `${prefix}.${k}`;
+    const flatKey = at >= 0 ? `${prefix}.${k.slice(0, at)}${k.slice(at)}` : `${prefix}.${k}`;
     if (isPlainObject(v)) {
       // Further nested N:1 (depth ≥ 2) — dot-flatten again.
       flattenSingleValuedInto(v, flatKey, out);
@@ -122,8 +118,8 @@ export function flattenRow(row: Record<string, unknown>): Array<Record<string, u
     if (isObjectArray(value)) {
       // 1:N / N:N expand — recursively flatten each item (so nested
       // collections also fan out), then prefix every key by the nav name.
-      const itemRows = value.flatMap(it => flattenRow(it));
-      const prefixed = itemRows.map(itr => prefixKeys(itr, key));
+      const itemRows = value.flatMap((it) => flattenRow(it));
+      const prefixed = itemRows.map((itr) => prefixKeys(itr, key));
       collections.push({
         prefix: key,
         rows: prefixed,
@@ -157,12 +153,12 @@ export function flattenRow(row: Record<string, unknown>): Array<Record<string, u
       // Dataverse paginated and we got "no items returned yet, but more
       // exist" — the cell renderer can still show that.
       if (c.nextLink != null) {
-        combined = combined.map(b => ({ ...b, [`${c.prefix}@odata.nextLink`]: c.nextLink }));
+        combined = combined.map((b) => ({ ...b, [`${c.prefix}@odata.nextLink`]: c.nextLink }));
       }
       continue;
     }
-    combined = combined.flatMap(b =>
-      c.rows.map(child => ({
+    combined = combined.flatMap((b) =>
+      c.rows.map((child) => ({
         ...b,
         ...child,
         // Sibling nextLink marker for the child cell renderer.
@@ -177,9 +173,7 @@ export function flattenRow(row: Record<string, unknown>): Array<Record<string, u
 }
 
 /** Flatten every server row, concatenating the multi-row outputs. */
-export function flattenRows(
-  rows: Array<Record<string, unknown>>,
-): Array<Record<string, unknown>> {
+export function flattenRows(rows: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
   // Re-stamp __rowKey globally so it's unique across the whole grid, not
   // just within one parent's expansion.
   const out: Array<Record<string, unknown>> = [];

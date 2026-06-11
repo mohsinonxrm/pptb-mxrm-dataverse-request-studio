@@ -22,13 +22,23 @@
 //   Body1 / Caption1                                               (typography)
 
 import {
-  Accordion, AccordionItem, AccordionHeader, AccordionPanel,
-  Badge, Body1, Caption1, Persona, tokens,
+  Accordion,
+  AccordionItem,
+  AccordionHeader,
+  AccordionPanel,
+  Badge,
+  Body1,
+  Caption1,
+  Persona,
+  tokens,
   CounterBadge,
 } from '@fluentui/react-components';
 import {
-  CheckmarkCircle20Filled, LinkSquare16Regular,
-  PuzzlePiece16Regular, BranchFork16Regular, BranchFork20Regular,
+  CheckmarkCircle20Filled,
+  LinkSquare16Regular,
+  PuzzlePiece16Regular,
+  BranchFork16Regular,
+  BranchFork20Regular,
 } from '@fluentui/react-icons';
 import { findTable } from '../../mock/metadata';
 import {
@@ -57,9 +67,9 @@ export interface RecordDetailCardProps {
   showHeadline?: boolean;
 }
 
-const DEFAULT_OPEN_OBJECTS_UP_TO_LEVEL = 1;   // N:1 cards open through level 1
+const DEFAULT_OPEN_OBJECTS_UP_TO_LEVEL = 1; // N:1 cards open through level 1
 const DEFAULT_OPEN_COLLECTIONS_UP_TO_LEVEL = 0; // 1:N grids open only at root
-const COLLECTION_AUTO_COLLAPSE_THRESHOLD = 5;   // collapse 1:N if more than N rows
+const COLLECTION_AUTO_COLLAPSE_THRESHOLD = 5; // collapse 1:N if more than N rows
 
 export function RecordDetailCard({
   record,
@@ -104,12 +114,12 @@ export function RecordDetailCard({
           collapsible
           defaultOpenItems={
             level <= DEFAULT_OPEN_OBJECTS_UP_TO_LEVEL
-              ? part.navObjects.map(n => `obj-${n.key}`)
+              ? part.navObjects.map((n) => `obj-${n.key}`)
               : []
           }
           style={{ marginTop: 16 }}
         >
-          {part.navObjects.map(n => (
+          {part.navObjects.map((n) => (
             <AccordionItem key={`obj-${n.key}`} value={`obj-${n.key}`}>
               <AccordionHeader expandIconPosition="end" icon={<LinkSquare16Regular />}>
                 <NavHeader
@@ -120,11 +130,13 @@ export function RecordDetailCard({
                 />
               </AccordionHeader>
               <AccordionPanel>
-                <div style={{
-                  marginLeft: 8,
-                  paddingLeft: 12,
-                  borderLeft: `2px solid ${tokens.colorNeutralStroke3}`,
-                }}>
+                <div
+                  style={{
+                    marginLeft: 8,
+                    paddingLeft: 12,
+                    borderLeft: `2px solid ${tokens.colorNeutralStroke3}`,
+                  }}
+                >
                   <RecordDetailCard
                     record={n.value}
                     entityLogical={n.targetEntityLogical ?? ''}
@@ -146,13 +158,13 @@ export function RecordDetailCard({
           defaultOpenItems={
             level <= DEFAULT_OPEN_COLLECTIONS_UP_TO_LEVEL
               ? part.navCollections
-                  .filter(n => n.value.length <= COLLECTION_AUTO_COLLAPSE_THRESHOLD)
-                  .map(n => `col-${n.key}`)
+                  .filter((n) => n.value.length <= COLLECTION_AUTO_COLLAPSE_THRESHOLD)
+                  .map((n) => `col-${n.key}`)
               : []
           }
           style={{ marginTop: 12 }}
         >
-          {part.navCollections.map(n => (
+          {part.navCollections.map((n) => (
             <AccordionItem key={`col-${n.key}`} value={`col-${n.key}`}>
               <AccordionHeader expandIconPosition="end" icon={<BranchFork16Regular />}>
                 <NavHeader
@@ -164,13 +176,17 @@ export function RecordDetailCard({
                 />
               </AccordionHeader>
               <AccordionPanel>
-                <div style={{
-                  marginLeft: 8,
-                  paddingLeft: 12,
-                  borderLeft: `2px solid ${tokens.colorNeutralStroke3}`,
-                }}>
+                <div
+                  style={{
+                    marginLeft: 8,
+                    paddingLeft: 12,
+                    borderLeft: `2px solid ${tokens.colorNeutralStroke3}`,
+                  }}
+                >
                   {n.value.length === 0 ? (
-                    <Caption1 style={{ color: tokens.colorNeutralForeground3, fontStyle: 'italic' }}>
+                    <Caption1
+                      style={{ color: tokens.colorNeutralForeground3, fontStyle: 'italic' }}
+                    >
                       (no related rows)
                     </Caption1>
                   ) : (
@@ -191,11 +207,13 @@ export function RecordDetailCard({
           knows "this WAS queried, came back unset" rather than "absent" */}
       {part.navNulls.length > 0 && (
         <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {part.navNulls.map(n => (
+          {part.navNulls.map((n) => (
             <div
               key={`null-${n.key}`}
               style={{
-                display: 'flex', alignItems: 'center', gap: 8,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
                 padding: '6px 10px',
                 border: `1px dashed ${tokens.colorNeutralStroke2}`,
                 borderRadius: tokens.borderRadiusMedium,
@@ -239,7 +257,7 @@ function ScalarGrid({ scalars }: { scalars: PartitionedScalar[] }) {
         alignItems: 'baseline',
       }}
     >
-      {scalars.map(s => (
+      {scalars.map((s) => (
         <ScalarRow key={s.key} s={s} />
       ))}
     </div>
@@ -315,8 +333,11 @@ function ScalarValue({ s }: { s: PartitionedScalar }) {
   // recognizable at a glance.
   const raw = s.value;
   const isStringy = typeof raw === 'string';
-  const looksLikeGuid = isStringy
-    && /^[{(]?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}[)}]?$/.test(raw as string);
+  const looksLikeGuid =
+    isStringy &&
+    /^[{(]?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}[)}]?$/.test(
+      raw as string,
+    );
   return (
     <span
       style={{
@@ -342,7 +363,11 @@ function ScalarValue({ s }: { s: PartitionedScalar }) {
 // ── Accordion header content ─────────────────────────────────────────
 
 function NavHeader({
-  navKey, targetDisplay, targetLogical, cardinality, count,
+  navKey,
+  targetDisplay,
+  targetLogical,
+  cardinality,
+  count,
 }: {
   navKey: string;
   targetDisplay?: string;
@@ -351,14 +376,19 @@ function NavHeader({
   count?: number;
 }) {
   const cardLabel =
-    cardinality === 'OneToMany'  ? '1:N' :
-    cardinality === 'ManyToOne'  ? 'N:1' :
-    cardinality === 'ManyToMany' ? 'N:N' :
-    null;
+    cardinality === 'OneToMany'
+      ? '1:N'
+      : cardinality === 'ManyToOne'
+        ? 'N:1'
+        : cardinality === 'ManyToMany'
+          ? 'N:N'
+          : null;
   const cardColor: 'brand' | 'informative' | 'subtle' =
-    cardinality === 'ManyToOne' ? 'informative' :
-    cardinality === 'OneToMany' || cardinality === 'ManyToMany' ? 'brand' :
-    'subtle';
+    cardinality === 'ManyToOne'
+      ? 'informative'
+      : cardinality === 'OneToMany' || cardinality === 'ManyToMany'
+        ? 'brand'
+        : 'subtle';
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
       <span style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: tokens.fontSizeBase300 }}>

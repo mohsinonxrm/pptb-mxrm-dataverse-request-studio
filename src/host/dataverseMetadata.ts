@@ -12,9 +12,7 @@
 
 import * as pptbClient from './pptbClient';
 import { metadataCache } from './cache';
-import type {
-  EntityMetadata, AttributeMetadata, RelationshipMetadata,
-} from './pptbClient';
+import type { EntityMetadata, AttributeMetadata, RelationshipMetadata } from './pptbClient';
 
 /** All entities — always fetched with `advancedFindOnly=false`. Callers
  *  apply the AF filter at the display layer so the toggle is instant. */
@@ -115,7 +113,10 @@ export async function loadAttributesByTypeCast(
   if (inFlight) return inFlight;
 
   const promise = pptbClient.getAttributesByTypeCast(
-    entityLogicalName, typeCast, selectProps, expandProps,
+    entityLogicalName,
+    typeCast,
+    selectProps,
+    expandProps,
   );
   metadataCache.setAttributesPromise(cacheKey, promise);
   try {

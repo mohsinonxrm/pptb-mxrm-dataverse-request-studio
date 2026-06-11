@@ -18,12 +18,21 @@
 
 import { useMemo, useState } from 'react';
 import {
-  Caption1, Badge, Tooltip, Button, Spinner,
-  MessageBar, MessageBarBody, MessageBarTitle,
+  Caption1,
+  Badge,
+  Tooltip,
+  Button,
+  Spinner,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
   tokens,
 } from '@fluentui/react-components';
 import {
-  BranchFork20Filled, ArrowSwap20Regular, Eye20Regular, EyeOff20Regular,
+  BranchFork20Filled,
+  ArrowSwap20Regular,
+  Eye20Regular,
+  EyeOff20Regular,
   ChevronRight20Filled,
 } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
@@ -34,10 +43,17 @@ import type { CreateFieldValue, LookupFieldValue } from '../state/writeState';
 // Columns we exclude from the diff (system / binary)
 // ──────────────────────────────────────────────────────────────
 const HIDDEN_FROM_DIFF = new Set([
-  'createdon', 'modifiedon', 'createdby', 'modifiedby',
-  'createdonbehalfby', 'modifiedonbehalfby',
-  'versionnumber', 'importsequencenumber',
-  'overriddencreatedon', 'utcconversiontimezonecode', 'timezoneruleversionnumber',
+  'createdon',
+  'modifiedon',
+  'createdby',
+  'modifiedby',
+  'createdonbehalfby',
+  'modifiedonbehalfby',
+  'versionnumber',
+  'importsequencenumber',
+  'overriddencreatedon',
+  'utcconversiontimezonecode',
+  'timezoneruleversionnumber',
 ]);
 
 interface DiffRow {
@@ -64,7 +80,12 @@ export interface UpdateDiffPaneProps {
 }
 
 export function UpdateDiffPane({
-  table, recordId, fieldValues, original, originalLoading, onDrillColumn,
+  table,
+  recordId,
+  fieldValues,
+  original,
+  originalLoading,
+  onDrillColumn,
 }: UpdateDiffPaneProps) {
   const tbl = findTable(table);
   const [showUnchanged, setShowUnchanged] = useState(false);
@@ -85,14 +106,16 @@ export function UpdateDiffPane({
     return out;
   }, [tbl, original, fieldValues]);
 
-  const changedCount = rows.filter(r => r.changed).length;
+  const changedCount = rows.filter((r) => r.changed).length;
   const unchangedCount = rows.length - changedCount;
-  const displayRows = showUnchanged ? rows : rows.filter(r => r.changed);
+  const displayRows = showUnchanged ? rows : rows.filter((r) => r.changed);
 
   if (!tbl) {
     return (
       <MessageBar layout="multiline" intent="error">
-        <MessageBarBody>Unknown table <code>{table}</code>.</MessageBarBody>
+        <MessageBarBody>
+          Unknown table <code>{table}</code>.
+        </MessageBarBody>
       </MessageBar>
     );
   }
@@ -103,28 +126,34 @@ export function UpdateDiffPane({
     //   3. Fetch returned nothing   → record gone or no read access
     return (
       <div>
-        <PaneHead icon={BranchFork20Filled} title="Diff" sub="Pick a record to compare against." group="write" />
+        <PaneHead
+          icon={BranchFork20Filled}
+          title="Diff"
+          sub="Pick a record to compare against."
+          group="write"
+        />
         {!recordId ? (
           <MessageBar layout="multiline" intent="info" style={{ maxWidth: 720 }}>
             <MessageBarBody>
-              No record selected — switch to the <strong>Target</strong> pane and pick one. The diff compares
-              your edits against the record&apos;s current persisted state.
+              No record selected — switch to the <strong>Target</strong> pane and pick one. The diff
+              compares your edits against the record&apos;s current persisted state.
             </MessageBarBody>
           </MessageBar>
         ) : originalLoading ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0' }}>
             <Spinner size="small" />
             <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-              Loading the current record from Dataverse — this anchors the &ldquo;before&rdquo; column of the diff.
+              Loading the current record from Dataverse — this anchors the &ldquo;before&rdquo;
+              column of the diff.
             </Caption1>
           </div>
         ) : (
           <MessageBar layout="multiline" intent="warning" style={{ maxWidth: 720 }}>
             <MessageBarBody>
               <MessageBarTitle>Couldn&apos;t load the record.</MessageBarTitle>
-              GUID <code>{recordId}</code> didn&apos;t resolve in <code>{table}</code>. The record may have been
-              deleted, or you might not have read access. You can still author the PATCH — the diff just won&apos;t
-              show a &ldquo;before&rdquo; column.
+              GUID <code>{recordId}</code> didn&apos;t resolve in <code>{table}</code>. The record
+              may have been deleted, or you might not have read access. You can still author the
+              PATCH — the diff just won&apos;t show a &ldquo;before&rdquo; column.
             </MessageBarBody>
           </MessageBar>
         )}
@@ -140,18 +169,29 @@ export function UpdateDiffPane({
         icon={BranchFork20Filled}
         title={primaryName || '(unnamed record)'}
         sub={
-          changedCount > 0
-            ? <>{changedCount} field{changedCount === 1 ? '' : 's'} changed · {unchangedCount} unchanged</>
-            : <>No changes yet — edit fields in the <strong>Field set</strong> pane to populate the diff.</>
+          changedCount > 0 ? (
+            <>
+              {changedCount} field{changedCount === 1 ? '' : 's'} changed · {unchangedCount}{' '}
+              unchanged
+            </>
+          ) : (
+            <>
+              No changes yet — edit fields in the <strong>Field set</strong> pane to populate the
+              diff.
+            </>
+          )
         }
         group="write"
       >
-        <Tooltip content={showUnchanged ? 'Hiding unchanged rows' : 'Showing unchanged rows'} relationship="description">
+        <Tooltip
+          content={showUnchanged ? 'Hiding unchanged rows' : 'Showing unchanged rows'}
+          relationship="description"
+        >
           <Button
             size="small"
             appearance={showUnchanged ? 'primary' : 'outline'}
             icon={showUnchanged ? <Eye20Regular /> : <EyeOff20Regular />}
-            onClick={() => setShowUnchanged(v => !v)}
+            onClick={() => setShowUnchanged((v) => !v)}
           >
             {showUnchanged ? 'All fields' : 'Changes only'}
           </Button>
@@ -165,8 +205,9 @@ export function UpdateDiffPane({
         <MessageBar layout="multiline" intent="info" style={{ marginBottom: 14 }}>
           <MessageBarBody>
             <MessageBarTitle>No diff to render.</MessageBarTitle>
-            PATCH sends only the fields in the body — edit one or more columns in the <strong>Field set</strong> pane to see the before → after diff.
-            {' '}You can also drill into any column for a single-property <code>PUT</code> instead.
+            PATCH sends only the fields in the body — edit one or more columns in the{' '}
+            <strong>Field set</strong> pane to see the before → after diff. You can also drill into
+            any column for a single-property <code>PUT</code> instead.
           </MessageBarBody>
         </MessageBar>
       )}
@@ -185,14 +226,22 @@ export function UpdateDiffPane({
           <tbody>
             {displayRows.length === 0 && (
               <tr>
-                <td colSpan={5} style={{ padding: '24px 8px', textAlign: 'center', color: tokens.colorNeutralForeground3, fontStyle: 'italic' }}>
+                <td
+                  colSpan={5}
+                  style={{
+                    padding: '24px 8px',
+                    textAlign: 'center',
+                    color: tokens.colorNeutralForeground3,
+                    fontStyle: 'italic',
+                  }}
+                >
                   {showUnchanged
                     ? 'No fields on this record (somehow).'
                     : 'No changes — toggle "All fields" to see the unchanged rows.'}
                 </td>
               </tr>
             )}
-            {displayRows.map(r => (
+            {displayRows.map((r) => (
               <DiffRowView
                 key={r.col.logicalName}
                 row={r}
@@ -214,11 +263,19 @@ function DiffRowView({ row, onDrill }: { row: DiffRow; onDrill: () => void }) {
     <tr style={fadeStyle}>
       <Td>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 12, color: tokens.colorNeutralForeground1, fontWeight: 500 }}>
+          <span
+            style={{
+              fontFamily: tokens.fontFamilyMonospace,
+              fontSize: 12,
+              color: tokens.colorNeutralForeground1,
+              fontWeight: 500,
+            }}
+          >
             {col.logicalName}
           </span>
           <Caption1 style={{ color: tokens.colorNeutralForeground3, fontSize: 10 }}>
-            {col.displayName} · <span style={{ color: tokens.colorBrandForeground2 }}>{col.attributeType}</span>
+            {col.displayName} ·{' '}
+            <span style={{ color: tokens.colorBrandForeground2 }}>{col.attributeType}</span>
           </Caption1>
         </div>
       </Td>
@@ -226,10 +283,13 @@ function DiffRowView({ row, onDrill }: { row: DiffRow; onDrill: () => void }) {
         <ValueCell col={col} value={before} faded={!changed} />
       </Td>
       <Td>
-        <span style={{
-          color: changed ? tokens.colorBrandForeground1 : tokens.colorNeutralForeground3,
-          fontSize: 18, fontWeight: 700,
-        }}>
+        <span
+          style={{
+            color: changed ? tokens.colorBrandForeground1 : tokens.colorNeutralForeground3,
+            fontSize: 18,
+            fontWeight: 700,
+          }}
+        >
           {changed ? '→' : '='}
         </span>
       </Td>
@@ -256,23 +316,35 @@ function DiffRowView({ row, onDrill }: { row: DiffRow; onDrill: () => void }) {
 // ──────────────────────────────────────────────────────────────
 // Header/body cells + value formatting
 // ──────────────────────────────────────────────────────────────
-function Th({ children, style, tone }: { children: React.ReactNode; style?: React.CSSProperties; tone?: 'before' | 'after' }) {
+function Th({
+  children,
+  style,
+  tone,
+}: {
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+  tone?: 'before' | 'after';
+}) {
   const accent =
-    tone === 'before' ? { background: 'rgba(125,125,125,.06)' } :
-    tone === 'after'  ? { background: 'rgba(31,127,56,.08)', color: tokens.colorPaletteGreenForeground1 } :
-    {};
+    tone === 'before'
+      ? { background: 'rgba(125,125,125,.06)' }
+      : tone === 'after'
+        ? { background: 'rgba(31,127,56,.08)', color: tokens.colorPaletteGreenForeground1 }
+        : {};
   return (
-    <th style={{
-      textAlign: 'left',
-      padding: '8px 10px',
-      fontSize: 11,
-      fontWeight: 600,
-      color: tokens.colorNeutralForeground2,
-      borderBottom: `2px solid ${tokens.colorNeutralStroke2}`,
-      whiteSpace: 'nowrap',
-      ...accent,
-      ...style,
-    }}>
+    <th
+      style={{
+        textAlign: 'left',
+        padding: '8px 10px',
+        fontSize: 11,
+        fontWeight: 600,
+        color: tokens.colorNeutralForeground2,
+        borderBottom: `2px solid ${tokens.colorNeutralStroke2}`,
+        whiteSpace: 'nowrap',
+        ...accent,
+        ...style,
+      }}
+    >
       {children}
     </th>
   );
@@ -280,36 +352,61 @@ function Th({ children, style, tone }: { children: React.ReactNode; style?: Reac
 
 function Td({ children, tone }: { children: React.ReactNode; tone?: 'before' | 'after' }) {
   const accent =
-    tone === 'before' ? { background: 'rgba(125,125,125,.025)' } :
-    tone === 'after'  ? { background: 'rgba(31,127,56,.04)', borderLeft: `2px solid ${tokens.colorPaletteGreenBorderActive}` } :
-    {};
+    tone === 'before'
+      ? { background: 'rgba(125,125,125,.025)' }
+      : tone === 'after'
+        ? {
+            background: 'rgba(31,127,56,.04)',
+            borderLeft: `2px solid ${tokens.colorPaletteGreenBorderActive}`,
+          }
+        : {};
   return (
-    <td style={{
-      padding: '8px 10px',
-      verticalAlign: 'top',
-      borderBottom: `1px solid ${tokens.colorNeutralStroke3}`,
-      fontSize: 12,
-      ...accent,
-    }}>
+    <td
+      style={{
+        padding: '8px 10px',
+        verticalAlign: 'top',
+        borderBottom: `1px solid ${tokens.colorNeutralStroke3}`,
+        fontSize: 12,
+        ...accent,
+      }}
+    >
       {children}
     </td>
   );
 }
 
-function ValueCell({ col, value, faded, highlight }: { col: ColumnMeta; value: unknown; faded?: boolean; highlight?: boolean }) {
+function ValueCell({
+  col,
+  value,
+  faded,
+  highlight,
+}: {
+  col: ColumnMeta;
+  value: unknown;
+  faded?: boolean;
+  highlight?: boolean;
+}) {
   if (value == null || value === '') {
-    return <span style={{ color: tokens.colorNeutralForeground3, fontStyle: 'italic', fontSize: 11 }}>(empty)</span>;
+    return (
+      <span style={{ color: tokens.colorNeutralForeground3, fontStyle: 'italic', fontSize: 11 }}>
+        (empty)
+      </span>
+    );
   }
   return (
-    <span style={{
-      fontFamily: col.attributeType === 'Uniqueidentifier' || isLookupLike(col)
-        ? tokens.fontFamilyMonospace : tokens.fontFamilyBase,
-      fontSize: 12,
-      color: highlight ? tokens.colorPaletteGreenForeground1 : tokens.colorNeutralForeground1,
-      fontWeight: highlight ? 600 : 400,
-      opacity: faded && !highlight ? 0.7 : 1,
-      wordBreak: 'break-word',
-    }}>
+    <span
+      style={{
+        fontFamily:
+          col.attributeType === 'Uniqueidentifier' || isLookupLike(col)
+            ? tokens.fontFamilyMonospace
+            : tokens.fontFamilyBase,
+        fontSize: 12,
+        color: highlight ? tokens.colorPaletteGreenForeground1 : tokens.colorNeutralForeground1,
+        fontWeight: highlight ? 600 : 400,
+        opacity: faded && !highlight ? 0.7 : 1,
+        wordBreak: 'break-word',
+      }}
+    >
       {formatValue(col, value)}
     </span>
   );
@@ -318,7 +415,9 @@ function ValueCell({ col, value, faded, highlight }: { col: ColumnMeta; value: u
 function formatValue(col: ColumnMeta, value: unknown): string {
   if (value == null || value === '') return '(empty)';
   if (col.attributeType === 'Boolean') {
-    return value === true || value === '1' || value === 1 ? col.trueOption.label : col.falseOption.label;
+    return value === true || value === '1' || value === 1
+      ? col.trueOption.label
+      : col.falseOption.label;
   }
   if (isLookupLike(col)) {
     if (typeof value === 'object' && value !== null && 'id' in value) {
@@ -331,27 +430,33 @@ function formatValue(col: ColumnMeta, value: unknown): string {
   if (opts) {
     const n = Number(value);
     if (Number.isFinite(n)) {
-      const o = opts.find(x => x.value === n);
+      const o = opts.find((x) => x.value === n);
       if (o) return `${o.label} · ${n}`;
     }
     if (col.attributeType === 'MultiSelectPicklist') {
       if (Array.isArray(value)) {
-        return value.map(v => opts.find(o => o.value === v)?.label ?? String(v)).join(', ');
+        return value.map((v) => opts.find((o) => o.value === v)?.label ?? String(v)).join(', ');
       }
       if (typeof value === 'string') {
-        return value.split(',').map(v => opts.find(o => String(o.value) === v.trim())?.label ?? v).join(', ');
+        return value
+          .split(',')
+          .map((v) => opts.find((o) => String(o.value) === v.trim())?.label ?? v)
+          .join(', ');
       }
     }
   }
   if (col.attributeType === 'Money') {
     const n = Number(value);
-    if (Number.isFinite(n)) return n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
+    if (Number.isFinite(n))
+      return n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
   }
   if (col.attributeType === 'DateTime' && typeof value === 'string') {
     try {
       const d = new Date(value);
       if (Number.isFinite(d.getTime())) return d.toLocaleString();
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
   }
   return String(value);
 }

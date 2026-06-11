@@ -19,14 +19,20 @@ export interface LookupRow {
   name: string;
 }
 
-interface CacheKey { entity: string; query: string }
+interface CacheKey {
+  entity: string;
+  query: string;
+}
 const __cache = new Map<string, LookupRow[]>();
 const cacheKey = (k: CacheKey): string => `${k.entity}::${k.query.toLowerCase()}`;
 
 const DEBOUNCE_MS = 250;
 const PAGE = 50;
 
-export function useLookupRecords(targetEntity: string | null | undefined, query: string): {
+export function useLookupRecords(
+  targetEntity: string | null | undefined,
+  query: string,
+): {
   rows: LookupRow[];
   loading: boolean;
   error: string | null;
@@ -37,12 +43,20 @@ export function useLookupRecords(targetEntity: string | null | undefined, query:
   const lastReq = useRef(0);
 
   useEffect(() => {
-    if (!targetEntity) { setRows([]); setError(null); return; }
+    if (!targetEntity) {
+      setRows([]);
+      setError(null);
+      return;
+    }
 
     // Cache hit → instant.
     const key = cacheKey({ entity: targetEntity, query });
     const cached = __cache.get(key);
-    if (cached) { setRows(cached); setError(null); return; }
+    if (cached) {
+      setRows(cached);
+      setError(null);
+      return;
+    }
 
     // Ensure target metadata is loaded — we need primaryKey/primaryName.
     let cancelled = false;
@@ -52,7 +66,7 @@ export function useLookupRecords(targetEntity: string | null | undefined, query:
 
     const timer = setTimeout(async () => {
       try {
-        const tbl = findTable(targetEntity) ?? await metadata.getTable(targetEntity);
+        const tbl = findTable(targetEntity) ?? (await metadata.getTable(targetEntity));
         if (cancelled || myReq !== lastReq.current) return;
         if (!tbl) {
           setError(`Couldn't load metadata for "${targetEntity}".`);
@@ -75,7 +89,7 @@ export function useLookupRecords(targetEntity: string | null | undefined, query:
         const result = await window.dataverseAPI.queryData(queryUrl);
         if (cancelled || myReq !== lastReq.current) return;
         const list = (result.value ?? []) as Record<string, unknown>[];
-        const mapped: LookupRow[] = list.map(r => ({
+        const mapped: LookupRow[] = list.map((r) => ({
           id: String(r[tbl.primaryKey] ?? ''),
           name: String(r[tbl.primaryName] ?? r[tbl.primaryKey] ?? ''),
         }));
@@ -90,7 +104,10 @@ export function useLookupRecords(targetEntity: string | null | undefined, query:
       }
     }, DEBOUNCE_MS);
 
-    return () => { cancelled = true; clearTimeout(timer); };
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [targetEntity, query]);
 
   return { rows, loading, error };

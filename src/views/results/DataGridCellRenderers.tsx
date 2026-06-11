@@ -10,9 +10,16 @@
 
 import { Switch, Badge, Label, makeStyles, tokens } from '@fluentui/react-components';
 import type {
-  ColumnMeta, BooleanColumnMeta, MoneyColumnMeta, DecimalColumnMeta,
-  DoubleColumnMeta, DateTimeColumnMeta, PicklistColumnMeta, StatusColumnMeta,
-  StateColumnMeta, MultiSelectPicklistColumnMeta,
+  ColumnMeta,
+  BooleanColumnMeta,
+  MoneyColumnMeta,
+  DecimalColumnMeta,
+  DoubleColumnMeta,
+  DateTimeColumnMeta,
+  PicklistColumnMeta,
+  StatusColumnMeta,
+  StateColumnMeta,
+  MultiSelectPicklistColumnMeta,
 } from '../../mock/metadata';
 
 const useStyles = makeStyles({
@@ -80,15 +87,19 @@ const EmptyDash = () => {
 
 /** Boolean → disabled Switch + label. Formatted value preferred for the label. */
 function BooleanCellRenderer({
-  value, formattedValue, col,
-}: { value: unknown; formattedValue?: unknown; col?: BooleanColumnMeta }) {
+  value,
+  formattedValue,
+  col,
+}: {
+  value: unknown;
+  formattedValue?: unknown;
+  col?: BooleanColumnMeta;
+}) {
   const s = useStyles();
   const checked = value === true || value === 1 || value === '1' || value === 'true';
   const label =
     (typeof formattedValue === 'string' && formattedValue) ||
-    (checked
-      ? col?.trueOption?.label ?? 'Yes'
-      : col?.falseOption?.label ?? 'No');
+    (checked ? (col?.trueOption?.label ?? 'Yes') : (col?.falseOption?.label ?? 'No'));
   return (
     <div className={s.booleanCell}>
       <Switch checked={checked} disabled />
@@ -99,7 +110,9 @@ function BooleanCellRenderer({
 
 /** Picklist / State / Status → Badge. Formatted value preferred for the label. */
 function PicklistCellRenderer({
-  value, formattedValue, col,
+  value,
+  formattedValue,
+  col,
 }: {
   value: unknown;
   formattedValue?: unknown;
@@ -121,7 +134,7 @@ function PicklistCellRenderer({
   const n = typeof value === 'number' ? value : parseInt(String(value), 10);
   if (Number.isNaN(n)) return <EmptyDash />;
   const opts = col?.options ?? [];
-  const match = opts.find(o => Number(o.value) === n);
+  const match = opts.find((o) => Number(o.value) === n);
   const label = match?.label ?? String(n);
   return (
     <div className={s.picklistCell}>
@@ -138,7 +151,8 @@ function PicklistCellRenderer({
  * this renderer stays pure.
  */
 function LookupCellRenderer({
-  formattedValue, targetEntityDisplay,
+  formattedValue,
+  targetEntityDisplay,
 }: {
   formattedValue?: unknown;
   /** Display name of the target entity, e.g. "Account" — small caption under the name */
@@ -149,21 +163,28 @@ function LookupCellRenderer({
   return (
     <div className={s.lookupCell}>
       <span className={s.lookupName}>{String(formattedValue)}</span>
-      {targetEntityDisplay && (
-        <span className={s.lookupType}>{targetEntityDisplay}</span>
-      )}
+      {targetEntityDisplay && <span className={s.lookupType}>{targetEntityDisplay}</span>}
     </div>
   );
 }
 
 /** Numeric → right-aligned, tabular-nums. Formatted preferred (includes $, locale). */
-type NumericLike = MoneyColumnMeta | DecimalColumnMeta | DoubleColumnMeta
+type NumericLike =
+  | MoneyColumnMeta
+  | DecimalColumnMeta
+  | DoubleColumnMeta
   | { attributeType: 'Integer'; precision?: undefined }
   | { attributeType: 'BigInt'; precision?: undefined };
 
 function NumberCellRenderer({
-  value, formattedValue, col,
-}: { value: unknown; formattedValue?: unknown; col?: NumericLike }) {
+  value,
+  formattedValue,
+  col,
+}: {
+  value: unknown;
+  formattedValue?: unknown;
+  col?: NumericLike;
+}) {
   const s = useStyles();
   if (formattedValue != null && formattedValue !== '') {
     return <span className={s.numberCell}>{String(formattedValue)}</span>;
@@ -193,8 +214,14 @@ function NumberCellRenderer({
 
 /** DateTime → locale formatting, DateOnly vs DateAndTime aware. */
 function DateTimeCellRenderer({
-  value, formattedValue, col,
-}: { value: unknown; formattedValue?: unknown; col?: DateTimeColumnMeta }) {
+  value,
+  formattedValue,
+  col,
+}: {
+  value: unknown;
+  formattedValue?: unknown;
+  col?: DateTimeColumnMeta;
+}) {
   const s = useStyles();
   if (formattedValue != null && formattedValue !== '') {
     return <span className={s.dateCell}>{String(formattedValue)}</span>;
@@ -214,17 +241,18 @@ function DateTimeCellRenderer({
   return (
     <span className={s.dateCell}>
       {d.toLocaleString(undefined, {
-        year: 'numeric', month: 'short', day: 'numeric',
-        hour: '2-digit', minute: '2-digit',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
       })}
     </span>
   );
 }
 
 /** Default string fallback. Formatted preferred. Null/undefined → em-dash. */
-function TextCellRenderer({
-  value, formattedValue,
-}: { value: unknown; formattedValue?: unknown }) {
+function TextCellRenderer({ value, formattedValue }: { value: unknown; formattedValue?: unknown }) {
   const s = useStyles();
   const v = formattedValue ?? value;
   if (v == null || v === '') return <EmptyDash />;
@@ -248,7 +276,8 @@ function TextCellRenderer({
  *   • If `@odata.nextLink` was present on the parent, surface "paginated".
  */
 function CollectionCellRenderer({
-  items, hasMore,
+  items,
+  hasMore,
 }: {
   items: Array<Record<string, unknown>>;
   hasMore?: boolean;
@@ -265,17 +294,25 @@ function CollectionCellRenderer({
     return null;
   };
 
-  const previews = items.slice(0, 2).map(previewOf).filter((v): v is string => !!v);
+  const previews = items
+    .slice(0, 2)
+    .map(previewOf)
+    .filter((v): v is string => !!v);
   const remaining = items.length - previews.length;
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
       <Badge appearance="tint" color="informative">
-        {items.length} {items.length === 1 ? 'item' : 'items'}{hasMore ? '+' : ''}
+        {items.length} {items.length === 1 ? 'item' : 'items'}
+        {hasMore ? '+' : ''}
       </Badge>
       {previews.length > 0 && (
-        <span className={s.truncateText} style={{ color: tokens.colorNeutralForeground2, fontSize: tokens.fontSizeBase200 }}>
-          {previews.join(', ')}{remaining > 0 ? `, +${remaining} more` : ''}
+        <span
+          className={s.truncateText}
+          style={{ color: tokens.colorNeutralForeground2, fontSize: tokens.fontSizeBase200 }}
+        >
+          {previews.join(', ')}
+          {remaining > 0 ? `, +${remaining} more` : ''}
         </span>
       )}
     </div>
@@ -305,8 +342,13 @@ export function getCellRenderer(args: {
   // column-type dispatch since nav properties don't have a ColumnMeta and
   // would otherwise fall through to TextCellRenderer's `String([{…}])` =
   // "[object Object]" stringification.
-  if (Array.isArray(rawValue) && rawValue.every(v => v != null && typeof v === 'object')) {
-    return <CollectionCellRenderer items={rawValue as Array<Record<string, unknown>>} hasMore={collectionHasMore} />;
+  if (Array.isArray(rawValue) && rawValue.every((v) => v != null && typeof v === 'object')) {
+    return (
+      <CollectionCellRenderer
+        items={rawValue as Array<Record<string, unknown>>}
+        hasMore={collectionHasMore}
+      />
+    );
   }
 
   switch (col?.attributeType) {
@@ -316,24 +358,40 @@ export function getCellRenderer(args: {
     case 'State':
     case 'Status':
     case 'MultiSelectPicklist':
-      return <PicklistCellRenderer
-        value={rawValue}
-        formattedValue={formattedValue}
-        col={col as PicklistColumnMeta | StatusColumnMeta | StateColumnMeta | MultiSelectPicklistColumnMeta}
-      />;
+      return (
+        <PicklistCellRenderer
+          value={rawValue}
+          formattedValue={formattedValue}
+          col={
+            col as
+              | PicklistColumnMeta
+              | StatusColumnMeta
+              | StateColumnMeta
+              | MultiSelectPicklistColumnMeta
+          }
+        />
+      );
     case 'Lookup':
     case 'Customer':
     case 'Owner':
-      return <LookupCellRenderer
-        formattedValue={formattedValue}
-        targetEntityDisplay={targetEntityDisplay}
-      />;
+      return (
+        <LookupCellRenderer
+          formattedValue={formattedValue}
+          targetEntityDisplay={targetEntityDisplay}
+        />
+      );
     case 'Integer':
     case 'BigInt':
     case 'Decimal':
     case 'Double':
     case 'Money':
-      return <NumberCellRenderer value={rawValue} formattedValue={formattedValue} col={col as NumericLike} />;
+      return (
+        <NumberCellRenderer
+          value={rawValue}
+          formattedValue={formattedValue}
+          col={col as NumericLike}
+        />
+      );
     case 'DateTime':
       return <DateTimeCellRenderer value={rawValue} formattedValue={formattedValue} col={col} />;
     default:

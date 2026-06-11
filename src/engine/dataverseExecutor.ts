@@ -30,23 +30,42 @@
 import { dvHost, HostNotAvailableError } from '../host/pptbBridge';
 import { metadata } from '../host/metadataProvider';
 import {
-  buildRetrieveMultiple, buildRetrieveSingle, buildCreateBody,
-  buildUpdate, buildUpdateBody, buildUpsertBody, buildDelete,
-  buildMergeBody, buildAssociateRequests, buildDisassociateRequests,
+  buildRetrieveMultiple,
+  buildRetrieveSingle,
+  buildCreateBody,
+  buildUpdate,
+  buildUpdateBody,
+  buildUpsertBody,
+  buildDelete,
+  buildMergeBody,
+  buildAssociateRequests,
+  buildDisassociateRequests,
 } from './urlBuilder';
 import { buildExecuteActionBody, buildExecuteFunction } from './executeBuilders';
 import type {
-  RetrieveMultipleState, RetrieveSingleState, PredefinedQueryState,
+  RetrieveMultipleState,
+  RetrieveSingleState,
+  PredefinedQueryState,
   RetrieveNextLinkState,
 } from '../state/readState';
 import type {
-  CreateState, UpdateState, UpsertState, DeleteState, MergeState,
+  CreateState,
+  UpdateState,
+  UpsertState,
+  DeleteState,
+  MergeState,
 } from '../state/writeState';
 import type { AssociateState, DisassociateState } from '../state/relateState';
 import type {
-  ExecuteActionState, ExecuteFunctionState, ExecuteWorkflowState,
+  ExecuteActionState,
+  ExecuteFunctionState,
+  ExecuteWorkflowState,
 } from '../state/executeState';
-import type { ManageFileState, ManageImageState, ManageAttachmentState } from '../state/binaryState';
+import type {
+  ManageFileState,
+  ManageImageState,
+  ManageAttachmentState,
+} from '../state/binaryState';
 // Action lookup goes through the live CSDL provider. PPTB-only.
 import { actions } from '../host/csdlProvider';
 
@@ -72,10 +91,16 @@ export interface ExecResult {
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 const STATUS_TEXT: Record<number, string> = {
-  200: 'OK', 201: 'Created', 204: 'No Content',
-  304: 'Not Modified', 400: 'Bad Request',
-  401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found',
-  412: 'Precondition Failed', 500: 'Internal Server Error',
+  200: 'OK',
+  201: 'Created',
+  204: 'No Content',
+  304: 'Not Modified',
+  400: 'Bad Request',
+  401: 'Unauthorized',
+  403: 'Forbidden',
+  404: 'Not Found',
+  412: 'Precondition Failed',
+  500: 'Internal Server Error',
 };
 
 interface HostError {
@@ -97,9 +122,7 @@ function mapError(err: unknown, ms: number): ExecResult {
   const message = e.message ?? e.innererror?.message ?? String(err);
   const code = e.code ?? '0x80040217';
   const outcome: ExecResult['outcome'] =
-    status === 404 ? '404' :
-    status === 401 ? '401' :
-    status === 403 ? '403' : 'ok';
+    status === 404 ? '404' : status === 401 ? '401' : status === 403 ? '403' : 'ok';
   return {
     status,
     statusText: STATUS_TEXT[status] ?? 'Error',
@@ -138,8 +161,9 @@ function hostNotSupported(feature: string, ms: number): ExecResult {
     body: {
       error: {
         code: '0x80048345',
-        message: `${feature} isn't supported through the PPTB Dataverse API today. ` +
-                 `Build the request here and run it from an external Web API client.`,
+        message:
+          `${feature} isn't supported through the PPTB Dataverse API today. ` +
+          `Build the request here and run it from an external Web API client.`,
       },
     },
     headers: {},
@@ -180,9 +204,7 @@ export async function executeRetrieveSingle(s: RetrieveSingleState): Promise<Exe
   const res = await timed(() => dvHost.queryData(built.relativeNoBase));
   if (isExecResult(res)) return res;
   const v = res.value as unknown;
-  const row =
-    Array.isArray(v) ? (v[0] ?? null) :
-    (v && typeof v === 'object') ? v : null;
+  const row = Array.isArray(v) ? (v[0] ?? null) : v && typeof v === 'object' ? v : null;
   return ok(row ? 200 : 404, row, res.ms);
 }
 
@@ -217,7 +239,7 @@ export async function executePredefined(s: PredefinedQueryState): Promise<ExecRe
   // Predefined queries: GET /<entitySet>?savedQuery=<id>  or  ?userQuery=<id>
   // We need the entity set name from the table. The metadata provider gives
   // us TableMeta synchronously when cached.
-  const tbl = metadata.peekTable(s.table) ?? await metadata.getTable(s.table);
+  const tbl = metadata.peekTable(s.table) ?? (await metadata.getTable(s.table));
   if (!tbl) return mapError({ statusCode: 404, message: `Unknown table ${s.table}` }, 0);
   const param = s.queryType === 'savedQuery' ? 'savedQuery' : 'userQuery';
   const top = s.top ? `&$top=${s.top}` : '';
@@ -245,14 +267,17 @@ export async function executeUpdate(s: UpdateState): Promise<ExecResult> {
   // a different shape than DRS authored (and what the URL bar / Code tab
   // promise). Fail loud and direct the user to PATCH-one-field instead.
   if (s.method === 'PUT') {
-    return mapError({
-      statusCode: 400,
-      message:
-        'PUT single-column (PUT /<entityset>(<id>)/<column>) isn\'t supported by the PPTB host. ' +
-        'Its dataverseAPI.update is PATCH-only; there\'s no raw-request hook for property-path URLs. ' +
-        'To set one column from inside PPTB, switch back to PATCH and put a single field in the body. ' +
-        'To use the PUT pattern, copy the URL + body from the Code tab and run it outside PPTB.',
-    }, 0);
+    return mapError(
+      {
+        statusCode: 400,
+        message:
+          "PUT single-column (PUT /<entityset>(<id>)/<column>) isn't supported by the PPTB host. " +
+          "Its dataverseAPI.update is PATCH-only; there's no raw-request hook for property-path URLs. " +
+          'To set one column from inside PPTB, switch back to PATCH and put a single field in the body. ' +
+          'To use the PUT pattern, copy the URL + body from the Code tab and run it outside PPTB.',
+      },
+      0,
+    );
   }
   const body = buildUpdateBody(s);
   // The host's `update()` is PATCH semantics. For Upsert-via-Update (when
@@ -275,14 +300,17 @@ export async function executeUpsert(s: UpsertState): Promise<ExecResult> {
   // gated by an advisory in UpsertMode pointing users to copy the
   // request out for external execution.
   if (s.key.kind === 'alternate') {
-    return mapError({
-      statusCode: 400,
-      message:
-        'Alternate-key Upsert (PATCH /<entityset>(<keyCol>=\'value\')) isn\'t supported by the PPTB host — ' +
-        'its dataverseAPI.update only accepts GUID addressing. ' +
-        'DRS authored the correct request — copy the URL + body from the Code tab and run it from outside PPTB ' +
-        '(Postman / curl / JS SDK / Power Automate).',
-    }, 0);
+    return mapError(
+      {
+        statusCode: 400,
+        message:
+          "Alternate-key Upsert (PATCH /<entityset>(<keyCol>='value')) isn't supported by the PPTB host — " +
+          'its dataverseAPI.update only accepts GUID addressing. ' +
+          'DRS authored the correct request — copy the URL + body from the Code tab and run it from outside PPTB ' +
+          '(Postman / curl / JS SDK / Power Automate).',
+      },
+      0,
+    );
   }
   if (s.key.kind !== 'guid' || !s.key.recordId) {
     return mapError({ statusCode: 400, message: 'Pick or enter a record GUID.' }, 0);
@@ -309,13 +337,16 @@ export async function executeDelete(s: DeleteState): Promise<ExecResult> {
   // we'd silently whole-row-delete the record — which is exactly the bug
   // the user reported. Fail loud instead.
   if (s.scope.kind === 'single-property') {
-    return mapError({
-      statusCode: 400,
-      message:
-        'Single-property DELETE (DELETE /<entityset>(<id>)/<column>) isn\'t supported by the PPTB host. ' +
-        'Its dataverseAPI only does whole-row deletes; there\'s no raw-request hook for property-path URLs. ' +
-        'DRS authored the correct request — copy the URL or the Code-tab fetch snippet and run it from outside PPTB (Postman, curl, the JS SDK, Power Automate, etc.).',
-    }, 0);
+    return mapError(
+      {
+        statusCode: 400,
+        message:
+          "Single-property DELETE (DELETE /<entityset>(<id>)/<column>) isn't supported by the PPTB host. " +
+          "Its dataverseAPI only does whole-row deletes; there's no raw-request hook for property-path URLs. " +
+          'DRS authored the correct request — copy the URL or the Code-tab fetch snippet and run it from outside PPTB (Postman, curl, the JS SDK, Power Automate, etc.).',
+      },
+      0,
+    );
   }
   void buildDelete;
   const res = await timed(() => dvHost.delete(s.table, s.recordId!));
@@ -331,7 +362,7 @@ export async function executeMerge(s: MergeState): Promise<ExecResult> {
       operationName: 'Merge',
       operationType: 'action',
       parameters: body,
-    })
+    }),
   );
   if (isExecResult(res)) return res;
   return ok(204, res.value, res.ms);
@@ -346,15 +377,16 @@ export async function executeAssociate(s: AssociateState): Promise<ExecResult> {
     return mapError({ statusCode: 400, message: 'Pick a source record + navigation property.' }, 0);
   }
   const reqs = buildAssociateRequests(s);
-  if (reqs.length === 0) return mapError({ statusCode: 400, message: 'Pick at least one target.' }, 0);
+  if (reqs.length === 0)
+    return mapError({ statusCode: 400, message: 'Pick at least one target.' }, 0);
 
   // Resolve cardinality so we pick the right PPTB host method:
   //   • Single-valued (N:1) → PATCH @odata.bind via dvHost.update
   //                           PPTB doesn't expose PUT $ref and the docs-
   //                           preferred shape is PATCH anyway.
   //   • Collection-valued    → POST $ref per target via dvHost.associate
-  const tbl = metadata.peekTable(s.table) ?? await metadata.getTable(s.table);
-  const nav = tbl?.navigationProperties.find(n => n.name === navProperty);
+  const tbl = metadata.peekTable(s.table) ?? (await metadata.getTable(s.table));
+  const nav = tbl?.navigationProperties.find((n) => n.name === navProperty);
   const singleValued = nav?.cardinality === 'ManyToOne';
   const relatedEntity = nav?.targetEntity ?? '';
 
@@ -387,7 +419,8 @@ export async function executeDisassociate(s: DisassociateState): Promise<ExecRes
     return mapError({ statusCode: 400, message: 'Pick a source record + navigation property.' }, 0);
   }
   const reqs = buildDisassociateRequests(s);
-  if (reqs.length === 0) return mapError({ statusCode: 400, message: 'Pick at least one target.' }, 0);
+  if (reqs.length === 0)
+    return mapError({ statusCode: 400, message: 'Pick at least one target.' }, 0);
 
   const t0 = performance.now();
   try {
@@ -424,13 +457,15 @@ export async function executeAction(s: ExecuteActionState): Promise<ExecResult> 
   const boundEntity = action.binding.kind === 'entity' ? action.binding.entityType : undefined;
   const boundEntityId = boundEntity ? (s.boundRecordId ?? undefined) : undefined;
 
-  const res = await timed(() => dvHost.execute({
-    operationName: s.actionName!,
-    operationType: 'action',
-    entityName: boundEntity,
-    entityId: boundEntityId,
-    parameters: params,
-  }));
+  const res = await timed(() =>
+    dvHost.execute({
+      operationName: s.actionName!,
+      operationType: 'action',
+      entityName: boundEntity,
+      entityId: boundEntityId,
+      parameters: params,
+    }),
+  );
   if (isExecResult(res)) return res;
   return ok(200, res.value, res.ms);
 }
@@ -438,7 +473,8 @@ export async function executeAction(s: ExecuteActionState): Promise<ExecResult> 
 export async function executeFunction(s: ExecuteFunctionState): Promise<ExecResult> {
   if (!s.functionName) return mapError({ statusCode: 400, message: 'Pick a function.' }, 0);
   const action = await actions.find(s.functionName);
-  if (!action) return mapError({ statusCode: 404, message: `Unknown function ${s.functionName}` }, 0);
+  if (!action)
+    return mapError({ statusCode: 404, message: `Unknown function ${s.functionName}` }, 0);
   void buildExecuteFunction;
 
   const boundEntity = action.binding.kind === 'entity' ? action.binding.entityType : undefined;
@@ -446,13 +482,15 @@ export async function executeFunction(s: ExecuteFunctionState): Promise<ExecResu
 
   // The host's execute() handles parameter encoding (URL-aliased for
   // functions, JSON-body for actions) so we just pass the raw param map.
-  const res = await timed(() => dvHost.execute({
-    operationName: s.functionName!,
-    operationType: 'function',
-    entityName: boundEntity,
-    entityId: boundEntityId,
-    parameters: s.paramValues as Record<string, unknown>,
-  }));
+  const res = await timed(() =>
+    dvHost.execute({
+      operationName: s.functionName!,
+      operationType: 'function',
+      entityName: boundEntity,
+      entityId: boundEntityId,
+      parameters: s.paramValues as Record<string, unknown>,
+    }),
+  );
   if (isExecResult(res)) return res;
   return ok(200, res.value, res.ms);
 }
@@ -463,13 +501,15 @@ export async function executeWorkflow(s: ExecuteWorkflowState): Promise<ExecResu
   }
   // POST /workflows(<wf-id>)/Microsoft.Dynamics.CRM.ExecuteWorkflow
   // body: { EntityId: '<target-guid>' }
-  const res = await timed(() => dvHost.execute({
-    operationName: 'ExecuteWorkflow',
-    operationType: 'action',
-    entityName: 'workflow',
-    entityId: s.workflowId!,
-    parameters: { EntityId: s.entityId },
-  }));
+  const res = await timed(() =>
+    dvHost.execute({
+      operationName: 'ExecuteWorkflow',
+      operationType: 'action',
+      entityName: 'workflow',
+      entityId: s.workflowId!,
+      parameters: { EntityId: s.entityId },
+    }),
+  );
   if (isExecResult(res)) return res;
   return ok(204, res.value, res.ms);
 }

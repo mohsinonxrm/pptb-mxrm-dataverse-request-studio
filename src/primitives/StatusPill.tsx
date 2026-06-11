@@ -3,7 +3,12 @@ import { useStudioStyles } from './styles';
 
 export type StatusKind = 'success' | 'danger' | 'warning' | 'info';
 
-export function StatusPill({ status, code, ms, size }: {
+export function StatusPill({
+  status,
+  code,
+  ms,
+  size,
+}: {
   status: StatusKind;
   code: number | string;
   ms?: number;
@@ -12,16 +17,19 @@ export function StatusPill({ status, code, ms, size }: {
   const s = useStudioStyles();
   const colors: Record<StatusKind, { bg: string; fg: string }> = {
     success: { bg: tokens.colorPaletteGreenBackground2, fg: tokens.colorPaletteGreenForeground1 },
-    danger:  { bg: tokens.colorPaletteRedBackground2,   fg: tokens.colorPaletteRedForeground1 },
-    warning: { bg: tokens.colorPaletteYellowBackground2,fg: tokens.colorPaletteYellowForeground1 },
-    info:    { bg: tokens.colorNeutralBackground3,      fg: tokens.colorNeutralForeground2 },
+    danger: { bg: tokens.colorPaletteRedBackground2, fg: tokens.colorPaletteRedForeground1 },
+    warning: { bg: tokens.colorPaletteYellowBackground2, fg: tokens.colorPaletteYellowForeground1 },
+    info: { bg: tokens.colorNeutralBackground3, fg: tokens.colorNeutralForeground2 },
   };
   const c = colors[status];
   const label =
-    status === 'success' ? `${code} OK` :
-    status === 'danger'  ? `${code}` :
-    status === 'warning' ? `${code}` :
-    `${code}`;
+    status === 'success'
+      ? `${code} OK`
+      : status === 'danger'
+        ? `${code}`
+        : status === 'warning'
+          ? `${code}`
+          : `${code}`;
   return (
     <span
       className={s.statusPill}

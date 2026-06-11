@@ -1,9 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Combobox, Option, tokens, MessageBar, MessageBarBody, mergeClasses, ToggleButton } from '@fluentui/react-components';
+import {
+  Button,
+  Combobox,
+  Option,
+  tokens,
+  MessageBar,
+  MessageBarBody,
+  mergeClasses,
+  ToggleButton,
+} from '@fluentui/react-components';
 import { SegmentedToggle } from '../primitives/SegmentedToggle';
 import {
-  TextSortAscending20Filled, TextSortAscending20Regular, TextSortDescending20Regular,
-  Add20Regular, Delete20Regular, ArrowUp20Regular, ArrowDown20Regular,
+  TextSortAscending20Filled,
+  TextSortAscending20Regular,
+  TextSortDescending20Regular,
+  Add20Regular,
+  Delete20Regular,
+  ArrowUp20Regular,
+  ArrowDown20Regular,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import { findTable, isCompanionLogicalReadOnly, resolveNavPath } from '../mock/metadata';
@@ -31,7 +45,13 @@ export interface OrderbyEditorProps {
   applyActive?: boolean;
 }
 
-export function OrderbyEditor({ table, items, setItems, group = 'read', applyActive }: OrderbyEditorProps) {
+export function OrderbyEditor({
+  table,
+  items,
+  setItems,
+  group = 'read',
+  applyActive,
+}: OrderbyEditorProps) {
   const s = useStudioStyles();
   const tbl = findTable(table);
   if (!tbl) return null;
@@ -45,21 +65,37 @@ export function OrderbyEditor({ table, items, setItems, group = 'read', applyAct
   for (const it of items) {
     const c = resolveNavPath(tbl, it.col).leaf;
     if (!c) continue;
-    if (c.attributeType === 'Picklist' || c.attributeType === 'State' || c.attributeType === 'Status') {
-      warnings.push(`${c.displayName}: choice columns sort by the underlying integer value, not the localized label. Use FetchXml if you need label order.`);
+    if (
+      c.attributeType === 'Picklist' ||
+      c.attributeType === 'State' ||
+      c.attributeType === 'Status'
+    ) {
+      warnings.push(
+        `${c.displayName}: choice columns sort by the underlying integer value, not the localized label. Use FetchXml if you need label order.`,
+      );
     }
     if (c.attributeType === 'MultiSelectPicklist') {
-      warnings.push(`${c.displayName}: MultiSelectPicklist sorts by the raw semicolon-separated string — effectively meaningless.`);
+      warnings.push(
+        `${c.displayName}: MultiSelectPicklist sorts by the raw semicolon-separated string — effectively meaningless.`,
+      );
     }
     if (c.attributeType === 'Memo') {
-      warnings.push(`${c.displayName}: ordering long text is an anti-pattern (slow). Add a unique key as a tie-breaker for stable paging.`);
+      warnings.push(
+        `${c.displayName}: ordering long text is an anti-pattern (slow). Add a unique key as a tie-breaker for stable paging.`,
+      );
     }
-    if (c.attributeType === 'Lookup' || c.attributeType === 'Customer' || c.attributeType === 'Owner') {
-      warnings.push(`${c.displayName}: lookup columns sort by the related row's primary name field (join). Slower than scalar sorts.`);
+    if (
+      c.attributeType === 'Lookup' ||
+      c.attributeType === 'Customer' ||
+      c.attributeType === 'Owner'
+    ) {
+      warnings.push(
+        `${c.displayName}: lookup columns sort by the related row's primary name field (join). Slower than scalar sorts.`,
+      );
     }
   }
   // Recommend a unique-key tie-breaker if no primary key is in the orderby
-  const pkInSort = items.some(it => {
+  const pkInSort = items.some((it) => {
     const c = resolveNavPath(tbl, it.col).leaf;
     return c?.attributeType === 'Uniqueidentifier';
   });
@@ -68,13 +104,14 @@ export function OrderbyEditor({ table, items, setItems, group = 'read', applyAct
   }
 
   const newOrderId = () =>
-    (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? `ord_${crypto.randomUUID()}`
       : `ord_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`;
 
-  const add = () => setItems([...items, { id: newOrderId(), col: tbl.columns[0].logicalName, dir: 'asc' }]);
+  const add = () =>
+    setItems([...items, { id: newOrderId(), col: tbl.columns[0].logicalName, dir: 'asc' }]);
   const update = (i: number, patch: Partial<OrderbySpec>) =>
-    setItems(items.map((it, j) => j === i ? { ...it, ...patch } : it));
+    setItems(items.map((it, j) => (j === i ? { ...it, ...patch } : it)));
   const remove = (i: number) => setItems(items.filter((_, j) => j !== i));
   const swap = (i: number, j: number) => {
     if (j < 0 || j >= items.length) return;
@@ -97,7 +134,9 @@ export function OrderbyEditor({ table, items, setItems, group = 'read', applyAct
       {items.length === 0 && (
         <MessageBar layout="multiline" intent="info" style={{ marginBottom: 12 }}>
           <MessageBarBody>
-            No <code>$orderby</code> — server-default order. Add one to make pagination deterministic; recommended best practice is <code>orderby={tbl.primaryKey} asc</code> as a tie-breaker.
+            No <code>$orderby</code> — server-default order. Add one to make pagination
+            deterministic; recommended best practice is <code>orderby={tbl.primaryKey} asc</code> as
+            a tie-breaker.
           </MessageBarBody>
         </MessageBar>
       )}
@@ -136,11 +175,29 @@ export function OrderbyEditor({ table, items, setItems, group = 'read', applyAct
             return (
               <SortableItem key={itemId} id={itemId}>
                 {({ gripProps, Grip }) => (
-                  <div className={mergeClasses(s.inlineCard)} style={{ padding: '8px 10px', display: 'grid', gridTemplateColumns: '20px 24px 1fr auto 28px 28px 28px', gap: 8, alignItems: 'center' }}>
-                    <span {...gripProps} aria-label={`Drag to reorder ${col?.displayName ?? it.col}`}>
+                  <div
+                    className={mergeClasses(s.inlineCard)}
+                    style={{
+                      padding: '8px 10px',
+                      display: 'grid',
+                      gridTemplateColumns: '20px 24px 1fr auto 28px 28px 28px',
+                      gap: 8,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <span
+                      {...gripProps}
+                      aria-label={`Drag to reorder ${col?.displayName ?? it.col}`}
+                    >
                       <Grip />
                     </span>
-                    <span style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 11, color: tokens.colorNeutralForeground3 }}>
+                    <span
+                      style={{
+                        fontFamily: tokens.fontFamilyMonospace,
+                        fontSize: 11,
+                        color: tokens.colorNeutralForeground3,
+                      }}
+                    >
                       {i + 1}.
                     </span>
                     <OrderbyColumnCombo
@@ -150,8 +207,8 @@ export function OrderbyEditor({ table, items, setItems, group = 'read', applyAct
                       // FilterEditor: honor IsValidForRead, hide companion
                       // *name / *yominame logical read-only columns.
                       columns={tbl.columns
-                        .filter(c => c.isValidForRead !== false)
-                        .filter(c => !isCompanionLogicalReadOnly(c))}
+                        .filter((c) => c.isValidForRead !== false)
+                        .filter((c) => !isCompanionLogicalReadOnly(c))}
                       onChange={(logicalName) => update(i, { col: logicalName })}
                     />
                     <SegmentedToggle ariaLabel="Sort direction">
@@ -159,16 +216,40 @@ export function OrderbyEditor({ table, items, setItems, group = 'read', applyAct
                         checked={it.dir === 'asc'}
                         icon={<TextSortAscending20Regular />}
                         onClick={() => update(i, { dir: 'asc' })}
-                      >Asc</ToggleButton>
+                      >
+                        Asc
+                      </ToggleButton>
                       <ToggleButton
                         checked={it.dir === 'desc'}
                         icon={<TextSortDescending20Regular />}
                         onClick={() => update(i, { dir: 'desc' })}
-                      >Desc</ToggleButton>
+                      >
+                        Desc
+                      </ToggleButton>
                     </SegmentedToggle>
-                    <Button size="small" appearance="subtle" icon={<ArrowUp20Regular />}   onClick={() => swap(i, i - 1)} disabled={i === 0}                aria-label="Move up" />
-                    <Button size="small" appearance="subtle" icon={<ArrowDown20Regular />} onClick={() => swap(i, i + 1)} disabled={i === items.length - 1} aria-label="Move down" />
-                    <Button size="small" appearance="subtle" icon={<Delete20Regular />}    onClick={() => remove(i)} aria-label="Remove" />
+                    <Button
+                      size="small"
+                      appearance="subtle"
+                      icon={<ArrowUp20Regular />}
+                      onClick={() => swap(i, i - 1)}
+                      disabled={i === 0}
+                      aria-label="Move up"
+                    />
+                    <Button
+                      size="small"
+                      appearance="subtle"
+                      icon={<ArrowDown20Regular />}
+                      onClick={() => swap(i, i + 1)}
+                      disabled={i === items.length - 1}
+                      aria-label="Move down"
+                    />
+                    <Button
+                      size="small"
+                      appearance="subtle"
+                      icon={<Delete20Regular />}
+                      onClick={() => remove(i)}
+                      aria-label="Remove"
+                    />
                   </div>
                 )}
               </SortableItem>
@@ -178,14 +259,16 @@ export function OrderbyEditor({ table, items, setItems, group = 'read', applyAct
       </div>
 
       <div style={{ marginTop: 12 }}>
-        <Button icon={<Add20Regular />} appearance="outline" size="small" onClick={add}>Add sort</Button>
+        <Button icon={<Add20Regular />} appearance="outline" size="small" onClick={add}>
+          Add sort
+        </Button>
       </div>
     </div>
   );
 }
 
 export const orderbyToOData = (items: OrderbySpec[]): string =>
-  items.map(it => it.dir === 'asc' ? it.col : `${it.col} desc`).join(',');
+  items.map((it) => (it.dir === 'asc' ? it.col : `${it.col} desc`)).join(',');
 
 // ────────────────────────────────────────────────────────────
 // Searchable column picker for the orderby row
@@ -196,7 +279,10 @@ export const orderbyToOData = (items: OrderbySpec[]): string =>
  * Same UX as the filter editor's column picker for consistency.
  */
 function OrderbyColumnCombo({
-  value, currentDisplay, columns, onChange,
+  value,
+  currentDisplay,
+  columns,
+  onChange,
 }: {
   value: string;
   currentDisplay?: string;
@@ -204,13 +290,14 @@ function OrderbyColumnCombo({
   onChange: (logicalName: string) => void;
 }) {
   const [query, setQuery] = useState<string>(currentDisplay ?? value);
-  useEffect(() => { setQuery(currentDisplay ?? value); }, [currentDisplay, value]);
+  useEffect(() => {
+    setQuery(currentDisplay ?? value);
+  }, [currentDisplay, value]);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q || q === (currentDisplay ?? '').toLowerCase()) return columns;
-    return columns.filter(c =>
-      c.displayName.toLowerCase().includes(q) ||
-      c.logicalName.toLowerCase().includes(q),
+    return columns.filter(
+      (c) => c.displayName.toLowerCase().includes(q) || c.logicalName.toLowerCase().includes(q),
     );
   }, [columns, query, currentDisplay]);
 
@@ -224,7 +311,7 @@ function OrderbyColumnCombo({
       onChange={(e) => setQuery((e.target as HTMLInputElement).value)}
       onOptionSelect={(_, d) => {
         if (d.optionValue) {
-          const picked = columns.find(c => c.logicalName === d.optionValue);
+          const picked = columns.find((c) => c.logicalName === d.optionValue);
           onChange(d.optionValue);
           setQuery(picked?.displayName ?? d.optionValue);
         } else {
@@ -241,10 +328,16 @@ function OrderbyColumnCombo({
           </span>
         </Option>
       )}
-      {filtered.map(c => (
+      {filtered.map((c) => (
         <Option key={c.logicalName} value={c.logicalName} text={c.displayName}>
           {c.displayName}{' '}
-          <span style={{ color: tokens.colorNeutralForeground3, fontFamily: tokens.fontFamilyMonospace, fontSize: 10 }}>
+          <span
+            style={{
+              color: tokens.colorNeutralForeground3,
+              fontFamily: tokens.fontFamilyMonospace,
+              fontSize: 10,
+            }}
+          >
             · {c.logicalName}
           </span>
         </Option>

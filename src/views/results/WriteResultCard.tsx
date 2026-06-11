@@ -20,12 +20,14 @@
 // Designed to render correctly for 200 / 201 / 204 success and also the
 // common 412 / 404 / 409 failure cases — same component, different copy.
 
+import { Caption1, Badge, tokens, Button, Tooltip, mergeClasses } from '@fluentui/react-components';
 import {
-  Caption1, Badge, tokens, Button, Tooltip, mergeClasses,
-} from '@fluentui/react-components';
-import {
-  CheckmarkCircle20Filled, ErrorCircle20Filled, Warning20Filled,
-  Copy20Regular, Open20Regular, BranchFork20Filled,
+  CheckmarkCircle20Filled,
+  ErrorCircle20Filled,
+  Warning20Filled,
+  Copy20Regular,
+  Open20Regular,
+  BranchFork20Filled,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../../primitives/styles';
 import { StatusPill } from '../../primitives/StatusPill';
@@ -34,7 +36,20 @@ import { ENV } from '../../mock/environment';
 import { findTable } from '../../mock/metadata';
 import type { ExecResult } from '../../engine/dataverseExecutor';
 
-export type WriteOperation = 'create' | 'update' | 'upsert' | 'delete' | 'merge' | 'associate' | 'disassociate' | 'action' | 'function' | 'workflow' | 'manage-file' | 'manage-image' | 'manage-attachment';
+export type WriteOperation =
+  | 'create'
+  | 'update'
+  | 'upsert'
+  | 'delete'
+  | 'merge'
+  | 'associate'
+  | 'disassociate'
+  | 'action'
+  | 'function'
+  | 'workflow'
+  | 'manage-file'
+  | 'manage-image'
+  | 'manage-attachment';
 
 export interface WriteResultContext {
   operation: WriteOperation;
@@ -103,40 +118,46 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
   //      affordance row.
   const odataEntityId = result.headers['OData-EntityId'] ?? result.headers['odata-entityid'];
   const resolvedId =
-    ctx.recordId
-    ?? extractGuidFromOdataEntityId(odataEntityId)
-    ?? extractGuidFromBody(result.body, tbl?.primaryKey);
+    ctx.recordId ??
+    extractGuidFromOdataEntityId(odataEntityId) ??
+    extractGuidFromBody(result.body, tbl?.primaryKey);
 
   // Status family — drives icon + tone.
   const family: 'success' | 'warning' | 'danger' =
-    result.status >= 200 && result.status < 300 ? 'success' :
-    result.status === 412 || result.status === 404 || result.status === 409 ? 'warning' :
-    'danger';
+    result.status >= 200 && result.status < 300
+      ? 'success'
+      : result.status === 412 || result.status === 404 || result.status === 409
+        ? 'warning'
+        : 'danger';
   const Icon =
-    family === 'success' ? CheckmarkCircle20Filled :
-    family === 'warning' ? Warning20Filled :
-    ErrorCircle20Filled;
+    family === 'success'
+      ? CheckmarkCircle20Filled
+      : family === 'warning'
+        ? Warning20Filled
+        : ErrorCircle20Filled;
   const tone =
-    family === 'success' ? tokens.colorPaletteGreenForeground1 :
-    family === 'warning' ? tokens.colorPaletteDarkOrangeForeground1 :
-    tokens.colorPaletteRedForeground1;
+    family === 'success'
+      ? tokens.colorPaletteGreenForeground1
+      : family === 'warning'
+        ? tokens.colorPaletteDarkOrangeForeground1
+        : tokens.colorPaletteRedForeground1;
 
   const narrative = buildNarrative(ctx, result, resolvedId, entityDisplay);
-  const recordUrl = resolvedId && tbl
-    ? `https://${ENV.host}/api/data/v9.2/${tbl.entitySetName}(${resolvedId})`
-    : null;
+  const recordUrl =
+    resolvedId && tbl
+      ? `https://${ENV.host}/api/data/v9.2/${tbl.entitySetName}(${resolvedId})`
+      : null;
 
   // The body — if Create/Update/Upsert returned a representation, we
   // render the recursive RecordDetailCard underneath the success header.
   // For 204 / null body / non-record body, we just show the header.
   const body = result.body;
   const hasReturnedRecord =
-    !!body
-    && typeof body === 'object'
-    && !Array.isArray(body)
-    && Object.keys(body as Record<string, unknown>).length > 0
-    && // Cheap heuristic: real records carry @odata.etag OR the table's primary key
-       ('@odata.etag' in (body as object) || (tbl && tbl.primaryKey in (body as object)));
+    !!body &&
+    typeof body === 'object' &&
+    !Array.isArray(body) &&
+    Object.keys(body as Record<string, unknown>).length > 0 && // Cheap heuristic: real records carry @odata.etag OR the table's primary key
+    ('@odata.etag' in (body as object) || (tbl && tbl.primaryKey in (body as object)));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -146,21 +167,23 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
         style={{
           padding: 16,
           background:
-            family === 'success' ? tokens.colorPaletteGreenBackground1 :
-            family === 'warning' ? tokens.colorPaletteDarkOrangeBackground1 :
-            tokens.colorPaletteRedBackground1,
+            family === 'success'
+              ? tokens.colorPaletteGreenBackground1
+              : family === 'warning'
+                ? tokens.colorPaletteDarkOrangeBackground1
+                : tokens.colorPaletteRedBackground1,
           border:
-            family === 'success' ? `1px solid ${tokens.colorPaletteGreenBorderActive}` :
-            family === 'warning' ? `1px solid ${tokens.colorPaletteDarkOrangeBorderActive}` :
-            `1px solid ${tokens.colorPaletteRedBorderActive}`,
+            family === 'success'
+              ? `1px solid ${tokens.colorPaletteGreenBorderActive}`
+              : family === 'warning'
+                ? `1px solid ${tokens.colorPaletteDarkOrangeBorderActive}`
+                : `1px solid ${tokens.colorPaletteRedBorderActive}`,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Icon style={{ width: 28, height: 28, color: tone, flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>
-              {narrative.title}
-            </div>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>{narrative.title}</div>
             {narrative.body && (
               <Caption1 style={{ color: tokens.colorNeutralForeground2 }}>
                 {narrative.body}
@@ -169,7 +192,9 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
           </div>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <StatusPill
-              status={family === 'success' ? 'success' : family === 'warning' ? 'warning' : 'danger'}
+              status={
+                family === 'success' ? 'success' : family === 'warning' ? 'warning' : 'danger'
+              }
               code={result.status}
               ms={result.ms}
             />
@@ -184,23 +209,27 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
             URL would 404 and Open-in-tab is a footgun. We keep Copy ID
             for audit/log purposes only. */}
         {resolvedId && (
-          <div style={{
-            display: 'flex',
-            gap: 6,
-            marginTop: 12,
-            flexWrap: 'wrap',
-            paddingTop: 12,
-            borderTop: `1px solid ${tokens.colorNeutralStroke3}`,
-          }}>
-            <code style={{
-              fontFamily: tokens.fontFamilyMonospace,
-              fontSize: 11,
-              color: tokens.colorNeutralForeground3,
-              padding: '4px 8px',
-              background: tokens.colorNeutralBackground1,
-              borderRadius: tokens.borderRadiusSmall,
-              alignSelf: 'center',
-            }}>
+          <div
+            style={{
+              display: 'flex',
+              gap: 6,
+              marginTop: 12,
+              flexWrap: 'wrap',
+              paddingTop: 12,
+              borderTop: `1px solid ${tokens.colorNeutralStroke3}`,
+            }}
+          >
+            <code
+              style={{
+                fontFamily: tokens.fontFamilyMonospace,
+                fontSize: 11,
+                color: tokens.colorNeutralForeground3,
+                padding: '4px 8px',
+                background: tokens.colorNeutralBackground1,
+                borderRadius: tokens.borderRadiusSmall,
+                alignSelf: 'center',
+              }}
+            >
               {tbl?.primaryKey ?? 'id'}: {resolvedId}
             </code>
             <Tooltip content="Copy record GUID" relationship="label">
@@ -247,15 +276,17 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
       {/* If the server returned a representation, drill the full record card. */}
       {hasReturnedRecord && (
         <div>
-          <Caption1 style={{
-            display: 'block',
-            marginBottom: 6,
-            color: tokens.colorNeutralForeground3,
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            letterSpacing: '0.04em',
-            fontSize: 10,
-          }}>
+          <Caption1
+            style={{
+              display: 'block',
+              marginBottom: 6,
+              color: tokens.colorNeutralForeground3,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+              fontSize: 10,
+            }}
+          >
             Returned representation
           </Caption1>
           <RecordDetailCard
@@ -285,31 +316,54 @@ function buildNarrative(
   if (!ok) {
     if (result.status === 412) {
       const why =
-        ctx.operation === 'upsert' ? 'precondition failed — the record\'s existence state didn\'t match your selection' :
-        ctx.operation === 'delete' || ctx.operation === 'update' ? 'precondition failed — the ETag is stale (someone else changed the record)' :
-        'precondition failed';
+        ctx.operation === 'upsert'
+          ? "precondition failed — the record's existence state didn't match your selection"
+          : ctx.operation === 'delete' || ctx.operation === 'update'
+            ? 'precondition failed — the ETag is stale (someone else changed the record)'
+            : 'precondition failed';
       return { title: 'Operation rejected', body: why };
     }
     if (result.status === 404) {
-      return { title: 'Record not found', body: `No ${entityDisplay} record matched ${resolvedId ?? 'the supplied id'}.` };
+      return {
+        title: 'Record not found',
+        body: `No ${entityDisplay} record matched ${resolvedId ?? 'the supplied id'}.`,
+      };
     }
     if (result.status === 409) {
-      return { title: 'Conflict', body: 'A duplicate-detection rule or related conflict blocked the operation.' };
+      return {
+        title: 'Conflict',
+        body: 'A duplicate-detection rule or related conflict blocked the operation.',
+      };
     }
     if (result.status === 401) {
-      return { title: 'Not authenticated', body: 'Your session lost the bearer token. Reconnect and retry.' };
+      return {
+        title: 'Not authenticated',
+        body: 'Your session lost the bearer token. Reconnect and retry.',
+      };
     }
     if (result.status === 403) {
       return { title: 'Forbidden', body: 'The calling user lacks the required privilege.' };
     }
     if (result.status >= 500) {
-      return { title: 'Server error', body: 'Dataverse returned a 5xx. Inspect the JSON body for details.' };
+      return {
+        title: 'Server error',
+        body: 'Dataverse returned a 5xx. Inspect the JSON body for details.',
+      };
     }
-    return { title: `Failed · ${result.status} ${result.statusText}`, body: 'See the JSON / Headers tabs for details.' };
+    return {
+      title: `Failed · ${result.status} ${result.statusText}`,
+      body: 'See the JSON / Headers tabs for details.',
+    };
   }
 
   // ── Success framings — operation-specific ──
-  const who = name ? <>{name}</> : resolvedId ? `record ${resolvedId.slice(0, 8)}…` : `${entityDisplay} record`;
+  const who = name ? (
+    <>{name}</>
+  ) : resolvedId ? (
+    `record ${resolvedId.slice(0, 8)}…`
+  ) : (
+    `${entityDisplay} record`
+  );
   const whoStr = typeof who === 'string' ? who : (name as string);
 
   switch (ctx.operation) {
@@ -322,8 +376,15 @@ function buildNarrative(
       };
     case 'update':
       return {
-        title: result.status === 200 ? `Updated ${entityDisplay} (return=representation)` : `Updated ${entityDisplay}`,
-        body: name ? `Saved changes to "${name}".` : resolvedId ? `Saved changes to ${resolvedId.slice(0, 8)}…` : null,
+        title:
+          result.status === 200
+            ? `Updated ${entityDisplay} (return=representation)`
+            : `Updated ${entityDisplay}`,
+        body: name
+          ? `Saved changes to "${name}".`
+          : resolvedId
+            ? `Saved changes to ${resolvedId.slice(0, 8)}…`
+            : null,
       };
     case 'upsert':
       // Per the Web API docs: server returns 201 if it created, 204 if it
@@ -336,7 +397,11 @@ function buildNarrative(
       if (result.status === 201) {
         return {
           title: `Upsert: created new ${entityDisplay}`,
-          body: name ? `New record "${name}".` : resolvedId ? `id ${resolvedId.slice(0, 8)}…` : null,
+          body: name
+            ? `New record "${name}".`
+            : resolvedId
+              ? `id ${resolvedId.slice(0, 8)}…`
+              : null,
         };
       }
       return {
@@ -363,37 +428,54 @@ function buildNarrative(
     case 'merge':
       return {
         title: `Merged ${entityDisplay}`,
-        body: ctx.subordinateName && ctx.targetName
-          ? `"${ctx.subordinateName}" merged into "${ctx.targetName}". Subordinate deactivated; related rows re-parented.`
-          : 'Merge completed. Subordinate deactivated; related rows re-parented.',
+        body:
+          ctx.subordinateName && ctx.targetName
+            ? `"${ctx.subordinateName}" merged into "${ctx.targetName}". Subordinate deactivated; related rows re-parented.`
+            : 'Merge completed. Subordinate deactivated; related rows re-parented.',
       };
     case 'associate': {
       const n = ctx.targetCount ?? 0;
       const navLabel = ctx.navProperty ? `via ${ctx.navProperty}` : '';
-      const sourceFrag = name ? `"${name}"` : resolvedId ? `id ${resolvedId.slice(0, 8)}…` : `the ${entityDisplay} record`;
+      const sourceFrag = name
+        ? `"${name}"`
+        : resolvedId
+          ? `id ${resolvedId.slice(0, 8)}…`
+          : `the ${entityDisplay} record`;
       // List up to 3 target names inline; rest become "and N more".
       const namesShown = (ctx.targetNames ?? []).slice(0, 3);
       const remaining = Math.max(0, n - namesShown.length);
       const targetsFrag =
         namesShown.length > 0
-          ? `${namesShown.map(t => `"${t}"`).join(', ')}${remaining > 0 ? ` and ${remaining} more` : ''}`
+          ? `${namesShown.map((t) => `"${t}"`).join(', ')}${remaining > 0 ? ` and ${remaining} more` : ''}`
           : n > 0
             ? `${n} target${n === 1 ? '' : 's'}`
             : 'the target';
       return {
-        title: n > 1 ? `Associated ${n} records to ${entityDisplay}` : `Associated to ${entityDisplay}`,
+        title:
+          n > 1 ? `Associated ${n} records to ${entityDisplay}` : `Associated to ${entityDisplay}`,
         body: `Linked ${targetsFrag} to ${sourceFrag} ${navLabel}.`.replace(/\s+\./, '.'),
       };
     }
     case 'disassociate': {
       const n = ctx.targetCount ?? 0;
       const navLabel = ctx.navProperty ? `via ${ctx.navProperty}` : '';
-      const sourceFrag = name ? `"${name}"` : resolvedId ? `id ${resolvedId.slice(0, 8)}…` : `the ${entityDisplay} record`;
+      const sourceFrag = name
+        ? `"${name}"`
+        : resolvedId
+          ? `id ${resolvedId.slice(0, 8)}…`
+          : `the ${entityDisplay} record`;
       return {
-        title: n > 1 ? `Disassociated ${n} records from ${entityDisplay}` : `Disassociated from ${entityDisplay}`,
-        body: n > 0
-          ? `Removed ${n} link${n === 1 ? '' : 's'} from ${sourceFrag} ${navLabel}.`.replace(/\s+\./, '.')
-          : `Cleared the lookup on ${sourceFrag} ${navLabel}.`.replace(/\s+\./, '.'),
+        title:
+          n > 1
+            ? `Disassociated ${n} records from ${entityDisplay}`
+            : `Disassociated from ${entityDisplay}`,
+        body:
+          n > 0
+            ? `Removed ${n} link${n === 1 ? '' : 's'} from ${sourceFrag} ${navLabel}.`.replace(
+                /\s+\./,
+                '.',
+              )
+            : `Cleared the lookup on ${sourceFrag} ${navLabel}.`.replace(/\s+\./, '.'),
       };
     }
     case 'action': {
@@ -440,9 +522,13 @@ function buildNarrative(
       // "request was built; run it externally" rather than "something went
       // wrong".
       const kind =
-        ctx.operation === 'manage-image' ? 'image' :
-        ctx.operation === 'manage-attachment' ? (ctx.columnName === 'documentbody' ? 'annotation' : 'attachment') :
-        'file';
+        ctx.operation === 'manage-image'
+          ? 'image'
+          : ctx.operation === 'manage-attachment'
+            ? ctx.columnName === 'documentbody'
+              ? 'annotation'
+              : 'attachment'
+            : 'file';
       const op = ctx.fileOperation ?? 'upload';
       const colFrag = ctx.columnName ? ` · column ${ctx.columnName}` : '';
       const targetFrag = name
@@ -456,9 +542,10 @@ function buildNarrative(
       if (result.status === 501) {
         return {
           title: `${kindLabel} ${op} — request built`,
-          body: `PPTB's dataverseAPI doesn't expose the ${kind} ${op} endpoint. ` +
-                `Your request is ready to run externally — copy a snippet from the Code tab ` +
-                `(fetch / curl / C# / PowerShell) and execute it from there.`,
+          body:
+            `PPTB's dataverseAPI doesn't expose the ${kind} ${op} endpoint. ` +
+            `Your request is ready to run externally — copy a snippet from the Code tab ` +
+            `(fetch / curl / C# / PowerShell) and execute it from there.`,
         };
       }
       return {
@@ -493,10 +580,12 @@ function extractGuidFromBody(body: unknown, primaryKey?: string): string | null 
   if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
   const obj = body as Record<string, unknown>;
   const candidate =
-    (typeof obj.id === 'string' && /^[0-9a-fA-F-]{36}$/.test(obj.id) ? obj.id : null)
-    ?? (primaryKey && typeof obj[primaryKey] === 'string' && /^[0-9a-fA-F-]{36}$/.test(obj[primaryKey] as string)
-        ? obj[primaryKey] as string
-        : null);
+    (typeof obj.id === 'string' && /^[0-9a-fA-F-]{36}$/.test(obj.id) ? obj.id : null) ??
+    (primaryKey &&
+    typeof obj[primaryKey] === 'string' &&
+    /^[0-9a-fA-F-]{36}$/.test(obj[primaryKey] as string)
+      ? (obj[primaryKey] as string)
+      : null);
   return candidate ?? null;
 }
 

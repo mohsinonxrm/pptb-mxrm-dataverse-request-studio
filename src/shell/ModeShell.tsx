@@ -13,7 +13,11 @@ import { useStudioStyles } from '../primitives/styles';
  * The parent Frame is `grid: auto 1fr auto`, so the body row stretches and the
  * URL bar sits flush at the bottom across the full window width.
  */
-export function ModeShell({ sidebar, children, urlBar }: {
+export function ModeShell({
+  sidebar,
+  children,
+  urlBar,
+}: {
   sidebar: ReactNode;
   /** Main pane content (typically MainTabs) */
   children: ReactNode;

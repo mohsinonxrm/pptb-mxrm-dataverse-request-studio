@@ -5,6 +5,26 @@ All notable changes to Dataverse Request Studio will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - 2026-06-10
+
+### ✨ Added
+
+- **Auto-switch to Builder tab on sidebar item click**
+  ([#32](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/32))
+  — clicking any sidebar nav item while on the Code or Results tab now
+  automatically switches the active tab back to Builder, making the selected
+  editor panel immediately visible. Previously the tab had to be switched
+  manually first. Applies across all 17 modes.
+
+### 🔧 Internal
+
+- **Prettier added as dev tooling** — `.prettierrc` (single quotes, 2-space
+  indent, semis, `printWidth: 100`), `.prettierignore`, `.gitattributes` (LF
+  line endings repo-wide), and `.vscode/settings.json` (Prettier as default
+  formatter with `formatOnSave`). Added `format` and `format:check` npm
+  scripts. Full codebase normalised in one pass to eliminate quote-style
+  inconsistency introduced by a recent VS Code built-in formatter change.
+
 ## [1.1.2] - 2026-06-08
 
 ### 🐛 Fixed

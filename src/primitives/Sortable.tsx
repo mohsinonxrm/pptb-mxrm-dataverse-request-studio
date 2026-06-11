@@ -26,12 +26,18 @@
 
 import { type ReactNode, type CSSProperties } from 'react';
 import {
-  DndContext, type DragEndEvent,
-  PointerSensor, KeyboardSensor, useSensor, useSensors,
-  closestCenter, MeasuringStrategy,
+  DndContext,
+  type DragEndEvent,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  MeasuringStrategy,
 } from '@dnd-kit/core';
 import {
-  SortableContext, useSortable,
+  SortableContext,
+  useSortable,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
   horizontalListSortingStrategy,
@@ -90,7 +96,12 @@ export interface SortableListProps {
  * dnd-kit needs. Vertical orientation is the default — switch to
  * "horizontal" when laying out a chip row (e.g. groupby pills).
  */
-export function SortableList({ ids, onReorder, orientation = 'vertical', children }: SortableListProps) {
+export function SortableList({
+  ids,
+  onReorder,
+  orientation = 'vertical',
+  children,
+}: SortableListProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 4 }, // Allow click vs drag distinction
@@ -104,7 +115,7 @@ export function SortableList({ ids, onReorder, orientation = 'vertical', childre
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const fromIndex = ids.indexOf(String(active.id));
-    const toIndex   = ids.indexOf(String(over.id));
+    const toIndex = ids.indexOf(String(over.id));
     if (fromIndex < 0 || toIndex < 0) return;
     onReorder(fromIndex, toIndex);
   };
@@ -118,7 +129,9 @@ export function SortableList({ ids, onReorder, orientation = 'vertical', childre
     >
       <SortableContext
         items={ids}
-        strategy={orientation === 'horizontal' ? horizontalListSortingStrategy : verticalListSortingStrategy}
+        strategy={
+          orientation === 'horizontal' ? horizontalListSortingStrategy : verticalListSortingStrategy
+        }
       >
         {children}
       </SortableContext>
@@ -169,8 +182,14 @@ export interface SortableItemProps {
 export function SortableItem({ id, children, disabled, className, style }: SortableItemProps) {
   const s = useStyles();
   const {
-    attributes, listeners, setNodeRef, setActivatorNodeRef,
-    transform, transition, isDragging, isOver,
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+    isOver,
   } = useSortable({ id, disabled });
 
   const wrapperStyle: CSSProperties = {
@@ -180,10 +199,7 @@ export function SortableItem({ id, children, disabled, className, style }: Sorta
   };
 
   const Grip: React.FC<{ className?: string }> = ({ className: cn }) => (
-    <ReOrderDotsHorizontal20Regular
-      className={mergeClasses(s.grip, cn)}
-      aria-hidden
-    />
+    <ReOrderDotsHorizontal20Regular className={mergeClasses(s.grip, cn)} aria-hidden />
   );
 
   // `gripProps` spreads dnd-kit's listeners + attributes onto whatever
@@ -194,7 +210,10 @@ export function SortableItem({ id, children, disabled, className, style }: Sorta
     ...listeners,
     ...attributes,
     tabIndex: 0 as const,
-    style: { touchAction: 'none' as const, ...(disabled ? { cursor: 'not-allowed', opacity: 0.4 } : {}) },
+    style: {
+      touchAction: 'none' as const,
+      ...(disabled ? { cursor: 'not-allowed', opacity: 0.4 } : {}),
+    },
   };
 
   return (

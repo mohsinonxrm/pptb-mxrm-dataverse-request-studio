@@ -38,7 +38,10 @@ export function useSolutionFilter() {
     async function loadSolutions() {
       // Cache key: empty array = "all solutions"
       const cached = metadataCache.getSolutions([]);
-      if (cached) { setSolutions(cached); return; }
+      if (cached) {
+        setSolutions(cached);
+        return;
+      }
 
       try {
         setSolutionsLoading(true);
@@ -56,7 +59,9 @@ export function useSolutionFilter() {
     }
 
     loadSolutions();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // ── Cascade solution → entities ──
@@ -71,7 +76,10 @@ export function useSolutionFilter() {
 
     async function loadEntities() {
       const cached = metadataCache.getFilteredEntities(selectedSolutionIds);
-      if (cached) { setEntities(cached); return; }
+      if (cached) {
+        setEntities(cached);
+        return;
+      }
 
       try {
         setEntitiesLoading(true);
@@ -79,7 +87,7 @@ export function useSolutionFilter() {
 
         const components = await getSolutionComponents(selectedSolutionIds);
         const logicalNames = Array.from(
-          new Set(components.map(c => c.msdyn_name).filter(Boolean))
+          new Set(components.map((c) => c.msdyn_name).filter(Boolean)),
         );
         const data = filterCachedEntitiesByNames(logicalNames);
 
@@ -95,7 +103,9 @@ export function useSolutionFilter() {
     }
 
     loadEntities();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [selectedSolutionIds]);
 
   const updateSelectedSolutions = useCallback((ids: string[]) => {

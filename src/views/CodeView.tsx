@@ -20,16 +20,31 @@ import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker';
 import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
 import {
-  TabList, Tab, Button, Tooltip, tokens, Caption1, MessageBar, MessageBarBody, Badge,
+  TabList,
+  Tab,
+  Button,
+  Tooltip,
+  tokens,
+  Caption1,
+  MessageBar,
+  MessageBarBody,
+  Badge,
 } from '@fluentui/react-components';
 import {
-  Copy20Regular, ArrowReset20Regular, Play20Filled, Code20Filled, Edit20Filled,
+  Copy20Regular,
+  ArrowReset20Regular,
+  Play20Filled,
+  Code20Filled,
+  Edit20Filled,
 } from '@fluentui/react-icons';
 import { PaneHead } from '../editors/PaneHead';
 import {
-  generateCode, FORMAT_LABELS, FORMAT_LANG,
+  generateCode,
+  FORMAT_LABELS,
+  FORMAT_LANG,
   generatePowerAutomateFields,
-  type CodeFormat, type CodegenInputs,
+  type CodeFormat,
+  type CodegenInputs,
 } from '../engine/codeGenerators';
 import { PowerAutomatePane } from './PowerAutomatePane';
 import type { ThemeMode } from '../theme/theme';
@@ -40,9 +55,19 @@ import type { RequestGroup } from '../registry/requestTypes';
 // The Editor tab matches the Dataverse REST Builder UX: pick a starter, tweak
 // it, copy or save as a snippet.
 type ViewTab = 'code' | 'editor';
-const FORMATS: CodeFormat[] = ['fetch', 'xrm', 'xrm-batch', 'xhr', 'powerautomate', 'csharp', 'powershell', 'curl', 'json'];
+const FORMATS: CodeFormat[] = [
+  'fetch',
+  'xrm',
+  'xrm-batch',
+  'xhr',
+  'powerautomate',
+  'csharp',
+  'powershell',
+  'curl',
+  'json',
+];
 // Power Automate is a field-list form, not source code — skip it in the Editor tab.
-const EDITOR_FORMATS: CodeFormat[] = FORMATS.filter(f => f !== 'powerautomate');
+const EDITOR_FORMATS: CodeFormat[] = FORMATS.filter((f) => f !== 'powerautomate');
 
 // Bundle Monaco locally — PPTB's CSP forbids fetching from cdn.jsdelivr.net
 // ("script-src 'self' 'unsafe-inline' pptb-webview:"). `loader.config({ monaco })`
@@ -121,9 +146,11 @@ export function CodeView({ themeMode, inputs, group = 'read' }: CodeViewProps) {
       <PaneHead
         icon={Code20Filled}
         title="Generated code"
-        sub={viewTab === 'code'
-          ? '8 formats — read-only, regenerated on every builder change.'
-          : 'Writable playground — edit the starter, copy or run it (mock).'}
+        sub={
+          viewTab === 'code'
+            ? '8 formats — read-only, regenerated on every builder change.'
+            : 'Writable playground — edit the starter, copy or run it (mock).'
+        }
         group={group}
       />
 
@@ -134,13 +161,18 @@ export function CodeView({ themeMode, inputs, group = 'read' }: CodeViewProps) {
         appearance="subtle"
         style={{ marginBottom: 10 }}
       >
-        <Tab value="code" icon={<Code20Filled />}>Code</Tab>
-        <Tab value="editor" icon={<Edit20Filled />}>Editor</Tab>
+        <Tab value="code" icon={<Code20Filled />}>
+          Code
+        </Tab>
+        <Tab value="editor" icon={<Edit20Filled />}>
+          Editor
+        </Tab>
       </TabList>
 
       {viewTab === 'code' ? (
         <CodePane
-          fmt={fmt} setFmt={setFmt}
+          fmt={fmt}
+          setFmt={setFmt}
           code={code}
           inputs={inputs}
           themeMode={themeMode}
@@ -149,10 +181,18 @@ export function CodeView({ themeMode, inputs, group = 'read' }: CodeViewProps) {
       ) : (
         <EditorPane
           fmt={editorFmt}
-          setFmt={(f) => { setEditorFmt(f); /* effect resets code */ }}
+          setFmt={(f) => {
+            setEditorFmt(f); /* effect resets code */
+          }}
           code={editorCode}
-          setCode={(s) => { setEditorCode(s); setEditorDirty(true); }}
-          onReset={() => { setEditorCode(generateCode(editorFmt, inputs)); setEditorDirty(false); }}
+          setCode={(s) => {
+            setEditorCode(s);
+            setEditorDirty(true);
+          }}
+          onReset={() => {
+            setEditorCode(generateCode(editorFmt, inputs));
+            setEditorDirty(false);
+          }}
           dirty={editorDirty}
           themeMode={themeMode}
           monacoOptions={{ ...monacoOptions, readOnly: false }}
@@ -166,7 +206,12 @@ export function CodeView({ themeMode, inputs, group = 'read' }: CodeViewProps) {
 // Code pane (read-only)
 // ────────────────────────────────────────────────────────────
 function CodePane({
-  fmt, setFmt, code, inputs, themeMode, monacoOptions,
+  fmt,
+  setFmt,
+  code,
+  inputs,
+  themeMode,
+  monacoOptions,
 }: {
   fmt: CodeFormat;
   setFmt: (f: CodeFormat) => void;
@@ -183,26 +228,48 @@ function CodePane({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flexGrow: 1 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 10,
+          flexWrap: 'wrap',
+        }}
+      >
         <TabList
           selectedValue={fmt}
           onTabSelect={(_, d) => setFmt(d.value as CodeFormat)}
           appearance="subtle"
           size="small"
         >
-          {FORMATS.map(f => (
-            <Tab key={f} value={f}>{FORMAT_LABELS[f]}</Tab>
+          {FORMATS.map((f) => (
+            <Tab key={f} value={f}>
+              {FORMAT_LABELS[f]}
+            </Tab>
           ))}
         </TabList>
         <span style={{ flexGrow: 1 }} />
         {!isPA && (
           <>
-            <Caption1 style={{ color: tokens.colorNeutralForeground3, fontFamily: tokens.fontFamilyMonospace }}>
-              {code.length.toLocaleString()} chars · {Math.round(new Blob([code]).size / 1024 * 10) / 10} KB
+            <Caption1
+              style={{
+                color: tokens.colorNeutralForeground3,
+                fontFamily: tokens.fontFamilyMonospace,
+              }}
+            >
+              {code.length.toLocaleString()} chars ·{' '}
+              {Math.round((new Blob([code]).size / 1024) * 10) / 10} KB
             </Caption1>
             <Tooltip content="Copy code" relationship="label">
-              <Button icon={<Copy20Regular />} appearance="subtle" size="small"
-                onClick={() => navigator.clipboard?.writeText(code)}>Copy</Button>
+              <Button
+                icon={<Copy20Regular />}
+                appearance="subtle"
+                size="small"
+                onClick={() => navigator.clipboard?.writeText(code)}
+              >
+                Copy
+              </Button>
             </Tooltip>
           </>
         )}
@@ -225,7 +292,8 @@ function CodePane({
           </MonacoFrame>
 
           <Caption1 style={{ marginTop: 8, color: tokens.colorNeutralForeground3 }}>
-            Tip: replace <code>&lt;access-token&gt;</code> with a real bearer token (e.g. from <code>Get-AzAccessToken</code>, MSAL, or the connector's auth step) before running.
+            Tip: replace <code>&lt;access-token&gt;</code> with a real bearer token (e.g. from{' '}
+            <code>Get-AzAccessToken</code>, MSAL, or the connector's auth step) before running.
           </Caption1>
         </>
       )}
@@ -237,7 +305,14 @@ function CodePane({
 // Editor pane (writable — playground)
 // ────────────────────────────────────────────────────────────
 function EditorPane({
-  fmt, setFmt, code, setCode, onReset, dirty, themeMode, monacoOptions,
+  fmt,
+  setFmt,
+  code,
+  setCode,
+  onReset,
+  dirty,
+  themeMode,
+  monacoOptions,
 }: {
   fmt: CodeFormat;
   setFmt: (f: CodeFormat) => void;
@@ -251,7 +326,9 @@ function EditorPane({
   const [output, setOutput] = useState<string>('');
   const [running, setRunning] = useState(false);
   const editorRef = useRef<monacoNs.editor.IStandaloneCodeEditor | null>(null);
-  const onMount: OnMount = (editor) => { editorRef.current = editor; };
+  const onMount: OnMount = (editor) => {
+    editorRef.current = editor;
+  };
 
   const onMockRun = async () => {
     setRunning(true);
@@ -263,14 +340,14 @@ function EditorPane({
       // show a structured echo of what the code would attempt + a stub result.
       // (Hooking up the real mock executor would require parsing the URL out
       // of the user-edited code — left as a follow-up.)
-      await new Promise(r => setTimeout(r, 350));
+      await new Promise((r) => setTimeout(r, 350));
       const sampleResp = {
         status: 200,
         ok: true,
         body: {
           '@odata.context': '$metadata#accounts(name,revenue)',
           value: [
-            { name: 'Contoso Ltd.',  revenue: 18_500_000 },
+            { name: 'Contoso Ltd.', revenue: 18_500_000 },
             { name: 'Fabrikam, Inc.', revenue: 9_120_000 },
           ],
         },
@@ -285,31 +362,65 @@ function EditorPane({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flexGrow: 1 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-        <Caption1 style={{ color: tokens.colorNeutralForeground3, marginRight: 4 }}>Starter:</Caption1>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 10,
+          flexWrap: 'wrap',
+        }}
+      >
+        <Caption1 style={{ color: tokens.colorNeutralForeground3, marginRight: 4 }}>
+          Starter:
+        </Caption1>
         <TabList
           selectedValue={fmt}
           onTabSelect={(_, d) => setFmt(d.value as CodeFormat)}
           appearance="subtle"
           size="small"
         >
-          {EDITOR_FORMATS.map(f => (
-            <Tab key={f} value={f}>{FORMAT_LABELS[f]}</Tab>
+          {EDITOR_FORMATS.map((f) => (
+            <Tab key={f} value={f}>
+              {FORMAT_LABELS[f]}
+            </Tab>
           ))}
         </TabList>
         <span style={{ flexGrow: 1 }} />
-        {dirty && <Badge size="small" appearance="ghost" color="warning">edited</Badge>}
-        <Tooltip content="Reset to the freshly-generated starter for this format" relationship="description">
+        {dirty && (
+          <Badge size="small" appearance="ghost" color="warning">
+            edited
+          </Badge>
+        )}
+        <Tooltip
+          content="Reset to the freshly-generated starter for this format"
+          relationship="description"
+        >
           <Button icon={<ArrowReset20Regular />} appearance="subtle" size="small" onClick={onReset}>
             Reset
           </Button>
         </Tooltip>
         <Tooltip content="Copy current editor contents" relationship="label">
-          <Button icon={<Copy20Regular />} appearance="subtle" size="small"
-            onClick={() => navigator.clipboard?.writeText(code)}>Copy</Button>
+          <Button
+            icon={<Copy20Regular />}
+            appearance="subtle"
+            size="small"
+            onClick={() => navigator.clipboard?.writeText(code)}
+          >
+            Copy
+          </Button>
         </Tooltip>
-        <Tooltip content="Run against the mock simulator — returns sample data without touching a real environment" relationship="description">
-          <Button icon={<Play20Filled />} appearance="primary" size="small" onClick={onMockRun} disabled={running}>
+        <Tooltip
+          content="Run against the mock simulator — returns sample data without touching a real environment"
+          relationship="description"
+        >
+          <Button
+            icon={<Play20Filled />}
+            appearance="primary"
+            size="small"
+            onClick={onMockRun}
+            disabled={running}
+          >
             {running ? 'Running…' : 'Run (mock)'}
           </Button>
         </Tooltip>
@@ -317,11 +428,21 @@ function EditorPane({
 
       <MessageBar layout="multiline" intent="info" style={{ marginBottom: 10 }}>
         <MessageBarBody>
-          <strong>Playground.</strong> Edit the starter however you like, copy it out, or hit <strong>Run (mock)</strong> to see a simulated response below. Reset re-generates the starter from the current builder state.
+          <strong>Playground.</strong> Edit the starter however you like, copy it out, or hit{' '}
+          <strong>Run (mock)</strong> to see a simulated response below. Reset re-generates the
+          starter from the current builder state.
         </MessageBarBody>
       </MessageBar>
 
-      <div style={{ display: 'grid', gridTemplateRows: '1fr auto', gap: 10, minHeight: 0, flexGrow: 1 }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateRows: '1fr auto',
+          gap: 10,
+          minHeight: 0,
+          flexGrow: 1,
+        }}
+      >
         <MonacoFrame>
           <Editor
             height="100%"
@@ -335,30 +456,38 @@ function EditorPane({
         </MonacoFrame>
 
         {output && (
-          <div style={{
-            borderRadius: tokens.borderRadiusMedium,
-            border: `1px solid ${tokens.colorNeutralStroke2}`,
-            backgroundColor: tokens.colorNeutralBackground1,
-            padding: 12,
-            maxHeight: 220,
-            overflow: 'auto',
-          }}>
-            <Caption1 style={{
-              display: 'block',
-              fontWeight: 600,
-              color: tokens.colorNeutralForeground2,
-              marginBottom: 6,
-            }}>
+          <div
+            style={{
+              borderRadius: tokens.borderRadiusMedium,
+              border: `1px solid ${tokens.colorNeutralStroke2}`,
+              backgroundColor: tokens.colorNeutralBackground1,
+              padding: 12,
+              maxHeight: 220,
+              overflow: 'auto',
+            }}
+          >
+            <Caption1
+              style={{
+                display: 'block',
+                fontWeight: 600,
+                color: tokens.colorNeutralForeground2,
+                marginBottom: 6,
+              }}
+            >
               Mock output
             </Caption1>
-            <pre style={{
-              margin: 0,
-              fontFamily: tokens.fontFamilyMonospace,
-              fontSize: 12,
-              color: tokens.colorNeutralForeground1,
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-            }}>{output}</pre>
+            <pre
+              style={{
+                margin: 0,
+                fontFamily: tokens.fontFamilyMonospace,
+                fontSize: 12,
+                color: tokens.colorNeutralForeground1,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {output}
+            </pre>
           </div>
         )}
       </div>
@@ -369,13 +498,15 @@ function EditorPane({
 // Shared Monaco container — bordered + radius + min-height
 function MonacoFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{
-      flexGrow: 1,
-      border: `1px solid ${tokens.colorNeutralStroke2}`,
-      borderRadius: tokens.borderRadiusMedium,
-      overflow: 'hidden',
-      minHeight: 320,
-    }}>
+    <div
+      style={{
+        flexGrow: 1,
+        border: `1px solid ${tokens.colorNeutralStroke2}`,
+        borderRadius: tokens.borderRadiusMedium,
+        overflow: 'hidden',
+        minHeight: 320,
+      }}
+    >
       {children}
     </div>
   );
