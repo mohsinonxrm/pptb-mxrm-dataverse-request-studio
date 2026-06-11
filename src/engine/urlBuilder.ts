@@ -9,12 +9,20 @@ import { orderbyToOData } from '../editors/OrderbyEditor';
 import { expandToOData } from '../editors/ExpandEditor';
 import { applyToOData } from '../editors/ApplyEditor';
 import type {
-  RetrieveMultipleState, RetrieveSingleState, RetrieveNextLinkState, PredefinedQueryState,
+  RetrieveMultipleState,
+  RetrieveSingleState,
+  RetrieveNextLinkState,
+  PredefinedQueryState,
 } from '../state/readState';
 import {
   defaultBypassOptions,
-  type CreateState, type UpdateState, type UpsertState, type DeleteState, type MergeState,
-  type LookupFieldValue, type CreateFieldValue,
+  type CreateState,
+  type UpdateState,
+  type UpsertState,
+  type DeleteState,
+  type MergeState,
+  type LookupFieldValue,
+  type CreateFieldValue,
 } from '../state/writeState';
 import type { AssociateState, DisassociateState } from '../state/relateState';
 import { isCollectionValuedNav, isSingleValuedNav } from '../state/relateState';
@@ -22,15 +30,21 @@ import { isCollectionValuedNav, isSingleValuedNav } from '../state/relateState';
 // Re-export execute builders so callers don't have to know they live in a
 // separate module. Same surface contract — keeps imports terse.
 export {
-  buildExecuteAction, buildExecuteActionBody,
+  buildExecuteAction,
+  buildExecuteActionBody,
   buildExecuteFunction,
-  buildExecuteWorkflow, buildExecuteWorkflowBody,
+  buildExecuteWorkflow,
+  buildExecuteWorkflowBody,
 } from './executeBuilders';
 
 export {
-  buildManageFile, manageFilePipeline,
-  buildManageImage, manageImagePipeline,
-  buildManageAttachment, manageAttachmentPipeline, attachmentTargetLabel,
+  buildManageFile,
+  manageFilePipeline,
+  buildManageImage,
+  manageImagePipeline,
+  buildManageAttachment,
+  manageAttachmentPipeline,
+  attachmentTargetLabel,
   formatSize,
   type BinaryPipelineStep,
 } from './binaryBuilders';
@@ -61,17 +75,22 @@ export interface BuiltRequest {
 // The previous `%20 → +` substitution was form-encoding (application/x-www-form-urlencoded),
 // not URL-query encoding. RFC 3986 query strings don't use `+` for space, and
 // some Dataverse code paths mis-decode it. Spaces stay as spaces (or `%20`).
-const enc = (s: string) => encodeURIComponent(s)
-  .replace(/%2F/g, '/').replace(/%2C/g, ',').replace(/%3D/g, '=')
-  .replace(/%24/g, '$').replace(/%28/g, '(').replace(/%29/g, ')')
-  .replace(/%20/g, ' ')   // literal space — matches MS Learn URL examples
-  .replace(/%27/g, "'")   // literal apostrophe — OData string delimiter
-  .replace(/%3B/g, ';');  // literal semicolon — separates inner $expand options
+const enc = (s: string) =>
+  encodeURIComponent(s)
+    .replace(/%2F/g, '/')
+    .replace(/%2C/g, ',')
+    .replace(/%3D/g, '=')
+    .replace(/%24/g, '$')
+    .replace(/%28/g, '(')
+    .replace(/%29/g, ')')
+    .replace(/%20/g, ' ') // literal space — matches MS Learn URL examples
+    .replace(/%27/g, "'") // literal apostrophe — OData string delimiter
+    .replace(/%3B/g, ';'); // literal semicolon — separates inner $expand options
 
 function joinQuery(parts: { key: string; value: string }[]): string {
   return parts
-    .filter(p => p.value !== '' && p.value != null)
-    .map(p => `${p.key}=${p.value}`)
+    .filter((p) => p.value !== '' && p.value != null)
+    .map((p) => `${p.key}=${p.value}`)
     .join('&');
 }
 
@@ -83,13 +102,20 @@ function joinQuery(parts: { key: string; value: string }[]): string {
  */
 function selectToOData(table: TableMeta | undefined, cols: string[]): string {
   if (!table) return cols.join(',');
-  return cols.map(c => attrRefByName(table, c)).join(',');
+  return cols.map((c) => attrRefByName(table, c)).join(',');
 }
 
 export function buildRetrieveMultiple(s: RetrieveMultipleState): BuiltRequest {
   const tbl = findTable(s.table);
   if (!tbl) {
-    return { relativeUrl: '', relativeNoBase: '', bytes: 0, queryParts: [], entitySet: '', entityLogical: '' };
+    return {
+      relativeUrl: '',
+      relativeNoBase: '',
+      bytes: 0,
+      queryParts: [],
+      entitySet: '',
+      entityLogical: '',
+    };
   }
   const parts: { key: string; value: string }[] = [];
   // Encoder now takes the table so it can render the filter() stage's
@@ -105,7 +131,8 @@ export function buildRetrieveMultiple(s: RetrieveMultipleState): BuiltRequest {
       const f = groupToOData(s.filter, tbl);
       if (f) parts.push({ key: '$filter', value: enc(f) });
     }
-    if (s.expand.length) parts.push({ key: '$expand', value: enc(expandToOData(s.expand, s.table)) });
+    if (s.expand.length)
+      parts.push({ key: '$expand', value: enc(expandToOData(s.expand, s.table)) });
     if (s.orderby.length) parts.push({ key: '$orderby', value: enc(orderbyToOData(s.orderby)) });
   }
   if (s.top != null && s.top > 0 && (s.prefer.maxpagesize == null || s.prefer.maxpagesize === 0)) {
@@ -129,7 +156,15 @@ export function buildRetrieveMultiple(s: RetrieveMultipleState): BuiltRequest {
 
 export function buildRetrieveSingle(s: RetrieveSingleState): BuiltRequest {
   const tbl = findTable(s.table);
-  if (!tbl) return { relativeUrl: '', relativeNoBase: '', bytes: 0, queryParts: [], entitySet: '', entityLogical: '' };
+  if (!tbl)
+    return {
+      relativeUrl: '',
+      relativeNoBase: '',
+      bytes: 0,
+      queryParts: [],
+      entitySet: '',
+      entityLogical: '',
+    };
   const parts: { key: string; value: string }[] = [];
   if (s.select.length) parts.push({ key: '$select', value: enc(selectToOData(tbl, s.select)) });
   if (s.expand.length) parts.push({ key: '$expand', value: enc(expandToOData(s.expand, s.table)) });
@@ -164,7 +199,11 @@ export function buildRetrieveNextLink(s: RetrieveNextLinkState): BuiltRequest {
   // NextLink is opaque — we don't know the entity logical name without parsing.
   // Best-effort derivation: lop the trailing 's' for the simple case. Generators
   // shouldn't rely on this; they branch on isNextLink instead.
-  const entityLogical = entitySet ? (entitySet.endsWith('ies') ? entitySet.slice(0, -3) + 'y' : entitySet.replace(/s$/, '')) : '';
+  const entityLogical = entitySet
+    ? entitySet.endsWith('ies')
+      ? entitySet.slice(0, -3) + 'y'
+      : entitySet.replace(/s$/, '')
+    : '';
   return {
     relativeUrl: url.replace(/^https?:\/\/[^/]+/, ''),
     relativeNoBase: noBase || '/',
@@ -185,7 +224,15 @@ export function buildRetrieveNextLink(s: RetrieveNextLinkState): BuiltRequest {
 
 export function buildCreate(s: CreateState): BuiltRequest {
   const tbl = findTable(s.table);
-  if (!tbl) return { relativeUrl: '', relativeNoBase: '', bytes: 0, queryParts: [], entitySet: '', entityLogical: '' };
+  if (!tbl)
+    return {
+      relativeUrl: '',
+      relativeNoBase: '',
+      bytes: 0,
+      queryParts: [],
+      entitySet: '',
+      entityLogical: '',
+    };
   const parts: { key: string; value: string }[] = [];
   // $select only meaningful with return=representation
   if (s.prefer.returnRepresentation && s.returnSelect.length) {
@@ -252,11 +299,16 @@ export function buildCreate(s: CreateState): BuiltRequest {
  * single-target lookups always work this way, and the server will produce
  * the same clear error as before if the lookup happens to be polymorphic.
  */
-function bindPropertyFor(parentTbl: TableMeta, col: { logicalName: string }, targetEntity: string): string {
-  const nav = parentTbl.navigationProperties.find(n =>
-    n.cardinality === 'ManyToOne'
-    && n.referencingAttribute === col.logicalName
-    && n.targetEntity === targetEntity,
+function bindPropertyFor(
+  parentTbl: TableMeta,
+  col: { logicalName: string },
+  targetEntity: string,
+): string {
+  const nav = parentTbl.navigationProperties.find(
+    (n) =>
+      n.cardinality === 'ManyToOne' &&
+      n.referencingAttribute === col.logicalName &&
+      n.targetEntity === targetEntity,
   );
   return `${nav?.name ?? col.logicalName}@odata.bind`;
 }
@@ -283,9 +335,7 @@ export function buildCreateBody(s: CreateState): Record<string, unknown> {
     if (!col) continue;
     if (isLookupLike(col)) {
       const target = col.targets?.[0] ?? '';
-      const bindProp = target
-        ? bindPropertyFor(tbl, col, target)
-        : `${col.logicalName}@odata.bind`;
+      const bindProp = target ? bindPropertyFor(tbl, col, target) : `${col.logicalName}@odata.bind`;
       body[bindProp] = null;
     } else {
       body[col.logicalName] = null;
@@ -336,7 +386,15 @@ export function buildCreateBody(s: CreateState): Record<string, unknown> {
 
 export function buildUpdate(s: UpdateState): BuiltRequest {
   const tbl = findTable(s.table);
-  if (!tbl) return { relativeUrl: '', relativeNoBase: '', bytes: 0, queryParts: [], entitySet: '', entityLogical: '' };
+  if (!tbl)
+    return {
+      relativeUrl: '',
+      relativeNoBase: '',
+      bytes: 0,
+      queryParts: [],
+      entitySet: '',
+      entityLogical: '',
+    };
 
   const idSegment = s.recordId ? `(${s.recordId})` : '(<id>)';
   // PUT single-column drills into the property URL: /<entitySet>(<id>)/<col>
@@ -412,22 +470,36 @@ export function buildUpdateBody(s: UpdateState): Record<string, unknown> {
 function odataLiteral(value: string, col: ReturnType<typeof findColumn>): string {
   if (!col) return `'${value.replace(/'/g, "''")}'`;
   switch (col.attributeType) {
-    case 'Integer': case 'BigInt': case 'Decimal': case 'Double': case 'Money':
-    case 'Picklist': case 'MultiSelectPicklist': case 'State': case 'Status': case 'EntityName':
+    case 'Integer':
+    case 'BigInt':
+    case 'Decimal':
+    case 'Double':
+    case 'Money':
+    case 'Picklist':
+    case 'MultiSelectPicklist':
+    case 'State':
+    case 'Status':
+    case 'EntityName':
       return value === '' ? '0' : value;
     case 'Boolean':
       return value === 'true' || value === '1' ? 'true' : 'false';
     case 'Uniqueidentifier':
-    case 'Lookup': case 'Customer': case 'Owner':
+    case 'Lookup':
+    case 'Customer':
+    case 'Owner':
       return value;
     default:
       return `'${value.replace(/'/g, "''")}'`;
   }
 }
 
-function altKeySegment(table: string, keyColumns: string[], keyValues: Record<string, string>): string {
+function altKeySegment(
+  table: string,
+  keyColumns: string[],
+  keyValues: Record<string, string>,
+): string {
   const tbl = findTable(table);
-  const parts = keyColumns.map(col => {
+  const parts = keyColumns.map((col) => {
     const c = tbl ? findColumn(tbl, col) : undefined;
     const raw = keyValues[col] ?? '';
     return `${col}=${odataLiteral(raw, c)}`;
@@ -437,7 +509,15 @@ function altKeySegment(table: string, keyColumns: string[], keyValues: Record<st
 
 export function buildUpsert(s: UpsertState): BuiltRequest {
   const tbl = findTable(s.table);
-  if (!tbl) return { relativeUrl: '', relativeNoBase: '', bytes: 0, queryParts: [], entitySet: '', entityLogical: '' };
+  if (!tbl)
+    return {
+      relativeUrl: '',
+      relativeNoBase: '',
+      bytes: 0,
+      queryParts: [],
+      entitySet: '',
+      entityLogical: '',
+    };
 
   let idSegment = '(<id>)';
   let recordId: string | undefined;
@@ -448,7 +528,7 @@ export function buildUpsert(s: UpsertState): BuiltRequest {
       recordId = key.recordId;
     }
   } else {
-    const def = tbl.alternateKeys?.find(k => k.name === key.keyName);
+    const def = tbl.alternateKeys?.find((k) => k.name === key.keyName);
     if (def) {
       idSegment = altKeySegment(s.table, def.columns, key.keyValues);
     }
@@ -495,9 +575,18 @@ export function buildUpsertBody(s: UpsertState): Record<string, unknown> {
 
 export function buildDelete(s: DeleteState): BuiltRequest {
   const tbl = findTable(s.table);
-  if (!tbl) return { relativeUrl: '', relativeNoBase: '', bytes: 0, queryParts: [], entitySet: '', entityLogical: '' };
+  if (!tbl)
+    return {
+      relativeUrl: '',
+      relativeNoBase: '',
+      bytes: 0,
+      queryParts: [],
+      entitySet: '',
+      entityLogical: '',
+    };
   const idSegment = s.recordId ? `(${s.recordId})` : '(<id>)';
-  const propSegment = s.scope.kind === 'single-property' && s.scope.column ? `/${s.scope.column}` : '';
+  const propSegment =
+    s.scope.kind === 'single-property' && s.scope.column ? `/${s.scope.column}` : '';
   const path = `${ENV.apiBase}/${tbl.entitySetName}${idSegment}${propSegment}`;
   const noBase = `/${tbl.entitySetName}${idSegment}${propSegment}`;
   return {
@@ -520,7 +609,15 @@ export function buildDelete(s: DeleteState): BuiltRequest {
 
 export function buildMerge(s: MergeState): BuiltRequest {
   const tbl = findTable(s.table);
-  if (!tbl) return { relativeUrl: '', relativeNoBase: '', bytes: 0, queryParts: [], entitySet: '', entityLogical: '' };
+  if (!tbl)
+    return {
+      relativeUrl: '',
+      relativeNoBase: '',
+      bytes: 0,
+      queryParts: [],
+      entitySet: '',
+      entityLogical: '',
+    };
   const path = `${ENV.apiBase}/Merge`;
   return {
     relativeUrl: path,
@@ -590,7 +687,10 @@ export function buildMergeBody(s: MergeState): Record<string, unknown> {
       }
       if (col.attributeType === 'MultiSelectPicklist') {
         if (typeof raw === 'string' && raw) {
-          update[field] = raw.split(',').map(n => Number(n)).filter(n => Number.isFinite(n));
+          update[field] = raw
+            .split(',')
+            .map((n) => Number(n))
+            .filter((n) => Number.isFinite(n));
         }
         continue;
       }
@@ -609,7 +709,9 @@ export function buildMergeBody(s: MergeState): Record<string, unknown> {
     fieldValues: update,
     nullFields: [],
     prefer: {} as never,
-    headers: [], returnSelect: [], duplicateDetection: false,
+    headers: [],
+    returnSelect: [],
+    duplicateDetection: false,
     bypass: defaultBypassOptions(),
     dirty: new Set(),
   });
@@ -694,7 +796,7 @@ function absoluteRefUrl(entitySet: string, id: string): string {
 export function buildAssociateRequests(s: AssociateState): AssociateRequest[] {
   const sourceTbl = findTable(s.table);
   if (!sourceTbl || !s.sourceId || !s.navProperty) return [];
-  const nav = sourceTbl.navigationProperties.find(n => n.name === s.navProperty);
+  const nav = sourceTbl.navigationProperties.find((n) => n.name === s.navProperty);
   if (!nav) return [];
   const targetTbl = findTable(nav.targetEntity);
   if (!targetTbl) return [];
@@ -714,20 +816,22 @@ export function buildAssociateRequests(s: AssociateState): AssociateRequest[] {
     const bindKey = bindPropertyFor(sourceTbl, { logicalName: nav.name }, targetTbl.logicalName);
     const path = `${ENV.apiBase}/${sourceTbl.entitySetName}(${s.sourceId})`;
     const noBase = `/${sourceTbl.entitySetName}(${s.sourceId})`;
-    return [{
-      method: 'PATCH',
-      relativeUrl: path,
-      relativeNoBase: noBase,
-      // PATCH bind values are RELATIVE URLs (no scheme/host) per docs —
-      // unlike POST $ref's @odata.id which requires absolute. The doc
-      // example uses `"accounts(<id>)"` directly.
-      body: { [bindKey]: `${targetTbl.entitySetName}(${targetId})` },
-      targetId,
-    }];
+    return [
+      {
+        method: 'PATCH',
+        relativeUrl: path,
+        relativeNoBase: noBase,
+        // PATCH bind values are RELATIVE URLs (no scheme/host) per docs —
+        // unlike POST $ref's @odata.id which requires absolute. The doc
+        // example uses `"accounts(<id>)"` directly.
+        body: { [bindKey]: `${targetTbl.entitySetName}(${targetId})` },
+        targetId,
+      },
+    ];
   }
 
   // Collection-valued (1:N / N:N) — POST $ref per target. Unchanged.
-  return s.targets.filter(Boolean).map(targetId => {
+  return s.targets.filter(Boolean).map((targetId) => {
     const path = `${ENV.apiBase}/${sourceTbl.entitySetName}(${s.sourceId})/${nav.name}/$ref`;
     const noBase = `/${sourceTbl.entitySetName}(${s.sourceId})/${nav.name}/$ref`;
     return {
@@ -747,16 +851,26 @@ export function buildAssociateRequests(s: AssociateState): AssociateRequest[] {
  */
 export function buildAssociate(s: AssociateState): BuiltRequest {
   const sourceTbl = findTable(s.table);
-  if (!sourceTbl) return { relativeUrl: '', relativeNoBase: '', bytes: 0, queryParts: [], entitySet: '', entityLogical: '' };
+  if (!sourceTbl)
+    return {
+      relativeUrl: '',
+      relativeNoBase: '',
+      bytes: 0,
+      queryParts: [],
+      entitySet: '',
+      entityLogical: '',
+    };
   // Even before targets are picked, render the URL skeleton so the user sees
   // the shape of the request as they configure the nav property. URL shape
   // depends on cardinality:
   //   • Single-valued (N:1) PATCH: /<source>(<id>)             — body owns the link
   //   • Collection-valued       POST: /<source>(<id>)/<nav>/$ref
-  const nav = s.navProperty ? sourceTbl.navigationProperties.find(n => n.name === s.navProperty) : undefined;
+  const nav = s.navProperty
+    ? sourceTbl.navigationProperties.find((n) => n.name === s.navProperty)
+    : undefined;
   const singleValued = nav ? isSingleValuedNav(nav) : false;
   const idSegment = s.sourceId ? `(${s.sourceId})` : '(<source-id>)';
-  const navSegment = singleValued ? '' : (nav ? `/${nav.name}/$ref` : '/<nav-property>/$ref');
+  const navSegment = singleValued ? '' : nav ? `/${nav.name}/$ref` : '/<nav-property>/$ref';
   const path = `${ENV.apiBase}/${sourceTbl.entitySetName}${idSegment}${navSegment}`;
   const noBase = `/${sourceTbl.entitySetName}${idSegment}${navSegment}`;
   return {
@@ -779,7 +893,10 @@ export function buildAssociateBody(s: AssociateState): Record<string, unknown> {
     //   • Single-valued PATCH → `{ "<nav>@odata.bind": "<target-set>(<id>)" }`
     //   • Collection-valued POST → `{ "@odata.id": "<absolute-url>" }`
     const sourceTbl = findTable(s.table);
-    const nav = sourceTbl && s.navProperty ? sourceTbl.navigationProperties.find(n => n.name === s.navProperty) : undefined;
+    const nav =
+      sourceTbl && s.navProperty
+        ? sourceTbl.navigationProperties.find((n) => n.name === s.navProperty)
+        : undefined;
     const targetTbl = nav ? findTable(nav.targetEntity) : undefined;
     const singleValued = nav ? isSingleValuedNav(nav) : false;
     if (singleValued && sourceTbl && nav && targetTbl) {
@@ -817,8 +934,18 @@ export function buildAssociateBody(s: AssociateState): Record<string, unknown> {
 
 export function buildDisassociate(s: DisassociateState): BuiltRequest {
   const sourceTbl = findTable(s.table);
-  if (!sourceTbl) return { relativeUrl: '', relativeNoBase: '', bytes: 0, queryParts: [], entitySet: '', entityLogical: '' };
-  const nav = s.navProperty ? sourceTbl.navigationProperties.find(n => n.name === s.navProperty) : undefined;
+  if (!sourceTbl)
+    return {
+      relativeUrl: '',
+      relativeNoBase: '',
+      bytes: 0,
+      queryParts: [],
+      entitySet: '',
+      entityLogical: '',
+    };
+  const nav = s.navProperty
+    ? sourceTbl.navigationProperties.find((n) => n.name === s.navProperty)
+    : undefined;
   const idSegment = s.sourceId ? `(${s.sourceId})` : '(<source-id>)';
   const singleValued = nav ? isSingleValuedNav(nav) : false;
 
@@ -876,7 +1003,7 @@ export interface DisassociateRequest {
 export function buildDisassociateRequests(s: DisassociateState): DisassociateRequest[] {
   const sourceTbl = findTable(s.table);
   if (!sourceTbl || !s.sourceId || !s.navProperty) return [];
-  const nav = sourceTbl.navigationProperties.find(n => n.name === s.navProperty);
+  const nav = sourceTbl.navigationProperties.find((n) => n.name === s.navProperty);
   if (!nav) return [];
 
   const idSegment = `(${s.sourceId})`;
@@ -895,17 +1022,23 @@ export function buildDisassociateRequests(s: DisassociateState): DisassociateReq
     // lookups we use that as a best-effort. Disambiguated bind keys all
     // resolve to the same wire effect when the value is null.
     const targetTbl = findTable(nav.targetEntity);
-    const bindKey = bindPropertyFor(sourceTbl, { logicalName: nav.name }, targetTbl?.logicalName ?? nav.targetEntity);
-    return [{
-      method: 'PATCH',
-      relativeUrl: `${ENV.apiBase}/${sourceTbl.entitySetName}${idSegment}`,
-      relativeNoBase: `/${sourceTbl.entitySetName}${idSegment}`,
-      targetId: null,
-      body: { [bindKey]: null },
-    }];
+    const bindKey = bindPropertyFor(
+      sourceTbl,
+      { logicalName: nav.name },
+      targetTbl?.logicalName ?? nav.targetEntity,
+    );
+    return [
+      {
+        method: 'PATCH',
+        relativeUrl: `${ENV.apiBase}/${sourceTbl.entitySetName}${idSegment}`,
+        relativeNoBase: `/${sourceTbl.entitySetName}${idSegment}`,
+        targetId: null,
+        body: { [bindKey]: null },
+      },
+    ];
   }
   // Collection-valued: one DELETE per target id — unchanged
-  return s.targetIds.filter(Boolean).map(targetId => ({
+  return s.targetIds.filter(Boolean).map((targetId) => ({
     method: 'DELETE' as const,
     relativeUrl: `${ENV.apiBase}/${sourceTbl.entitySetName}${idSegment}${navSegment}(${targetId})/$ref`,
     relativeNoBase: `/${sourceTbl.entitySetName}${idSegment}${navSegment}(${targetId})/$ref`,
@@ -915,7 +1048,15 @@ export function buildDisassociateRequests(s: DisassociateState): DisassociateReq
 
 export function buildPredefinedQuery(s: PredefinedQueryState): BuiltRequest {
   const tbl = findTable(s.table);
-  if (!tbl) return { relativeUrl: '', relativeNoBase: '', bytes: 0, queryParts: [], entitySet: '', entityLogical: '' };
+  if (!tbl)
+    return {
+      relativeUrl: '',
+      relativeNoBase: '',
+      bytes: 0,
+      queryParts: [],
+      entitySet: '',
+      entityLogical: '',
+    };
   const parts: { key: string; value: string }[] = [];
   parts.push({ key: s.queryType, value: s.queryId ?? '<query-guid>' });
   if (s.top != null && s.top > 0 && (s.prefer.maxpagesize == null || s.prefer.maxpagesize === 0)) {
@@ -934,4 +1075,3 @@ export function buildPredefinedQuery(s: PredefinedQueryState): BuiltRequest {
     entityLogical: tbl.logicalName,
   };
 }
-

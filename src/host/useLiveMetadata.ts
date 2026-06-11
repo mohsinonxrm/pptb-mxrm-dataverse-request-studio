@@ -13,9 +13,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { metadata, type EntityListItem } from './metadataProvider';
-import {
-  __subscribeLiveTables, findTable, type TableMeta,
-} from '../mock/metadata';
+import { __subscribeLiveTables, findTable, type TableMeta } from '../mock/metadata';
 import { collectReferencedEntities, type ReferencedTreeInput } from '../engine/navPath';
 
 /**
@@ -34,7 +32,7 @@ export function useLiveTable(logical: string | null | undefined): {
   // Bump on every registry update — that's what triggers re-render after
   // a metadata fetch resolves.
   const [, bump] = useState(0);
-  useEffect(() => __subscribeLiveTables(() => bump(v => v + 1)), []);
+  useEffect(() => __subscribeLiveTables(() => bump((v) => v + 1)), []);
 
   const [loading, setLoading] = useState(false);
 
@@ -63,11 +61,18 @@ export function useLiveEntities(): {
 
   useEffect(() => {
     let cancelled = false;
-    metadata.listEntities()
-      .then(list => { if (!cancelled) setEntities(list); })
-      .catch(e => console.warn('[useLiveEntities] listEntities failed', e))
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    metadata
+      .listEntities()
+      .then((list) => {
+        if (!cancelled) setEntities(list);
+      })
+      .catch((e) => console.warn('[useLiveEntities] listEntities failed', e))
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return { entities, loading };
@@ -80,8 +85,11 @@ export function useLiveEntities(): {
 export function useWarmTable(): (logical: string) => Promise<void> {
   return useCallback(async (logical: string) => {
     if (!logical) return;
-    try { await metadata.getTable(logical); }
-    catch (e) { console.warn(`[useWarmTable] getTable('${logical}') failed`, e); }
+    try {
+      await metadata.getTable(logical);
+    } catch (e) {
+      console.warn(`[useWarmTable] getTable('${logical}') failed`, e);
+    }
   }, []);
 }
 
@@ -113,7 +121,7 @@ export function useWarmReferencedTables(
   trees: ReferencedTreeInput,
 ): void {
   const [registryVersion, setRegistryVersion] = useState(0);
-  useEffect(() => __subscribeLiveTables(() => setRegistryVersion(v => v + 1)), []);
+  useEffect(() => __subscribeLiveTables(() => setRegistryVersion((v) => v + 1)), []);
 
   // Stable dependency key — the trees object is rebuilt by the caller each
   // render, so depend on its serialized content rather than its identity.

@@ -13,11 +13,18 @@
 // (no toolboxAPI): settings stay in memory and reset on reload.
 
 import {
-  createContext, useCallback, useContext, useEffect, useRef, useState,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
   type ReactNode,
 } from 'react';
 import {
-  defaultDisplaySettings, mergeWithDefaults, DISPLAY_SETTINGS_KEY,
+  defaultDisplaySettings,
+  mergeWithDefaults,
+  DISPLAY_SETTINGS_KEY,
   type DisplaySettings,
 } from '../state/displaySettings';
 
@@ -49,7 +56,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
 
     loadSettings();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // ── Update + persist ──
@@ -58,11 +67,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
     if (loadedRef.current) {
       if (typeof window !== 'undefined' && window.toolboxAPI?.settings?.set) {
-        window.toolboxAPI.settings
-          .set(DISPLAY_SETTINGS_KEY, newSettings)
-          .catch((err: unknown) => {
-            console.warn('⚙️ Failed to save settings to toolboxAPI:', err);
-          });
+        window.toolboxAPI.settings.set(DISPLAY_SETTINGS_KEY, newSettings).catch((err: unknown) => {
+          console.warn('⚙️ Failed to save settings to toolboxAPI:', err);
+        });
       }
     }
   }, []);
@@ -85,7 +92,7 @@ export function usePersistedSettings(): Ctx {
     if (typeof window !== 'undefined') {
       console.warn(
         '[usePersistedSettings] called outside <SettingsProvider> — ' +
-        'wrap the app in <SettingsProvider> in App.tsx.',
+          'wrap the app in <SettingsProvider> in App.tsx.',
       );
     }
     return [defaultDisplaySettings, () => {}];

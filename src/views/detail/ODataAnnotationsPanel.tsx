@@ -10,8 +10,12 @@
 // Closed by default. Single-section Accordion.
 
 import {
-  Accordion, AccordionItem, AccordionHeader, AccordionPanel,
-  Caption1, tokens,
+  Accordion,
+  AccordionItem,
+  AccordionHeader,
+  AccordionPanel,
+  Caption1,
+  tokens,
 } from '@fluentui/react-components';
 import { Info16Regular } from '@fluentui/react-icons';
 import type { PartitionedAnnotation } from './detailFieldPartitioner';
@@ -36,16 +40,18 @@ export function ODataAnnotationsPanel({ annotations }: ODataAnnotationsPanelProp
           </span>
         </AccordionHeader>
         <AccordionPanel>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(200px, 320px) 1fr',
-            rowGap: 4,
-            columnGap: 12,
-            fontFamily: tokens.fontFamilyMonospace,
-            fontSize: 11,
-            color: tokens.colorNeutralForeground2,
-          }}>
-            {annotations.map(a => (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(200px, 320px) 1fr',
+              rowGap: 4,
+              columnGap: 12,
+              fontFamily: tokens.fontFamilyMonospace,
+              fontSize: 11,
+              color: tokens.colorNeutralForeground2,
+            }}
+          >
+            {annotations.map((a) => (
               <span key={a.key} style={{ display: 'contents' }}>
                 <span
                   style={{ color: tokens.colorBrandForeground1, wordBreak: 'break-all' }}

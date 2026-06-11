@@ -1,7 +1,7 @@
 name: 🧩 Dataverse Web API request bug
 description: Issues with the URL/body shape DRS produces, the code it generates, or metadata loading.
-title: "[WebAPI Bug]: "
-labels: ["bug", "webapi", "needs-triage"]
+title: '[WebAPI Bug]: '
+labels: ['bug', 'webapi', 'needs-triage']
 body:
   - type: markdown
     attributes:
@@ -26,28 +26,28 @@ body:
   - type: input
     attributes:
       label: Tool version
-      placeholder: "e.g., v1.0.0 or commit SHA"
+      placeholder: 'e.g., v1.0.0 or commit SHA'
     validations:
       required: true
 
   - type: input
     attributes:
       label: PPTB version (if known)
-      placeholder: "e.g., 1.2.x"
+      placeholder: 'e.g., 1.2.x'
     validations:
       required: false
 
   - type: input
     attributes:
       label: Dataverse Web API version (if known)
-      placeholder: "e.g., v9.2"
+      placeholder: 'e.g., v9.2'
     validations:
       required: false
 
   - type: input
     attributes:
       label: Environment region (optional)
-      placeholder: "e.g., NA / EU / UK / APAC"
+      placeholder: 'e.g., NA / EU / UK / APAC'
     validations:
       required: false
 
@@ -94,7 +94,7 @@ body:
     attributes:
       label: URL DRS generated
       description: Copy from the URL bar in DRS (sanitize ids if needed).
-      placeholder: "/api/data/v9.2/accounts?$select=name,..."
+      placeholder: '/api/data/v9.2/accounts?$select=name,...'
       render: shell
     validations:
       required: false

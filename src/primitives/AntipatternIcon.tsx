@@ -11,7 +11,14 @@
 // Click → Popover with the full title + body + Learn more link to MS docs.
 // No antipatterns → returns null (no visual noise on clean rules).
 
-import { Popover, PopoverTrigger, PopoverSurface, Button, Link, tokens } from '@fluentui/react-components';
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverSurface,
+  Button,
+  Link,
+  tokens,
+} from '@fluentui/react-components';
 import { Warning16Filled, Open16Regular } from '@fluentui/react-icons';
 import type { ColumnAntipattern } from '../engine/antipatterns';
 
@@ -30,11 +37,7 @@ export function AntipatternIcon({ antipatterns }: AntipatternIconProps) {
         <Button
           appearance="transparent"
           size="small"
-          icon={
-            <Warning16Filled
-              style={{ color: tokens.colorPaletteDarkOrangeForeground1 }}
-            />
-          }
+          icon={<Warning16Filled style={{ color: tokens.colorPaletteDarkOrangeForeground1 }} />}
           aria-label={`${antipatterns.length} performance warning${antipatterns.length === 1 ? '' : 's'} on this rule`}
           title={
             antipatterns.length === 1
@@ -57,33 +60,42 @@ export function AntipatternIcon({ antipatterns }: AntipatternIconProps) {
       <PopoverSurface style={{ maxWidth: 360, padding: 12 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {antipatterns.map((ap, i) => (
-            <div key={ap.kind + i} style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 6,
-              ...(i > 0 ? {
-                paddingTop: 12,
-                borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
-              } : {}),
-            }}>
-              <div style={{
+            <div
+              key={ap.kind + i}
+              style={{
                 display: 'flex',
-                alignItems: 'center',
+                flexDirection: 'column',
                 gap: 6,
-                fontWeight: tokens.fontWeightSemibold,
-                fontSize: tokens.fontSizeBase300,
-                color: tokens.colorNeutralForeground1,
-              }}>
+                ...(i > 0
+                  ? {
+                      paddingTop: 12,
+                      borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+                    }
+                  : {}),
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontWeight: tokens.fontWeightSemibold,
+                  fontSize: tokens.fontSizeBase300,
+                  color: tokens.colorNeutralForeground1,
+                }}
+              >
                 <Warning16Filled
                   style={{ color: tokens.colorPaletteDarkOrangeForeground1, flexShrink: 0 }}
                 />
                 <span>{ap.title}</span>
               </div>
-              <div style={{
-                fontSize: tokens.fontSizeBase200,
-                color: tokens.colorNeutralForeground2,
-                lineHeight: 1.4,
-              }}>
+              <div
+                style={{
+                  fontSize: tokens.fontSizeBase200,
+                  color: tokens.colorNeutralForeground2,
+                  lineHeight: 1.4,
+                }}
+              >
                 {ap.body}
               </div>
               <Link

@@ -1,10 +1,25 @@
-import { Field, SpinButton, Switch, Text, MessageBar, MessageBarBody, tokens, Caption1, ToggleButton } from '@fluentui/react-components';
+import {
+  Field,
+  SpinButton,
+  Switch,
+  Text,
+  MessageBar,
+  MessageBarBody,
+  tokens,
+  Caption1,
+  ToggleButton,
+} from '@fluentui/react-components';
 import { NumberSymbol20Filled, Tag20Filled } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
 import { ApplyOverridesBanner } from './ApplyOverridesBanner';
 import type { RequestGroup } from '../registry/requestTypes';
 
-export function TopEditor({ top, setTop, maxPageSize, group = 'read' }: {
+export function TopEditor({
+  top,
+  setTop,
+  maxPageSize,
+  group = 'read',
+}: {
   top: number | null;
   setTop: (v: number | null) => void;
   /** Visible warning when both $top and Prefer:maxpagesize are set (mutually exclusive) */
@@ -23,12 +38,20 @@ export function TopEditor({ top, setTop, maxPageSize, group = 'read' }: {
       {conflict && (
         <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 12 }}>
           <MessageBarBody>
-            <strong>$top and Prefer: odata.maxpagesize are mutually exclusive</strong> — when both are set, <code>$top</code> is silently ignored.
+            <strong>$top and Prefer: odata.maxpagesize are mutually exclusive</strong> — when both
+            are set, <code>$top</code> is silently ignored.
           </MessageBarBody>
         </MessageBar>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 360 }}>
-        <Field label="Top N" hint={top == null || top === 0 ? 'Empty / 0 = use server default (5,000).' : `Returns up to ${top} rows.`}>
+        <Field
+          label="Top N"
+          hint={
+            top == null || top === 0
+              ? 'Empty / 0 = use server default (5,000).'
+              : `Returns up to ${top} rows.`
+          }
+        >
           <SpinButton
             value={top ?? 0}
             min={0}
@@ -41,21 +64,33 @@ export function TopEditor({ top, setTop, maxPageSize, group = 'read' }: {
           />
         </Field>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {[5, 10, 25, 50, 100, 500, 1000, 5000].map(n => (
-            <ToggleButton key={n} size="small" shape="circular" checked={top === n} onClick={() => setTop(n)}>
+          {[5, 10, 25, 50, 100, 500, 1000, 5000].map((n) => (
+            <ToggleButton
+              key={n}
+              size="small"
+              shape="circular"
+              checked={top === n}
+              onClick={() => setTop(n)}
+            >
               {n.toLocaleString()}
             </ToggleButton>
           ))}
         </div>
         <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-          For large pages, prefer <code>Prefer: odata.maxpagesize</code> + <code>@odata.nextLink</code>.
+          For large pages, prefer <code>Prefer: odata.maxpagesize</code> +{' '}
+          <code>@odata.nextLink</code>.
         </Caption1>
       </div>
     </div>
   );
 }
 
-export function CountEditor({ countOn, setCountOn, group = 'read', applyActive }: {
+export function CountEditor({
+  countOn,
+  setCountOn,
+  group = 'read',
+  applyActive,
+}: {
   countOn: boolean;
   setCountOn: (b: boolean) => void;
   group?: RequestGroup;
@@ -73,13 +108,11 @@ export function CountEditor({ countOn, setCountOn, group = 'read', applyActive }
       {applyActive && <ApplyOverridesBanner clause="$count" />}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 480 }}>
         <Field label={countOn ? 'Including @odata.count' : 'Not including @odata.count'}>
-          <Switch
-            checked={countOn}
-            onChange={(_, d) => setCountOn(d.checked)}
-          />
+          <Switch checked={countOn} onChange={(_, d) => setCountOn(d.checked)} />
         </Field>
         <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
-          When you also need to know whether the count is capped, add the <code>Microsoft.Dynamics.CRM.totalrecordcount</code> and{' '}
+          When you also need to know whether the count is capped, add the{' '}
+          <code>Microsoft.Dynamics.CRM.totalrecordcount</code> and{' '}
           <code>totalrecordcountlimitexceeded</code> annotations via Prefer.
         </Text>
       </div>

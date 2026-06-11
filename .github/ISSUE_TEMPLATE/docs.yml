@@ -1,7 +1,7 @@
 name: 📚 Documentation
 description: Report missing/incorrect docs or request a new guide.
-title: "[Docs]: "
-labels: ["docs"]
+title: '[Docs]: '
+labels: ['docs']
 body:
   - type: checkboxes
     attributes:
@@ -19,13 +19,13 @@ body:
   - type: textarea
     attributes:
       label: Suggested improvement
-      placeholder: "Propose wording, steps, or a new section..."
+      placeholder: 'Propose wording, steps, or a new section...'
     validations:
       required: false
 
   - type: textarea
     attributes:
       label: Context
-      placeholder: "Link to page/section or screenshot..."
+      placeholder: 'Link to page/section or screenshot...'
     validations:
       required: false

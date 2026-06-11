@@ -119,7 +119,12 @@ export function newId(prefix: string): string {
   }
   return `${prefix}_${Date.now().toString(36)}_${(__fallbackCounter++).toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`;
 }
-export const emptyTree = (): FilterGroup => ({ id: newId('root'), type: 'group', combinator: 'and', rules: [] });
+export const emptyTree = (): FilterGroup => ({
+  id: newId('root'),
+  type: 'group',
+  combinator: 'and',
+  rules: [],
+});
 
 // ── Tree mutation helpers ───────────────────────────────────
 // Recursive — walks plain groups AND the inner predicate of lambda nodes.
@@ -127,17 +132,21 @@ export function patchNode(
   root: FilterGroup,
   id: string,
   patch: Partial<Omit<FilterGroup, 'type'>> &
-         Partial<Omit<FilterRule, 'type'>> &
-         Partial<Omit<FilterFunctionNode, 'type'>> &
-         Partial<Omit<FilterLambdaNode, 'type'>>,
+    Partial<Omit<FilterRule, 'type'>> &
+    Partial<Omit<FilterFunctionNode, 'type'>> &
+    Partial<Omit<FilterLambdaNode, 'type'>>,
 ): FilterGroup {
   const visit = (n: FilterNode): FilterNode => {
     if (n.id === id) {
       switch (n.type) {
-        case 'group':    return { ...n, ...(patch as Partial<FilterGroup>) };
-        case 'rule':     return { ...n, ...(patch as Partial<FilterRule>) };
-        case 'function': return { ...n, ...(patch as Partial<FilterFunctionNode>) };
-        case 'lambda':   return { ...n, ...(patch as Partial<FilterLambdaNode>) };
+        case 'group':
+          return { ...n, ...(patch as Partial<FilterGroup>) };
+        case 'rule':
+          return { ...n, ...(patch as Partial<FilterRule>) };
+        case 'function':
+          return { ...n, ...(patch as Partial<FilterFunctionNode>) };
+        case 'lambda':
+          return { ...n, ...(patch as Partial<FilterLambdaNode>) };
       }
     }
     if (n.type === 'group') return { ...n, rules: n.rules.map(visit) };
@@ -167,11 +176,22 @@ export function addChild(root: FilterGroup, parentId: string, child: FilterNode)
  * `rules[fromIndex]` to `rules[toIndex]`. Returns a new tree; original
  * is not mutated. Used by the FilterEditor's DnD reorder UX.
  */
-export function reorderInGroup(root: FilterGroup, parentId: string, fromIndex: number, toIndex: number): FilterGroup {
+export function reorderInGroup(
+  root: FilterGroup,
+  parentId: string,
+  fromIndex: number,
+  toIndex: number,
+): FilterGroup {
   const visit = (n: FilterNode): FilterNode => {
     if (n.type === 'group') {
       if (n.id === parentId) {
-        if (fromIndex < 0 || fromIndex >= n.rules.length || toIndex < 0 || toIndex >= n.rules.length) return n;
+        if (
+          fromIndex < 0 ||
+          fromIndex >= n.rules.length ||
+          toIndex < 0 ||
+          toIndex >= n.rules.length
+        )
+          return n;
         const next = [...n.rules];
         const [moved] = next.splice(fromIndex, 1);
         next.splice(toIndex, 0, moved);
@@ -190,9 +210,7 @@ export function removeNode(root: FilterGroup, id: string): FilterGroup {
     if (n.type === 'group') {
       return {
         ...n,
-        rules: n.rules
-          .filter(c => c.id !== id)
-          .map(c => visit(c)),
+        rules: n.rules.filter((c) => c.id !== id).map((c) => visit(c)),
       };
     }
     if (n.type === 'lambda') return { ...n, inner: visit(n.inner) as FilterGroup };
@@ -220,10 +238,16 @@ export function countRules(g: FilterGroup): number {
   let n = 0;
   for (const c of g.rules) {
     switch (c.type) {
-      case 'group':    n += countRules(c); break;
-      case 'lambda':   n += countRules(c.inner) || 1; break; // empty lambda counts as one
+      case 'group':
+        n += countRules(c);
+        break;
+      case 'lambda':
+        n += countRules(c.inner) || 1;
+        break; // empty lambda counts as one
       case 'rule':
-      case 'function': n += 1; break;
+      case 'function':
+        n += 1;
+        break;
     }
   }
   return n;
@@ -253,7 +277,7 @@ function escapeStringLiteral(s: string): string {
  * stripped so the caller can render a faithful advisory ("we removed the
  * leading % from your search — Dataverse doesn't support it").
  */
-export type StrippedKind = '%' | '_' | '[' | "[^" | '-' | "'";
+export type StrippedKind = '%' | '_' | '[' | '[^' | '-' | "'";
 
 export function stripLeadingWildcards(raw: string): {
   value: string;
@@ -268,11 +292,27 @@ export function stripLeadingWildcards(raw: string): {
   while (i < raw.length) {
     const ch = raw[i];
     // % and _ — classic SQL/OData wildcards
-    if (ch === '%') { if (!kinds.includes('%')) kinds.push('%'); i++; continue; }
-    if (ch === '_') { if (!kinds.includes('_')) kinds.push('_'); i++; continue; }
+    if (ch === '%') {
+      if (!kinds.includes('%')) kinds.push('%');
+      i++;
+      continue;
+    }
+    if (ch === '_') {
+      if (!kinds.includes('_')) kinds.push('_');
+      i++;
+      continue;
+    }
     // Hyphen / apostrophe — collation-driven leading-wildcard analogs
-    if (ch === '-' && i === 0) { kinds.push('-'); i++; continue; }
-    if (ch === "'" && i === 0) { kinds.push("'"); i++; continue; }
+    if (ch === '-' && i === 0) {
+      kinds.push('-');
+      i++;
+      continue;
+    }
+    if (ch === "'" && i === 0) {
+      kinds.push("'");
+      i++;
+      continue;
+    }
     // [ and [^ — bracket character class. Skip the whole [...] block.
     if (ch === '[') {
       const isNeg = raw[i + 1] === '^';
@@ -313,7 +353,10 @@ export interface StrippedWildcardEntry {
 
 const STRING_FN_OPS = new Set(['contains', 'startswith', 'endswith']);
 
-export function collectStrippedWildcards(group: FilterGroup, out: StrippedWildcardEntry[] = []): StrippedWildcardEntry[] {
+export function collectStrippedWildcards(
+  group: FilterGroup,
+  out: StrippedWildcardEntry[] = [],
+): StrippedWildcardEntry[] {
   for (const node of group.rules) {
     if (node.type === 'rule' && STRING_FN_OPS.has(node.op) && node.val) {
       const { value, stripped, kinds } = stripLeadingWildcards(node.val);
@@ -334,12 +377,18 @@ export function collectStrippedWildcards(group: FilterGroup, out: StrippedWildca
  */
 export function strippedKindLabel(k: StrippedKind): string {
   switch (k) {
-    case '%':  return 'percent (%) — matches any sequence';
-    case '_':  return 'underscore (_) — matches a single character';
-    case '[':  return 'bracket character class ([...])';
-    case '[^': return 'negated bracket character class ([^...])';
-    case '-':  return 'hyphen (-) — collation-driven leading wildcard';
-    case "'":  return 'apostrophe (\') — collation-driven leading wildcard';
+    case '%':
+      return 'percent (%) — matches any sequence';
+    case '_':
+      return 'underscore (_) — matches a single character';
+    case '[':
+      return 'bracket character class ([...])';
+    case '[^':
+      return 'negated bracket character class ([^...])';
+    case '-':
+      return 'hyphen (-) — collation-driven leading wildcard';
+    case "'":
+      return "apostrophe (') — collation-driven leading wildcard";
   }
 }
 
@@ -378,10 +427,13 @@ function quoteLiteral(col: ColumnMeta | undefined, raw: string): string {
       return `'${escapeStringLiteral(raw)}'`;
   }
 }
-const arrayLiteral = (vals: string[]): string =>
-  JSON.stringify(vals.map(v => String(v ?? '')));
+const arrayLiteral = (vals: string[]): string => JSON.stringify(vals.map((v) => String(v ?? '')));
 
-function colLookup(col: string, prefix: string | undefined, table: TableMeta): ColumnMeta | undefined {
+function colLookup(
+  col: string,
+  prefix: string | undefined,
+  table: TableMeta,
+): ColumnMeta | undefined {
   // Resolve the leaf through the canonical metadata-driven resolver so a
   // nav-path leaf (`msdyn_opportunityid/abc_salesstage`) is looked up on the
   // RELATED entity, not the root. This is what makes the leaf's AttributeType
@@ -423,7 +475,7 @@ export function ruleToOData(rule: FilterRule, ctx: EncodeCtx): string {
       // If the LHS uses a lambda alias prefix (e.g. `c/jobtitle`) we
       // mirror that on the RHS so both sides resolve in the same scope.
       // Same lookup-value rewrite applies on the RHS.
-      const rhsCol = ctx.table.columns.find(c => c.logicalName === raw);
+      const rhsCol = ctx.table.columns.find((c) => c.logicalName === raw);
       const rhsEnc = attrRef(rhsCol, raw);
       return ctx.lambdaAlias && !raw.includes('/') ? `${ctx.lambdaAlias}/${rhsEnc}` : rhsEnc;
     }
@@ -504,8 +556,13 @@ export function functionToOData(fn: FilterFunctionNode, ctx: EncodeCtx): string 
       break;
     case 'dv-fn-1': {
       const v = fn.val ?? '';
-      const lit = col && (col.attributeType === 'DateTime' || col.attributeType === 'String' || col.attributeType === 'Memo')
-        ? `'${escapeStringLiteral(v)}'` : v;
+      const lit =
+        col &&
+        (col.attributeType === 'DateTime' ||
+          col.attributeType === 'String' ||
+          col.attributeType === 'Memo')
+          ? `'${escapeStringLiteral(v)}'`
+          : v;
       expr = `${op.odata}(PropertyName='${propName}',PropertyValue=${lit})`;
       break;
     }
@@ -561,7 +618,7 @@ export function lambdaToOData(
   outerAlias?: string,
 ): string {
   // Resolve the related table for inner column lookups
-  const nav = parentTable.navigationProperties.find(n => n.name === node.nav);
+  const nav = parentTable.navigationProperties.find((n) => n.name === node.nav);
   const innerTbl = nav ? findTableByLogical(nav.targetEntity) : undefined;
   const inner = innerTbl
     ? groupToOData(node.inner, innerTbl, node.alias)
@@ -580,14 +637,18 @@ export function lambdaToOData(
 export function groupToOData(g: FilterGroup, table: TableMeta, lambdaAlias?: string): string {
   const ctx: EncodeCtx = { table, lambdaAlias };
   const parts = g.rules
-    .map(c => {
+    .map((c) => {
       switch (c.type) {
-        case 'group':    return groupToOData(c, table, lambdaAlias);
-        case 'rule':     return ruleToOData(c, ctx);
-        case 'function': return functionToOData(c, ctx);
+        case 'group':
+          return groupToOData(c, table, lambdaAlias);
+        case 'rule':
+          return ruleToOData(c, ctx);
+        case 'function':
+          return functionToOData(c, ctx);
         // Propagate the current scope's alias so a nested lambda's nav
         // gets prefixed (e.g. `c/Contact_Annotation/any(n: …)`).
-        case 'lambda':   return lambdaToOData(c, table, lambdaAlias);
+        case 'lambda':
+          return lambdaToOData(c, table, lambdaAlias);
       }
     })
     .filter(Boolean);
@@ -598,7 +659,7 @@ export function groupToOData(g: FilterGroup, table: TableMeta, lambdaAlias?: str
   } else {
     const joiner = ` ${g.combinator} `;
     body = parts
-      .map(p => (p.includes(' and ') || p.includes(' or ')) ? `(${p})` : p)
+      .map((p) => (p.includes(' and ') || p.includes(' or ') ? `(${p})` : p))
       .join(joiner);
   }
   // Group-level NOT — wrap the body in `not (…)`. Empirically supported
@@ -624,7 +685,10 @@ function findTableByLogical(id: string): TableMeta | undefined {
 }
 
 // ── Validators ──────────────────────────────────────────────
-export function validateTree(g: FilterGroup, urlBytes: number): {
+export function validateTree(
+  g: FilterGroup,
+  urlBytes: number,
+): {
   ruleCount: number;
   ruleWarn: boolean;
   ruleError: boolean;
@@ -634,18 +698,20 @@ export function validateTree(g: FilterGroup, urlBytes: number): {
   const ruleCount = countRules(g);
   return {
     ruleCount,
-    ruleWarn:  ruleCount >= 400,
-    ruleError: ruleCount  > 500,
-    urlWarn:   urlBytes  >= 30_000,
-    urlError:  urlBytes  >= 32_000,
+    ruleWarn: ruleCount >= 400,
+    ruleError: ruleCount > 500,
+    urlWarn: urlBytes >= 30_000,
+    urlError: urlBytes >= 32_000,
   };
 }
 
 // Factory helpers for the "Add …" menu in the FilterEditor footer.
 export function makeRuleDefaults(op: OperatorDef): Partial<FilterRule> {
   switch (op.kind) {
-    case 'null-check':       return {};
-    default:                 return { val: '' };
+    case 'null-check':
+      return {};
+    default:
+      return { val: '' };
   }
 }
 
@@ -666,11 +732,14 @@ export function defaultGroup(firstColumn: string): FilterGroup {
 export function defaultFunction(table: TableMeta, fnId = 'LastXDays'): FilterFunctionNode {
   const op = findOperator(fnId);
   const allowed = op?.allowedTypes;
-  const visibleCols = table.columns.filter(c => c.attributeType !== 'File' && c.attributeType !== 'Image');
+  const visibleCols = table.columns.filter(
+    (c) => c.attributeType !== 'File' && c.attributeType !== 'Image',
+  );
   const compatible = allowed
-    ? visibleCols.find(c => allowed.includes(c.attributeType))
+    ? visibleCols.find((c) => allowed.includes(c.attributeType))
     : visibleCols[0];
-  const col = compatible?.logicalName ?? visibleCols[0]?.logicalName ?? table.columns[0].logicalName;
+  const col =
+    compatible?.logicalName ?? visibleCols[0]?.logicalName ?? table.columns[0].logicalName;
   // Sensible default value for int-valued rolling functions
   const val = op?.intValue ? '30' : '';
   return { id: newId('f'), type: 'function', op: fnId, col, val };
@@ -685,8 +754,11 @@ export function defaultLambda(navName: string, firstColumn: string): FilterLambd
     nav: navName,
     lambda: 'any',
     alias,
-    inner: { id: newId('g'), type: 'group', combinator: 'and', rules: [
-      { id: newId('r'), type: 'rule', col: `${alias}/${firstColumn}`, op: 'eq', val: '' },
-    ] },
+    inner: {
+      id: newId('g'),
+      type: 'group',
+      combinator: 'and',
+      rules: [{ id: newId('r'), type: 'rule', col: `${alias}/${firstColumn}`, op: 'eq', val: '' }],
+    },
   };
 }

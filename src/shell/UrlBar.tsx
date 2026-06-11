@@ -1,7 +1,5 @@
 import { Button, Tooltip, tokens, Caption1, Spinner } from '@fluentui/react-components';
-import {
-  Copy20Regular, Play20Filled, Open20Regular,
-} from '@fluentui/react-icons';
+import { Copy20Regular, Play20Filled, Open20Regular } from '@fluentui/react-icons';
 import type { FC } from 'react';
 import { useEffect } from 'react';
 import { useStudioStyles } from '../primitives/styles';
@@ -45,7 +43,17 @@ export interface UrlBarProps {
   onAdvisoryFocus?: (nodeId: string) => void;
 }
 
-export function UrlBar({ method, url, disabledReason, executeVerb, executeIcon, onExecute, loading, advisories, onAdvisoryFocus }: UrlBarProps) {
+export function UrlBar({
+  method,
+  url,
+  disabledReason,
+  executeVerb,
+  executeIcon,
+  onExecute,
+  loading,
+  advisories,
+  onAdvisoryFocus,
+}: UrlBarProps) {
   const ExecIcon = executeIcon ?? Play20Filled;
   const s = useStudioStyles();
   const fullUrl = `https://${ENV.host}${url}`;
@@ -88,10 +96,13 @@ export function UrlBar({ method, url, disabledReason, executeVerb, executeIcon, 
       {/* Byte counter is functional telemetry (not decoration) — 11px@100%
           reads as AA-large without competing with the URL itself; 10px@70%
           opacity is below the legibility floor on standard DPI. */}
-      <Caption1 style={{
-        fontSize: 11, color: tokens.colorNeutralForeground3,
-        fontFamily: tokens.fontFamilyMonospace,
-      }}>
+      <Caption1
+        style={{
+          fontSize: 11,
+          color: tokens.colorNeutralForeground3,
+          fontFamily: tokens.fontFamilyMonospace,
+        }}
+      >
         {(url.length / 1024).toFixed(1)} KB
       </Caption1>
       {advisories && advisories.length > 0 && (

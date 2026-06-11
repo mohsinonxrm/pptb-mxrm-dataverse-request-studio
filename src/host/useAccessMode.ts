@@ -36,10 +36,10 @@ export function useAccessMode() {
           // hot when they get there.
           if (summary && !summary.noAccessMode) {
             getAllAdvancedFindEntities()
-              .then(entities => {
+              .then((entities) => {
                 metadataCache.setAllEntities(entities);
               })
-              .catch(err => {
+              .catch((err) => {
                 console.warn('[useAccessMode] failed to preload entity metadata:', err);
               });
           }
@@ -52,17 +52,19 @@ export function useAccessMode() {
     }
 
     checkAccess();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   return {
     accessSummary,
     loading,
     error,
-    fullFilterMode:     accessSummary?.fullFilterMode     ?? false,
-    solutionsOnlyMode:  accessSummary?.solutionsOnlyMode  ?? false,
+    fullFilterMode: accessSummary?.fullFilterMode ?? false,
+    solutionsOnlyMode: accessSummary?.solutionsOnlyMode ?? false,
     publishersOnlyMode: accessSummary?.publishersOnlyMode ?? false,
-    metadataOnlyMode:   accessSummary?.metadataOnlyMode   ?? false,
-    noAccessMode:       accessSummary?.noAccessMode       ?? false,
+    metadataOnlyMode: accessSummary?.metadataOnlyMode ?? false,
+    noAccessMode: accessSummary?.noAccessMode ?? false,
   };
 }

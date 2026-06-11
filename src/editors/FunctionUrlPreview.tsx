@@ -35,7 +35,7 @@ export function FunctionUrlPreview({ built, useParamAliases }: FunctionUrlPrevie
   const paramSegment = fnMatch?.[3] ?? '';
 
   const aliasPairs = aliasPart
-    ? aliasPart.split('&').map(p => {
+    ? aliasPart.split('&').map((p) => {
         const eq = p.indexOf('=');
         return eq === -1 ? { key: p, value: '' } : { key: p.slice(0, eq), value: p.slice(eq + 1) };
       })
@@ -58,18 +58,22 @@ export function FunctionUrlPreview({ built, useParamAliases }: FunctionUrlPrevie
         </Tooltip>
       </div>
 
-      <div style={{
-        padding: 10,
-        background: tokens.colorNeutralBackground3,
-        borderRadius: tokens.borderRadiusSmall,
-        fontFamily: tokens.fontFamilyMonospace,
-        fontSize: 11,
-        wordBreak: 'break-all',
-        whiteSpace: 'pre-wrap',
-        lineHeight: 1.6,
-      }}>
+      <div
+        style={{
+          padding: 10,
+          background: tokens.colorNeutralBackground3,
+          borderRadius: tokens.borderRadiusSmall,
+          fontFamily: tokens.fontFamilyMonospace,
+          fontSize: 11,
+          wordBreak: 'break-all',
+          whiteSpace: 'pre-wrap',
+          lineHeight: 1.6,
+        }}
+      >
         <span style={{ color: tokens.colorNeutralForeground3 }}>{prefix}/</span>
-        <span style={{ color: tokens.colorBrandForeground1, fontWeight: 700 }}>{fnName || pathPart}</span>
+        <span style={{ color: tokens.colorBrandForeground1, fontWeight: 700 }}>
+          {fnName || pathPart}
+        </span>
         {paramSegment !== '' && (
           <>
             <span style={{ color: tokens.colorNeutralForeground3 }}>(</span>
@@ -85,7 +89,9 @@ export function FunctionUrlPreview({ built, useParamAliases }: FunctionUrlPrevie
                 {i > 0 && <span style={{ color: tokens.colorNeutralForeground3 }}>&</span>}
                 <span style={{ color: tokens.colorPaletteDarkOrangeForeground1 }}>{p.key}</span>
                 <span style={{ color: tokens.colorNeutralForeground3 }}>=</span>
-                <span style={{ color: tokens.colorPaletteGreenForeground1 }}>{decodeURIComponent(p.value)}</span>
+                <span style={{ color: tokens.colorPaletteGreenForeground1 }}>
+                  {decodeURIComponent(p.value)}
+                </span>
               </span>
             ))}
           </>
@@ -94,12 +100,17 @@ export function FunctionUrlPreview({ built, useParamAliases }: FunctionUrlPrevie
 
       {useParamAliases && aliasPairs.length > 0 && (
         <Caption1 style={{ display: 'block', marginTop: 8, color: tokens.colorNeutralForeground3 }}>
-          Aliased — each <code style={{ color: tokens.colorPaletteDarkOrangeForeground1 }}>@p<i>n</i></code> in the path is bound by the query string. Recommended by docs for any non-trivial value.
+          Aliased — each{' '}
+          <code style={{ color: tokens.colorPaletteDarkOrangeForeground1 }}>
+            @p<i>n</i>
+          </code>{' '}
+          in the path is bound by the query string. Recommended by docs for any non-trivial value.
         </Caption1>
       )}
       {!useParamAliases && (
         <Caption1 style={{ display: 'block', marginTop: 8, color: tokens.colorNeutralForeground3 }}>
-          Inline — values are embedded directly in the path. Beware URL-length limits + DateTimeOffset encoding bugs.
+          Inline — values are embedded directly in the path. Beware URL-length limits +
+          DateTimeOffset encoding bugs.
         </Caption1>
       )}
     </div>
@@ -108,7 +119,7 @@ export function FunctionUrlPreview({ built, useParamAliases }: FunctionUrlPrevie
 
 // Color each `key=value` pair inside the param segment.
 function ParamSegment({ segment }: { segment: string }) {
-  const pairs = segment.split(',').map(p => {
+  const pairs = segment.split(',').map((p) => {
     const eq = p.indexOf('=');
     return eq === -1 ? { key: p, value: '' } : { key: p.slice(0, eq), value: p.slice(eq + 1) };
   });

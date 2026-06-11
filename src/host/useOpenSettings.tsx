@@ -12,34 +12,34 @@
 // The registration uses a ref so the provider re-renders zero times when
 // FrameHeader mounts/unmounts.
 
-import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from 'react';
 
 type OpenFn = () => void;
 
 interface OpenSettingsCtx {
-	open: OpenFn;
-	register: (fn: OpenFn) => void;
+  open: OpenFn;
+  register: (fn: OpenFn) => void;
 }
 
 const Ctx = createContext<OpenSettingsCtx | null>(null);
 
 export function OpenSettingsProvider({ children }: { children: ReactNode }) {
-	const ref = useRef<OpenFn | null>(null);
+  const ref = useRef<OpenFn | null>(null);
 
-	const open = useCallback(() => ref.current?.(), []);
-	const register = useCallback((fn: OpenFn) => {
-		ref.current = fn;
-	}, []);
+  const open = useCallback(() => ref.current?.(), []);
+  const register = useCallback((fn: OpenFn) => {
+    ref.current = fn;
+  }, []);
 
-	return <Ctx.Provider value={{ open, register }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ open, register }}>{children}</Ctx.Provider>;
 }
 
 /** Call this in FrameHeader to register its local `setSettingsOpen(true)` callback. */
 export function useRegisterOpenSettings(fn: OpenFn) {
-	const ctx = useContext(Ctx);
-	useEffect(() => {
-		ctx?.register(fn);
-	}, [ctx, fn]);
+  const ctx = useContext(Ctx);
+  useEffect(() => {
+    ctx?.register(fn);
+  }, [ctx, fn]);
 }
 
 /**
@@ -47,6 +47,6 @@ export function useRegisterOpenSettings(fn: OpenFn) {
  * Returns a no-op when called outside the provider (safe fallback).
  */
 export function useOpenSettings(): OpenFn {
-	const ctx = useContext(Ctx);
-	return ctx?.open ?? (() => {});
+  const ctx = useContext(Ctx);
+  return ctx?.open ?? (() => {});
 }

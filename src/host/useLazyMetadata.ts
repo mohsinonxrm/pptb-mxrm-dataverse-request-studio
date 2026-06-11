@@ -6,9 +6,7 @@
 //   - Cache utilities (clearCache, clearEntityCache)
 
 import { useState, useCallback } from 'react';
-import type {
-  EntityMetadata, AttributeMetadata, RelationshipMetadata,
-} from './pptbClient';
+import type { EntityMetadata, AttributeMetadata, RelationshipMetadata } from './pptbClient';
 import * as metadataLoader from './dataverseMetadata';
 
 interface UseLazyMetadataResult {
@@ -37,8 +35,11 @@ export function useLazyMetadata(): UseLazyMetadataResult {
       return await metadataLoader.loadAllEntities();
     } catch (err) {
       const e = err instanceof Error ? err : new Error('Failed to load entities');
-      setError(e); throw e;
-    } finally { setIsLoading(false); }
+      setError(e);
+      throw e;
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   const loadEntityMetadata = useCallback(async (logicalName: string) => {
@@ -47,9 +48,13 @@ export function useLazyMetadata(): UseLazyMetadataResult {
     try {
       return await metadataLoader.loadEntityMetadata(logicalName);
     } catch (err) {
-      const e = err instanceof Error ? err : new Error(`Failed to load metadata for ${logicalName}`);
-      setError(e); throw e;
-    } finally { setIsLoading(false); }
+      const e =
+        err instanceof Error ? err : new Error(`Failed to load metadata for ${logicalName}`);
+      setError(e);
+      throw e;
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   const loadAttributes = useCallback(async (logicalName: string) => {
@@ -58,9 +63,13 @@ export function useLazyMetadata(): UseLazyMetadataResult {
     try {
       return await metadataLoader.loadEntityAttributes(logicalName);
     } catch (err) {
-      const e = err instanceof Error ? err : new Error(`Failed to load attributes for ${logicalName}`);
-      setError(e); throw e;
-    } finally { setIsLoading(false); }
+      const e =
+        err instanceof Error ? err : new Error(`Failed to load attributes for ${logicalName}`);
+      setError(e);
+      throw e;
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   const loadRelationships = useCallback(async (logicalName: string) => {
@@ -69,18 +78,30 @@ export function useLazyMetadata(): UseLazyMetadataResult {
     try {
       return await metadataLoader.loadEntityRelationships(logicalName);
     } catch (err) {
-      const e = err instanceof Error ? err : new Error(`Failed to load relationships for ${logicalName}`);
-      setError(e); throw e;
-    } finally { setIsLoading(false); }
+      const e =
+        err instanceof Error ? err : new Error(`Failed to load relationships for ${logicalName}`);
+      setError(e);
+      throw e;
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  const clearCache = useCallback(() => { metadataLoader.clearMetadataCache(); }, []);
+  const clearCache = useCallback(() => {
+    metadataLoader.clearMetadataCache();
+  }, []);
   const clearEntityCache = useCallback((logicalName: string) => {
     metadataLoader.clearEntityCache(logicalName);
   }, []);
 
   return {
-    loadEntities, loadEntityMetadata, loadAttributes, loadRelationships,
-    isLoading, error, clearCache, clearEntityCache,
+    loadEntities,
+    loadEntityMetadata,
+    loadAttributes,
+    loadRelationships,
+    isLoading,
+    error,
+    clearCache,
+    clearEntityCache,
   };
 }

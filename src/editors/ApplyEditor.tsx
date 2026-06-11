@@ -35,10 +35,25 @@
 
 import { useMemo } from 'react';
 import {
-  Button, Combobox, Input, Option, tokens, Caption1, Badge, Switch,
-  MessageBar, MessageBarBody, MessageBarTitle, mergeClasses,
+  Button,
+  Combobox,
+  Input,
+  Option,
+  tokens,
+  Caption1,
+  Badge,
+  Switch,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
+  mergeClasses,
 } from '@fluentui/react-components';
-import { Add20Regular, Delete20Regular, ChartMultiple20Filled, Filter20Filled } from '@fluentui/react-icons';
+import {
+  Add20Regular,
+  Delete20Regular,
+  ChartMultiple20Filled,
+  Filter20Filled,
+} from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import { findTable } from '../mock/metadata';
 import { NavPathColumnPicker } from '../primitives/NavPathColumnPicker';
@@ -106,9 +121,13 @@ export const emptyApply = (): ApplySpec => ({
 // ── Helpers — aggregatable / groupable column predicates ───────────────────
 
 function isNumeric(c: { attributeType: string }) {
-  return c.attributeType === 'Integer' || c.attributeType === 'BigInt' ||
-         c.attributeType === 'Decimal' || c.attributeType === 'Double' ||
-         c.attributeType === 'Money';
+  return (
+    c.attributeType === 'Integer' ||
+    c.attributeType === 'BigInt' ||
+    c.attributeType === 'Decimal' ||
+    c.attributeType === 'Double' ||
+    c.attributeType === 'Money'
+  );
 }
 
 function isDateLike(c: { attributeType: string }) {
@@ -145,7 +164,12 @@ export function isAggregateEligible(fn: AggFn, c: { attributeType: string }): bo
 
 // ── Editor ─────────────────────────────────────────────────────────────────
 
-export function ApplyEditor({ table, spec, setSpec, group = 'read' }: {
+export function ApplyEditor({
+  table,
+  spec,
+  setSpec,
+  group = 'read',
+}: {
   table: string;
   spec: ApplySpec;
   setSpec: (s: ApplySpec) => void;
@@ -157,21 +181,29 @@ export function ApplyEditor({ table, spec, setSpec, group = 'read' }: {
   // ── Column filters ──
   // groupby: per doc, DateTime is NOT supported. Memo / File / Image excluded
   //   because aggregating large blobs is meaningless server-side.
-  const groupableCols = useMemo(() => tbl
-    ? tbl.columns.filter(c =>
-        c.attributeType !== 'DateTime' && c.attributeType !== 'Memo' &&
-        c.attributeType !== 'File' && c.attributeType !== 'Image',
-      )
-    : [], [tbl]);
+  const groupableCols = useMemo(
+    () =>
+      tbl
+        ? tbl.columns.filter(
+            (c) =>
+              c.attributeType !== 'DateTime' &&
+              c.attributeType !== 'Memo' &&
+              c.attributeType !== 'File' &&
+              c.attributeType !== 'Image',
+          )
+        : [],
+    [tbl],
+  );
 
   // Per-function eligibility — derive once per render. The picker for each
   // aggregate row reads `colsFor(a.fn)` to scope choices.
-  const colsFor = useMemo(() => (fn: AggFn) => tbl
-    ? tbl.columns.filter(c => isAggregateEligible(fn, c))
-    : [], [tbl]);
+  const colsFor = useMemo(
+    () => (fn: AggFn) => (tbl ? tbl.columns.filter((c) => isAggregateEligible(fn, c)) : []),
+    [tbl],
+  );
   // Default seed for "Add scalar aggregate" — numeric columns are the safest
   // starting point.
-  const numericCols = useMemo(() => tbl ? tbl.columns.filter(isNumeric) : [], [tbl]);
+  const numericCols = useMemo(() => (tbl ? tbl.columns.filter(isNumeric) : []), [tbl]);
 
   if (!tbl) return null;
 
@@ -184,10 +216,11 @@ export function ApplyEditor({ table, spec, setSpec, group = 'read' }: {
   const setPrefilter = (f: FilterGroup) => setSpec({ ...spec, prefilter: f });
 
   const addGroup = (col: string) => setSpec({ ...spec, groupby: [...spec.groupby, col] });
-  const rmGroup  = (i: number)   => setSpec({ ...spec, groupby: spec.groupby.filter((_, j) => j !== i) });
+  const rmGroup = (i: number) =>
+    setSpec({ ...spec, groupby: spec.groupby.filter((_, j) => j !== i) });
 
   const newAggId = () =>
-    (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? `agg_${crypto.randomUUID()}`
       : `agg_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`;
 
@@ -195,7 +228,10 @@ export function ApplyEditor({ table, spec, setSpec, group = 'read' }: {
     if (fn === '$count') {
       setSpec({
         ...spec,
-        aggregates: [...spec.aggregates, { id: newAggId(), col: '$count', fn: '$count', alias: 'count' }],
+        aggregates: [
+          ...spec.aggregates,
+          { id: newAggId(), col: '$count', fn: '$count', alias: 'count' },
+        ],
       });
       return;
     }
@@ -205,12 +241,15 @@ export function ApplyEditor({ table, spec, setSpec, group = 'read' }: {
     if (!c) return;
     setSpec({
       ...spec,
-      aggregates: [...spec.aggregates, { id: newAggId(), col: c.logicalName, fn, alias: `${c.logicalName}_${fn}` }],
+      aggregates: [
+        ...spec.aggregates,
+        { id: newAggId(), col: c.logicalName, fn, alias: `${c.logicalName}_${fn}` },
+      ],
     });
   };
   const updAgg = (i: number, p: Partial<ApplyAgg>) =>
-    setSpec({ ...spec, aggregates: spec.aggregates.map((a, j) => j === i ? { ...a, ...p } : a) });
-  const rmAgg  = (i: number) =>
+    setSpec({ ...spec, aggregates: spec.aggregates.map((a, j) => (j === i ? { ...a, ...p } : a)) });
+  const rmAgg = (i: number) =>
     setSpec({ ...spec, aggregates: spec.aggregates.filter((_, j) => j !== i) });
 
   // ── Pipeline preview — built from the encoder so the user sees the
@@ -257,45 +296,74 @@ export function ApplyEditor({ table, spec, setSpec, group = 'read' }: {
         <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 12 }}>
           <MessageBarBody>
             <MessageBarTitle>$apply replaces most other query options.</MessageBarTitle>
-            Per the Dataverse <em>aggregate-data</em> docs, when <code>$apply</code> is set the following are <strong>not applied</strong>:
+            Per the Dataverse <em>aggregate-data</em> docs, when <code>$apply</code> is set the
+            following are <strong>not applied</strong>:
             <ul style={{ margin: '6px 0 6px 18px', padding: 0 }}>
-              <li><code>$select</code> — output columns come from groupby + aggregate aliases</li>
-              <li><code>$filter</code> — use the <strong>filter() stage below</strong> instead</li>
-              <li><code>$orderby</code> — sorting aggregate output isn't supported</li>
-              <li><code>$expand</code> — joins aren't allowed alongside aggregation</li>
-              <li><code>$count</code> — use <code>$count as &lt;alias&gt;</code> inside aggregate() instead</li>
+              <li>
+                <code>$select</code> — output columns come from groupby + aggregate aliases
+              </li>
+              <li>
+                <code>$filter</code> — use the <strong>filter() stage below</strong> instead
+              </li>
+              <li>
+                <code>$orderby</code> — sorting aggregate output isn't supported
+              </li>
+              <li>
+                <code>$expand</code> — joins aren't allowed alongside aggregation
+              </li>
+              <li>
+                <code>$count</code> — use <code>$count as &lt;alias&gt;</code> inside aggregate()
+                instead
+              </li>
             </ul>
-            Only <code>$top</code> still works alongside <code>$apply</code>. <strong>50,000-row hard cap</strong> on the input set.
+            Only <code>$top</code> still works alongside <code>$apply</code>.{' '}
+            <strong>50,000-row hard cap</strong> on the input set.
           </MessageBarBody>
         </MessageBar>
       )}
 
       {/* Pipeline preview chip — shows the composed $apply= string. */}
       {spec.enabled && (
-        <div className={mergeClasses(s.inlineCard)} style={{
-          padding: '8px 12px',
-          marginBottom: 14,
-          maxWidth: 980,
-        }}>
-          <Caption1 style={{ fontWeight: 600, color: tokens.colorNeutralForeground2, display: 'block', marginBottom: 4 }}>
+        <div
+          className={mergeClasses(s.inlineCard)}
+          style={{
+            padding: '8px 12px',
+            marginBottom: 14,
+            maxWidth: 980,
+          }}
+        >
+          <Caption1
+            style={{
+              fontWeight: 600,
+              color: tokens.colorNeutralForeground2,
+              display: 'block',
+              marginBottom: 4,
+            }}
+          >
             Pipeline preview
           </Caption1>
-          <code style={{
-            fontFamily: tokens.fontFamilyMonospace,
-            fontSize: 11,
-            color: tokens.colorBrandForeground1,
-            wordBreak: 'break-all',
-          }}>
+          <code
+            style={{
+              fontFamily: tokens.fontFamilyMonospace,
+              fontSize: 11,
+              color: tokens.colorBrandForeground1,
+              wordBreak: 'break-all',
+            }}
+          >
             $apply={pipelinePreview}
           </code>
         </div>
       )}
 
-      <div style={{
-        display: 'flex', flexDirection: 'column', gap: 22,
-        opacity: spec.enabled ? 1 : 0.45,
-        pointerEvents: spec.enabled ? 'auto' : 'none',
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 22,
+          opacity: spec.enabled ? 1 : 0.45,
+          pointerEvents: spec.enabled ? 'auto' : 'none',
+        }}
+      >
         {/* ── Stage 1: filter() ─────────────────────────────────── */}
         <PipelineStage
           n={1}
@@ -343,17 +411,17 @@ export function ApplyEditor({ table, spec, setSpec, group = 'read' }: {
             >
               {spec.groupby.map((g, i) => {
                 const leaf = g.split('/').pop() ?? g;
-                const c = tbl.columns.find(x => x.logicalName === leaf);
+                const c = tbl.columns.find((x) => x.logicalName === leaf);
                 const display = g.includes('/') ? g : (c?.displayName ?? g);
                 return (
                   <SortableItem key={g} id={g}>
                     {({ gripProps, Grip }) => (
-                      <Badge
-                        appearance="tint"
-                        color="brand"
-                        style={{ paddingRight: 0, gap: 4 }}
-                      >
-                        <span {...gripProps} aria-label={`Drag to reorder ${display}`} style={{ display: 'inline-flex', ...gripProps.style }}>
+                      <Badge appearance="tint" color="brand" style={{ paddingRight: 0, gap: 4 }}>
+                        <span
+                          {...gripProps}
+                          aria-label={`Drag to reorder ${display}`}
+                          style={{ display: 'inline-flex', ...gripProps.style }}
+                        >
                           <Grip />
                         </span>
                         <span style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 11 }}>
@@ -423,121 +491,150 @@ export function ApplyEditor({ table, spec, setSpec, group = 'read' }: {
                 setSpec({ ...spec, aggregates: next });
               }}
             >
-            {spec.aggregates.map((a, i) => {
-              const eligibleCols = colsFor(a.fn);
-              const colMissing = a.fn !== '$count' && !eligibleCols.some(c => c.logicalName === a.col);
-              const aggId = aggIds[i];
-              return (
-              <SortableItem key={aggId} id={aggId}>
-                {({ gripProps, Grip }) => (
-                <div
-                  className={mergeClasses(s.inlineCard)}
-                  style={{
-                    padding: '10px 12px',
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: 10,
-                    alignItems: 'center',
-                  }}
-                >
-                  <span {...gripProps} aria-label="Drag to reorder aggregate">
-                    <Grip />
-                  </span>
-                  {/* Field labels live above each input so cramped widths don't
+              {spec.aggregates.map((a, i) => {
+                const eligibleCols = colsFor(a.fn);
+                const colMissing =
+                  a.fn !== '$count' && !eligibleCols.some((c) => c.logicalName === a.col);
+                const aggId = aggIds[i];
+                return (
+                  <SortableItem key={aggId} id={aggId}>
+                    {({ gripProps, Grip }) => (
+                      <div
+                        className={mergeClasses(s.inlineCard)}
+                        style={{
+                          padding: '10px 12px',
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: 10,
+                          alignItems: 'center',
+                        }}
+                      >
+                        <span {...gripProps} aria-label="Drag to reorder aggregate">
+                          <Grip />
+                        </span>
+                        {/* Field labels live above each input so cramped widths don't
                       collide. fn-picker comes first because it gates the column
                       list (numeric vs numeric+date). */}
-                  <LabeledInput label="function" minWidth={140}>
-                    <Combobox
-                      size="small"
-                      value={a.fn}
-                      selectedOptions={[a.fn]}
-                      onOptionSelect={(_, d) => {
-                        if (!d.optionValue) return;
-                        const fn = d.optionValue as AggFn;
-                        if (fn === '$count') {
-                          updAgg(i, { fn, col: '$count', alias: a.alias === '' ? 'count' : a.alias });
-                          return;
-                        }
-                        // Reset col to the first one eligible for the new fn if the
-                        // current pick isn't valid (e.g. switching avg → max keeps
-                        // numeric; switching sum → min from datetime needs reset).
-                        const eligibleForNewFn = tbl.columns.filter(c => isAggregateEligible(fn, c));
-                        const stillValid = eligibleForNewFn.some(c => c.logicalName === a.col);
-                        const col = stillValid
-                          ? a.col
-                          : (eligibleForNewFn[0]?.logicalName ?? '');
-                        updAgg(i, { fn, col, alias: `${col}_${fn}` });
-                      }}
-                      style={{ minWidth: 140 }}
-                    >
-                      <Option value="sum">sum</Option>
-                      <Option value="average">average</Option>
-                      <Option value="min">min</Option>
-                      <Option value="max">max</Option>
-                      <Option value="$count">$count</Option>
-                    </Combobox>
-                  </LabeledInput>
+                        <LabeledInput label="function" minWidth={140}>
+                          <Combobox
+                            size="small"
+                            value={a.fn}
+                            selectedOptions={[a.fn]}
+                            onOptionSelect={(_, d) => {
+                              if (!d.optionValue) return;
+                              const fn = d.optionValue as AggFn;
+                              if (fn === '$count') {
+                                updAgg(i, {
+                                  fn,
+                                  col: '$count',
+                                  alias: a.alias === '' ? 'count' : a.alias,
+                                });
+                                return;
+                              }
+                              // Reset col to the first one eligible for the new fn if the
+                              // current pick isn't valid (e.g. switching avg → max keeps
+                              // numeric; switching sum → min from datetime needs reset).
+                              const eligibleForNewFn = tbl.columns.filter((c) =>
+                                isAggregateEligible(fn, c),
+                              );
+                              const stillValid = eligibleForNewFn.some(
+                                (c) => c.logicalName === a.col,
+                              );
+                              const col = stillValid
+                                ? a.col
+                                : (eligibleForNewFn[0]?.logicalName ?? '');
+                              updAgg(i, { fn, col, alias: `${col}_${fn}` });
+                            }}
+                            style={{ minWidth: 140 }}
+                          >
+                            <Option value="sum">sum</Option>
+                            <Option value="average">average</Option>
+                            <Option value="min">min</Option>
+                            <Option value="max">max</Option>
+                            <Option value="$count">$count</Option>
+                          </Combobox>
+                        </LabeledInput>
 
-                  {/* Column — hidden for $count, otherwise scoped by fn. */}
-                  {a.fn !== '$count' && (
-                    <LabeledInput label="column" minWidth={220} grow>
-                      <Combobox
-                        size="small"
-                        value={tbl.columns.find(c => c.logicalName === a.col)?.displayName ?? a.col}
-                        selectedOptions={[a.col]}
-                        onOptionSelect={(_, d) => d.optionValue && updAgg(i, {
-                          col: d.optionValue,
-                          alias: `${d.optionValue}_${a.fn}`,
-                        })}
-                        style={{ minWidth: 220, width: '100%' }}
-                      >
-                        {eligibleCols.map(c => (
-                          <Option key={c.logicalName} value={c.logicalName} text={c.displayName}>
-                            {c.displayName}{' '}
-                            <span style={{ color: tokens.colorNeutralForeground3, fontFamily: tokens.fontFamilyMonospace, fontSize: 10 }}>
-                              · {c.attributeType}
-                            </span>
-                          </Option>
-                        ))}
-                      </Combobox>
-                    </LabeledInput>
-                  )}
+                        {/* Column — hidden for $count, otherwise scoped by fn. */}
+                        {a.fn !== '$count' && (
+                          <LabeledInput label="column" minWidth={220} grow>
+                            <Combobox
+                              size="small"
+                              value={
+                                tbl.columns.find((c) => c.logicalName === a.col)?.displayName ??
+                                a.col
+                              }
+                              selectedOptions={[a.col]}
+                              onOptionSelect={(_, d) =>
+                                d.optionValue &&
+                                updAgg(i, {
+                                  col: d.optionValue,
+                                  alias: `${d.optionValue}_${a.fn}`,
+                                })
+                              }
+                              style={{ minWidth: 220, width: '100%' }}
+                            >
+                              {eligibleCols.map((c) => (
+                                <Option
+                                  key={c.logicalName}
+                                  value={c.logicalName}
+                                  text={c.displayName}
+                                >
+                                  {c.displayName}{' '}
+                                  <span
+                                    style={{
+                                      color: tokens.colorNeutralForeground3,
+                                      fontFamily: tokens.fontFamilyMonospace,
+                                      fontSize: 10,
+                                    }}
+                                  >
+                                    · {c.attributeType}
+                                  </span>
+                                </Option>
+                              ))}
+                            </Combobox>
+                          </LabeledInput>
+                        )}
 
-                  {/* Alias */}
-                  <LabeledInput label="alias" minWidth={180} grow>
-                    <Input
-                      size="small"
-                      value={a.alias}
-                      onChange={(_, d) => updAgg(i, { alias: d.value })}
-                      placeholder="alias"
-                      style={{ fontFamily: tokens.fontFamilyMonospace, width: '100%' }}
-                    />
-                  </LabeledInput>
+                        {/* Alias */}
+                        <LabeledInput label="alias" minWidth={180} grow>
+                          <Input
+                            size="small"
+                            value={a.alias}
+                            onChange={(_, d) => updAgg(i, { alias: d.value })}
+                            placeholder="alias"
+                            style={{ fontFamily: tokens.fontFamilyMonospace, width: '100%' }}
+                          />
+                        </LabeledInput>
 
-                  <Button
-                    size="small"
-                    appearance="subtle"
-                    icon={<Delete20Regular />}
-                    onClick={() => rmAgg(i)}
-                    aria-label="Remove aggregate"
-                    style={{ alignSelf: 'flex-end', marginBottom: 1 }}
-                  />
+                        <Button
+                          size="small"
+                          appearance="subtle"
+                          icon={<Delete20Regular />}
+                          onClick={() => rmAgg(i)}
+                          aria-label="Remove aggregate"
+                          style={{ alignSelf: 'flex-end', marginBottom: 1 }}
+                        />
 
-                  {/* Inline validation — the per-fn eligibility filter means
+                        {/* Inline validation — the per-fn eligibility filter means
                       switching to a stricter fn can leave a leftover column
                       that's now invalid. Surface it loudly. */}
-                  {colMissing && (
-                    <MessageBar layout="multiline" intent="warning" style={{ width: '100%' }}>
-                      <MessageBarBody>
-                        <code>{a.col}</code> isn't valid for <code>{a.fn}</code> — pick a {a.fn === 'sum' || a.fn === 'average' ? 'numeric' : 'numeric or DateTime'} column.
-                      </MessageBarBody>
-                    </MessageBar>
-                  )}
-                </div>
-                )}
-              </SortableItem>
-              );
-            })}
+                        {colMissing && (
+                          <MessageBar layout="multiline" intent="warning" style={{ width: '100%' }}>
+                            <MessageBarBody>
+                              <code>{a.col}</code> isn't valid for <code>{a.fn}</code> — pick a{' '}
+                              {a.fn === 'sum' || a.fn === 'average'
+                                ? 'numeric'
+                                : 'numeric or DateTime'}{' '}
+                              column.
+                            </MessageBarBody>
+                          </MessageBar>
+                        )}
+                      </div>
+                    )}
+                  </SortableItem>
+                );
+              })}
             </SortableList>
           </div>
 
@@ -572,7 +669,11 @@ export function ApplyEditor({ table, spec, setSpec, group = 'read' }: {
 // "labeled section with caption" pattern used elsewhere (e.g. ExpandOverview,
 // BypassEditor sections).
 function PipelineStage({
-  n, icon, title, hint, children,
+  n,
+  icon,
+  title,
+  hint,
+  children,
 }: {
   n: number;
   icon: React.ReactNode;
@@ -583,18 +684,29 @@ function PipelineStage({
   return (
     <section>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-        <Badge appearance="filled" color="brand" size="small" style={{ minWidth: 18, fontWeight: 700 }}>
+        <Badge
+          appearance="filled"
+          color="brand"
+          size="small"
+          style={{ minWidth: 18, fontWeight: 700 }}
+        >
           {n}
         </Badge>
         {icon}
-        <code style={{
-          fontFamily: tokens.fontFamilyMonospace, fontSize: 13, fontWeight: 600,
-          color: tokens.colorNeutralForeground1,
-        }}>
+        <code
+          style={{
+            fontFamily: tokens.fontFamilyMonospace,
+            fontSize: 13,
+            fontWeight: 600,
+            color: tokens.colorNeutralForeground1,
+          }}
+        >
           {title}
         </code>
       </div>
-      <Caption1 style={{ display: 'block', marginBottom: 10, color: tokens.colorNeutralForeground3 }}>
+      <Caption1
+        style={{ display: 'block', marginBottom: 10, color: tokens.colorNeutralForeground3 }}
+      >
         {hint}
       </Caption1>
       {children}
@@ -606,7 +718,10 @@ function PipelineStage({
 // Caption above the field so labels don't collide with placeholder text on
 // narrow viewports. `grow` lets the column / alias slots take leftover width.
 function LabeledInput({
-  label, minWidth, grow, children,
+  label,
+  minWidth,
+  grow,
+  children,
 }: {
   label: string;
   minWidth: number;
@@ -614,14 +729,25 @@ function LabeledInput({
   children: React.ReactNode;
 }) {
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', gap: 2,
-      minWidth, flexGrow: grow ? 1 : 0, flexShrink: 1,
-    }}>
-      <Caption1 style={{
-        fontSize: 10, fontWeight: 600, letterSpacing: '0.3px',
-        color: tokens.colorNeutralForeground3, textTransform: 'uppercase',
-      }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 2,
+        minWidth,
+        flexGrow: grow ? 1 : 0,
+        flexShrink: 1,
+      }}
+    >
+      <Caption1
+        style={{
+          fontSize: 10,
+          fontWeight: 600,
+          letterSpacing: '0.3px',
+          color: tokens.colorNeutralForeground3,
+          textTransform: 'uppercase',
+        }}
+      >
         {label}
       </Caption1>
       {children}
@@ -656,16 +782,18 @@ export function applyToOData(spec: ApplySpec, tbl?: import('../mock/metadata').T
   //   - groupby alone       → groupby((cols))                       (distinct values)
   //   - aggregate alone     → aggregate(aggs)                       (single-row total)
   const aggParts = spec.aggregates
-    .filter(a => a.alias.trim() !== '' && (a.fn === '$count' || a.col.trim() !== ''))
-    .map(a => a.fn === '$count'
-      ? `$count as ${a.alias}`
-      : `${a.col} with ${a.fn} as ${a.alias}`);
+    .filter((a) => a.alias.trim() !== '' && (a.fn === '$count' || a.col.trim() !== ''))
+    .map((a) =>
+      a.fn === '$count' ? `$count as ${a.alias}` : `${a.col} with ${a.fn} as ${a.alias}`,
+    );
 
   if (spec.groupby.length > 0) {
     const aggStage = aggParts.length ? `aggregate(${aggParts.join(',')})` : '';
-    stages.push(aggStage
-      ? `groupby((${spec.groupby.join(',')}),${aggStage})`
-      : `groupby((${spec.groupby.join(',')}))`);
+    stages.push(
+      aggStage
+        ? `groupby((${spec.groupby.join(',')}),${aggStage})`
+        : `groupby((${spec.groupby.join(',')}))`,
+    );
   } else if (aggParts.length > 0) {
     stages.push(`aggregate(${aggParts.join(',')})`);
   }

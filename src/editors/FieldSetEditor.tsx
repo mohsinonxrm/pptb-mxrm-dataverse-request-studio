@@ -26,29 +26,70 @@
 
 import { useMemo, useState, useEffect } from 'react';
 import {
-  Input, Textarea, SpinButton, Switch, Combobox, Option, Button, Caption1,
-  Tooltip, Badge, Persona, Field, ToggleButton, MessageBar, MessageBarBody,
-  MessageBarTitle, mergeClasses, tokens,
-  TagPicker, TagPickerControl, TagPickerGroup, TagPickerInput, TagPickerList,
-  TagPickerOption, useTagPickerFilter, Tag,
+  Input,
+  Textarea,
+  SpinButton,
+  Switch,
+  Combobox,
+  Option,
+  Button,
+  Caption1,
+  Tooltip,
+  Badge,
+  Persona,
+  Field,
+  ToggleButton,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
+  mergeClasses,
+  tokens,
+  TagPicker,
+  TagPickerControl,
+  TagPickerGroup,
+  TagPickerInput,
+  TagPickerList,
+  TagPickerOption,
+  useTagPickerFilter,
+  Tag,
 } from '@fluentui/react-components';
 import { DatePicker } from '@fluentui/react-datepicker-compat';
 import { TimePicker } from '@fluentui/react-timepicker-compat';
 import {
-  Add20Regular, Delete20Regular, Search20Regular, FormNew20Filled,
-  Database20Regular, Key20Regular,
-  Code20Regular, FormNew20Regular, Copy20Regular,
-  TextNumberFormat20Regular, Link20Regular, ListBar20Regular,
+  Add20Regular,
+  Delete20Regular,
+  Search20Regular,
+  FormNew20Filled,
+  Database20Regular,
+  Key20Regular,
+  Code20Regular,
+  FormNew20Regular,
+  Copy20Regular,
+  TextNumberFormat20Regular,
+  Link20Regular,
+  ListBar20Regular,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import { SegmentedToggle } from '../primitives/SegmentedToggle';
 import { PaneHead } from './PaneHead';
 import {
-  findTable, findColumn, isLookupLike, columnOptions,
-  type ColumnMeta, type TableMeta, type StringColumnMeta, type MemoColumnMeta,
-  type IntegerColumnMeta, type DateTimeColumnMeta, type MoneyColumnMeta,
-  type DecimalColumnMeta, type DoubleColumnMeta, type BigIntColumnMeta,
-  type BooleanColumnMeta, type LookupColumnMeta, type CustomerColumnMeta,
+  findTable,
+  findColumn,
+  isLookupLike,
+  columnOptions,
+  type ColumnMeta,
+  type TableMeta,
+  type StringColumnMeta,
+  type MemoColumnMeta,
+  type IntegerColumnMeta,
+  type DateTimeColumnMeta,
+  type MoneyColumnMeta,
+  type DecimalColumnMeta,
+  type DoubleColumnMeta,
+  type BigIntColumnMeta,
+  type BooleanColumnMeta,
+  type LookupColumnMeta,
+  type CustomerColumnMeta,
   type OwnerColumnMeta,
 } from '../mock/metadata';
 import { useLookupRecords } from '../host/useLookupRecords';
@@ -69,10 +110,17 @@ import type { RequestGroup } from '../registry/requestTypes';
 // for the rare power-user case.)
 // ──────────────────────────────────────────────────────────────
 const SYSTEM_MANAGED = new Set([
-  'createdon', 'modifiedon', 'createdby', 'modifiedby',
-  'createdonbehalfby', 'modifiedonbehalfby',
-  'versionnumber', 'importsequencenumber', 'overriddencreatedon',
-  'utcconversiontimezonecode', 'timezoneruleversionnumber',
+  'createdon',
+  'modifiedon',
+  'createdby',
+  'modifiedby',
+  'createdonbehalfby',
+  'modifiedonbehalfby',
+  'versionnumber',
+  'importsequencenumber',
+  'overriddencreatedon',
+  'utcconversiontimezonecode',
+  'timezoneruleversionnumber',
 ]);
 
 const isSystemManaged = (c: ColumnMeta): boolean =>
@@ -127,9 +175,14 @@ type Filter = 'all' | 'required' | 'set' | 'common';
 // Public component
 // ──────────────────────────────────────────────────────────────
 export function FieldSetEditor({
-  table, values, setValues,
-  nullFields: nullFieldsProp, setNullFields: setNullFieldsProp,
-  group = 'write', themeMode = 'light', purpose = 'create',
+  table,
+  values,
+  setValues,
+  nullFields: nullFieldsProp,
+  setNullFields: setNullFieldsProp,
+  group = 'write',
+  themeMode = 'light',
+  purpose = 'create',
 }: FieldSetEditorProps) {
   // Internal fallback when the caller doesn't wire up explicit-null tracking.
   // Keeps the affordance hidden in those modes (the Set-null button checks
@@ -151,7 +204,7 @@ export function FieldSetEditor({
   };
   const removeNull = (k: string) => {
     if (!setNullFieldsProp) return;
-    setNullFieldsProp(nullFields.filter(n => n !== k));
+    setNullFieldsProp(nullFields.filter((n) => n !== k));
   };
   const tbl = findTable(table);
   const [search, setSearch] = useState('');
@@ -175,8 +228,7 @@ export function FieldSetEditor({
   }, [bodyMode, tbl, values]);
 
   // Set / Update / Remove helpers
-  const setField = (k: string, v: CreateFieldValue) =>
-    setValues({ ...values, [k]: v });
+  const setField = (k: string, v: CreateFieldValue) => setValues({ ...values, [k]: v });
   const removeField = (k: string) => {
     const next = { ...values };
     delete next[k];
@@ -184,41 +236,43 @@ export function FieldSetEditor({
   };
 
   const writable = useMemo<ColumnMeta[]>(
-    () => (tbl?.columns ?? [])
-      .filter(c => !isSystemManaged(c))
-      // Per-purpose write-eligibility — backed by AttributeMetadata.
-      //   • Create surfaces columns where IsValidForCreate is true.
-      //   • Update surfaces columns where IsValidForUpdate is true.
-      // We treat `undefined` as "true" so the filter doesn't accidentally
-      // hide everything on entities that haven't been enriched yet, or
-      // on columns whose host build doesn't return the flag. The real
-      // server response is the source of truth — sending an attribute
-      // that the server doesn't accept gets a 400 with a clear message.
-      .filter(c => {
-        if (purpose === 'create') return c.isValidForCreate !== false;
-        if (purpose === 'update') return c.isValidForUpdate !== false;
-        if (purpose === 'upsert') return c.isValidForCreate !== false && c.isValidForUpdate !== false;
-        return true;
-      }),
+    () =>
+      (tbl?.columns ?? [])
+        .filter((c) => !isSystemManaged(c))
+        // Per-purpose write-eligibility — backed by AttributeMetadata.
+        //   • Create surfaces columns where IsValidForCreate is true.
+        //   • Update surfaces columns where IsValidForUpdate is true.
+        // We treat `undefined` as "true" so the filter doesn't accidentally
+        // hide everything on entities that haven't been enriched yet, or
+        // on columns whose host build doesn't return the flag. The real
+        // server response is the source of truth — sending an attribute
+        // that the server doesn't accept gets a 400 with a clear message.
+        .filter((c) => {
+          if (purpose === 'create') return c.isValidForCreate !== false;
+          if (purpose === 'update') return c.isValidForUpdate !== false;
+          if (purpose === 'upsert')
+            return c.isValidForCreate !== false && c.isValidForUpdate !== false;
+          return true;
+        }),
     [tbl, purpose],
   );
 
-  const requiredFields = useMemo(
-    () => writable.filter(c => c.required),
-    [writable],
-  );
+  const requiredFields = useMemo(() => writable.filter((c) => c.required), [writable]);
   // "Populated" includes both columns with a value AND columns flagged as
   // explicit-null — both produce a body entry, so both count toward
   // "the user has expressed an intent for this column".
   const populatedFields = useMemo(
-    () => writable.filter(c => c.logicalName in values || nullFields.includes(c.logicalName)),
+    () => writable.filter((c) => c.logicalName in values || nullFields.includes(c.logicalName)),
     [writable, values, nullFields],
   );
   // Required-field check: a column marked explicit-null still counts as
   // "missing" since the server will reject a null on a required column —
   // this matches Dataverse's runtime behavior and surfaces the issue.
   const missingRequired = useMemo(
-    () => requiredFields.filter(c => !(c.logicalName in values) || nullFields.includes(c.logicalName)),
+    () =>
+      requiredFields.filter(
+        (c) => !(c.logicalName in values) || nullFields.includes(c.logicalName),
+      ),
     [requiredFields, values, nullFields],
   );
 
@@ -236,11 +290,11 @@ export function FieldSetEditor({
   // unpredictable (a new field can slot into the middle), which is what
   // the user flagged.
   const visible = useMemo(() => {
-    const writableById = new Map(writable.map(c => [c.logicalName, c]));
+    const writableById = new Map(writable.map((c) => [c.logicalName, c]));
 
     // Required columns in metadata order (regardless of whether they're populated)
-    const requiredCols = writable.filter(c => c.required);
-    const requiredIds = new Set(requiredCols.map(c => c.logicalName));
+    const requiredCols = writable.filter((c) => c.required);
+    const requiredIds = new Set(requiredCols.map((c) => c.logicalName));
 
     // Then user-added non-required fields in insertion order. Sourced
     // from BOTH `values` keys (typed entries) AND `nullFields` (explicit
@@ -250,43 +304,53 @@ export function FieldSetEditor({
     const consider = (k: string) => {
       if (requiredIds.has(k) || seenAdded.has(k)) return;
       const col = writableById.get(k);
-      if (col) { userAddedCols.push(col); seenAdded.add(k); }
+      if (col) {
+        userAddedCols.push(col);
+        seenAdded.add(k);
+      }
     };
     for (const k of Object.keys(values)) consider(k);
-    for (const k of nullFields)         consider(k);
+    for (const k of nullFields) consider(k);
 
     let pool: ColumnMeta[] = [...requiredCols, ...userAddedCols];
 
-    if (filter === 'required') pool = pool.filter(c => c.required);
-    if (filter === 'set')      pool = pool.filter(c => c.logicalName in values || nullFields.includes(c.logicalName));
+    if (filter === 'required') pool = pool.filter((c) => c.required);
+    if (filter === 'set')
+      pool = pool.filter((c) => c.logicalName in values || nullFields.includes(c.logicalName));
     if (filter === 'common') {
-      pool = pool.filter(c =>
-        c.required ||
-        c.logicalName === tbl?.primaryName ||
-        c.logicalName === 'statecode' || c.logicalName === 'statuscode' ||
-        isLookupLike(c),
+      pool = pool.filter(
+        (c) =>
+          c.required ||
+          c.logicalName === tbl?.primaryName ||
+          c.logicalName === 'statecode' ||
+          c.logicalName === 'statuscode' ||
+          isLookupLike(c),
       );
     }
     if (search) {
       const q = search.toLowerCase();
-      pool = pool.filter(c =>
-        c.displayName.toLowerCase().includes(q) ||
-        c.logicalName.toLowerCase().includes(q) ||
-        c.attributeType.toLowerCase().includes(q));
+      pool = pool.filter(
+        (c) =>
+          c.displayName.toLowerCase().includes(q) ||
+          c.logicalName.toLowerCase().includes(q) ||
+          c.attributeType.toLowerCase().includes(q),
+      );
     }
     return pool;
   }, [writable, values, filter, search, tbl]);
 
   // Pool of fields available to add (writable, not currently visible)
   const addable = useMemo(() => {
-    const visibleIds = new Set(visible.map(c => c.logicalName));
-    return writable.filter(c => !visibleIds.has(c.logicalName));
+    const visibleIds = new Set(visible.map((c) => c.logicalName));
+    return writable.filter((c) => !visibleIds.has(c.logicalName));
   }, [writable, visible]);
 
   if (!tbl) {
     return (
       <MessageBar layout="multiline" intent="error">
-        <MessageBarBody>Unknown table <code>{table}</code>.</MessageBarBody>
+        <MessageBarBody>
+          Unknown table <code>{table}</code>.
+        </MessageBarBody>
       </MessageBar>
     );
   }
@@ -298,8 +362,7 @@ export function FieldSetEditor({
         title="Field set"
         sub={
           <span>
-            Pick the columns this <code>POST</code> should set.
-            {' '}
+            Pick the columns this <code>POST</code> should set.{' '}
             <span style={{ color: tokens.colorNeutralForeground3 }}>
               Only fields below are emitted in the body — empty columns stay out.
             </span>
@@ -319,10 +382,7 @@ export function FieldSetEditor({
         )}
         <Badge appearance="ghost">{populatedFields.length} populated</Badge>
         {requiredFields.length > 0 && (
-          <Badge
-            appearance="tint"
-            color={missingRequired.length ? 'danger' : 'success'}
-          >
+          <Badge appearance="tint" color={missingRequired.length ? 'danger' : 'success'}>
             {requiredFields.length - missingRequired.length}/{requiredFields.length} required
           </Badge>
         )}
@@ -350,13 +410,17 @@ export function FieldSetEditor({
       {missingRequired.length > 0 && (
         <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 12 }}>
           <MessageBarBody>
-            <MessageBarTitle>{missingRequired.length} required field{missingRequired.length === 1 ? ' is' : 's are'} unset.</MessageBarTitle>
+            <MessageBarTitle>
+              {missingRequired.length} required field
+              {missingRequired.length === 1 ? ' is' : 's are'} unset.
+            </MessageBarTitle>
             Dataverse will reject the create with{' '}
-            <code>0x80040217 · A required field is missing</code> unless every required column has a value.
-            {' '}
-            <strong>Missing:</strong>{' '}
-            {missingRequired.map(c => (
-              <code key={c.logicalName} style={{ marginRight: 6 }}>{c.logicalName}</code>
+            <code>0x80040217 · A required field is missing</code> unless every required column has a
+            value. <strong>Missing:</strong>{' '}
+            {missingRequired.map((c) => (
+              <code key={c.logicalName} style={{ marginRight: 6 }}>
+                {c.logicalName}
+              </code>
             ))}
           </MessageBarBody>
         </MessageBar>
@@ -366,20 +430,46 @@ export function FieldSetEditor({
         <>
           {/* Filter chip row */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-            <FilterChip label="Set"      count={populatedFields.length} active={filter === 'set'}      onClick={() => setFilter('set')} />
-            <FilterChip label="Required" count={requiredFields.length}  active={filter === 'required'} onClick={() => setFilter('required')} />
-            <FilterChip label="Common"   active={filter === 'common'}   onClick={() => setFilter('common')} />
-            <FilterChip label="All"      count={writable.length}        active={filter === 'all'}      onClick={() => setFilter('all')} />
+            <FilterChip
+              label="Set"
+              count={populatedFields.length}
+              active={filter === 'set'}
+              onClick={() => setFilter('set')}
+            />
+            <FilterChip
+              label="Required"
+              count={requiredFields.length}
+              active={filter === 'required'}
+              onClick={() => setFilter('required')}
+            />
+            <FilterChip
+              label="Common"
+              active={filter === 'common'}
+              onClick={() => setFilter('common')}
+            />
+            <FilterChip
+              label="All"
+              count={writable.length}
+              active={filter === 'all'}
+              onClick={() => setFilter('all')}
+            />
           </div>
 
           {/* Sectioned field rows — General / Choices / Lookups / System */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 880 }}>
             {visible.length === 0 && (
-              <Caption1 style={{ padding: '24px 4px', color: tokens.colorNeutralForeground3, textAlign: 'center', fontStyle: 'italic' }}>
+              <Caption1
+                style={{
+                  padding: '24px 4px',
+                  color: tokens.colorNeutralForeground3,
+                  textAlign: 'center',
+                  fontStyle: 'italic',
+                }}
+              >
                 No fields match. Switch the filter or use “Add field”.
               </Caption1>
             )}
-            {sectionsOf(visible).map(sec => (
+            {sectionsOf(visible).map((sec) => (
               <FieldSection
                 key={sec.id}
                 title={sec.title}
@@ -387,7 +477,7 @@ export function FieldSetEditor({
                 tagText={sec.tagText}
                 tagAppearance={sec.tagAppearance}
               >
-                {sec.cols.map(col => (
+                {sec.cols.map((col) => (
                   <FieldRow
                     key={col.logicalName}
                     table={tbl}
@@ -439,7 +529,9 @@ export function FieldSetEditor({
 
       {/* Add field — only if there's something left to add */}
       {addable.length > 0 && (
-        <div style={{ marginTop: 14, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div
+          style={{ marginTop: 14, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}
+        >
           {!addPickerOpen ? (
             <Button
               icon={<Add20Regular />}
@@ -463,19 +555,25 @@ export function FieldSetEditor({
                   setAddPickerOpen(false);
                 }}
               >
-                {addable.map(c => (
+                {addable.map((c) => (
                   <Option key={c.logicalName} value={c.logicalName} text={c.displayName}>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <span>{c.displayName}</span>
                       <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
                         {c.logicalName} · <code>{c.attributeType}</code>
-                        {c.required && <span style={{ marginLeft: 6, color: tokens.colorPaletteRedForeground1 }}>required</span>}
+                        {c.required && (
+                          <span style={{ marginLeft: 6, color: tokens.colorPaletteRedForeground1 }}>
+                            required
+                          </span>
+                        )}
                       </Caption1>
                     </div>
                   </Option>
                 ))}
               </Combobox>
-              <Button size="small" appearance="subtle" onClick={() => setAddPickerOpen(false)}>Cancel</Button>
+              <Button size="small" appearance="subtle" onClick={() => setAddPickerOpen(false)}>
+                Cancel
+              </Button>
             </span>
           )}
           <Caption1 style={{ color: tokens.colorNeutralForeground3, marginLeft: 'auto' }}>
@@ -491,8 +589,16 @@ export function FieldSetEditor({
 // FieldRow — one column's label + value + remove
 // ──────────────────────────────────────────────────────────────
 function FieldRow({
-  table, col, value, populated, isNull, nullSupported,
-  onChange, onRemove, onSetNull, onClearNull,
+  table,
+  col,
+  value,
+  populated,
+  isNull,
+  nullSupported,
+  onChange,
+  onRemove,
+  onSetNull,
+  onClearNull,
 }: {
   table: TableMeta;
   col: ColumnMeta;
@@ -531,23 +637,45 @@ function FieldRow({
             {col.displayName}
           </span>
           {col.required && (
-            <Tooltip content="Required — Dataverse rejects the create when this is empty." relationship="description">
-              <Badge appearance="tint" color="danger" size="extra-small">req</Badge>
+            <Tooltip
+              content="Required — Dataverse rejects the create when this is empty."
+              relationship="description"
+            >
+              <Badge appearance="tint" color="danger" size="extra-small">
+                req
+              </Badge>
             </Tooltip>
           )}
           {isLookupLike(col) && (
-            <Tooltip content={`Lookup → emits ${col.logicalName}@odata.bind`} relationship="description">
-              <Database20Regular style={{ width: 12, height: 12, color: tokens.colorBrandForeground1 }} />
+            <Tooltip
+              content={`Lookup → emits ${col.logicalName}@odata.bind`}
+              relationship="description"
+            >
+              <Database20Regular
+                style={{ width: 12, height: 12, color: tokens.colorBrandForeground1 }}
+              />
             </Tooltip>
           )}
           {col.attributeType === 'Uniqueidentifier' && (
-            <Tooltip content="Primary key — Dataverse will auto-generate this. Override only if you know what you're doing." relationship="description">
-              <Key20Regular style={{ width: 12, height: 12, color: tokens.colorPaletteGoldBorderActive }} />
+            <Tooltip
+              content="Primary key — Dataverse will auto-generate this. Override only if you know what you're doing."
+              relationship="description"
+            >
+              <Key20Regular
+                style={{ width: 12, height: 12, color: tokens.colorPaletteGoldBorderActive }}
+              />
             </Tooltip>
           )}
         </div>
-        <Caption1 style={{ color: tokens.colorNeutralForeground3, fontFamily: tokens.fontFamilyMonospace, fontSize: 10 }}>
-          {col.logicalName} · <span style={{ color: tokens.colorBrandForeground2 }}>{col.attributeType}</span>
+        <Caption1
+          style={{
+            color: tokens.colorNeutralForeground3,
+            fontFamily: tokens.fontFamilyMonospace,
+            fontSize: 10,
+          }}
+        >
+          {col.logicalName} ·{' '}
+          <span style={{ color: tokens.colorBrandForeground2 }}>{col.attributeType}</span>
           {typeHint(col)}
         </Caption1>
       </div>
@@ -581,7 +709,12 @@ function FieldRow({
                 }}
                 title="This field will be sent as null. Toggle the Switch off to enter a value."
               >
-                <Badge appearance="filled" color="warning" size="extra-small" style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: 700 }}>
+                <Badge
+                  appearance="filled"
+                  color="warning"
+                  size="extra-small"
+                  style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: 700 }}
+                >
                   null
                 </Badge>
                 <code
@@ -610,10 +743,20 @@ function FieldRow({
             // "this is the primary affordance".
             <Switch
               checked={isNull}
-              onChange={(_, d) => { if (d.checked) onSetNull(); else onClearNull(); }}
+              onChange={(_, d) => {
+                if (d.checked) onSetNull();
+                else onClearNull();
+              }}
               label={
-                <span style={{ fontSize: 11, color: tokens.colorNeutralForeground3, whiteSpace: 'nowrap' }}>
-                  Send as <code style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 11 }}>null</code>
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: tokens.colorNeutralForeground3,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Send as{' '}
+                  <code style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 11 }}>null</code>
                 </span>
               }
               labelPosition="after"
@@ -647,7 +790,10 @@ function FieldRow({
 // FieldInput — dispatch to the right control for the column's type
 // ──────────────────────────────────────────────────────────────
 function FieldInput({
-  table, col, value, onChange,
+  table,
+  col,
+  value,
+  onChange,
 }: {
   table: TableMeta;
   col: ColumnMeta;
@@ -668,24 +814,67 @@ function FieldInput({
   // (entity, attribute) so re-renders don't refetch.
   useColumnDetail(table.logicalName, col.logicalName);
   switch (col.attributeType) {
-    case 'String':              return <StringFieldInput col={col} value={value as string | undefined} onChange={onChange} />;
-    case 'Memo':                return <MemoFieldInput   col={col} value={value as string | undefined} onChange={onChange} />;
-    case 'Integer':             return <IntegerFieldInput col={col} value={value as number | undefined} onChange={onChange} />;
-    case 'BigInt':              return <NumericFieldInput value={value as number | undefined} onChange={onChange} integer min={col.minValue} max={col.maxValue} />;
-    case 'Decimal':             return <DecimalFieldInput col={col} value={value as number | undefined} onChange={onChange} />;
-    case 'Double':              return <DecimalFieldInput col={col} value={value as number | undefined} onChange={onChange} />;
-    case 'Money':               return <MoneyFieldInput  col={col} value={value as number | undefined} onChange={onChange} />;
-    case 'Boolean':             return <BooleanFieldInput col={col} value={value as boolean | undefined} onChange={onChange} />;
-    case 'DateTime':            return <DateTimeFieldInput col={col} value={value as string | undefined} onChange={onChange} />;
+    case 'String':
+      return <StringFieldInput col={col} value={value as string | undefined} onChange={onChange} />;
+    case 'Memo':
+      return <MemoFieldInput col={col} value={value as string | undefined} onChange={onChange} />;
+    case 'Integer':
+      return (
+        <IntegerFieldInput col={col} value={value as number | undefined} onChange={onChange} />
+      );
+    case 'BigInt':
+      return (
+        <NumericFieldInput
+          value={value as number | undefined}
+          onChange={onChange}
+          integer
+          min={col.minValue}
+          max={col.maxValue}
+        />
+      );
+    case 'Decimal':
+      return (
+        <DecimalFieldInput col={col} value={value as number | undefined} onChange={onChange} />
+      );
+    case 'Double':
+      return (
+        <DecimalFieldInput col={col} value={value as number | undefined} onChange={onChange} />
+      );
+    case 'Money':
+      return <MoneyFieldInput col={col} value={value as number | undefined} onChange={onChange} />;
+    case 'Boolean':
+      return (
+        <BooleanFieldInput col={col} value={value as boolean | undefined} onChange={onChange} />
+      );
+    case 'DateTime':
+      return (
+        <DateTimeFieldInput col={col} value={value as string | undefined} onChange={onChange} />
+      );
     case 'Picklist':
     case 'State':
     case 'Status':
-    case 'EntityName':          return <ChoiceFieldInput  col={col} value={value as number | undefined} onChange={onChange} />;
-    case 'MultiSelectPicklist': return <MultiChoiceFieldInput col={col} value={value as number[] | undefined} onChange={onChange} />;
+    case 'EntityName':
+      return <ChoiceFieldInput col={col} value={value as number | undefined} onChange={onChange} />;
+    case 'MultiSelectPicklist':
+      return (
+        <MultiChoiceFieldInput
+          col={col}
+          value={value as number[] | undefined}
+          onChange={onChange}
+        />
+      );
     case 'Lookup':
     case 'Customer':
-    case 'Owner':               return <LookupFieldInput col={col} value={value as LookupFieldValue | undefined} onChange={onChange} />;
-    case 'Uniqueidentifier':    return <GuidFieldInput   value={value as string | undefined} onChange={onChange} />;
+    case 'Owner':
+      return (
+        <LookupFieldInput
+          col={col}
+          value={value as LookupFieldValue | undefined}
+          onChange={onChange}
+        />
+      );
+    case 'Uniqueidentifier':
+      return <GuidFieldInput value={value as string | undefined} onChange={onChange} />;
     default:
       return (
         <Input
@@ -701,7 +890,15 @@ function FieldInput({
 // ──────────────────────────────────────────────────────────────
 // Per-type controls (mirrors FilterValueInput patterns)
 // ──────────────────────────────────────────────────────────────
-function StringFieldInput({ col, value, onChange }: { col: StringColumnMeta; value: string | undefined; onChange: (v: string) => void }) {
+function StringFieldInput({
+  col,
+  value,
+  onChange,
+}: {
+  col: StringColumnMeta;
+  value: string | undefined;
+  onChange: (v: string) => void;
+}) {
   const isLong = col.format === 'TextArea';
   if (isLong) {
     return (
@@ -715,15 +912,23 @@ function StringFieldInput({ col, value, onChange }: { col: StringColumnMeta; val
     );
   }
   const type =
-    col.format === 'Email' ? 'email' :
-    col.format === 'Url'   ? 'url' :
-    col.format === 'Phone' ? 'tel' : 'text';
+    col.format === 'Email'
+      ? 'email'
+      : col.format === 'Url'
+        ? 'url'
+        : col.format === 'Phone'
+          ? 'tel'
+          : 'text';
   const placeholder =
-    col.format === 'Email' ? 'name@example.com' :
-    col.format === 'Url'   ? 'https://example.com' :
-    col.format === 'Phone' ? '+1 (555) 555-0000' :
-    col.format === 'TickerSymbol' ? 'MSFT' :
-    `up to ${col.maxLength} chars`;
+    col.format === 'Email'
+      ? 'name@example.com'
+      : col.format === 'Url'
+        ? 'https://example.com'
+        : col.format === 'Phone'
+          ? '+1 (555) 555-0000'
+          : col.format === 'TickerSymbol'
+            ? 'MSFT'
+            : `up to ${col.maxLength} chars`;
   return (
     <Input
       size="small"
@@ -736,11 +941,23 @@ function StringFieldInput({ col, value, onChange }: { col: StringColumnMeta; val
   );
 }
 
-function MemoFieldInput({ col, value, onChange }: { col: MemoColumnMeta; value: string | undefined; onChange: (v: string) => void }) {
+function MemoFieldInput({
+  col,
+  value,
+  onChange,
+}: {
+  col: MemoColumnMeta;
+  value: string | undefined;
+  onChange: (v: string) => void;
+}) {
   const v = value ?? '';
   return (
     <Field
-      hint={<span style={{ color: tokens.colorNeutralForeground3 }}>{v.length.toLocaleString()} / {col.maxLength.toLocaleString()}</span>}
+      hint={
+        <span style={{ color: tokens.colorNeutralForeground3 }}>
+          {v.length.toLocaleString()} / {col.maxLength.toLocaleString()}
+        </span>
+      }
     >
       <Textarea
         rows={4}
@@ -754,7 +971,15 @@ function MemoFieldInput({ col, value, onChange }: { col: MemoColumnMeta; value: 
   );
 }
 
-function IntegerFieldInput({ col, value, onChange }: { col: IntegerColumnMeta; value: number | undefined; onChange: (v: number) => void }) {
+function IntegerFieldInput({
+  col,
+  value,
+  onChange,
+}: {
+  col: IntegerColumnMeta;
+  value: number | undefined;
+  onChange: (v: number) => void;
+}) {
   // Format-driven presets (mirrors FilterValueInput)
   if (col.format === 'Language' || col.format === 'Locale') {
     return (
@@ -776,15 +1001,39 @@ function IntegerFieldInput({ col, value, onChange }: { col: IntegerColumnMeta; v
   if (col.format === 'Duration') {
     return (
       <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-        <NumericFieldInput value={value} onChange={onChange} min={col.minValue ?? 0} max={col.maxValue ?? 525_600} step={1} integer />
+        <NumericFieldInput
+          value={value}
+          onChange={onChange}
+          min={col.minValue ?? 0}
+          max={col.maxValue ?? 525_600}
+          step={1}
+          integer
+        />
         <span style={{ fontSize: 10, color: tokens.colorNeutralForeground3 }}>min</span>
       </span>
     );
   }
-  return <NumericFieldInput value={value} onChange={onChange} min={col.minValue} max={col.maxValue} step={1} integer />;
+  return (
+    <NumericFieldInput
+      value={value}
+      onChange={onChange}
+      min={col.minValue}
+      max={col.maxValue}
+      step={1}
+      integer
+    />
+  );
 }
 
-function DecimalFieldInput({ col, value, onChange }: { col: DecimalColumnMeta | DoubleColumnMeta; value: number | undefined; onChange: (v: number) => void }) {
+function DecimalFieldInput({
+  col,
+  value,
+  onChange,
+}: {
+  col: DecimalColumnMeta | DoubleColumnMeta;
+  value: number | undefined;
+  onChange: (v: number) => void;
+}) {
   return (
     <NumericFieldInput
       value={value}
@@ -797,11 +1046,19 @@ function DecimalFieldInput({ col, value, onChange }: { col: DecimalColumnMeta | 
 }
 
 function NumericFieldInput({
-  value, onChange, min, max, step, integer,
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  integer,
 }: {
   value: number | undefined;
   onChange: (v: number) => void;
-  min?: number; max?: number; step?: number; integer?: boolean;
+  min?: number;
+  max?: number;
+  step?: number;
+  integer?: boolean;
 }) {
   return (
     <SpinButton
@@ -818,10 +1075,26 @@ function NumericFieldInput({
   );
 }
 
-function MoneyFieldInput({ col, value, onChange }: { col: MoneyColumnMeta; value: number | undefined; onChange: (v: number) => void }) {
+function MoneyFieldInput({
+  col,
+  value,
+  onChange,
+}: {
+  col: MoneyColumnMeta;
+  value: number | undefined;
+  onChange: (v: number) => void;
+}) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-      <span style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 12, color: tokens.colorNeutralForeground3 }}>$</span>
+      <span
+        style={{
+          fontFamily: tokens.fontFamilyMonospace,
+          fontSize: 12,
+          color: tokens.colorNeutralForeground3,
+        }}
+      >
+        $
+      </span>
       <NumericFieldInput
         value={value}
         onChange={onChange}
@@ -836,7 +1109,15 @@ function MoneyFieldInput({ col, value, onChange }: { col: MoneyColumnMeta; value
   );
 }
 
-function BooleanFieldInput({ col, value, onChange }: { col: BooleanColumnMeta; value: boolean | undefined; onChange: (v: boolean) => void }) {
+function BooleanFieldInput({
+  col,
+  value,
+  onChange,
+}: {
+  col: BooleanColumnMeta;
+  value: boolean | undefined;
+  onChange: (v: boolean) => void;
+}) {
   const checked = value === true;
   return (
     <Switch
@@ -847,18 +1128,31 @@ function BooleanFieldInput({ col, value, onChange }: { col: BooleanColumnMeta; v
   );
 }
 
-function DateTimeFieldInput({ col, value, onChange }: { col: DateTimeColumnMeta; value: string | undefined; onChange: (v: string) => void }) {
+function DateTimeFieldInput({
+  col,
+  value,
+  onChange,
+}: {
+  col: DateTimeColumnMeta;
+  value: string | undefined;
+  onChange: (v: string) => void;
+}) {
   const isDateOnly = col.format === 'DateOnly' || col.dateTimeBehavior === 'DateOnly';
   const behaviorHint =
-    col.dateTimeBehavior === 'UserLocal'  ? 'stored as UTC, displayed in user TZ' :
-    col.dateTimeBehavior === 'DateOnly'   ? 'midnight UTC, no TZ conversion' :
-                                            'wall-clock as UTC (no TZ math)';
+    col.dateTimeBehavior === 'UserLocal'
+      ? 'stored as UTC, displayed in user TZ'
+      : col.dateTimeBehavior === 'DateOnly'
+        ? 'midnight UTC, no TZ conversion'
+        : 'wall-clock as UTC (no TZ math)';
 
   const parsed = value ? new Date(value) : null;
   const dateOnly = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
 
   const writeDate = (d: Date | null | undefined) => {
-    if (!d) { onChange(''); return; }
+    if (!d) {
+      onChange('');
+      return;
+    }
     if (isDateOnly) {
       const yyyy = d.getFullYear();
       const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -880,27 +1174,33 @@ function DateTimeFieldInput({ col, value, onChange }: { col: DateTimeColumnMeta;
 
   if (isDateOnly) {
     return (
-      <Tooltip content={`Behavior: ${col.dateTimeBehavior} — ${behaviorHint}`} relationship="description">
+      <Tooltip
+        content={`Behavior: ${col.dateTimeBehavior} — ${behaviorHint}`}
+        relationship="description"
+      >
         <DatePicker
           size="small"
           value={dateOnly}
           onSelectDate={writeDate}
           placeholder="Pick a date…"
-          formatDate={(d) => d ? d.toLocaleDateString() : ''}
+          formatDate={(d) => (d ? d.toLocaleDateString() : '')}
           allowTextInput
         />
       </Tooltip>
     );
   }
   return (
-    <Tooltip content={`Behavior: ${col.dateTimeBehavior} — ${behaviorHint}`} relationship="description">
+    <Tooltip
+      content={`Behavior: ${col.dateTimeBehavior} — ${behaviorHint}`}
+      relationship="description"
+    >
       <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <DatePicker
           size="small"
           value={dateOnly}
           onSelectDate={writeDate}
           placeholder="Date…"
-          formatDate={(d) => d ? d.toLocaleDateString() : ''}
+          formatDate={(d) => (d ? d.toLocaleDateString() : '')}
           style={{ minWidth: 130 }}
           allowTextInput
         />
@@ -918,9 +1218,17 @@ function DateTimeFieldInput({ col, value, onChange }: { col: DateTimeColumnMeta;
   );
 }
 
-function ChoiceFieldInput({ col, value, onChange }: { col: ColumnMeta; value: number | undefined; onChange: (v: number) => void }) {
+function ChoiceFieldInput({
+  col,
+  value,
+  onChange,
+}: {
+  col: ColumnMeta;
+  value: number | undefined;
+  onChange: (v: number) => void;
+}) {
   const options = columnOptions(col) ?? [];
-  const cur = options.find(o => o.value === value);
+  const cur = options.find((o) => o.value === value);
   return (
     <Combobox
       size="small"
@@ -929,10 +1237,17 @@ function ChoiceFieldInput({ col, value, onChange }: { col: ColumnMeta; value: nu
       onOptionSelect={(_, d) => d.optionValue && onChange(Number(d.optionValue))}
       placeholder="Pick a value…"
     >
-      {options.map(o => (
+      {options.map((o) => (
         <Option key={o.value} value={String(o.value)} text={o.label}>
           {o.label}
-          <span style={{ color: tokens.colorNeutralForeground3, fontFamily: tokens.fontFamilyMonospace, fontSize: 10, marginLeft: 6 }}>
+          <span
+            style={{
+              color: tokens.colorNeutralForeground3,
+              fontFamily: tokens.fontFamilyMonospace,
+              fontSize: 10,
+              marginLeft: 6,
+            }}
+          >
             · {o.value}
           </span>
         </Option>
@@ -941,12 +1256,28 @@ function ChoiceFieldInput({ col, value, onChange }: { col: ColumnMeta; value: nu
   );
 }
 
-function MultiChoiceFieldInput({ col, value, onChange }: { col: ColumnMeta; value: number[] | undefined; onChange: (v: number[]) => void }) {
+function MultiChoiceFieldInput({
+  col,
+  value,
+  onChange,
+}: {
+  col: ColumnMeta;
+  value: number[] | undefined;
+  onChange: (v: number[]) => void;
+}) {
   return (
     <div>
       <MultiChoiceTagPicker col={col} value={value} onChange={onChange} />
-      <Caption1 style={{ display: 'block', color: tokens.colorNeutralForeground3, marginTop: 4, fontSize: 10 }}>
-        Emitted as comma-separated integers (e.g. <code>"1,2,3"</code>) per Dataverse Web API contract.
+      <Caption1
+        style={{
+          display: 'block',
+          color: tokens.colorNeutralForeground3,
+          marginTop: 4,
+          fontSize: 10,
+        }}
+      >
+        Emitted as comma-separated integers (e.g. <code>"1,2,3"</code>) per Dataverse Web API
+        contract.
       </Caption1>
     </div>
   );
@@ -961,7 +1292,9 @@ function MultiChoiceFieldInput({ col, value, onChange }: { col: ColumnMeta; valu
  * canonical OData-friendly representation in state.
  */
 function MultiChoiceTagPicker({
-  col, value, onChange,
+  col,
+  value,
+  onChange,
 }: {
   col: ColumnMeta;
   value: number[] | undefined;
@@ -976,7 +1309,7 @@ function MultiChoiceTagPicker({
     for (const o of options) m.set(String(o.value), o.label);
     return m;
   }, [options]);
-  const allKeys = useMemo(() => options.map(o => String(o.value)), [options]);
+  const allKeys = useMemo(() => options.map((o) => String(o.value)), [options]);
 
   const children = useTagPickerFilter({
     query,
@@ -986,7 +1319,13 @@ function MultiChoiceTagPicker({
       <TagPickerOption key={key} value={key} text={labelByKey.get(key) ?? key}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           {labelByKey.get(key) ?? key}
-          <span style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 10, color: tokens.colorNeutralForeground3 }}>
+          <span
+            style={{
+              fontFamily: tokens.fontFamilyMonospace,
+              fontSize: 10,
+              color: tokens.colorNeutralForeground3,
+            }}
+          >
             · {key}
           </span>
         </span>
@@ -1005,8 +1344,8 @@ function MultiChoiceTagPicker({
       onOptionSelect={(_, d) => {
         if (d.value === '__no-matches') return;
         const next = d.selectedOptions
-          .map(s => Number(s))
-          .filter(n => Number.isFinite(n))
+          .map((s) => Number(s))
+          .filter((n) => Number.isFinite(n))
           .sort((a, b) => a - b);
         onChange(next);
         setQuery('');
@@ -1015,7 +1354,7 @@ function MultiChoiceTagPicker({
     >
       <TagPickerControl style={{ maxWidth: 520 }}>
         <TagPickerGroup aria-label="Selected choices">
-          {selected.map(k => (
+          {selected.map((k) => (
             <Tag key={k} value={k} shape="rounded">
               {labelByKey.get(k) ?? k}
             </Tag>
@@ -1036,7 +1375,9 @@ function MultiChoiceTagPicker({
 // Exported so MergeFieldDiff can reuse it for the custom-override path
 // on lookup columns. Same live-typeahead semantics as in the field set.
 export function LookupFieldInput({
-  col, value, onChange,
+  col,
+  value,
+  onChange,
 }: {
   col: LookupColumnMeta | CustomerColumnMeta | OwnerColumnMeta;
   value: LookupFieldValue | undefined;
@@ -1088,7 +1429,7 @@ export function LookupFieldInput({
   }, [value?.id, target]);
 
   const selectedRow = value?.id
-    ? rows.find(r => r.id.toLowerCase() === value.id.toLowerCase())
+    ? rows.find((r) => r.id.toLowerCase() === value.id.toLowerCase())
     : undefined;
   const selectedLabel = selectedRow?.name ?? (value?.id ? `(${value.id.slice(0, 8)}…)` : '');
   const displayValue = userIsTyping ? search : selectedLabel;
@@ -1103,7 +1444,9 @@ export function LookupFieldInput({
           → loading targets…
         </Badge>
         <Combobox size="small" disabled placeholder="Loading…" style={{ minWidth: 240 }}>
-          <Option value="__loading" text="" disabled>—</Option>
+          <Option value="__loading" text="" disabled>
+            —
+          </Option>
         </Combobox>
       </span>
     );
@@ -1127,10 +1470,12 @@ export function LookupFieldInput({
           }}
           style={{ width: 130 }}
         >
-          {col.targets.map(t => {
+          {col.targets.map((t) => {
             const tt = findTable(t);
             return (
-              <Option key={t} value={t} text={tt?.displayName ?? t}>{tt?.displayName ?? t}</Option>
+              <Option key={t} value={t} text={tt?.displayName ?? t}>
+                {tt?.displayName ?? t}
+              </Option>
             );
           })}
         </Combobox>
@@ -1182,17 +1527,30 @@ export function LookupFieldInput({
             </Caption1>
           </Option>
         )}
-        {!loading && !error && rows.map(r => (
-          <Option key={r.id} value={r.id} text={r.name}>
-            <Persona size="extra-small" name={r.name} secondaryText={r.id} avatar={{ color: 'colorful' }} />
-          </Option>
-        ))}
+        {!loading &&
+          !error &&
+          rows.map((r) => (
+            <Option key={r.id} value={r.id} text={r.name}>
+              <Persona
+                size="extra-small"
+                name={r.name}
+                secondaryText={r.id}
+                avatar={{ color: 'colorful' }}
+              />
+            </Option>
+          ))}
       </Combobox>
     </span>
   );
 }
 
-function GuidFieldInput({ value, onChange }: { value: string | undefined; onChange: (v: string) => void }) {
+function GuidFieldInput({
+  value,
+  onChange,
+}: {
+  value: string | undefined;
+  onChange: (v: string) => void;
+}) {
   const v = value ?? '';
   const valid = !v || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
   return (
@@ -1202,7 +1560,13 @@ function GuidFieldInput({ value, onChange }: { value: string | undefined; onChan
       placeholder="00000000-0000-0000-0000-000000000000"
       onChange={(_, d) => onChange(d.value)}
       style={{ fontFamily: tokens.fontFamilyMonospace }}
-      contentAfter={!valid ? <span style={{ color: tokens.colorPaletteRedForeground1, fontSize: 10 }}>invalid GUID</span> : undefined}
+      contentAfter={
+        !valid ? (
+          <span style={{ color: tokens.colorPaletteRedForeground1, fontSize: 10 }}>
+            invalid GUID
+          </span>
+        ) : undefined
+      }
     />
   );
 }
@@ -1210,57 +1574,90 @@ function GuidFieldInput({ value, onChange }: { value: string | undefined; onChan
 // ──────────────────────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────────────────────
-function FilterChip({ label, count, active, onClick }: {
-  label: string; count?: number; active: boolean; onClick: () => void;
+function FilterChip({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count?: number;
+  active: boolean;
+  onClick: () => void;
 }) {
   return (
-    <ToggleButton
-      size="small"
-      shape="circular"
-      checked={active}
-      onClick={onClick}
-    >
-      {label}{count != null ? ` · ${count}` : ''}
+    <ToggleButton size="small" shape="circular" checked={active} onClick={onClick}>
+      {label}
+      {count != null ? ` · ${count}` : ''}
     </ToggleButton>
   );
 }
 
 function typeHint(c: ColumnMeta): string {
   switch (c.attributeType) {
-    case 'String': case 'Memo': return ` · max ${c.maxLength}`;
-    case 'Decimal': case 'Double': return ` · ${c.precision} dec`;
-    case 'Money': return ` · ${c.precision} dec`;
+    case 'String':
+    case 'Memo':
+      return ` · max ${c.maxLength}`;
+    case 'Decimal':
+    case 'Double':
+      return ` · ${c.precision} dec`;
+    case 'Money':
+      return ` · ${c.precision} dec`;
     case 'Integer':
       return c.minValue != null || c.maxValue != null
         ? ` · [${c.minValue ?? '−∞'}…${c.maxValue ?? '∞'}]`
         : '';
-    case 'Lookup': case 'Customer': case 'Owner':
+    case 'Lookup':
+    case 'Customer':
+    case 'Owner':
       return ` · → ${c.targets.join(' | ')}`;
-    case 'Picklist': case 'MultiSelectPicklist': case 'State': case 'Status': case 'EntityName':
+    case 'Picklist':
+    case 'MultiSelectPicklist':
+    case 'State':
+    case 'Status':
+    case 'EntityName':
       return ` · ${('options' in c ? c.options : []).length} options`;
-    case 'DateTime': return ` · ${c.format} (${c.dateTimeBehavior})`;
-    default: return '';
+    case 'DateTime':
+      return ` · ${c.format} (${c.dateTimeBehavior})`;
+    default:
+      return '';
   }
 }
 
 /** Default value when the user adds (or auto-includes) a column. */
 export function defaultValueFor(col: ColumnMeta): CreateFieldValue {
   switch (col.attributeType) {
-    case 'String': case 'Memo':           return '';
-    case 'Integer': case 'BigInt':
-    case 'Decimal': case 'Double':
-    case 'Money':                          return 0;
-    case 'Boolean':                        return col.defaultValue ?? false;
-    case 'DateTime':                       return '';
-    case 'Picklist':                       return col.defaultFormValue ?? (col.options[0]?.value ?? 0);
-    case 'State':                          return col.options[0]?.value ?? 0;
-    case 'Status':                         return col.options[0]?.value ?? 1;
-    case 'EntityName':                     return col.options[0]?.value ?? 0;
-    case 'MultiSelectPicklist':            return [];
-    case 'Lookup': case 'Customer': case 'Owner':
+    case 'String':
+    case 'Memo':
+      return '';
+    case 'Integer':
+    case 'BigInt':
+    case 'Decimal':
+    case 'Double':
+    case 'Money':
+      return 0;
+    case 'Boolean':
+      return col.defaultValue ?? false;
+    case 'DateTime':
+      return '';
+    case 'Picklist':
+      return col.defaultFormValue ?? col.options[0]?.value ?? 0;
+    case 'State':
+      return col.options[0]?.value ?? 0;
+    case 'Status':
+      return col.options[0]?.value ?? 1;
+    case 'EntityName':
+      return col.options[0]?.value ?? 0;
+    case 'MultiSelectPicklist':
+      return [];
+    case 'Lookup':
+    case 'Customer':
+    case 'Owner':
       return { id: '', targetEntity: col.targets[0] };
-    case 'Uniqueidentifier':               return '';
-    default:                                return '';
+    case 'Uniqueidentifier':
+      return '';
+    default:
+      return '';
   }
 }
 
@@ -1288,8 +1685,11 @@ interface FieldSection {
 function sectionOf(col: ColumnMeta): SectionId {
   if (isLookupLike(col)) return 'lookups';
   switch (col.attributeType) {
-    case 'Picklist': case 'MultiSelectPicklist':
-    case 'State': case 'Status': case 'EntityName':
+    case 'Picklist':
+    case 'MultiSelectPicklist':
+    case 'State':
+    case 'Status':
+    case 'EntityName':
       return 'choices';
     case 'Uniqueidentifier':
       return 'system';
@@ -1299,28 +1699,55 @@ function sectionOf(col: ColumnMeta): SectionId {
 }
 
 function sectionsOf(cols: ColumnMeta[]): FieldSection[] {
-  const grouped: Record<SectionId, ColumnMeta[]> = { general: [], choices: [], lookups: [], system: [] };
+  const grouped: Record<SectionId, ColumnMeta[]> = {
+    general: [],
+    choices: [],
+    lookups: [],
+    system: [],
+  };
   for (const c of cols) grouped[sectionOf(c)].push(c);
   const out: FieldSection[] = [];
-  if (grouped.general.length) out.push({
-    id: 'general', title: 'General', icon: TextNumberFormat20Regular, cols: grouped.general,
-  });
-  if (grouped.choices.length) out.push({
-    id: 'choices', title: 'Choices', icon: ListBar20Regular,
-    tagText: 'option sets', tagAppearance: 'subtle', cols: grouped.choices,
-  });
-  if (grouped.lookups.length) out.push({
-    id: 'lookups', title: 'Lookups', icon: Link20Regular,
-    tagText: '@odata.bind', tagAppearance: 'brand', cols: grouped.lookups,
-  });
-  if (grouped.system.length) out.push({
-    id: 'system', title: 'System', icon: Key20Regular, cols: grouped.system,
-  });
+  if (grouped.general.length)
+    out.push({
+      id: 'general',
+      title: 'General',
+      icon: TextNumberFormat20Regular,
+      cols: grouped.general,
+    });
+  if (grouped.choices.length)
+    out.push({
+      id: 'choices',
+      title: 'Choices',
+      icon: ListBar20Regular,
+      tagText: 'option sets',
+      tagAppearance: 'subtle',
+      cols: grouped.choices,
+    });
+  if (grouped.lookups.length)
+    out.push({
+      id: 'lookups',
+      title: 'Lookups',
+      icon: Link20Regular,
+      tagText: '@odata.bind',
+      tagAppearance: 'brand',
+      cols: grouped.lookups,
+    });
+  if (grouped.system.length)
+    out.push({
+      id: 'system',
+      title: 'System',
+      icon: Key20Regular,
+      cols: grouped.system,
+    });
   return out;
 }
 
 function FieldSection({
-  title, icon: Icon, tagText, tagAppearance, children,
+  title,
+  icon: Icon,
+  tagText,
+  tagAppearance,
+  children,
 }: {
   title: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1330,24 +1757,27 @@ function FieldSection({
   children: React.ReactNode;
 }) {
   return (
-    <div style={{
-      border: `1px solid ${tokens.colorNeutralStroke2}`,
-      borderRadius: tokens.borderRadiusMedium,
-      background: tokens.colorNeutralBackground1,
-      padding: 12,
-    }}>
+    <div
+      style={{
+        border: `1px solid ${tokens.colorNeutralStroke2}`,
+        borderRadius: tokens.borderRadiusMedium,
+        background: tokens.colorNeutralBackground1,
+        padding: 12,
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <Icon style={{ width: 16, height: 16, color: tokens.colorNeutralForeground2 }} />
         <strong style={{ fontSize: 12, color: tokens.colorNeutralForeground1 }}>{title}</strong>
         {tagText && (
-          <Badge appearance={tagAppearance === 'brand' ? 'tint' : 'ghost'} color={tagAppearance === 'brand' ? 'brand' : undefined}>
+          <Badge
+            appearance={tagAppearance === 'brand' ? 'tint' : 'ghost'}
+            color={tagAppearance === 'brand' ? 'brand' : undefined}
+          >
             {tagText}
           </Badge>
         )}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {children}
-      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>{children}</div>
     </div>
   );
 }
@@ -1356,7 +1786,11 @@ function FieldSection({
 // JSON edit pane — raw body editing for power users
 // ──────────────────────────────────────────────────────────────
 function JsonEditPane({
-  tbl, text, error, themeMode, onChange,
+  tbl,
+  text,
+  error,
+  themeMode,
+  onChange,
 }: {
   tbl: TableMeta;
   text: string;
@@ -1370,13 +1804,18 @@ function JsonEditPane({
       <MessageBar layout="multiline" intent="info">
         <MessageBarBody>
           Raw JSON edit mode — what you type here becomes the request body verbatim. Lookups use{' '}
-          <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{'"<col>@odata.bind": "/<entitySet>(<guid>)"'}</code>{' '}
-          and multi-select choices are comma-separated integer strings. Switch back to <strong>Form</strong> to use the metadata-driven controls.
+          <code style={{ fontFamily: tokens.fontFamilyMonospace }}>
+            {'"<col>@odata.bind": "/<entitySet>(<guid>)"'}
+          </code>{' '}
+          and multi-select choices are comma-separated integer strings. Switch back to{' '}
+          <strong>Form</strong> to use the metadata-driven controls.
         </MessageBarBody>
       </MessageBar>
       {error && (
         <MessageBar layout="multiline" intent="error">
-          <MessageBarBody><strong>Invalid JSON.</strong> {error}</MessageBarBody>
+          <MessageBarBody>
+            <strong>Invalid JSON.</strong> {error}
+          </MessageBarBody>
         </MessageBar>
       )}
       <div style={{ position: 'relative' }}>
@@ -1394,9 +1833,10 @@ function JsonEditPane({
             border: `1px solid ${tokens.colorNeutralStroke2}`,
             borderRadius: tokens.borderRadiusMedium,
             overflow: 'hidden',
-            background: themeMode === 'dark'
-              ? '#1e1e1e'  // matches Monaco vs-dark background to avoid border flash on mount
-              : tokens.colorNeutralBackground1,
+            background:
+              themeMode === 'dark'
+                ? '#1e1e1e' // matches Monaco vs-dark background to avoid border flash on mount
+                : tokens.colorNeutralBackground1,
           }}
         >
           <Editor
@@ -1451,16 +1891,24 @@ function JsonEditPane({
  * engine-free (no urlBuilder import — the JSON pane needs to render even
  * before the request would otherwise execute).
  */
-function bindPropertyFor(parentTbl: TableMeta, columnLogical: string, targetEntity: string): string {
-  const nav = parentTbl.navigationProperties.find(n =>
-    n.cardinality === 'ManyToOne'
-    && n.referencingAttribute === columnLogical
-    && n.targetEntity === targetEntity,
+function bindPropertyFor(
+  parentTbl: TableMeta,
+  columnLogical: string,
+  targetEntity: string,
+): string {
+  const nav = parentTbl.navigationProperties.find(
+    (n) =>
+      n.cardinality === 'ManyToOne' &&
+      n.referencingAttribute === columnLogical &&
+      n.targetEntity === targetEntity,
   );
   return `${nav?.name ?? columnLogical}@odata.bind`;
 }
 
-function valuesToJsonBody(tbl: TableMeta | undefined, values: Record<string, CreateFieldValue>): Record<string, unknown> {
+function valuesToJsonBody(
+  tbl: TableMeta | undefined,
+  values: Record<string, CreateFieldValue>,
+): Record<string, unknown> {
   if (!tbl) return {};
   const body: Record<string, unknown> = {};
   for (const [field, raw] of Object.entries(values)) {
@@ -1495,7 +1943,10 @@ function valuesToJsonBody(tbl: TableMeta | undefined, values: Record<string, Cre
  * in-memory fieldValues. Lookup-bind entries become LookupFieldValue, multi-
  * select comma-strings become number[]. Unknown columns are dropped.
  */
-function jsonBodyToValues(tbl: TableMeta | undefined, body: Record<string, unknown>): Record<string, CreateFieldValue> {
+function jsonBodyToValues(
+  tbl: TableMeta | undefined,
+  body: Record<string, unknown>,
+): Record<string, CreateFieldValue> {
   if (!tbl) return {};
   const values: Record<string, CreateFieldValue> = {};
   for (const [k, v] of Object.entries(body)) {
@@ -1520,15 +1971,15 @@ function jsonBodyToValues(tbl: TableMeta | undefined, body: Record<string, unkno
         // walking the column's known targets. If none match, fall back
         // to the first target. (Most plain Lookups have one target.)
         const targetLogical =
-          directCol.targets.find(t => findTable(t)?.entitySetName === entitySet)
-          ?? directCol.targets[0];
+          directCol.targets.find((t) => findTable(t)?.entitySetName === entitySet) ??
+          directCol.targets[0];
         values[propName] = { id, targetEntity: targetLogical };
         continue;
       }
 
       // (2) Try as a disambiguated nav-property name.
-      const nav = tbl.navigationProperties.find(n =>
-        n.cardinality === 'ManyToOne' && n.name === propName,
+      const nav = tbl.navigationProperties.find(
+        (n) => n.cardinality === 'ManyToOne' && n.name === propName,
       );
       if (nav && nav.referencingAttribute) {
         values[nav.referencingAttribute] = {
@@ -1545,10 +1996,13 @@ function jsonBodyToValues(tbl: TableMeta | undefined, body: Record<string, unkno
     if (!col) continue;
     if (col.attributeType === 'MultiSelectPicklist') {
       if (typeof v === 'string') {
-        const arr = v.split(',').map(n => Number(n.trim())).filter(n => Number.isFinite(n));
+        const arr = v
+          .split(',')
+          .map((n) => Number(n.trim()))
+          .filter((n) => Number.isFinite(n));
         values[k] = arr;
       } else if (Array.isArray(v)) {
-        values[k] = v.map(Number).filter(n => Number.isFinite(n));
+        values[k] = v.map(Number).filter((n) => Number.isFinite(n));
       }
       continue;
     }

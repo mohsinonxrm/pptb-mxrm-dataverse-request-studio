@@ -4,7 +4,16 @@
 // + canStoreFullImage distinction.
 
 import { useMemo } from 'react';
-import { Field, Combobox, Option, Caption1, Badge, tokens, MessageBar, MessageBarBody } from '@fluentui/react-components';
+import {
+  Field,
+  Combobox,
+  Option,
+  Caption1,
+  Badge,
+  tokens,
+  MessageBar,
+  MessageBarBody,
+} from '@fluentui/react-components';
 import { Document20Filled, Image20Filled } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
 import { findTable, type FileColumnMeta, type ImageColumnMeta } from '../mock/metadata';
@@ -22,18 +31,25 @@ export interface FileColumnPickerProps {
   group?: RequestGroup;
 }
 
-export function FileColumnPicker({ table, value, onChange, group = 'binary' }: FileColumnPickerProps) {
+export function FileColumnPicker({
+  table,
+  value,
+  onChange,
+  group = 'binary',
+}: FileColumnPickerProps) {
   const tbl = findTable(table);
   const fileCols = useMemo(
     () => (tbl?.columns ?? []).filter((c): c is FileColumnMeta => c.attributeType === 'File'),
     [tbl],
   );
-  const cur = fileCols.find(c => c.logicalName === value);
+  const cur = fileCols.find((c) => c.logicalName === value);
 
   if (!tbl) {
     return (
       <MessageBar layout="multiline" intent="error">
-        <MessageBarBody>Unknown table <code>{table}</code>.</MessageBarBody>
+        <MessageBarBody>
+          Unknown table <code>{table}</code>.
+        </MessageBarBody>
       </MessageBar>
     );
   }
@@ -43,7 +59,8 @@ export function FileColumnPicker({ table, value, onChange, group = 'binary' }: F
         <PaneHead icon={Document20Filled} title="File column" group={group} />
         <MessageBar layout="multiline" intent="warning" style={{ maxWidth: 720 }}>
           <MessageBarBody>
-            <strong>{tbl.displayName}</strong> has no File-typed columns. Add one via the maker portal or pick a different table.
+            <strong>{tbl.displayName}</strong> has no File-typed columns. Add one via the maker
+            portal or pick a different table.
           </MessageBarBody>
         </MessageBar>
       </div>
@@ -66,7 +83,7 @@ export function FileColumnPicker({ table, value, onChange, group = 'binary' }: F
             onOptionSelect={(_, d) => onChange(d.optionValue ?? null)}
             placeholder="Pick a file column…"
           >
-            {fileCols.map(c => (
+            {fileCols.map((c) => (
               <Option key={c.logicalName} value={c.logicalName} text={c.displayName}>
                 <FileColumnOption col={c} />
               </Option>
@@ -88,8 +105,12 @@ function FileColumnOption({ col }: { col: FileColumnMeta }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: 600 }}>{col.logicalName}</span>
-        <Badge appearance="ghost" size="extra-small">File</Badge>
+        <span style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: 600 }}>
+          {col.logicalName}
+        </span>
+        <Badge appearance="ghost" size="extra-small">
+          File
+        </Badge>
         <Badge appearance="ghost" size="extra-small" style={{ marginLeft: 'auto' }}>
           max {formatSize((col.maxSizeInKB ?? 32768) * 1024)}
         </Badge>
@@ -105,30 +126,56 @@ function FileColumnOption({ col }: { col: FileColumnMeta }) {
 function FileColumnSummary({ col }: { col: FileColumnMeta }) {
   const maxBytes = (col.maxSizeInKB ?? 32768) * 1024;
   return (
-    <div style={{
-      border: `1px solid ${tokens.colorNeutralStroke2}`,
-      borderRadius: tokens.borderRadiusMedium,
-      padding: 12,
-      background: tokens.colorNeutralBackground1,
-    }}>
+    <div
+      style={{
+        border: `1px solid ${tokens.colorNeutralStroke2}`,
+        borderRadius: tokens.borderRadiusMedium,
+        padding: 12,
+        background: tokens.colorNeutralBackground1,
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <Document20Filled style={{ color: tokens.colorBrandForeground1 }} />
-        <strong style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 13 }}>{col.logicalName}</strong>
-        <Badge appearance="tint" color="brand">File</Badge>
+        <strong style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 13 }}>
+          {col.logicalName}
+        </strong>
+        <Badge appearance="tint" color="brand">
+          File
+        </Badge>
         <span style={{ flexGrow: 1 }} />
-        <Caption1 style={{ color: tokens.colorNeutralForeground3, fontFamily: tokens.fontFamilyMonospace }}>
+        <Caption1
+          style={{ color: tokens.colorNeutralForeground3, fontFamily: tokens.fontFamilyMonospace }}
+        >
           {col.displayName}
         </Caption1>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', rowGap: 4, fontSize: 11 }}>
         <span style={{ color: tokens.colorNeutralForeground3 }}>Max file size</span>
-        <span>{formatSize(maxBytes)} <Caption1 style={{ color: tokens.colorNeutralForeground3, marginLeft: 4 }}>· {(col.maxSizeInKB ?? 32768).toLocaleString()} KB</Caption1></span>
+        <span>
+          {formatSize(maxBytes)}{' '}
+          <Caption1 style={{ color: tokens.colorNeutralForeground3, marginLeft: 4 }}>
+            · {(col.maxSizeInKB ?? 32768).toLocaleString()} KB
+          </Caption1>
+        </span>
         <span style={{ color: tokens.colorNeutralForeground3 }}>Companion column</span>
-        <span style={{ fontFamily: tokens.fontFamilyMonospace }}>{fileNameColumnFor(col.logicalName)} <Caption1 style={{ color: tokens.colorNeutralForeground3, marginLeft: 4, fontFamily: tokens.fontFamilyBase }}>· read-only string — $select to get the filename without downloading bytes</Caption1></span>
+        <span style={{ fontFamily: tokens.fontFamilyMonospace }}>
+          {fileNameColumnFor(col.logicalName)}{' '}
+          <Caption1
+            style={{
+              color: tokens.colorNeutralForeground3,
+              marginLeft: 4,
+              fontFamily: tokens.fontFamilyBase,
+            }}
+          >
+            · read-only string — $select to get the filename without downloading bytes
+          </Caption1>
+        </span>
         <span style={{ color: tokens.colorNeutralForeground3 }}>Retrieve returns</span>
         <span>file id (Guid). Pass to DeleteFile or compose download URL.</span>
         <span style={{ color: tokens.colorNeutralForeground3 }}>Binary target</span>
-        <span><Badge appearance="ghost">{col.binaryTarget ?? 'file'}</Badge></span>
+        <span>
+          <Badge appearance="ghost">{col.binaryTarget ?? 'file'}</Badge>
+        </span>
       </div>
     </div>
   );
@@ -144,18 +191,25 @@ export interface ImageColumnPickerProps {
   group?: RequestGroup;
 }
 
-export function ImageColumnPicker({ table, value, onChange, group = 'binary' }: ImageColumnPickerProps) {
+export function ImageColumnPicker({
+  table,
+  value,
+  onChange,
+  group = 'binary',
+}: ImageColumnPickerProps) {
   const tbl = findTable(table);
   const imgCols = useMemo(
     () => (tbl?.columns ?? []).filter((c): c is ImageColumnMeta => c.attributeType === 'Image'),
     [tbl],
   );
-  const cur = imgCols.find(c => c.logicalName === value);
+  const cur = imgCols.find((c) => c.logicalName === value);
 
   if (!tbl) {
     return (
       <MessageBar layout="multiline" intent="error">
-        <MessageBarBody>Unknown table <code>{table}</code>.</MessageBarBody>
+        <MessageBarBody>
+          Unknown table <code>{table}</code>.
+        </MessageBarBody>
       </MessageBar>
     );
   }
@@ -165,7 +219,8 @@ export function ImageColumnPicker({ table, value, onChange, group = 'binary' }: 
         <PaneHead icon={Image20Filled} title="Image column" group={group} />
         <MessageBar layout="multiline" intent="warning" style={{ maxWidth: 720 }}>
           <MessageBarBody>
-            <strong>{tbl.displayName}</strong> has no Image-typed columns. Tables get one when their primary image is configured; custom image columns are created via solution explorer.
+            <strong>{tbl.displayName}</strong> has no Image-typed columns. Tables get one when their
+            primary image is configured; custom image columns are created via solution explorer.
           </MessageBarBody>
         </MessageBar>
       </div>
@@ -188,7 +243,7 @@ export function ImageColumnPicker({ table, value, onChange, group = 'binary' }: 
             onOptionSelect={(_, d) => onChange(d.optionValue ?? null)}
             placeholder="Pick an image column…"
           >
-            {imgCols.map(c => (
+            {imgCols.map((c) => (
               <Option key={c.logicalName} value={c.logicalName} text={c.displayName}>
                 <ImageColumnOption col={c} />
               </Option>
@@ -210,10 +265,22 @@ function ImageColumnOption({ col }: { col: ImageColumnMeta }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: 600 }}>{col.logicalName}</span>
-        <Badge appearance="ghost" size="extra-small">Image</Badge>
-        {col.isPrimaryImage && <Badge appearance="tint" color="brand" size="extra-small">primary</Badge>}
-        {col.canStoreFullImage && <Badge appearance="tint" color="success" size="extra-small">full-size</Badge>}
+        <span style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: 600 }}>
+          {col.logicalName}
+        </span>
+        <Badge appearance="ghost" size="extra-small">
+          Image
+        </Badge>
+        {col.isPrimaryImage && (
+          <Badge appearance="tint" color="brand" size="extra-small">
+            primary
+          </Badge>
+        )}
+        {col.canStoreFullImage && (
+          <Badge appearance="tint" color="success" size="extra-small">
+            full-size
+          </Badge>
+        )}
         <Badge appearance="ghost" size="extra-small" style={{ marginLeft: 'auto' }}>
           {col.isPrimaryImage ? '144×144' : `max ${formatSize((col.maxSizeInKB ?? 10240) * 1024)}`}
         </Badge>
@@ -226,20 +293,36 @@ function ImageColumnOption({ col }: { col: ImageColumnMeta }) {
 function ImageColumnSummary({ col }: { col: ImageColumnMeta }) {
   const maxBytes = (col.maxSizeInKB ?? 10240) * 1024;
   return (
-    <div style={{
-      border: `1px solid ${tokens.colorNeutralStroke2}`,
-      borderRadius: tokens.borderRadiusMedium,
-      padding: 12,
-      background: tokens.colorNeutralBackground1,
-    }}>
+    <div
+      style={{
+        border: `1px solid ${tokens.colorNeutralStroke2}`,
+        borderRadius: tokens.borderRadiusMedium,
+        padding: 12,
+        background: tokens.colorNeutralBackground1,
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <Image20Filled style={{ color: tokens.colorBrandForeground1 }} />
-        <strong style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 13 }}>{col.logicalName}</strong>
-        <Badge appearance="tint" color="brand">Image</Badge>
-        {col.isPrimaryImage && <Badge appearance="tint" color="brand">primary</Badge>}
-        {col.canStoreFullImage
-          ? <Badge appearance="tint" color="success">full-size enabled</Badge>
-          : <Badge appearance="tint" color="subtle">thumbnail only</Badge>}
+        <strong style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 13 }}>
+          {col.logicalName}
+        </strong>
+        <Badge appearance="tint" color="brand">
+          Image
+        </Badge>
+        {col.isPrimaryImage && (
+          <Badge appearance="tint" color="brand">
+            primary
+          </Badge>
+        )}
+        {col.canStoreFullImage ? (
+          <Badge appearance="tint" color="success">
+            full-size enabled
+          </Badge>
+        ) : (
+          <Badge appearance="tint" color="subtle">
+            thumbnail only
+          </Badge>
+        )}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', rowGap: 4, fontSize: 11 }}>
         <span style={{ color: tokens.colorNeutralForeground3 }}>Display name</span>
@@ -247,10 +330,19 @@ function ImageColumnSummary({ col }: { col: ImageColumnMeta }) {
         <span style={{ color: tokens.colorNeutralForeground3 }}>Thumbnail size</span>
         <span>144 × 144 (auto-cropped center)</span>
         <span style={{ color: tokens.colorNeutralForeground3 }}>Full-size</span>
-        <span>{col.canStoreFullImage ? `Up to ${formatSize(maxBytes)}` : <em style={{ color: tokens.colorNeutralForeground3 }}>not stored — thumbnail only</em>}</span>
+        <span>
+          {col.canStoreFullImage ? (
+            `Up to ${formatSize(maxBytes)}`
+          ) : (
+            <em style={{ color: tokens.colorNeutralForeground3 }}>not stored — thumbnail only</em>
+          )}
+        </span>
         <span style={{ color: tokens.colorNeutralForeground3 }}>Companion columns</span>
         <span style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 10 }}>
-          {(() => { const c = imageCompanionsFor(col.logicalName); return `${c.id} · ${c.timestamp} · ${c.url}`; })()}
+          {(() => {
+            const c = imageCompanionsFor(col.logicalName);
+            return `${c.id} · ${c.timestamp} · ${c.url}`;
+          })()}
         </span>
         <span style={{ color: tokens.colorNeutralForeground3 }}>Set on Create?</span>
         <span>{col.isPrimaryImage ? 'Yes — primary image only' : 'No — Update or PATCH only'}</span>

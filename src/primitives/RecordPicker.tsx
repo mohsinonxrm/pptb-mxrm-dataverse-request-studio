@@ -32,25 +32,37 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Combobox, Option, Persona, Spinner, Input, RadioGroup, Radio,
-  tokens, Caption1, Button, Tooltip,
+  Combobox,
+  Option,
+  Persona,
+  Spinner,
+  Input,
+  RadioGroup,
+  Radio,
+  tokens,
+  Caption1,
+  Button,
+  Tooltip,
 } from '@fluentui/react-components';
-import {
-  Dismiss16Regular, Warning20Filled, CheckmarkCircle16Filled,
-} from '@fluentui/react-icons';
+import { Dismiss16Regular, Warning20Filled, CheckmarkCircle16Filled } from '@fluentui/react-icons';
 import { findTable } from '../mock/metadata';
 import { useLookupRecords } from '../host/useLookupRecords';
 
 export interface PickedRecord {
-  id: string;       // primary key value
-  primary: string;  // primary name value
+  id: string; // primary key value
+  primary: string; // primary name value
 }
 
 type PickerMode = 'search' | 'guid';
 
-const GUID_RE = /^[{(]?[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}[)}]?$/;
+const GUID_RE =
+  /^[{(]?[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}[)}]?$/;
 const isValidGuid = (s: string): boolean => GUID_RE.test(s.trim());
-const normalizeGuid = (s: string): string => s.replace(/[{}()]/g, '').trim().toLowerCase();
+const normalizeGuid = (s: string): string =>
+  s
+    .replace(/[{}()]/g, '')
+    .trim()
+    .toLowerCase();
 
 export function RecordPicker({
   table,
@@ -81,10 +93,17 @@ export function RecordPicker({
         <Radio value="search" label="Search" />
         <Radio value="guid" label="By GUID" />
       </RadioGroup>
-      {mode === 'search'
-        ? <SearchPicker table={table} tbl={tbl} selectedId={selectedId} onPick={onPick} placeholder={placeholder} />
-        : <GuidPicker selectedId={selectedId} onPick={onPick} />
-      }
+      {mode === 'search' ? (
+        <SearchPicker
+          table={table}
+          tbl={tbl}
+          selectedId={selectedId}
+          onPick={onPick}
+          placeholder={placeholder}
+        />
+      ) : (
+        <GuidPicker selectedId={selectedId} onPick={onPick} />
+      )}
     </div>
   );
 }
@@ -109,7 +128,11 @@ export function RecordPicker({
 //     `clearable` doesn't fire a separate clear event the parent can hook.
 
 function SearchPicker({
-  table, tbl, selectedId, onPick, placeholder,
+  table,
+  tbl,
+  selectedId,
+  onPick,
+  placeholder,
 }: {
   table: string;
   tbl: ReturnType<typeof findTable>;
@@ -135,7 +158,7 @@ function SearchPicker({
   // the user is just hovering options.
   const lastResolvedRef = useRef<PickedRecord | null>(null);
   const matchedRow = selectedId
-    ? rows.find(r => normalizeGuid(r.id) === normalizeGuid(selectedId))
+    ? rows.find((r) => normalizeGuid(r.id) === normalizeGuid(selectedId))
     : null;
   useEffect(() => {
     if (matchedRow) {
@@ -156,8 +179,8 @@ function SearchPicker({
     }
   }, [selectedId]);
 
-  const selectedLabel = lastResolvedRef.current?.primary
-    ?? (selectedId ? `(${selectedId.slice(0, 8)}…)` : '');
+  const selectedLabel =
+    lastResolvedRef.current?.primary ?? (selectedId ? `(${selectedId.slice(0, 8)}…)` : '');
   const displayValue = userIsTyping ? search : selectedLabel;
 
   const onClear = () => {
@@ -174,7 +197,7 @@ function SearchPicker({
         value={displayValue}
         selectedOptions={selectedId ? [normalizeGuid(selectedId)] : []}
         onOptionSelect={(_, d) => {
-          const rec = rows.find(r => r.id === d.optionValue);
+          const rec = rows.find((r) => r.id === d.optionValue);
           if (rec) {
             const picked = { id: rec.id, primary: rec.name };
             lastResolvedRef.current = picked;
@@ -200,37 +223,46 @@ function SearchPicker({
       >
         {loading && (
           <Option value="__loading" text="" disabled>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: tokens.colorNeutralForeground3 }}>
+            <span
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                color: tokens.colorNeutralForeground3,
+              }}
+            >
               <Spinner size="tiny" /> Searching…
             </span>
           </Option>
         )}
         {!loading && error && (
           <Option value="__error" text="" disabled>
-            <span style={{ color: tokens.colorPaletteRedForeground1, fontSize: 12 }}>
-              {error}
-            </span>
+            <span style={{ color: tokens.colorPaletteRedForeground1, fontSize: 12 }}>{error}</span>
           </Option>
         )}
         {!loading && !error && rows.length === 0 && (
           <Option value="__none" text="" disabled>
             <span style={{ color: tokens.colorNeutralForeground3, fontSize: 12 }}>
               {tbl
-                ? (search ? `No ${tbl.displayName} records match "${search}"` : `Type to search ${tbl.displayName}`)
+                ? search
+                  ? `No ${tbl.displayName} records match "${search}"`
+                  : `Type to search ${tbl.displayName}`
                 : 'Pick a table first'}
             </span>
           </Option>
         )}
-        {!loading && !error && rows.map(r => (
-          <Option key={r.id} value={r.id} text={r.name}>
-            <Persona
-              size="small"
-              name={r.name}
-              secondaryText={r.id}
-              avatar={{ color: 'colorful' }}
-            />
-          </Option>
-        ))}
+        {!loading &&
+          !error &&
+          rows.map((r) => (
+            <Option key={r.id} value={r.id} text={r.name}>
+              <Persona
+                size="small"
+                name={r.name}
+                secondaryText={r.id}
+                avatar={{ color: 'colorful' }}
+              />
+            </Option>
+          ))}
       </Combobox>
       {selectedId && (
         <Tooltip content="Clear selection" relationship="label">
@@ -254,7 +286,8 @@ function SearchPicker({
 // id and just want to paste it.
 
 function GuidPicker({
-  selectedId, onPick,
+  selectedId,
+  onPick,
 }: {
   selectedId: string | null;
   onPick: (rec: PickedRecord | null) => void;
@@ -269,7 +302,7 @@ function GuidPicker({
   }, [selectedId]);
 
   const valid = !raw || isValidGuid(raw);
-  const normalized = useMemo(() => valid && raw ? normalizeGuid(raw) : null, [raw, valid]);
+  const normalized = useMemo(() => (valid && raw ? normalizeGuid(raw) : null), [raw, valid]);
 
   const onChange = (next: string) => {
     setRaw(next);
@@ -291,9 +324,11 @@ function GuidPicker({
         onChange={(_, d) => onChange(d.value)}
         placeholder="00000000-0000-0000-0000-000000000000"
         contentAfter={
-          !raw ? null :
-          !valid ? <Warning20Filled style={{ color: tokens.colorPaletteRedForeground1 }} /> :
-          <CheckmarkCircle16Filled style={{ color: tokens.colorPaletteGreenForeground1 }} />
+          !raw ? null : !valid ? (
+            <Warning20Filled style={{ color: tokens.colorPaletteRedForeground1 }} />
+          ) : (
+            <CheckmarkCircle16Filled style={{ color: tokens.colorPaletteGreenForeground1 }} />
+          )
         }
         style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 12 }}
       />
@@ -303,7 +338,9 @@ function GuidPicker({
         </Caption1>
       )}
       {raw && valid && normalized && (
-        <Caption1 style={{ color: tokens.colorNeutralForeground3, fontFamily: tokens.fontFamilyMonospace }}>
+        <Caption1
+          style={{ color: tokens.colorNeutralForeground3, fontFamily: tokens.fontFamilyMonospace }}
+        >
           {normalized}
         </Caption1>
       )}

@@ -16,14 +16,32 @@
 // not for filtering it.
 
 import {
-  Toolbar, ToolbarButton, ToolbarDivider, makeStyles, tokens, Tooltip,
-  Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuButton, Spinner,
-  Input, ToggleButton,
+  Toolbar,
+  ToolbarButton,
+  ToolbarDivider,
+  makeStyles,
+  tokens,
+  Tooltip,
+  Menu,
+  MenuTrigger,
+  MenuPopover,
+  MenuList,
+  MenuItem,
+  MenuButton,
+  Spinner,
+  Input,
+  ToggleButton,
 } from '@fluentui/react-components';
 import {
-  ArrowClockwise20Regular, Copy20Regular, Link20Regular,
-  DocumentBulletList20Regular, ArrowDownload20Regular, Stack20Regular,
-  Search20Regular, TextDensity20Regular, TextAlignDistributed20Regular,
+  ArrowClockwise20Regular,
+  Copy20Regular,
+  Link20Regular,
+  DocumentBulletList20Regular,
+  ArrowDownload20Regular,
+  Stack20Regular,
+  Search20Regular,
+  TextDensity20Regular,
+  TextAlignDistributed20Regular,
 } from '@fluentui/react-icons';
 import { SegmentedToggle } from '../../primitives/SegmentedToggle';
 import { useHostSession } from '../../host/HostContext';
@@ -68,9 +86,17 @@ export interface ResultsCommandBarProps {
 }
 
 export function ResultsCommandBar({
-  hasMore, isLoading, isLoadingMore,
-  requestUrl, body, onRefresh, onRetrieveAll,
-  searchQuery, onSearchChange, density, onDensityChange,
+  hasMore,
+  isLoading,
+  isLoadingMore,
+  requestUrl,
+  body,
+  onRefresh,
+  onRetrieveAll,
+  searchQuery,
+  onSearchChange,
+  density,
+  onDensityChange,
 }: ResultsCommandBarProps) {
   const s = useStyles();
   const host = useHostSession();
@@ -82,7 +108,7 @@ export function ResultsCommandBar({
     ? 'Keep fetching @odata.nextLink pages until everything is loaded'
     : host.embedded
       ? 'No more pages to fetch. Inside PPTB, Prefer: odata.maxpagesize is stripped, ' +
-        'so the response uses Dataverse\'s default 5,000-row page size. To test paging at ' +
+        "so the response uses Dataverse's default 5,000-row page size. To test paging at " +
         'smaller sizes, export the request via the Code tab.'
       : 'No more pages to fetch — the response did not include @odata.nextLink. ' +
         'Set Prefer: odata.maxpagesize to enable server-side pagination.';
@@ -98,17 +124,21 @@ export function ResultsCommandBar({
   const copyTsv = () => {
     const rows = (body as { value?: Record<string, unknown>[] } | null)?.value ?? [];
     if (rows.length === 0) return;
-    const keys = Array.from(new Set(rows.flatMap(r => Object.keys(r))))
-      .filter(k => !k.includes('@'));
+    const keys = Array.from(new Set(rows.flatMap((r) => Object.keys(r)))).filter(
+      (k) => !k.includes('@'),
+    );
     const header = keys.join('\t');
-    const lines = rows.map(r =>
-      keys.map(k => {
-        const f = (r as Record<string, unknown>)[`${k}@OData.Community.Display.V1.FormattedValue`]
-          ?? (r as Record<string, unknown>)[`_${k}_value@OData.Community.Display.V1.FormattedValue`];
-        const v = f ?? r[k];
-        if (v == null) return '';
-        return String(v).replace(/[\t\n\r]+/g, ' ');
-      }).join('\t'),
+    const lines = rows.map((r) =>
+      keys
+        .map((k) => {
+          const f =
+            (r as Record<string, unknown>)[`${k}@OData.Community.Display.V1.FormattedValue`] ??
+            (r as Record<string, unknown>)[`_${k}_value@OData.Community.Display.V1.FormattedValue`];
+          const v = f ?? r[k];
+          if (v == null) return '';
+          return String(v).replace(/[\t\n\r]+/g, ' ');
+        })
+        .join('\t'),
     );
     navigator.clipboard?.writeText([header, ...lines].join('\n'));
   };
@@ -189,13 +219,17 @@ export function ResultsCommandBar({
             icon={<TextAlignDistributed20Regular />}
             onClick={() => onDensityChange('cozy')}
             title="Cozy"
-          >Cozy</ToggleButton>
+          >
+            Cozy
+          </ToggleButton>
           <ToggleButton
             checked={density === 'compact'}
             icon={<TextDensity20Regular />}
             onClick={() => onDensityChange('compact')}
             title="Compact"
-          >Compact</ToggleButton>
+          >
+            Compact
+          </ToggleButton>
         </SegmentedToggle>
       </Toolbar>
 

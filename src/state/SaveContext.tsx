@@ -48,7 +48,9 @@ const SaveSetterContext = createContext<Setter | null>(null);
  * active mode). Holds a single slot for the currently-active save context.
  */
 export function SaveContextRoot({
-  value, setValue, children,
+  value,
+  setValue,
+  children,
 }: {
   value: SaveContextValue | null;
   setValue: Setter;
@@ -56,9 +58,7 @@ export function SaveContextRoot({
 }) {
   return (
     <SaveSetterContext.Provider value={setValue}>
-      <SaveContext.Provider value={value}>
-        {children}
-      </SaveContext.Provider>
+      <SaveContext.Provider value={value}>{children}</SaveContext.Provider>
     </SaveSetterContext.Provider>
   );
 }

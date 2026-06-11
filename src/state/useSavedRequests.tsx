@@ -50,7 +50,9 @@ function setSnapshot(next: SavedRequest[]): void {
 
 function subscribe(cb: () => void): () => void {
   listeners.add(cb);
-  return () => { listeners.delete(cb); };
+  return () => {
+    listeners.delete(cb);
+  };
 }
 
 function getSnapshot(): SavedRequest[] {
@@ -119,7 +121,7 @@ export function useSavedRequests(): UseSavedRequestsApi {
   const writeBack = useCallback((next: SavedRequest[]): { ok: boolean; error?: string } => {
     try {
       persistSaved(next);
-      setSnapshot(next);   // broadcasts to every subscribed consumer
+      setSnapshot(next); // broadcasts to every subscribed consumer
       setError(null);
       return { ok: true };
     } catch (e) {
@@ -134,39 +136,48 @@ export function useSavedRequests(): UseSavedRequestsApi {
   //   • Else → prepend. If we exceed MAX_SAVED, drop the OLDEST entry
   //     (smallest savedAt). User can manually remove others first if they
   //     want a different eviction order.
-  const save = useCallback((entry: SavedRequest) => {
-    const idx = list.findIndex(e => e.id === entry.id);
-    let next: SavedRequest[];
-    if (idx >= 0) {
-      next = [...list];
-      next[idx] = entry;
-    } else {
-      next = [entry, ...list];
-      if (next.length > MAX_SAVED) {
-        // Sort copy by savedAt asc, drop the oldest until at cap.
-        next.sort((a, b) => b.savedAt - a.savedAt);
-        next = next.slice(0, MAX_SAVED);
+  const save = useCallback(
+    (entry: SavedRequest) => {
+      const idx = list.findIndex((e) => e.id === entry.id);
+      let next: SavedRequest[];
+      if (idx >= 0) {
+        next = [...list];
+        next[idx] = entry;
+      } else {
+        next = [entry, ...list];
+        if (next.length > MAX_SAVED) {
+          // Sort copy by savedAt asc, drop the oldest until at cap.
+          next.sort((a, b) => b.savedAt - a.savedAt);
+          next = next.slice(0, MAX_SAVED);
+        }
       }
-    }
-    return writeBack(next);
-  }, [list, writeBack]);
+      return writeBack(next);
+    },
+    [list, writeBack],
+  );
 
-  const rename = useCallback((id: string, name: string) => {
-    const next = list.map(e => e.id === id ? { ...e, name } : e);
-    writeBack(next);
-  }, [list, writeBack]);
+  const rename = useCallback(
+    (id: string, name: string) => {
+      const next = list.map((e) => (e.id === id ? { ...e, name } : e));
+      writeBack(next);
+    },
+    [list, writeBack],
+  );
 
-  const remove = useCallback((id: string) => {
-    writeBack(list.filter(e => e.id !== id));
-  }, [list, writeBack]);
+  const remove = useCallback(
+    (id: string) => {
+      writeBack(list.filter((e) => e.id !== id));
+    },
+    [list, writeBack],
+  );
 
   const clearAll = useCallback(() => {
     writeBack([]);
   }, [writeBack]);
 
-  const findById = useCallback((id: string) => list.find(e => e.id === id), [list]);
+  const findById = useCallback((id: string) => list.find((e) => e.id === id), [list]);
   const findByName = useCallback(
-    (name: string) => list.find(e => e.name.toLowerCase() === name.toLowerCase()),
+    (name: string) => list.find((e) => e.name.toLowerCase() === name.toLowerCase()),
     [list],
   );
 

@@ -252,7 +252,9 @@ const __metadataQueue: Array<() => void> = [];
 
 async function throttledMetadataQuery<T>(query: string): Promise<T> {
   if (__inFlightMetadata >= METADATA_CONCURRENCY) {
-    await new Promise<void>(resolve => { __metadataQueue.push(resolve); });
+    await new Promise<void>((resolve) => {
+      __metadataQueue.push(resolve);
+    });
   }
   __inFlightMetadata++;
   try {
@@ -277,7 +279,9 @@ export async function getAllEntities(advancedFindOnly: boolean = true): Promise<
     query += '&$filter=IsValidForAdvancedFind eq true';
   }
 
-  const result = await throttledMetadataQuery<{ value?: unknown[] } & Record<string, unknown>>(query);
+  const result = await throttledMetadataQuery<{ value?: unknown[] } & Record<string, unknown>>(
+    query,
+  );
   const entities = result.value as unknown as EntityMetadata[];
 
   // Metadata endpoint doesn't support $orderby — sort client-side.
@@ -354,7 +358,9 @@ export async function getEntityAttributes(
     query += `&$filter=${predicates.join(' and ')}`;
   }
 
-  const result = await throttledMetadataQuery<{ value?: unknown[] } & Record<string, unknown>>(query);
+  const result = await throttledMetadataQuery<{ value?: unknown[] } & Record<string, unknown>>(
+    query,
+  );
   const attrs = result.value as unknown as AttributeMetadata[];
 
   attrs.sort((a, b) => {
@@ -378,7 +384,9 @@ export async function getAttributeWithOptionSet(
     `EntityDefinitions(LogicalName='${entityLogicalName}')/Attributes(LogicalName='${attributeLogicalName}')` +
     `?$select=AttributeType,LogicalName,SchemaName,DisplayName,MetadataId`;
 
-  const basicResult = await throttledMetadataQuery<{ value?: unknown[] } & Record<string, unknown>>(basicQuery);
+  const basicResult = await throttledMetadataQuery<{ value?: unknown[] } & Record<string, unknown>>(
+    basicQuery,
+  );
   // Single-attribute reads return the record directly OR wrapped in `value[0]`.
   const basicAttr = (basicResult.value?.[0] || basicResult) as unknown as AttributeMetadata;
 
@@ -388,10 +396,18 @@ export async function getAttributeWithOptionSet(
 
   let typeCast = '';
   switch (basicAttr.AttributeType) {
-    case 'Boolean':  typeCast = 'Microsoft.Dynamics.CRM.BooleanAttributeMetadata';  break;
-    case 'State':    typeCast = 'Microsoft.Dynamics.CRM.StateAttributeMetadata';    break;
-    case 'Status':   typeCast = 'Microsoft.Dynamics.CRM.StatusAttributeMetadata';   break;
-    case 'Picklist': typeCast = 'Microsoft.Dynamics.CRM.PicklistAttributeMetadata'; break;
+    case 'Boolean':
+      typeCast = 'Microsoft.Dynamics.CRM.BooleanAttributeMetadata';
+      break;
+    case 'State':
+      typeCast = 'Microsoft.Dynamics.CRM.StateAttributeMetadata';
+      break;
+    case 'Status':
+      typeCast = 'Microsoft.Dynamics.CRM.StatusAttributeMetadata';
+      break;
+    case 'Picklist':
+      typeCast = 'Microsoft.Dynamics.CRM.PicklistAttributeMetadata';
+      break;
     case 'MultiSelectPicklist':
       typeCast = 'Microsoft.Dynamics.CRM.MultiSelectPicklistAttributeMetadata';
       break;
@@ -403,10 +419,14 @@ export async function getAttributeWithOptionSet(
   const fullQuery =
     `EntityDefinitions(LogicalName='${entityLogicalName}')/Attributes(LogicalName='${attributeLogicalName}')/${typeCast}` +
     `?$expand=OptionSet`;
-  const fullResult = await throttledMetadataQuery<{ value?: unknown[] } & Record<string, unknown>>(fullQuery);
+  const fullResult = await throttledMetadataQuery<{ value?: unknown[] } & Record<string, unknown>>(
+    fullQuery,
+  );
   const fullAttr = (fullResult.value?.[0] || fullResult) as unknown as AttributeMetadata;
   if (!fullAttr || !fullAttr.LogicalName) {
-    throw new Error(`Failed to retrieve attribute ${attributeLogicalName} with OptionSet expansion`);
+    throw new Error(
+      `Failed to retrieve attribute ${attributeLogicalName} with OptionSet expansion`,
+    );
   }
   return fullAttr;
 }
@@ -466,7 +486,9 @@ export async function getAttributeDetailedMetadata(
       const basicQuery =
         `EntityDefinitions(LogicalName='${entityLogicalName}')/Attributes(LogicalName='${attributeLogicalName}')` +
         `?$select=SchemaName,LogicalName,DisplayName,AttributeType,MetadataId`;
-      const basicResult = await throttledMetadataQuery<{ value?: unknown[] } & Record<string, unknown>>(basicQuery);
+      const basicResult = await throttledMetadataQuery<
+        { value?: unknown[] } & Record<string, unknown>
+      >(basicQuery);
       return (basicResult.value?.[0] || basicResult) as unknown as AttributeMetadata;
     }
   }
@@ -474,7 +496,9 @@ export async function getAttributeDetailedMetadata(
   const detailedQuery =
     `EntityDefinitions(LogicalName='${entityLogicalName}')/Attributes(LogicalName='${attributeLogicalName}')/${typeCast}` +
     `?$select=${selectProps}`;
-  const result = await throttledMetadataQuery<{ value?: unknown[] } & Record<string, unknown>>(detailedQuery);
+  const result = await throttledMetadataQuery<{ value?: unknown[] } & Record<string, unknown>>(
+    detailedQuery,
+  );
   const detailedAttr = (result.value?.[0] || result) as unknown as AttributeMetadata;
 
   if (!detailedAttr || !detailedAttr.SchemaName) {
@@ -513,7 +537,9 @@ export async function getAttributesByTypeCast(
   const query =
     `EntityDefinitions(LogicalName='${entityLogicalName}')/Attributes/${typeCast}` +
     `?$select=${selectProps}${expandPart}`;
-  const result = await throttledMetadataQuery<{ value?: unknown[] } & Record<string, unknown>>(query);
+  const result = await throttledMetadataQuery<{ value?: unknown[] } & Record<string, unknown>>(
+    query,
+  );
   return (result.value ?? []) as unknown as AttributeMetadata[];
 }
 
@@ -644,12 +670,12 @@ export async function getPublishersWithSolutions(): Promise<PublisherWithSolutio
     '?$select=publisherid,friendlyname,uniquename,customizationprefix' +
     '&$filter=isreadonly eq false and publisher_solution/any(s: s/isvisible eq true and s/solution_solutioncomponent/any(c: c/componenttype eq 1))' +
     '&$expand=publisher_solution(' +
-      '$select=solutionid,friendlyname,isvisible,ismanaged,uniquename,version;' +
-      '$filter=isvisible eq true and solution_solutioncomponent/any(c: c/componenttype eq 1))' +
+    '$select=solutionid,friendlyname,isvisible,ismanaged,uniquename,version;' +
+    '$filter=isvisible eq true and solution_solutioncomponent/any(c: c/componenttype eq 1))' +
     '&$orderby=friendlyname asc';
   const r = await throttledMetadataQuery<{ value?: unknown[] } & Record<string, unknown>>(q);
   const rows = r.value as unknown as Array<Publisher & { publisher_solution?: Solution[] }>;
-  return rows.map(row => ({
+  return rows.map((row) => ({
     publisher: {
       publisherid: row.publisherid,
       friendlyname: row.friendlyname,
@@ -663,7 +689,7 @@ export async function getPublishersWithSolutions(): Promise<PublisherWithSolutio
 export async function getSolutionsByPublishers(publisherIds: string[]): Promise<Solution[]> {
   if (!isDataverseAvailable()) throw new Error('PPTB Dataverse API not available');
   if (publisherIds.length === 0) return [];
-  const publisherFilter = publisherIds.map(id => `_publisherid_value eq ${id}`).join(' or ');
+  const publisherFilter = publisherIds.map((id) => `_publisherid_value eq ${id}`).join(' or ');
   const q =
     'solutions?$select=solutionid,friendlyname,uniquename,solutionpackageversion,' +
     '_publisherid_value,isvisible,ismanaged' +
@@ -680,7 +706,7 @@ export async function getAllSolutionsWithEntities(): Promise<Solution[]> {
     'solutions?$select=solutionid,friendlyname,uniquename,version,' +
     '_publisherid_value,isvisible,ismanaged' +
     '&$filter=isvisible eq true and solution_solutioncomponent/any(c: c/componenttype eq 1) ' +
-    "and publisherid/isreadonly eq false" +
+    'and publisherid/isreadonly eq false' +
     '&$orderby=friendlyname asc';
   const r = await throttledMetadataQuery<{ value?: unknown[] } & Record<string, unknown>>(q);
   return r.value as unknown as Solution[];
@@ -694,13 +720,13 @@ export async function getSolutionComponents(solutionIds: string[]): Promise<Solu
   // `msdyn_solutioncomponentsummaries` endpoint doesn't support a multi-id
   // filter in one request.
   const results = await Promise.all(
-    solutionIds.map(id =>
+    solutionIds.map((id) =>
       window.dataverseAPI!.queryData(
         `msdyn_solutioncomponentsummaries?` +
-        `$select=msdyn_name,msdyn_displayname,msdyn_logicalcollectionname,msdyn_solutionid,msdyn_componenttype` +
-        `&$filter=msdyn_componenttype eq 1 and msdyn_solutionid eq '${id}'`,
-      )
-    )
+          `$select=msdyn_name,msdyn_displayname,msdyn_logicalcollectionname,msdyn_solutionid,msdyn_componenttype` +
+          `&$filter=msdyn_componenttype eq 1 and msdyn_solutionid eq '${id}'`,
+      ),
+    ),
   );
   const merged: SolutionComponent[] = [];
   for (const r of results) {
@@ -730,11 +756,13 @@ export async function whoAmI(): Promise<WhoAmIResponse | null> {
   }
 }
 
-export async function checkPrivilegeByName(userId: string, privilegeName: string): Promise<boolean> {
+export async function checkPrivilegeByName(
+  userId: string,
+  privilegeName: string,
+): Promise<boolean> {
   if (!isDataverseAvailable()) return false;
   try {
-    const q =
-      `systemusers(${userId})/Microsoft.Dynamics.CRM.RetrieveUserPrivilegeByPrivilegeName(PrivilegeName='${privilegeName}')`;
+    const q = `systemusers(${userId})/Microsoft.Dynamics.CRM.RetrieveUserPrivilegeByPrivilegeName(PrivilegeName='${privilegeName}')`;
     const result = await throttledMetadataQuery<{ value?: unknown[] } & Record<string, unknown>>(q);
     const response = result as unknown as PrivilegeCheckResponse;
     return !!response?.RolePrivileges?.length;
@@ -759,10 +787,10 @@ export async function getAccessSummary(): Promise<AccessSummary | null> {
     canReadPublisher,
     canReadSolution,
     canReadCustomization,
-    fullFilterMode:     canReadCustomization && canReadSolution && canReadPublisher,
-    solutionsOnlyMode:  canReadCustomization && canReadSolution && !canReadPublisher,
+    fullFilterMode: canReadCustomization && canReadSolution && canReadPublisher,
+    solutionsOnlyMode: canReadCustomization && canReadSolution && !canReadPublisher,
     publishersOnlyMode: canReadCustomization && canReadPublisher && !canReadSolution,
-    metadataOnlyMode:   canReadCustomization && !canReadSolution && !canReadPublisher,
-    noAccessMode:      !canReadCustomization,
+    metadataOnlyMode: canReadCustomization && !canReadSolution && !canReadPublisher,
+    noAccessMode: !canReadCustomization,
   };
 }

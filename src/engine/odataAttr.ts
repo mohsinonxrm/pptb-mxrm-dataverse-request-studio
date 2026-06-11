@@ -52,7 +52,7 @@ export function attrRef(col: ColumnMeta | undefined, logicalName: string): strin
  */
 export function attrRefByName(table: TableMeta | undefined, logicalName: string): string {
   if (!table) return logicalName;
-  const col = table.columns.find(c => c.logicalName === logicalName);
+  const col = table.columns.find((c) => c.logicalName === logicalName);
   return attrRef(col, logicalName);
 }
 
@@ -64,10 +64,7 @@ export function attrRefByName(table: TableMeta | undefined, logicalName: string)
  * Example: `c/primarycontactid` with primarycontactid as Lookup →
  *          `c/_primarycontactid_value`
  */
-export function attrRefPath(
-  table: TableMeta | undefined,
-  expr: string,
-): string {
+export function attrRefPath(table: TableMeta | undefined, expr: string): string {
   if (!expr.includes('/')) return attrRefByName(table, expr);
   const parts = expr.split('/');
   const last = parts.pop() ?? expr;

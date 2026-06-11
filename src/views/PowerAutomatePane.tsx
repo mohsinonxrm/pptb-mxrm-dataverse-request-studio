@@ -1,8 +1,19 @@
 import { useState } from 'react';
 import {
-  Input, Textarea, Label, Button, Tooltip,
-  MessageBar, MessageBarBody, MessageBarTitle,
-  Subtitle1, Subtitle2, Caption1, Badge, mergeClasses, tokens,
+  Input,
+  Textarea,
+  Label,
+  Button,
+  Tooltip,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
+  Subtitle1,
+  Subtitle2,
+  Caption1,
+  Badge,
+  mergeClasses,
+  tokens,
   makeStyles,
 } from '@fluentui/react-components';
 import { Copy20Regular, Checkmark20Filled, Flash20Filled } from '@fluentui/react-icons';
@@ -53,16 +64,24 @@ export interface PowerAutomatePaneProps {
 
 export function PowerAutomatePane({ spec }: PowerAutomatePaneProps) {
   const s = usePAStyles();
-  const populatedCount = spec.fields.filter(f => f.value).length;
+  const populatedCount = spec.fields.filter((f) => f.value).length;
   const allAsText = spec.fields
-    .filter(f => f.value)
-    .map(f => `${f.label.padEnd(28)} ${f.value}`)
+    .filter((f) => f.value)
+    .map((f) => `${f.label.padEnd(28)} ${f.value}`)
     .join('\n');
 
   return (
     <div>
       {/* Header — action name + connector context */}
-      <div style={{ marginBottom: 16, display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+      <div
+        style={{
+          marginBottom: 16,
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}
+      >
         <Flash20Filled style={{ color: tokens.colorBrandForeground1, marginTop: 6 }} />
         <Subtitle1 style={{ fontFamily: tokens.fontFamilyBase }}>{spec.actionName}</Subtitle1>
         <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>· {spec.connector}</Caption1>
@@ -89,12 +108,16 @@ export function PowerAutomatePane({ spec }: PowerAutomatePaneProps) {
       )}
 
       {/* Fields */}
-      <Subtitle2 style={{ display: 'block', marginBottom: 10, color: tokens.colorNeutralForeground2 }}>
+      <Subtitle2
+        style={{ display: 'block', marginBottom: 10, color: tokens.colorNeutralForeground2 }}
+      >
         {spec.actionName === 'Get a row by ID' ? 'Get a row by ID' : 'List rows'}
       </Subtitle2>
 
       <div>
-        {spec.fields.map(f => <PARow key={f.label} field={f} styles={s} />)}
+        {spec.fields.map((f) => (
+          <PARow key={f.label} field={f} styles={s} />
+        ))}
       </div>
 
       {/* Notes */}
@@ -103,7 +126,9 @@ export function PowerAutomatePane({ spec }: PowerAutomatePaneProps) {
           <MessageBarBody>
             <MessageBarTitle>Notes</MessageBarTitle>
             <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
-              {spec.notes.map((n, i) => <li key={i}>{n}</li>)}
+              {spec.notes.map((n, i) => (
+                <li key={i}>{n}</li>
+              ))}
             </ul>
           </MessageBarBody>
         </MessageBar>
@@ -112,14 +137,15 @@ export function PowerAutomatePane({ spec }: PowerAutomatePaneProps) {
       {/* HTTP-action fallback (only when needed — e.g. $apply) */}
       {spec.httpFallback && (
         <div className={s.fallbackCard}>
-          <Subtitle2 style={{ display: 'block', marginBottom: 4 }}>HTTP action — fallback</Subtitle2>
-          <Caption1 style={{ display: 'block', marginBottom: 12, color: tokens.colorNeutralForeground3 }}>
+          <Subtitle2 style={{ display: 'block', marginBottom: 4 }}>
+            HTTP action — fallback
+          </Subtitle2>
+          <Caption1
+            style={{ display: 'block', marginBottom: 12, color: tokens.colorNeutralForeground3 }}
+          >
             {spec.httpFallback.note}
           </Caption1>
-          <PARow
-            field={{ label: 'Method', value: spec.httpFallback.method }}
-            styles={s}
-          />
+          <PARow field={{ label: 'Method', value: spec.httpFallback.method }} styles={s} />
           <PARow
             field={{ label: 'URI', value: spec.httpFallback.uri, multiline: true }}
             styles={s}
@@ -131,7 +157,8 @@ export function PowerAutomatePane({ spec }: PowerAutomatePaneProps) {
 }
 
 function PARow({
-  field, styles,
+  field,
+  styles,
 }: {
   field: PowerAutomateField;
   styles: ReturnType<typeof usePAStyles>;
@@ -139,10 +166,15 @@ function PARow({
   const [copied, setCopied] = useState(false);
   const onCopy = () => {
     if (!field.value) return;
-    navigator.clipboard?.writeText(field.value).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1400);
-    }).catch(() => {/* ignore */});
+    navigator.clipboard
+      ?.writeText(field.value)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1400);
+      })
+      .catch(() => {
+        /* ignore */
+      });
   };
 
   return (
@@ -179,9 +211,12 @@ function PARow({
           size="medium"
           appearance={field.value ? 'outline' : 'subtle'}
           disabled={!field.value}
-          icon={copied
-            ? <Checkmark20Filled style={{ color: tokens.colorPaletteGreenForeground1 }} />
-            : <Copy20Regular />
+          icon={
+            copied ? (
+              <Checkmark20Filled style={{ color: tokens.colorPaletteGreenForeground1 }} />
+            ) : (
+              <Copy20Regular />
+            )
           }
           onClick={onCopy}
           className={styles.copyBtn}

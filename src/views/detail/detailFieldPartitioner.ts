@@ -103,10 +103,7 @@ function isAnnotation(k: string): boolean {
  *   • null on a key that has paired @… annotations → nav null
  *   • everything else → scalar
  */
-export function partitionRecord(
-  record: Record<string, unknown>,
-  tbl?: TableMeta,
-): RecordPartition {
+export function partitionRecord(record: Record<string, unknown>, tbl?: TableMeta): RecordPartition {
   const scalars: PartitionedScalar[] = [];
   const navObjects: PartitionedNavObject[] = [];
   const navCollections: PartitionedNavCollection[] = [];
@@ -141,7 +138,7 @@ export function partitionRecord(
     }
 
     const value = record[k];
-    const nav = tbl?.navigationProperties.find(n => n.name === k);
+    const nav = tbl?.navigationProperties.find((n) => n.name === k);
     const folded = annotationByOwner.get(k);
 
     // Pull nav metadata once. For polymorphic lookups in the wire-form
@@ -198,9 +195,8 @@ export function partitionRecord(
       key: k,
       value,
       formattedValue: formattedValue == null ? undefined : String(formattedValue),
-      lookupTargetLogicalName: lookupTargetLogicalName == null
-        ? undefined
-        : String(lookupTargetLogicalName),
+      lookupTargetLogicalName:
+        lookupTargetLogicalName == null ? undefined : String(lookupTargetLogicalName),
     });
   }
 
@@ -224,14 +220,20 @@ export function pickHeadlineFields(
 ): { headline: string; subline?: string } {
   const headlineKey =
     tbl?.primaryName ||
-    (Object.prototype.hasOwnProperty.call(record, 'name') ? 'name' :
-     Object.prototype.hasOwnProperty.call(record, 'fullname') ? 'fullname' :
-     Object.prototype.hasOwnProperty.call(record, 'subject') ? 'subject' :
-     Object.prototype.hasOwnProperty.call(record, 'title') ? 'title' : null);
+    (Object.prototype.hasOwnProperty.call(record, 'name')
+      ? 'name'
+      : Object.prototype.hasOwnProperty.call(record, 'fullname')
+        ? 'fullname'
+        : Object.prototype.hasOwnProperty.call(record, 'subject')
+          ? 'subject'
+          : Object.prototype.hasOwnProperty.call(record, 'title')
+            ? 'title'
+            : null);
   const idKey = tbl?.primaryKey;
-  const headline = headlineKey != null && record[headlineKey] != null
-    ? String(record[headlineKey])
-    : '(unnamed record)';
+  const headline =
+    headlineKey != null && record[headlineKey] != null
+      ? String(record[headlineKey])
+      : '(unnamed record)';
   const idValue = idKey != null ? record[idKey] : undefined;
   const subline = idValue != null ? String(idValue) : undefined;
   return { headline, subline };

@@ -15,8 +15,14 @@ import { findTable } from '../../mock/metadata';
 import { useLiveTable } from '../../host/useLiveMetadata';
 import { type ExpandSpec } from '../ExpandEditor';
 import {
-  findExpandById, findExpandParentEntity, getExpandTarget, isCollectionExpand,
-  updateExpand, removeExpand, addExpand, hasAnyNestedExpand,
+  findExpandById,
+  findExpandParentEntity,
+  getExpandTarget,
+  isCollectionExpand,
+  updateExpand,
+  removeExpand,
+  addExpand,
+  hasAnyNestedExpand,
 } from './expandTree';
 import { ExpandOverview } from './ExpandOverview';
 import { SelectEditor } from '../SelectEditor';
@@ -41,7 +47,12 @@ export interface ExpandRouterProps {
 }
 
 export function ExpandRouter({
-  path, rootEntity, rootExpand, setRootExpand, setActivePath, group = 'read',
+  path,
+  rootEntity,
+  rootExpand,
+  setRootExpand,
+  setActivePath,
+  group = 'read',
 }: ExpandRouterProps) {
   const segments = path.split('/');
   // segments[0] === 'expand' guaranteed by caller
@@ -58,9 +69,9 @@ export function ExpandRouter({
   // We also build a breadcrumb trail with labels per segment.
   type Walk = {
     activeExpand: ExpandSpec | null;
-    activeClause: string | null;       // 'select' | 'filter' | 'orderby' | 'top' | 'expand' | null
-    parentEntity: string;              // entity at the active level (parent of `activeExpand` siblings)
-    siblings: ExpandSpec[];            // expand list at the active level
+    activeClause: string | null; // 'select' | 'filter' | 'orderby' | 'top' | 'expand' | null
+    parentEntity: string; // entity at the active level (parent of `activeExpand` siblings)
+    siblings: ExpandSpec[]; // expand list at the active level
     breadcrumb: { label: string; path: string }[];
     /**
      * Cardinality of the IMMEDIATE parent $expand (the one we're nested
@@ -88,20 +99,41 @@ export function ExpandRouter({
 
     while (i < segments.length) {
       const idSeg = segments[i];
-      const found = siblings.find(x => x.id === idSeg);
+      const found = siblings.find((x) => x.id === idSeg);
       if (!found) {
-        return { activeExpand: null, activeClause: null, parentEntity: entity, siblings, breadcrumb, parentCardinality };
+        return {
+          activeExpand: null,
+          activeClause: null,
+          parentEntity: entity,
+          siblings,
+          breadcrumb,
+          parentCardinality,
+        };
       }
       cursor = found;
       pathSoFar = `${pathSoFar}/${idSeg}`;
-      const nav = findTable(entity)?.navigationProperties.find(n => n.name === found.nav);
+      const nav = findTable(entity)?.navigationProperties.find((n) => n.name === found.nav);
       breadcrumb.push({ label: found.nav, path: pathSoFar });
       if (!nav) {
-        return { activeExpand: cursor, activeClause: null, parentEntity: entity, siblings, breadcrumb, parentCardinality };
+        return {
+          activeExpand: cursor,
+          activeClause: null,
+          parentEntity: entity,
+          siblings,
+          breadcrumb,
+          parentCardinality,
+        };
       }
       const next = segments[i + 1];
       if (!next) {
-        return { activeExpand: cursor, activeClause: 'select', parentEntity: entity, siblings, breadcrumb, parentCardinality };
+        return {
+          activeExpand: cursor,
+          activeClause: 'select',
+          parentEntity: entity,
+          siblings,
+          breadcrumb,
+          parentCardinality,
+        };
       }
       if (next === 'expand') {
         // Step into this expand's nestedExpand — the new level's parent
@@ -114,9 +146,23 @@ export function ExpandRouter({
         i += 2;
         continue;
       }
-      return { activeExpand: cursor, activeClause: next, parentEntity: entity, siblings, breadcrumb, parentCardinality };
+      return {
+        activeExpand: cursor,
+        activeClause: next,
+        parentEntity: entity,
+        siblings,
+        breadcrumb,
+        parentCardinality,
+      };
     }
-    return { activeExpand: null, activeClause: null, parentEntity: entity, siblings, breadcrumb, parentCardinality };
+    return {
+      activeExpand: null,
+      activeClause: null,
+      parentEntity: entity,
+      siblings,
+      breadcrumb,
+      parentCardinality,
+    };
   })();
 
   // ── Dispatchers ────────────────────────────────────────────
@@ -144,11 +190,12 @@ export function ExpandRouter({
   // for the loader so the hook is safe to call eagerly.
   const activeExpandForHook = walked.activeExpand;
   const parentEntityForExpand = activeExpandForHook
-    ? (findExpandParentEntity(rootExpand, activeExpandForHook.id, rootEntity) ?? walked.parentEntity)
+    ? (findExpandParentEntity(rootExpand, activeExpandForHook.id, rootEntity) ??
+      walked.parentEntity)
     : walked.parentEntity;
   const parentTblForHook = findTable(parentEntityForExpand);
   const navMetaForHook = activeExpandForHook
-    ? parentTblForHook?.navigationProperties.find(n => n.name === activeExpandForHook.nav)
+    ? parentTblForHook?.navigationProperties.find((n) => n.name === activeExpandForHook.nav)
     : undefined;
   const { loading: targetLoading } = useLiveTable(navMetaForHook?.targetEntity ?? null);
 
@@ -206,9 +253,13 @@ export function ExpandRouter({
     return (
       <MessageBar layout="multiline" intent="error">
         <MessageBarBody>
-          Couldn't resolve the target entity for navigation property <code>{activeExpand.nav}</code>.
+          Couldn't resolve the target entity for navigation property <code>{activeExpand.nav}</code>
+          .
           {navMeta?.targetEntity && (
-            <> Tried <code>{navMeta.targetEntity}</code>.</>
+            <>
+              {' '}
+              Tried <code>{navMeta.targetEntity}</code>.
+            </>
           )}
         </MessageBarBody>
       </MessageBar>
@@ -239,7 +290,14 @@ export function ExpandRouter({
 // Scoped per-clause renderer
 // ────────────────────────────────────────────────────────────
 function ScopedClause({
-  clause, targetEntity, expand, isCollection, breadcrumb, queryHasNestedExpand, onPatch, group,
+  clause,
+  targetEntity,
+  expand,
+  isCollection,
+  breadcrumb,
+  queryHasNestedExpand,
+  onPatch,
+  group,
 }: {
   clause: string;
   targetEntity: string;
@@ -254,16 +312,25 @@ function ScopedClause({
   const s = useStudioStyles();
   // Breadcrumb header common to every nested clause
   const crumb = (
-    <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+    <div
+      style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}
+    >
       <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>Editing inside:</Caption1>
       {breadcrumb.map((b, i) => (
         <span key={b.path} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           {i > 0 && <span style={{ color: tokens.colorNeutralForeground4 }}>→</span>}
-          <Caption1 style={{
-            fontFamily: tokens.fontFamilyMonospace,
-            color: i === breadcrumb.length - 1 ? tokens.colorBrandForeground1 : tokens.colorNeutralForeground2,
-            fontWeight: i === breadcrumb.length - 1 ? 600 : 400,
-          }}>{b.label}</Caption1>
+          <Caption1
+            style={{
+              fontFamily: tokens.fontFamilyMonospace,
+              color:
+                i === breadcrumb.length - 1
+                  ? tokens.colorBrandForeground1
+                  : tokens.colorNeutralForeground2,
+              fontWeight: i === breadcrumb.length - 1 ? 600 : 400,
+            }}
+          >
+            {b.label}
+          </Caption1>
         </span>
       ))}
     </div>
@@ -280,8 +347,9 @@ function ScopedClause({
         {crumb}
         <MessageBar layout="multiline" intent="info">
           <MessageBarBody>
-            <code>${clause}</code> isn't allowed on a single-valued navigation property (<code>{expand.nav}</code>).
-            Per the Dataverse docs, an <code>$expand</code> on a many-to-one relationship only accepts
+            <code>${clause}</code> isn't allowed on a single-valued navigation property (
+            <code>{expand.nav}</code>). Per the Dataverse docs, an <code>$expand</code> on a
+            many-to-one relationship only accepts
             <code> $select</code>, <code>$filter</code>, and a nested <code>$expand</code>.
           </MessageBarBody>
         </MessageBar>
@@ -364,8 +432,12 @@ function NestedBlockedBanner({ clause }: { clause: string }) {
   return (
     <MessageBar layout="multiline" intent="error" style={{ marginBottom: 12 }}>
       <MessageBarBody>
-        The query contains a nested <code>$expand</code>, so <code>{clause}</code> is no longer accepted by Dataverse on any expand —
-        the server returns: <em>"Only $select and $filter clause can be provided while doing $expand on many-to-one relationship or nested one-to-many relationship."</em>
+        The query contains a nested <code>$expand</code>, so <code>{clause}</code> is no longer
+        accepted by Dataverse on any expand — the server returns:{' '}
+        <em>
+          "Only $select and $filter clause can be provided while doing $expand on many-to-one
+          relationship or nested one-to-many relationship."
+        </em>
         Remove all nested expands first, or accept that this value will be ignored.
       </MessageBarBody>
     </MessageBar>

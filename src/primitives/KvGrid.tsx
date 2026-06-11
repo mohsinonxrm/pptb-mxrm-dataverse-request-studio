@@ -33,9 +33,10 @@ export interface KvGridProps {
 
 export function KvGrid({ rows, keyWidth, className }: KvGridProps) {
   const s = useStudioStyles();
-  const style = keyWidth != null
-    ? { gridTemplateColumns: `${typeof keyWidth === 'number' ? `${keyWidth}px` : keyWidth} 1fr` }
-    : undefined;
+  const style =
+    keyWidth != null
+      ? { gridTemplateColumns: `${typeof keyWidth === 'number' ? `${keyWidth}px` : keyWidth} 1fr` }
+      : undefined;
   return (
     <div className={mergeClasses(s.kvGrid, className)} style={style}>
       {rows.map((r, i) => (
@@ -52,9 +53,11 @@ function KvPair({ k, v, mono }: KvRow) {
       <span className={s.kvKey}>{k}</span>
       <span className={mono ? s.kvValMono : s.kvVal}>
         {/* Empty/falsy values get a faded em-dash so the grid stays aligned. */}
-        {v === null || v === undefined || v === ''
-          ? <em style={{ color: tokens.colorNeutralForeground4 }}>—</em>
-          : v}
+        {v === null || v === undefined || v === '' ? (
+          <em style={{ color: tokens.colorNeutralForeground4 }}>—</em>
+        ) : (
+          v
+        )}
       </span>
     </>
   );

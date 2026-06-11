@@ -50,9 +50,7 @@ export const settingsKey = (name: string): string => `${SETTINGS_NAMESPACE}:${na
 export const DISPLAY_SETTINGS_KEY = settingsKey('displaySettings');
 
 /** Merge stored settings with defaults — graceful schema evolution. */
-export function mergeWithDefaults(
-  stored: Partial<DisplaySettings> | undefined,
-): DisplaySettings {
+export function mergeWithDefaults(stored: Partial<DisplaySettings> | undefined): DisplaySettings {
   if (!stored) return { ...defaultDisplaySettings };
   return { ...defaultDisplaySettings, ...stored };
 }

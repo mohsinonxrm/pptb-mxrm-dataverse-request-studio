@@ -31,11 +31,16 @@ export interface NavPropertyPickerProps {
 }
 
 export function NavPropertyPicker({
-  table, value, onChange, group = 'relate', forOperation, footer,
+  table,
+  value,
+  onChange,
+  group = 'relate',
+  forOperation,
+  footer,
 }: NavPropertyPickerProps) {
   const tbl = findTable(table);
   const navProps = tbl?.navigationProperties ?? [];
-  const current = navProps.find(n => n.name === value);
+  const current = navProps.find((n) => n.name === value);
 
   // Warm ONLY the currently-selected nav's target — the option rows can
   // safely render the raw logical name; loading 50+ targets up-front would
@@ -59,7 +64,7 @@ export function NavPropertyPicker({
             onOptionSelect={(_, d) => onChange(d.optionValue ?? null)}
             placeholder="Pick a navigation property…"
           >
-            {navProps.map(n => (
+            {navProps.map((n) => (
               <Option key={n.name} value={n.name} text={n.name}>
                 <NavOptionRow nav={n} forOperation={forOperation} />
               </Option>
@@ -82,14 +87,22 @@ export function NavPropertyPicker({
 // ──────────────────────────────────────────────────────────────
 // Combobox option row — nav name + cardinality chip + target entity
 // ──────────────────────────────────────────────────────────────
-function NavOptionRow({ nav, forOperation }: { nav: NavProperty; forOperation: 'associate' | 'disassociate' }) {
+function NavOptionRow({
+  nav,
+  forOperation,
+}: {
+  nav: NavProperty;
+  forOperation: 'associate' | 'disassociate';
+}) {
   const target = findTable(nav.targetEntity);
   const verb = methodFor(nav, forOperation);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: 600 }}>{nav.name}</span>
-        <Badge appearance="ghost" size="extra-small">{cardinalityShort(nav.cardinality)}</Badge>
+        <Badge appearance="ghost" size="extra-small">
+          {cardinalityShort(nav.cardinality)}
+        </Badge>
         <Badge appearance="tint" color="brand" size="extra-small" style={{ marginLeft: 'auto' }}>
           {verb}
         </Badge>
@@ -106,39 +119,68 @@ function NavOptionRow({ nav, forOperation }: { nav: NavProperty; forOperation: '
 // ──────────────────────────────────────────────────────────────
 // Summary card — surfaces the resolved URL shape + method per cardinality
 // ──────────────────────────────────────────────────────────────
-function NavSummaryCard({ nav, forOperation }: { nav: NavProperty; forOperation: 'associate' | 'disassociate' }) {
+function NavSummaryCard({
+  nav,
+  forOperation,
+}: {
+  nav: NavProperty;
+  forOperation: 'associate' | 'disassociate';
+}) {
   const target = findTable(nav.targetEntity);
   const verb = methodFor(nav, forOperation);
   const cardinalityKind = nav.cardinality === 'ManyToOne' ? 'single-valued' : 'collection-valued';
   // Verb chip color — matches the URL bar's method pill so the user can
   // visually link "this is what'll fire" between the two surfaces.
-  const verbColor = verb === 'POST'   ? tokens.colorPaletteGreenForeground1
-                  : verb === 'PATCH'  ? tokens.colorPaletteDarkOrangeForeground1
-                  : tokens.colorPaletteRedForeground1; // DELETE
+  const verbColor =
+    verb === 'POST'
+      ? tokens.colorPaletteGreenForeground1
+      : verb === 'PATCH'
+        ? tokens.colorPaletteDarkOrangeForeground1
+        : tokens.colorPaletteRedForeground1; // DELETE
 
   return (
-    <div style={{
-      border: `1px solid ${tokens.colorNeutralStroke2}`,
-      borderRadius: tokens.borderRadiusMedium,
-      padding: 12,
-      background: tokens.colorNeutralBackground1,
-    }}>
+    <div
+      style={{
+        border: `1px solid ${tokens.colorNeutralStroke2}`,
+        borderRadius: tokens.borderRadiusMedium,
+        padding: 12,
+        background: tokens.colorNeutralBackground1,
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <Link20Filled style={{ width: 18, height: 18, color: tokens.colorBrandForeground1 }} />
         <strong style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 13 }}>{nav.name}</strong>
-        <Badge appearance="tint" color="brand">{cardinalityShort(nav.cardinality)}</Badge>
+        <Badge appearance="tint" color="brand">
+          {cardinalityShort(nav.cardinality)}
+        </Badge>
         <span style={{ flexGrow: 1 }} />
-        <Badge appearance="filled" style={{ background: verbColor, color: tokens.colorNeutralForegroundOnBrand, fontWeight: 700 }}>
+        <Badge
+          appearance="filled"
+          style={{
+            background: verbColor,
+            color: tokens.colorNeutralForegroundOnBrand,
+            fontWeight: 700,
+          }}
+        >
           {verb}
         </Badge>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', rowGap: 4, fontSize: 11 }}>
         <span style={{ color: tokens.colorNeutralForeground3 }}>Target entity</span>
-        <span style={{ fontFamily: tokens.fontFamilyMonospace }}>{target?.entitySetName ?? nav.targetEntity} <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>· {target?.displayName ?? nav.targetEntity}</Caption1></span>
+        <span style={{ fontFamily: tokens.fontFamilyMonospace }}>
+          {target?.entitySetName ?? nav.targetEntity}{' '}
+          <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
+            · {target?.displayName ?? nav.targetEntity}
+          </Caption1>
+        </span>
         <span style={{ color: tokens.colorNeutralForeground3 }}>Cardinality</span>
-        <span>{cardinalityKind} ({nav.cardinality})</span>
+        <span>
+          {cardinalityKind} ({nav.cardinality})
+        </span>
         <span style={{ color: tokens.colorNeutralForeground3 }}>Relationship</span>
-        <span style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 10 }}>{nav.relationshipName}</span>
+        <span style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 10 }}>
+          {nav.relationshipName}
+        </span>
       </div>
     </div>
   );
@@ -146,15 +188,21 @@ function NavSummaryCard({ nav, forOperation }: { nav: NavProperty; forOperation:
 
 function cardinalityShort(c: NavProperty['cardinality']): string {
   switch (c) {
-    case 'OneToMany':  return '1:N';
-    case 'ManyToOne':  return 'N:1';
-    case 'ManyToMany': return 'N:N';
+    case 'OneToMany':
+      return '1:N';
+    case 'ManyToOne':
+      return 'N:1';
+    case 'ManyToMany':
+      return 'N:N';
   }
 }
 function valuedShort(c: NavProperty['cardinality']): string {
   return c === 'ManyToOne' ? 'single-valued lookup' : 'collection-valued';
 }
-function methodFor(nav: NavProperty, op: 'associate' | 'disassociate'): 'POST' | 'PATCH' | 'DELETE' {
+function methodFor(
+  nav: NavProperty,
+  op: 'associate' | 'disassociate',
+): 'POST' | 'PATCH' | 'DELETE' {
   // Docs-preferred wire shape per cardinality:
   //   Associate    single-valued (N:1) → PATCH /<source>(<id>) with @odata.bind body
   //                collection-valued   → POST /<source>(<id>)/<nav>/$ref

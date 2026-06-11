@@ -20,17 +20,27 @@
 // caring about which file produced which item.
 
 import type { ReactNode } from 'react';
-import { findColumn, findTable, isLargeText, isComputedColumn, isLogicalColumn, sourceTypeLabel, type NavProperty } from '../mock/metadata';
+import {
+  findColumn,
+  findTable,
+  isLargeText,
+  isComputedColumn,
+  isLogicalColumn,
+  sourceTypeLabel,
+  type NavProperty,
+} from '../mock/metadata';
 import type { ColumnMeta, TableMeta } from '../mock/metadata';
 import type { FilterGroup } from '../editors/filter/filterTree';
 import { adv, type Advisory } from '../primitives/advisories';
 
-const LEARN_ANTIPATTERNS = 'https://learn.microsoft.com/en-us/power-apps/developer/data-platform/query-antipatterns';
-const LEARN_WILDCARDS    = 'https://learn.microsoft.com/en-us/power-apps/developer/data-platform/wildcard-characters';
+const LEARN_ANTIPATTERNS =
+  'https://learn.microsoft.com/en-us/power-apps/developer/data-platform/query-antipatterns';
+const LEARN_WILDCARDS =
+  'https://learn.microsoft.com/en-us/power-apps/developer/data-platform/wildcard-characters';
 
 // Comma-join an array of ReactNodes (e.g. <code>'s) into a single ReactNode.
 function joinNodes(nodes: ReactNode[], sep: string = ', '): ReactNode {
-  return nodes.reduce<ReactNode[]>((acc, el, i) => i === 0 ? [el] : [...acc, sep, el], []);
+  return nodes.reduce<ReactNode[]>((acc, el, i) => (i === 0 ? [el] : [...acc, sep, el]), []);
 }
 
 /**
@@ -68,18 +78,19 @@ function isAddressCompositeColumn(c: ColumnMeta): boolean {
  */
 export function detectLargeSelect(select: string[]): Advisory[] {
   if (select.length > 25) {
-    return [adv.warn(
-      'select-too-many',
-      'antipattern',
-      `${select.length} columns in $select — performance risk`,
-      <span>
-        Selecting more than ~25 columns slows the response and can trigger the{' '}
-        <code>LargeAmountOfAttributes</code> antipattern. Pick only what the
-        client renders.
-      </span>,
-      'select',
-      LEARN_ANTIPATTERNS,
-    )];
+    return [
+      adv.warn(
+        'select-too-many',
+        'antipattern',
+        `${select.length} columns in $select — performance risk`,
+        <span>
+          Selecting more than ~25 columns slows the response and can trigger the{' '}
+          <code>LargeAmountOfAttributes</code> antipattern. Pick only what the client renders.
+        </span>,
+        'select',
+        LEARN_ANTIPATTERNS,
+      ),
+    ];
   }
   return [];
 }
@@ -90,21 +101,23 @@ export function detectLargeSelect(select: string[]): Advisory[] {
  */
 export function detectLogicalSelect(select: string[], tbl: TableMeta): Advisory[] {
   const logicals = select
-    .map(name => findColumn(tbl, name))
+    .map((name) => findColumn(tbl, name))
     .filter((c): c is ColumnMeta => !!c && isLogicalColumn(c));
   if (logicals.length === 0) return [];
-  return [adv.warn(
-    'select-logical',
-    'antipattern',
-    `${logicals.length} logical column${logicals.length === 1 ? '' : 's'} in $select`,
-    <span>
-      {joinNodes(logicals.map(c => <code key={c.logicalName}>{c.logicalName}</code>))}
-      {' '}— values live in separate physical tables; each one forces a join.
-      Per the <code>LargeAmountOfLogicalAttributes</code> antipattern.
-    </span>,
-    'select',
-    LEARN_ANTIPATTERNS,
-  )];
+  return [
+    adv.warn(
+      'select-logical',
+      'antipattern',
+      `${logicals.length} logical column${logicals.length === 1 ? '' : 's'} in $select`,
+      <span>
+        {joinNodes(logicals.map((c) => <code key={c.logicalName}>{c.logicalName}</code>))} — values
+        live in separate physical tables; each one forces a join. Per the{' '}
+        <code>LargeAmountOfLogicalAttributes</code> antipattern.
+      </span>,
+      'select',
+      LEARN_ANTIPATTERNS,
+    ),
+  ];
 }
 
 // ── $filter detectors ──────────────────────────────────────────────────────
@@ -140,12 +153,14 @@ function collectFilterColumns(
         const segs = path.split('/');
         let cursor: TableMeta | undefined = ownerTable;
         for (let i = 0; i < segs.length - 1; i++) {
-          const navMatch: NavProperty | undefined = cursor?.navigationProperties.find((n: NavProperty) => n.name === segs[i]);
+          const navMatch: NavProperty | undefined = cursor?.navigationProperties.find(
+            (n: NavProperty) => n.name === segs[i],
+          );
           cursor = navMatch ? findTable(navMatch.targetEntity) : undefined;
           if (!cursor) break;
         }
         if (!cursor) continue;
-        const leaf = cursor.columns.find(c => c.logicalName === segs[segs.length - 1]);
+        const leaf = cursor.columns.find((c) => c.logicalName === segs[segs.length - 1]);
         if (leaf) out.push({ col: leaf, op: node.op });
       } else if (node.type === 'group') {
         walk(node, ownerTable, lambdaAlias);
@@ -175,22 +190,25 @@ export function detectLargeTextFilters(filter: FilterGroup, tbl: TableMeta): Adv
   // exact match — not a scan. The inline icon at the rule level uses the
   // same scoping; we mirror it here so the aggregated drawer entry doesn't
   // fire when no rule actually has the issue.
-  const pairs = collectFilterColumns(filter, tbl)
-    .filter(({ col, op }) => isLargeText(col) && STRING_SCAN_OPS.has(op));
+  const pairs = collectFilterColumns(filter, tbl).filter(
+    ({ col, op }) => isLargeText(col) && STRING_SCAN_OPS.has(op),
+  );
   if (pairs.length === 0) return [];
-  const uniq = Array.from(new Map(pairs.map(p => [p.col.logicalName, p.col])).values());
-  return [adv.warn(
-    'filter-large-text',
-    'antipattern',
-    `contains/startswith/endswith on large-text column${uniq.length === 1 ? '' : 's'}`,
-    <span>
-      {joinNodes(uniq.map(c => <code key={c.logicalName}>{c.logicalName}</code>))}
-      {' '}can't be efficiently indexed (Memo, or String &gt; 850 chars). Consider{' '}
-      <strong>Dataverse Search</strong> instead.
-    </span>,
-    'filter',
-    LEARN_ANTIPATTERNS,
-  )];
+  const uniq = Array.from(new Map(pairs.map((p) => [p.col.logicalName, p.col])).values());
+  return [
+    adv.warn(
+      'filter-large-text',
+      'antipattern',
+      `contains/startswith/endswith on large-text column${uniq.length === 1 ? '' : 's'}`,
+      <span>
+        {joinNodes(uniq.map((c) => <code key={c.logicalName}>{c.logicalName}</code>))} can't be
+        efficiently indexed (Memo, or String &gt; 850 chars). Consider{' '}
+        <strong>Dataverse Search</strong> instead.
+      </span>,
+      'filter',
+      LEARN_ANTIPATTERNS,
+    ),
+  ];
 }
 
 /**
@@ -202,27 +220,28 @@ export function detectLargeTextFilters(filter: FilterGroup, tbl: TableMeta): Adv
  */
 export function detectLogicalFilters(filter: FilterGroup, tbl: TableMeta): Advisory[] {
   const cols = collectFilterColumns(filter, tbl)
-    .map(p => p.col)
+    .map((p) => p.col)
     .filter(isLogicalColumn)
     // Exempt the address[N]_* composite family — the join is the
     // intended behavior for those, not a misuse pattern.
-    .filter(c => !isAddressCompositeColumn(c));
+    .filter((c) => !isAddressCompositeColumn(c));
   if (cols.length === 0) return [];
-  const uniq = Array.from(new Map(cols.map(c => [c.logicalName, c])).values());
-  return [adv.warn(
-    'filter-logical',
-    'antipattern',
-    `Filter on logical column${uniq.length === 1 ? '' : 's'}`,
-    <span>
-      {joinNodes(uniq.map(c => <code key={c.logicalName}>{c.logicalName}</code>))}
-      {' '}— values live in a joined physical table. Filtering forces a
-      server-side join before the predicate; slower than filtering on
-      sub-fields directly (e.g. <code>address1_city</code> instead of
-      the composite).
-    </span>,
-    'filter',
-    LEARN_ANTIPATTERNS,
-  )];
+  const uniq = Array.from(new Map(cols.map((c) => [c.logicalName, c])).values());
+  return [
+    adv.warn(
+      'filter-logical',
+      'antipattern',
+      `Filter on logical column${uniq.length === 1 ? '' : 's'}`,
+      <span>
+        {joinNodes(uniq.map((c) => <code key={c.logicalName}>{c.logicalName}</code>))} — values live
+        in a joined physical table. Filtering forces a server-side join before the predicate; slower
+        than filtering on sub-fields directly (e.g. <code>address1_city</code> instead of the
+        composite).
+      </span>,
+      'filter',
+      LEARN_ANTIPATTERNS,
+    ),
+  ];
 }
 
 /**
@@ -231,26 +250,30 @@ export function detectLogicalFilters(filter: FilterGroup, tbl: TableMeta): Advis
  */
 export function detectComputedColumnFilters(filter: FilterGroup, tbl: TableMeta): Advisory[] {
   const cols = collectFilterColumns(filter, tbl)
-    .map(p => p.col)
+    .map((p) => p.col)
     .filter(isComputedColumn);
   if (cols.length === 0) return [];
-  const uniq = Array.from(new Map(cols.map(c => [c.logicalName, c])).values());
-  return [adv.warn(
-    'filter-computed',
-    'antipattern',
-    `Filter on ${uniq.length === 1 ? `${sourceTypeLabel(uniq[0].sourceType)} column` : 'computed columns'}`,
-    <span>
-      {joinNodes(uniq.map(c => (
-        <code key={c.logicalName}>
-          {c.logicalName} ({sourceTypeLabel(c.sourceType)})
-        </code>
-      )))}
-      {' '}— Dataverse computes these at retrieval time. Filtering on them is
-      throttled (<code>FilteringOnCalculatedColumns</code>).
-    </span>,
-    'filter',
-    LEARN_ANTIPATTERNS,
-  )];
+  const uniq = Array.from(new Map(cols.map((c) => [c.logicalName, c])).values());
+  return [
+    adv.warn(
+      'filter-computed',
+      'antipattern',
+      `Filter on ${uniq.length === 1 ? `${sourceTypeLabel(uniq[0].sourceType)} column` : 'computed columns'}`,
+      <span>
+        {joinNodes(
+          uniq.map((c) => (
+            <code key={c.logicalName}>
+              {c.logicalName} ({sourceTypeLabel(c.sourceType)})
+            </code>
+          )),
+        )}{' '}
+        — Dataverse computes these at retrieval time. Filtering on them is throttled (
+        <code>FilteringOnCalculatedColumns</code>).
+      </span>,
+      'filter',
+      LEARN_ANTIPATTERNS,
+    ),
+  ];
 }
 
 /**
@@ -267,29 +290,29 @@ export interface StrippedWildcardEntry {
 
 export function buildWildcardAdvisory(entries: StrippedWildcardEntry[]): Advisory[] {
   if (entries.length === 0) return [];
-  return [adv.info(
-    'wildcard-stripped',
-    'wildcard',
-    `Stripped leading wildcard${entries.length === 1 ? '' : 's'} from ${entries.length} filter${entries.length === 1 ? '' : 's'}`,
-    <span>
-      Dataverse rejects leading wildcards. The following inputs were rewritten:
-      <ul style={{ margin: '6px 0 0 0', paddingLeft: 18 }}>
-        {entries.map((r, i) => (
-          <li key={i} style={{ marginBottom: 2 }}>
-            <code>{r.col}</code>: <code>{r.raw}</code> → <code>{r.cleaned}</code>
-            <span style={{ marginLeft: 4, opacity: 0.7 }}>
-              ({r.kinds.join(', ')})
-            </span>
-          </li>
-        ))}
-      </ul>
-      <span style={{ display: 'block', marginTop: 6 }}>
-        To search for a literal <code>%</code>, enclose it in brackets: <code>[%]</code>.
-      </span>
-    </span>,
-    'filter',
-    LEARN_WILDCARDS,
-  )];
+  return [
+    adv.info(
+      'wildcard-stripped',
+      'wildcard',
+      `Stripped leading wildcard${entries.length === 1 ? '' : 's'} from ${entries.length} filter${entries.length === 1 ? '' : 's'}`,
+      <span>
+        Dataverse rejects leading wildcards. The following inputs were rewritten:
+        <ul style={{ margin: '6px 0 0 0', paddingLeft: 18 }}>
+          {entries.map((r, i) => (
+            <li key={i} style={{ marginBottom: 2 }}>
+              <code>{r.col}</code>: <code>{r.raw}</code> → <code>{r.cleaned}</code>
+              <span style={{ marginLeft: 4, opacity: 0.7 }}>({r.kinds.join(', ')})</span>
+            </li>
+          ))}
+        </ul>
+        <span style={{ display: 'block', marginTop: 6 }}>
+          To search for a literal <code>%</code>, enclose it in brackets: <code>[%]</code>.
+        </span>
+      </span>,
+      'filter',
+      LEARN_WILDCARDS,
+    ),
+  ];
 }
 
 // ── Per-column rule advisory ──────────────────────────────────────────────
@@ -316,10 +339,7 @@ export interface ColumnAntipattern {
  * (since `eq` on a long-text column is not the same anti-pattern as
  * `contains()` on it).
  */
-export function detectColumnAntipatterns(
-  c: ColumnMeta,
-  op?: string,
-): ColumnAntipattern[] {
+export function detectColumnAntipatterns(c: ColumnMeta, op?: string): ColumnAntipattern[] {
   const out: ColumnAntipattern[] = [];
 
   if (isComputedColumn(c)) {
@@ -376,7 +396,9 @@ export interface RetrieveMultipleAntipatternInput {
  * matters here: blockers should always sort first inside the drawer, which
  * AdvisoryDrawer does via bucketAdvisories().
  */
-export function detectRetrieveMultipleAntipatterns(input: RetrieveMultipleAntipatternInput): Advisory[] {
+export function detectRetrieveMultipleAntipatterns(
+  input: RetrieveMultipleAntipatternInput,
+): Advisory[] {
   const tbl = findTable(input.table);
   if (!tbl) return [];
   return [

@@ -86,13 +86,7 @@ export interface LookupFieldValue {
 }
 
 /** Any value the FieldSetEditor can produce for a single column. */
-export type CreateFieldValue =
-  | string
-  | number
-  | boolean
-  | number[]
-  | LookupFieldValue
-  | null;
+export type CreateFieldValue = string | number | boolean | number[] | LookupFieldValue | null;
 
 // ──────────────────────────────────────────────────────────────
 // Create
@@ -318,15 +312,13 @@ export interface UpsertState {
 //                        clears one column's value (not supported on
 //                        single-valued navigation properties)
 
-export type DeleteScope =
-  | { kind: 'whole-row' }
-  | { kind: 'single-property'; column: string };
+export type DeleteScope = { kind: 'whole-row' } | { kind: 'single-property'; column: string };
 
 export interface DeleteState {
   table: string;
   recordId: string | null;
   scope: DeleteScope;
-  concurrency: ConcurrencyMode;     // Update-only / etag / none — same union
+  concurrency: ConcurrencyMode; // Update-only / etag / none — same union
   headers: HeaderItem[];
   /**
    * When true, send `MSCRM.BypassCustomPluginExecution: true` (LEGACY header).

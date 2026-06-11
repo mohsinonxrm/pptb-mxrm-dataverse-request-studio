@@ -18,7 +18,10 @@ export interface RequestBodyPreviewProps {
 }
 
 export function RequestBodyPreview({
-  body, title = 'Request body preview', pillText, maxHeight = 360,
+  body,
+  title = 'Request body preview',
+  pillText,
+  maxHeight = 360,
 }: RequestBodyPreviewProps) {
   const s = useStudioStyles();
   const json = JSON.stringify(body, null, 2);
@@ -30,7 +33,11 @@ export function RequestBodyPreview({
         <Code20Filled style={{ width: 16, height: 16, color: tokens.colorBrandForeground1 }} />
         <strong style={{ fontSize: 12 }}>{title}</strong>
         {pillText && <Badge appearance="ghost">{pillText}</Badge>}
-        {isEmpty && <Badge appearance="tint" color="subtle">empty</Badge>}
+        {isEmpty && (
+          <Badge appearance="tint" color="subtle">
+            empty
+          </Badge>
+        )}
         <span style={{ flexGrow: 1 }} />
         <Tooltip content="Copy body JSON" relationship="label">
           <Button
@@ -43,21 +50,30 @@ export function RequestBodyPreview({
         </Tooltip>
       </div>
       {isEmpty ? (
-        <Caption1 style={{ color: tokens.colorNeutralForeground3, fontStyle: 'italic', display: 'block', padding: '8px 4px' }}>
+        <Caption1
+          style={{
+            color: tokens.colorNeutralForeground3,
+            fontStyle: 'italic',
+            display: 'block',
+            padding: '8px 4px',
+          }}
+        >
           No parameters set yet. The wire body will appear here as you fill in the form above.
         </Caption1>
       ) : (
-        <pre style={{
-          margin: 0,
-          padding: 10,
-          fontFamily: tokens.fontFamilyMonospace,
-          fontSize: 11,
-          background: tokens.colorNeutralBackground3,
-          borderRadius: tokens.borderRadiusSmall,
-          maxHeight,
-          overflow: 'auto',
-          whiteSpace: 'pre',
-        }}>
+        <pre
+          style={{
+            margin: 0,
+            padding: 10,
+            fontFamily: tokens.fontFamilyMonospace,
+            fontSize: 11,
+            background: tokens.colorNeutralBackground3,
+            borderRadius: tokens.borderRadiusSmall,
+            maxHeight,
+            overflow: 'auto',
+            whiteSpace: 'pre',
+          }}
+        >
           {json}
         </pre>
       )}

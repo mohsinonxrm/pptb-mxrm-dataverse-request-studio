@@ -27,14 +27,31 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Popover, PopoverTrigger, PopoverSurface, Button, Input, tokens,
-  Caption1, Body1, makeStyles, Spinner,
+  Popover,
+  PopoverTrigger,
+  PopoverSurface,
+  Button,
+  Input,
+  tokens,
+  Caption1,
+  Body1,
+  makeStyles,
+  Spinner,
 } from '@fluentui/react-components';
 import {
-  ArrowEnter20Regular, ChevronRight16Regular,
-  Search20Regular, ArrowExit20Regular, Dismiss16Regular,
+  ArrowEnter20Regular,
+  ChevronRight16Regular,
+  Search20Regular,
+  ArrowExit20Regular,
+  Dismiss16Regular,
 } from '@fluentui/react-icons';
-import { findTable, __subscribeLiveTables, type ColumnMeta, type NavProperty, type TableMeta } from '../mock/metadata';
+import {
+  findTable,
+  __subscribeLiveTables,
+  type ColumnMeta,
+  type NavProperty,
+  type TableMeta,
+} from '../mock/metadata';
 import { useLiveTable } from '../host/useLiveMetadata';
 
 const useStyles = makeStyles({
@@ -249,7 +266,7 @@ function resolveExternalPath(
       pendingTarget: walked.pendingTarget,
     };
   }
-  const leaf = walked.current.columns.find(c => c.logicalName === leafSeg);
+  const leaf = walked.current.columns.find((c) => c.logicalName === leafSeg);
   return { tables: walked.tables, current: walked.current, leaf };
 }
 
@@ -257,15 +274,11 @@ function resolveExternalPath(
  * Display label for a path segment, given the parent entity it sits on
  * and the desired naming mode.
  */
-function labelFor(
-  table: TableMeta | undefined,
-  segment: string,
-  useLogicalNames: boolean,
-): string {
+function labelFor(table: TableMeta | undefined, segment: string, useLogicalNames: boolean): string {
   if (!table) return segment;
-  const col = table.columns.find(c => c.logicalName === segment);
+  const col = table.columns.find((c) => c.logicalName === segment);
   if (col) return useLogicalNames ? col.logicalName : col.displayName;
-  const nav = table.navigationProperties.find(n => n.name === segment);
+  const nav = table.navigationProperties.find((n) => n.name === segment);
   if (nav) {
     // Nav name is functional; use the target table's display name as a
     // friendlier breadcrumb segment when in display-name mode.
@@ -277,8 +290,15 @@ function labelFor(
 }
 
 export function NavPathColumnPicker({
-  rootTable, value, onChange, leafFilter, allowedColumnTypes,
-  placeholder = 'Pick a column…', disabled, useLogicalNames, size = 'small',
+  rootTable,
+  value,
+  onChange,
+  leafFilter,
+  allowedColumnTypes,
+  placeholder = 'Pick a column…',
+  disabled,
+  useLogicalNames,
+  size = 'small',
 }: NavPathColumnPickerProps) {
   const styles = useStyles();
   const [open, setOpen] = useState(false);
@@ -301,7 +321,7 @@ export function NavPathColumnPicker({
   // stuck). Subscribing to the registry version and including it in the
   // memo deps forces a recomputation on registry change.
   const [registryVersion, setRegistryVersion] = useState(0);
-  useEffect(() => __subscribeLiveTables(() => setRegistryVersion(v => v + 1)), []);
+  useEffect(() => __subscribeLiveTables(() => setRegistryVersion((v) => v + 1)), []);
 
   // Walk the draft to find the current entity inside the popover.
   const draftWalked = useMemo(
@@ -332,8 +352,8 @@ export function NavPathColumnPicker({
     if (!current) return { columnsAtLevel: [] as ColumnMeta[], navsAtLevel: [] as NavProperty[] };
     let cols = current.columns;
     // Always hide File / Image — never meaningful in filter/groupby paths.
-    cols = cols.filter(c => c.attributeType !== 'File' && c.attributeType !== 'Image');
-    if (allowedColumnTypes) cols = cols.filter(c => allowedColumnTypes.includes(c.attributeType));
+    cols = cols.filter((c) => c.attributeType !== 'File' && c.attributeType !== 'Image');
+    if (allowedColumnTypes) cols = cols.filter((c) => allowedColumnTypes.includes(c.attributeType));
     if (leafFilter) cols = cols.filter(leafFilter);
     // Only N:1 navs are eligible drill-in steps — per spec, conditions on
     // collection-valued navs nested in a lookup are forbidden. This also
@@ -347,16 +367,16 @@ export function NavPathColumnPicker({
   const filteredColumns = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return columnsAtLevel;
-    return columnsAtLevel.filter(c =>
-      c.displayName.toLowerCase().includes(q) || c.logicalName.toLowerCase().includes(q),
+    return columnsAtLevel.filter(
+      (c) => c.displayName.toLowerCase().includes(q) || c.logicalName.toLowerCase().includes(q),
     );
   }, [columnsAtLevel, query]);
 
   const filteredNavs = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return navsAtLevel;
-    return navsAtLevel.filter(n =>
-      n.name.toLowerCase().includes(q) || n.targetEntity.toLowerCase().includes(q),
+    return navsAtLevel.filter(
+      (n) => n.name.toLowerCase().includes(q) || n.targetEntity.toLowerCase().includes(q),
     );
   }, [navsAtLevel, query]);
 
@@ -364,22 +384,24 @@ export function NavPathColumnPicker({
   // drillInto APPENDS a nav segment to the internal nav stack — no leaf
   // is committed, the popover stays open.
   const drillInto = (navName: string) => {
-    setDraftNavs(prev => [...prev, navName]);
+    setDraftNavs((prev) => [...prev, navName]);
     setQuery('');
   };
   // pickColumn finalizes the path. The wire format is the nav chain plus
   // the leaf column, joined with `/`. Empty nav chain → just the leaf.
   const pickColumn = (logicalName: string) => {
-    const finalPath = draftNavs.length > 0
-      ? `${draftNavs.join('/')}/${logicalName}`
-      : logicalName;
+    const finalPath = draftNavs.length > 0 ? `${draftNavs.join('/')}/${logicalName}` : logicalName;
     onChange(finalPath);
     setOpen(false);
   };
   // backTo(idx) — idx -1 = root, idx 0 = stay at first nav, etc.
   const backTo = (segmentIndex: number) => {
-    if (segmentIndex < 0) { setDraftNavs([]); setQuery(''); return; }
-    setDraftNavs(prev => prev.slice(0, segmentIndex + 1));
+    if (segmentIndex < 0) {
+      setDraftNavs([]);
+      setQuery('');
+      return;
+    }
+    setDraftNavs((prev) => prev.slice(0, segmentIndex + 1));
     setQuery('');
   };
   const clearAndClose = () => {
@@ -434,9 +456,7 @@ export function NavPathColumnPicker({
       );
       const target = nav ? findTable(nav.targetEntity) : undefined;
       out.push({
-        label: useLogicalNames
-          ? draftNavs[i]
-          : (target?.displayName ?? draftNavs[i]),
+        label: useLogicalNames ? draftNavs[i] : (target?.displayName ?? draftNavs[i]),
         clickable: i < draftNavs.length - 1,
         navIndex: i,
       });
@@ -525,16 +545,20 @@ export function NavPathColumnPicker({
             </div>
           )}
 
-          {filteredColumns.length === 0 && filteredNavs.length === 0 && !draftWalked.pendingTarget && (
-            <Caption1 style={{ color: tokens.colorNeutralForeground3, padding: 12, fontStyle: 'italic' }}>
-              No matches{query ? ` for "${query}"` : ''}.
-            </Caption1>
-          )}
+          {filteredColumns.length === 0 &&
+            filteredNavs.length === 0 &&
+            !draftWalked.pendingTarget && (
+              <Caption1
+                style={{ color: tokens.colorNeutralForeground3, padding: 12, fontStyle: 'italic' }}
+              >
+                No matches{query ? ` for "${query}"` : ''}.
+              </Caption1>
+            )}
 
           {filteredColumns.length > 0 && (
             <>
               <div className={styles.groupHeader}>Columns · {filteredColumns.length}</div>
-              {filteredColumns.map(c => (
+              {filteredColumns.map((c) => (
                 <button
                   key={c.logicalName}
                   type="button"
@@ -555,7 +579,7 @@ export function NavPathColumnPicker({
               <div className={styles.groupHeader}>
                 Drill into related (single-valued) · {filteredNavs.length}
               </div>
-              {filteredNavs.map(n => {
+              {filteredNavs.map((n) => {
                 const target = findTable(n.targetEntity);
                 const targetLabel = useLogicalNames
                   ? n.targetEntity
@@ -567,7 +591,9 @@ export function NavPathColumnPicker({
                     className={styles.optionRow}
                     onClick={() => drillInto(n.name)}
                   >
-                    <ArrowEnter20Regular style={{ color: tokens.colorBrandForeground1, flexShrink: 0 }} />
+                    <ArrowEnter20Regular
+                      style={{ color: tokens.colorBrandForeground1, flexShrink: 0 }}
+                    />
                     <span className={styles.optionLabel}>
                       <span style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: 600 }}>
                         {n.name}
@@ -585,7 +611,15 @@ export function NavPathColumnPicker({
         </div>
 
         {/* Footer actions */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: `1px solid ${tokens.colorNeutralStroke2}`, paddingTop: 6 }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+            paddingTop: 6,
+          }}
+        >
           <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
             Click a column to pick · click a relationship to drill in
           </Caption1>

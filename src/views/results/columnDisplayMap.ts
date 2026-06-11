@@ -39,7 +39,7 @@ export interface ColumnDisplayInfo {
 function findExpandByPath(items: ExpandSpec[], path: string[]): ExpandSpec | undefined {
   if (path.length === 0) return undefined;
   const [head, ...rest] = path;
-  const match = items.find(it => it.nav === head);
+  const match = items.find((it) => it.nav === head);
   if (!match) return undefined;
   if (rest.length === 0) return match;
   return findExpandByPath(match.nestedExpand ?? [], rest);
@@ -50,14 +50,17 @@ function findExpandByPath(items: ExpandSpec[], path: string[]): ExpandSpec | und
  * `TableMeta` we could resolve. Falls back to the last successfully
  * resolved table when a nav target isn't in the live registry yet.
  */
-function walkToTargetTable(root: TableMeta, navPath: string[]): {
+function walkToTargetTable(
+  root: TableMeta,
+  navPath: string[],
+): {
   table: TableMeta | undefined;
   lastNav: NavProperty | undefined;
 } {
   let current: TableMeta | undefined = root;
   let lastNav: NavProperty | undefined;
   for (const name of navPath) {
-    const nav = current?.navigationProperties.find(n => n.name === name);
+    const nav = current?.navigationProperties.find((n) => n.name === name);
     if (!nav) return { table: current, lastNav };
     lastNav = nav;
     current = findTable(nav.targetEntity);
@@ -102,7 +105,7 @@ export function resolveColumnDisplay(
   // bare attribute name.
   const isLookupValue = leaf.startsWith('_') && leaf.endsWith('_value');
   const lookupKey = isLookupValue ? stripLookupWrapper(leaf) : leaf;
-  const column = parentTable?.columns.find(c => c.logicalName === lookupKey);
+  const column = parentTable?.columns.find((c) => c.logicalName === lookupKey);
 
   // Header display name waterfall.
   const leafDisplay = useLogicalNames
@@ -120,10 +123,7 @@ export function resolveColumnDisplay(
     displayName = `${leafDisplay} (${parentLabel})`;
   }
 
-  const logicalName =
-    navPath.length > 0
-      ? [...navPath, lookupKey].join('.')
-      : lookupKey;
+  const logicalName = navPath.length > 0 ? [...navPath, lookupKey].join('.') : lookupKey;
 
   return {
     parentTable,

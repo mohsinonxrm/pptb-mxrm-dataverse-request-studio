@@ -112,34 +112,41 @@ export function useCascadeConfiguration(entityLogical: string | null): {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    window.dataverseAPI.getEntityRelatedMetadata(
-      entityLogical,
-      'OneToManyRelationships',
-      ['SchemaName', 'CascadeConfiguration', 'ReferencedEntity', 'ReferencingEntity'],
-    ).then(res => {
-      if (cancelled) return;
-      // Some PPTB hosts wrap the response in { value: [...] }; others
-      // return the array directly. Normalize.
-      const valueField = (res as { value?: unknown })?.value;
-      const arr: OneToManyMeta[] =
-        Array.isArray(res) ? (res as OneToManyMeta[]) :
-        Array.isArray(valueField) ? (valueField as OneToManyMeta[]) :
-        [];
-      const mapped: CascadeRow[] = arr.map(r => ({
-        schemaName: r.SchemaName,
-        deleteBehavior: (r.CascadeConfiguration?.Delete ?? 'NoCascade') as CascadeBehavior,
-        full: r.CascadeConfiguration as Record<string, CascadeBehavior> | undefined,
-      }));
-      __cache.set(entityLogical, mapped);
-      setRows(mapped);
-      setLoading(false);
-    }).catch((e: unknown) => {
-      if (cancelled) return;
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
-      setLoading(false);
-    });
-    return () => { cancelled = true; };
+    window.dataverseAPI
+      .getEntityRelatedMetadata(entityLogical, 'OneToManyRelationships', [
+        'SchemaName',
+        'CascadeConfiguration',
+        'ReferencedEntity',
+        'ReferencingEntity',
+      ])
+      .then((res) => {
+        if (cancelled) return;
+        // Some PPTB hosts wrap the response in { value: [...] }; others
+        // return the array directly. Normalize.
+        const valueField = (res as { value?: unknown })?.value;
+        const arr: OneToManyMeta[] = Array.isArray(res)
+          ? (res as OneToManyMeta[])
+          : Array.isArray(valueField)
+            ? (valueField as OneToManyMeta[])
+            : [];
+        const mapped: CascadeRow[] = arr.map((r) => ({
+          schemaName: r.SchemaName,
+          deleteBehavior: (r.CascadeConfiguration?.Delete ?? 'NoCascade') as CascadeBehavior,
+          full: r.CascadeConfiguration as Record<string, CascadeBehavior> | undefined,
+        }));
+        __cache.set(entityLogical, mapped);
+        setRows(mapped);
+        setLoading(false);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(msg);
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [entityLogical]);
 
   return { rows, loading, error };
@@ -159,12 +166,18 @@ export function useCascadeConfiguration(entityLogical: string | null): {
  */
 export function cascadeSeverityRank(b: CascadeBehavior): number {
   switch (b) {
-    case 'Cascade':    return 1;
-    case 'Restrict':   return 2;
-    case 'Active':     return 3;
-    case 'UserOwned':  return 4;
-    case 'RemoveLink': return 5;
-    case 'NoCascade':  return 6;
+    case 'Cascade':
+      return 1;
+    case 'Restrict':
+      return 2;
+    case 'Active':
+      return 3;
+    case 'UserOwned':
+      return 4;
+    case 'RemoveLink':
+      return 5;
+    case 'NoCascade':
+      return 6;
   }
 }
 
