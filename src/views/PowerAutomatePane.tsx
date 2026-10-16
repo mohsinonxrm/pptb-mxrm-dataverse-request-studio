@@ -111,7 +111,7 @@ export function PowerAutomatePane({ spec }: PowerAutomatePaneProps) {
       <Subtitle2
         style={{ display: 'block', marginBottom: 10, color: tokens.colorNeutralForeground2 }}
       >
-        {spec.actionName === 'Get a row by ID' ? 'Get a row by ID' : 'List rows'}
+        {spec.actionName}
       </Subtitle2>
 
       <div>
