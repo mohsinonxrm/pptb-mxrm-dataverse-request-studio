@@ -40,6 +40,7 @@ import { PaneHead } from './PaneHead';
 import { useStudioStyles } from '../primitives/styles';
 import type { ConcurrencyMode } from '../state/writeState';
 import type { RequestGroup } from '../registry/requestTypes';
+import { HostHeaderNotice } from './HostHeaderNotice';
 
 export type PreconditionKind = ConcurrencyMode['kind'];
 
@@ -118,6 +119,15 @@ export function PreconditionEditor({
         sub="Optimistic concurrency & existence checks — controls the If-Match / If-None-Match header."
         group={group}
       />
+
+      {selected !== 'none' && (
+        <HostHeaderNotice>
+          The <code>If-Match</code> / <code>If-None-Match</code> header is dropped at execute time.
+          ETag and create-only checks (and update-only on Upsert) would go unenforced, so{' '}
+          <strong>Execute</strong> is disabled for them — pick <strong>None</strong> to run the
+          request here, or copy it from the Code tab to run it elsewhere.
+        </HostHeaderNotice>
+      )}
 
       <div style={{ maxWidth: 720 }}>
         <RadioGroup value={selected} onChange={(_, d) => onPick(d.value as PreconditionKind)}>

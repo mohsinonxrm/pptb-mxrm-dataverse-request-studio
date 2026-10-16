@@ -63,6 +63,7 @@ import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../edit
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
 import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
+import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { RecordPicker } from '../primitives/RecordPicker';
 import { CodeView } from '../views/CodeView';
@@ -317,7 +318,10 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Advisories — bypass family + GUID validation + same-record guard ──
   const advisories = useMemo<Advisory[]>(() => {
-    const out: Advisory[] = [...detectBypassAdvisories(state.bypass, 'bypass')];
+    const out: Advisory[] = [
+      ...detectBypassAdvisories(state.bypass, 'bypass'),
+      ...detectUnsentHeaderAdvisories({ op: 'merge', bypass: state.bypass }),
+    ];
     if (state.targetId && !isValidGuid(state.targetId)) {
       out.push({
         id: 'merge-bad-target-guid',

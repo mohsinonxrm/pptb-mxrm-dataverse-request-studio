@@ -45,6 +45,7 @@ import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../edit
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
 import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
+import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { PreconditionEditor, preconditionToHeader } from '../editors/PreconditionEditor';
 import { CodeView } from '../views/CodeView';
@@ -239,7 +240,14 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Advisories — bypass + GUID + alt-key host limitation ──
   const advisories = useMemo<Advisory[]>(() => {
-    const out: Advisory[] = [...detectBypassAdvisories(state.bypass, 'bypass')];
+    const out: Advisory[] = [
+      ...detectBypassAdvisories(state.bypass, 'bypass'),
+      ...detectUnsentHeaderAdvisories({
+        op: 'upsert',
+        concurrency: state.concurrency,
+        bypass: state.bypass,
+      }),
+    ];
 
     if (state.key.kind === 'guid' && state.key.recordId && !isValidGuid(state.key.recordId)) {
       out.push({
@@ -278,7 +286,7 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
     }
 
     return out;
-  }, [state.bypass, state.key, tbl]);
+  }, [state.bypass, state.concurrency, state.key, tbl]);
   const bypassBlocker = disabledReasonFromAdvisories(advisories);
 
   // ── Save / Load ──

@@ -33,6 +33,7 @@ import { useStudioStyles } from '../primitives/styles';
 import type { BypassOptions, BypassBusinessLogicMode } from '../state/writeState';
 import { STEP_IDS_DEFAULT_LIMIT, STEP_IDS_MAX_LIMIT } from '../engine/bypassHeaders';
 import type { RequestGroup } from '../registry/requestTypes';
+import { HostHeaderNotice } from './HostHeaderNotice';
 
 export interface BypassEditorProps {
   value: BypassOptions;
@@ -73,6 +74,14 @@ export function BypassEditor({ value, onChange, group = 'write' }: BypassEditorP
       >
         <Badge appearance="ghost">{summarize(value)}</Badge>
       </PaneHead>
+
+      {(value.businessLogic !== 'none' || value.suppressFlows) && (
+        <HostHeaderNotice>
+          The <code>MSCRM.*</code> bypass headers are dropped at execute time, so{' '}
+          <strong>Execute</strong> is disabled while a bypass option is on. Copy the request from
+          the Code tab to run it elsewhere.
+        </HostHeaderNotice>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18, maxWidth: 720 }}>
         {/* ── Custom business logic ─────────────────────────────── */}

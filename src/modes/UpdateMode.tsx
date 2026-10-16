@@ -60,6 +60,7 @@ import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../edit
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
 import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
+import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { PreconditionEditor } from '../editors/PreconditionEditor';
 import { UpdateDiffPane } from '../editors/UpdateDiffPane';
@@ -390,7 +391,14 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   // We still let the user author the request (correct URL + body in the Code
   // tab) but block Execute and explain why.
   const advisories = useMemo<Advisory[]>(() => {
-    const out: Advisory[] = [...detectBypassAdvisories(state.bypass, 'bypass')];
+    const out: Advisory[] = [
+      ...detectBypassAdvisories(state.bypass, 'bypass'),
+      ...detectUnsentHeaderAdvisories({
+        op: 'update',
+        concurrency: state.concurrency,
+        bypass: state.bypass,
+      }),
+    ];
 
     if (state.table && state.recordId && !isValidGuid(state.recordId)) {
       out.push({
@@ -429,7 +437,15 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
     }
 
     return out;
-  }, [state.bypass, state.table, state.recordId, state.method, state.putColumn, tbl]);
+  }, [
+    state.bypass,
+    state.concurrency,
+    state.table,
+    state.recordId,
+    state.method,
+    state.putColumn,
+    tbl,
+  ]);
   const bypassBlocker = disabledReasonFromAdvisories(advisories);
 
   // ── Sidebar ──

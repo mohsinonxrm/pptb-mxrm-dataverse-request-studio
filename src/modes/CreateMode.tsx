@@ -47,6 +47,7 @@ import {
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
 import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
+import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories } from '../primitives/advisories';
 import { Warning20Filled } from '@fluentui/react-icons';
 import { CodeView } from '../views/CodeView';
@@ -220,7 +221,13 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   }, [state.headers, state.duplicateDetection, state.bypass]);
 
   // ── Advisories — bypass family ──
-  const advisories = useMemo(() => detectBypassAdvisories(state.bypass, 'bypass'), [state.bypass]);
+  const advisories = useMemo(
+    () => [
+      ...detectBypassAdvisories(state.bypass, 'bypass'),
+      ...detectUnsentHeaderAdvisories({ op: 'create', bypass: state.bypass }),
+    ],
+    [state.bypass],
+  );
   const bypassBlocker = disabledReasonFromAdvisories(advisories);
 
   // ── Save / Load ──
