@@ -382,7 +382,7 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
                 {analysis.params.map((p, i) => (
                   <span key={i} style={{ display: 'contents' }}>
                     <span style={{ color: tokens.colorBrandForeground1 }}>{p.key}</span>
-                    <span style={{ wordBreak: 'break-all' }}>{decodeURIComponent(p.value)}</span>
+                    <span style={{ wordBreak: 'break-all' }}>{decodeForDisplay(p.value)}</span>
                   </span>
                 ))}
               </div>
@@ -464,4 +464,19 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
       </MainTabs>
     </ModeShell>
   );
+}
+
+/**
+ * URLSearchParams has already decoded each value once. Dataverse
+ * double-encodes `$skiptoken`, so a second decode makes the paging cookie
+ * readable — but any value holding a literal `%` (e.g. `contains(name,'50%')`)
+ * isn't valid percent-encoding and used to throw a URIError that blanked the
+ * whole app (#48). Fall back to the once-decoded value.
+ */
+function decodeForDisplay(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
