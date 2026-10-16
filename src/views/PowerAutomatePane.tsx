@@ -111,7 +111,7 @@ export function PowerAutomatePane({ spec }: PowerAutomatePaneProps) {
       <Subtitle2
         style={{ display: 'block', marginBottom: 10, color: tokens.colorNeutralForeground2 }}
       >
-        {spec.actionName}
+        Fields
       </Subtitle2>
 
       <div>

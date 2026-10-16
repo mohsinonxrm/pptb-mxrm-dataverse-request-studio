@@ -956,7 +956,10 @@ function classifyPowerAutomate(i: CodegenInputs): PowerAutomateClass {
   const isCollection = !!set && path === '/' + set;
   // /<set>(<key>) — a single row, addressed by GUID or by alternate key
   const isRow = onSet && /^\/[^/]+\([^)]*\)$/.test(path);
-  const isGuidRow = isRow && !!i.built.recordId;
+  // Alternate keys are `name=value` pairs; anything else in the parens is a
+  // GUID — or the `<id>` placeholder before a record has been picked, which
+  // should still map to the row action (with an empty Row ID).
+  const isGuidRow = isRow && (!!i.built.recordId || !/\([^)]*=/.test(path));
   // /<set>(<key>)/<column> — a single column value (incl. file / image columns)
   const isColumn = onSet && !isRef && !isMessage && /^\/[^/]+\([^)]*\)\/[^/]+$/.test(path);
 
