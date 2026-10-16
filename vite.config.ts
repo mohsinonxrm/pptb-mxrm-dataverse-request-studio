@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -12,12 +13,16 @@ function toolIcon(): Plugin {
     name: 'drs-tool-icon',
     apply: 'build',
     generateBundle() {
-      const { version } = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string };
+      // Resolve against this config file, not the process cwd.
+      const fromRoot = (rel: string) => fileURLToPath(new URL(rel, import.meta.url));
+      const { version } = JSON.parse(readFileSync(fromRoot('package.json'), 'utf8')) as {
+        version: string;
+      };
       const source = version.includes('-') ? 'icons/icon-insider.svg' : 'icons/icon.svg';
       this.emitFile({
         type: 'asset',
         fileName: 'icons/icon.svg',
-        source: readFileSync(source, 'utf8'),
+        source: readFileSync(fromRoot(source), 'utf8'),
       });
     },
   };
