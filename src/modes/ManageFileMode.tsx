@@ -131,7 +131,7 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
   const built = useMemo(() => buildManageFile(state), [state, liveTable]);
-  const pipeline = useMemo(() => manageFilePipeline(state), [state]);
+  const pipeline = useMemo(() => manageFilePipeline(state), [state, liveTable]);
   const tbl = findTable(state.table);
   const fileCol = useMemo(
     () =>

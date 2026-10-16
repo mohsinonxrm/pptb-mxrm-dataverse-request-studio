@@ -131,7 +131,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
   const built = useMemo(() => buildManageImage(state), [state, liveTable]);
-  const pipeline = useMemo(() => manageImagePipeline(state), [state]);
+  const pipeline = useMemo(() => manageImagePipeline(state), [state, liveTable]);
   const tbl = findTable(state.table);
   const imageCol = useMemo(
     () =>
