@@ -62,6 +62,7 @@ import type { RetrieveNextLinkState, RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { getEnv } from '../mock/environment';
 import type { Advisory } from '../primitives/advisories';
+import { decodeForDisplay } from '../primitives/decodeForDisplay';
 
 const initialState = (): RetrieveNextLinkState => ({
   url: '',
@@ -464,19 +465,4 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
       </MainTabs>
     </ModeShell>
   );
-}
-
-/**
- * URLSearchParams has already decoded each value once. Dataverse
- * double-encodes `$skiptoken`, so a second decode makes the paging cookie
- * readable — but any value holding a literal `%` (e.g. `contains(name,'50%')`)
- * isn't valid percent-encoding and used to throw a URIError that blanked the
- * whole app (#48). Fall back to the once-decoded value.
- */
-function decodeForDisplay(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
 }

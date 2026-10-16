@@ -11,6 +11,7 @@ import { Caption1, Tooltip, Button, tokens, mergeClasses, Badge } from '@fluentu
 import { Copy20Regular, Link20Filled } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import type { BuiltRequest } from '../engine/urlBuilder';
+import { decodeForDisplay } from '../primitives/decodeForDisplay';
 
 export interface FunctionUrlPreviewProps {
   built: BuiltRequest;
@@ -90,7 +91,7 @@ export function FunctionUrlPreview({ built, useParamAliases }: FunctionUrlPrevie
                 <span style={{ color: tokens.colorPaletteDarkOrangeForeground1 }}>{p.key}</span>
                 <span style={{ color: tokens.colorNeutralForeground3 }}>=</span>
                 <span style={{ color: tokens.colorPaletteGreenForeground1 }}>
-                  {decodeURIComponent(p.value)}
+                  {decodeForDisplay(p.value)}
                 </span>
               </span>
             ))}
