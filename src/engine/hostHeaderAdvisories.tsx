@@ -78,8 +78,8 @@ export function detectUnsentHeaderAdvisories(opts: {
         "PPTB can't send the bypass headers",
         <span>
           Power Platform ToolBox doesn't pass request headers through yet, so the{' '}
-          <code>MSCRM.*</code> bypass headers would be dropped and plug-ins / flows would still
-          run. Turn the bypass options off to execute here. {COPY_HINT}
+          <code>MSCRM.*</code> bypass headers would be dropped and plug-ins / flows would still run.
+          Turn the bypass options off to execute here. {COPY_HINT}
         </span>,
         opts.bypassFocus ?? 'bypass',
       ),
