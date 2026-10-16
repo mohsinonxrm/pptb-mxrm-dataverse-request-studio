@@ -40,13 +40,19 @@ export interface UseScopedEntitiesResult {
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+const NO_CONNECTION =
+  'No active Dataverse connection. Connect to an environment in Power Platform ToolBox, then Retry.';
+
 export function useScopedEntities(): UseScopedEntitiesResult {
   const [settings] = usePersistedSettings();
   const session = useHostSession();
-  // Inside PPTB, wait for the active connection before querying. Standalone
-  // runs the fetch anyway so the "not available" error is surfaced.
+  // Inside PPTB, wait for the host handshake and an active connection before
+  // querying. Standalone runs the fetch anyway so the "not available" error
+  // is surfaced. Handshake done without a connection is an error state, not
+  // an endless "Loading…".
   const ready = !session.embedded || session.connected;
-  const connectionKey = `${ready}|${session.environmentUrl}`;
+  const noConnection = session.embedded && session.handshakeDone && !session.connected;
+  const connectionKey = `${ready}|${noConnection}|${session.environmentUrl}`;
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
@@ -56,6 +62,12 @@ export function useScopedEntities(): UseScopedEntitiesResult {
 
   // ── Layer 1: unfiltered entity list ──
   useEffect(() => {
+    if (noConnection) {
+      setAll([]);
+      setAllLoading(false);
+      setAllError(NO_CONNECTION);
+      return;
+    }
     if (!ready) {
       setAllLoading(true);
       return;
@@ -100,7 +112,8 @@ export function useScopedEntities(): UseScopedEntitiesResult {
       return;
     }
     if (!ready) {
-      setScopedLoading(true);
+      // Layer 1 reports a missing connection; don't spin here as well.
+      setScopedLoading(!noConnection);
       return;
     }
 
