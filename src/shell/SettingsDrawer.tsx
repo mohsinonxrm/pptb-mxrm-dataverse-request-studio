@@ -523,9 +523,6 @@ function SolutionOnlyPicker({
 // name. Options get a secondary line with the unique name, version and
 // managed state (all already selected by the solution queries), selected
 // tags carry the version, and search matches the unique name too.
-function solutionVersion(s: Solution): string | undefined {
-  return s.version || s.solutionpackageversion || undefined;
-}
 
 function useSolutionLabels(solutions: Solution[]): {
   labelByKey: Map<string, string>;
@@ -538,7 +535,9 @@ function useSolutionLabels(solutions: Solution[]): {
     const tagLabelByKey = new Map<string, string>();
     for (const s of solutions) {
       const label = s.friendlyname || s.uniquename;
-      const version = solutionVersion(s);
+      // `version` only — `solutionpackageversion` is the package format
+      // version (e.g. "9.2"), not the solution's own version.
+      const version = s.version || undefined;
       const managed = s.ismanaged === undefined ? undefined : s.ismanaged ? 'Managed' : 'Unmanaged';
       labelByKey.set(s.solutionid, label);
       detailByKey.set(
@@ -582,13 +581,19 @@ function MultiPicker({
     options,
     noOptionsElement: <TagPickerOption value="__no-matches">No matches</TagPickerOption>,
     renderOption: (key) => (
-      <TagPickerOption
-        key={key}
-        value={key}
-        text={labelByKey.get(key) ?? key}
-        secondaryContent={detailByKey?.get(key)}
-      >
-        {labelByKey.get(key) ?? key}
+      <TagPickerOption key={key} value={key} text={labelByKey.get(key) ?? key}>
+        {detailByKey?.get(key) ? (
+          // Detail as a true second line under the name. Fluent's
+          // `secondaryContent` renders a squeezed right-hand column instead.
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <span>{labelByKey.get(key) ?? key}</span>
+            <Caption1 style={{ color: tokens.colorNeutralForeground3, wordBreak: 'break-all' }}>
+              {detailByKey.get(key)}
+            </Caption1>
+          </div>
+        ) : (
+          (labelByKey.get(key) ?? key)
+        )}
       </TagPickerOption>
     ),
     filter: (key) => {
@@ -621,6 +626,11 @@ function MultiPicker({
               dismissible
               dismissIcon={{ 'aria-label': 'remove' }}
               title={detailByKey?.get(k)}
+              // Long names + version must not overflow the picker.
+              style={{ maxWidth: '100%' }}
+              primaryText={{
+                style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+              }}
             >
               {tagLabelByKey?.get(k) ?? labelByKey.get(k) ?? k}
             </Tag>
