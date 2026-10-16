@@ -21,7 +21,9 @@ export type HeaderSensitiveOperation = 'create' | 'update' | 'upsert' | 'delete'
 
 const COPY_HINT = 'Copy the request from the Code tab to run it outside Power Platform ToolBox.';
 
-function isConcurrencyEnforcementRequired(
+/** True when PPTB would silently drop a precondition the request depends on
+ *  — the same rule gates Execute here and the Precondition pane's notice. */
+export function isConcurrencyEnforcementRequired(
   op: HeaderSensitiveOperation,
   concurrency: ConcurrencyMode,
 ): boolean {

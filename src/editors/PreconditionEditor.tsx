@@ -41,6 +41,7 @@ import { useStudioStyles } from '../primitives/styles';
 import type { ConcurrencyMode } from '../state/writeState';
 import type { RequestGroup } from '../registry/requestTypes';
 import { HostHeaderNotice } from './HostHeaderNotice';
+import { isConcurrencyEnforcementRequired } from '../engine/hostHeaderAdvisories';
 
 export type PreconditionKind = ConcurrencyMode['kind'];
 
@@ -120,12 +121,16 @@ export function PreconditionEditor({
         group={group}
       />
 
-      {selected !== 'none' && (
+      {isConcurrencyEnforcementRequired(
+        // Only Upsert offers create-only; Update and Delete share the same rules.
+        available.includes('create-only') ? 'upsert' : 'update',
+        mode,
+      ) && (
         <HostHeaderNotice>
-          The <code>If-Match</code> / <code>If-None-Match</code> header is dropped at execute time.
-          ETag and create-only checks (and update-only on Upsert) would go unenforced, so{' '}
-          <strong>Execute</strong> is disabled for them — pick <strong>None</strong> to run the
-          request here, or copy it from the Code tab to run it elsewhere.
+          The <code>If-Match</code> / <code>If-None-Match</code> header is dropped at execute time,
+          so this condition wouldn't be enforced and <strong>Execute</strong> is disabled. Pick a
+          different precondition to run the request here, or copy it from the Code tab to run it
+          elsewhere.
         </HostHeaderNotice>
       )}
 
