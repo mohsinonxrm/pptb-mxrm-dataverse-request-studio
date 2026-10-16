@@ -201,6 +201,9 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
       setOriginalRow(null);
       return;
     }
+    // Drop the previous record's row before fetching so its name / diff
+    // baseline can't show against a different record id (#46).
+    setOriginalRow(null);
     setOriginalLoading(true);
     // Use the same leading-slash URL form as executeRetrieveSingle — PPTB's
     // queryData is reliable with this form for single-record fetches.

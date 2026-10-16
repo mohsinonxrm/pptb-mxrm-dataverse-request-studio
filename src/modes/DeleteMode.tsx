@@ -210,20 +210,27 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     // PPTB's queryData accepts both forms in different paths but the
     // single-record form is more reliable with the leading slash.
     const url = `/${tbl.entitySetName}(${state.recordId})?$select=${[...cols].join(',')}`;
+    // Drop the previous record's row before fetching, so its name can't be
+    // offered for the typed confirmation while this fetch is in flight (#46).
+    setPickedRow(null);
+    setPickedRowError(null);
     setPickedRowLoading(true);
     window.dataverseAPI
       .queryData(url)
       .then((res) => {
         if (cancelled) return;
-        // PPTB normalizes single-record responses into either
-        // `{ value: <recordObject> }` OR `{ value: [<recordObject>] }`
-        // depending on the host build. Handle both.
+        // PPTB returns single-record responses as `{ value: <record> }`,
+        // `{ value: [<record>] }` or — PPTB 1.2.7 — the bare entity
+        // (`{ "@odata.context": "…/$entity", <pk>: … }`). Handle all three;
+        // missing the bare shape left the confirmation without a name (#46).
         const v = (res as { value?: unknown } | null)?.value;
         const row = Array.isArray(v)
           ? ((v[0] as Record<string, unknown> | undefined) ?? null)
           : v && typeof v === 'object'
             ? (v as Record<string, unknown>)
-            : null;
+            : res && typeof res === 'object' && tbl.primaryKey in (res as object)
+              ? (res as Record<string, unknown>)
+              : null;
         setPickedRow(row);
         setPickedRowLoading(false);
         setPickedRowError(null);
@@ -377,13 +384,15 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
             ? 'Provide an etag value or switch the concurrency mode.'
             : state.headers.some((h) => h.enabled && !h.name)
               ? 'Fix empty header name.'
-              : requireTypedConfirm && !primaryName
-                ? 'Waiting for record metadata — pick again or check the GUID.'
-                : requireTypedConfirm && !typedConfirmOk
-                  ? `Type the record name "${primaryName}" to confirm.`
-                  : requireTypedConfirm && !state.acknowledged
-                    ? 'Acknowledge that this action cannot be undone.'
-                    : bypassBlocker;
+              : requireTypedConfirm && pickedRowLoading && !pickedPrimaryFromPicker
+                ? 'Loading the record…'
+                : requireTypedConfirm && !primaryName
+                  ? 'Waiting for record metadata — pick again or check the GUID.'
+                  : requireTypedConfirm && !typedConfirmOk
+                    ? `Type the record name "${primaryName}" to confirm.`
+                    : requireTypedConfirm && !state.acknowledged
+                      ? 'Acknowledge that this action cannot be undone.'
+                      : bypassBlocker;
 
   const onExecute = async () => {
     setLoading(true);
