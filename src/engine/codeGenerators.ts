@@ -1681,6 +1681,21 @@ function methodCsharp(m: string): string {
 }
 
 // ────────────────────────────────────────────────────────────
+// Shell quoting — OData URLs are full of `$select` / `$filter` / `$ref`,
+// which bash and PowerShell both expand inside double quotes (to empty
+// strings / undefined variables), silently corrupting the request (#49).
+// Single-quoted literals expand nothing.
+// ────────────────────────────────────────────────────────────
+/** POSIX shell single-quoted literal: `it's` → `'it'\''s'`. */
+function shQuote(v: string): string {
+  return `'${v.replace(/'/g, "'\\''")}'`;
+}
+/** PowerShell verbatim (single-quoted) string: `it's` → `'it''s'`. */
+function psQuote(v: string): string {
+  return `'${v.replace(/'/g, "''")}'`;
+}
+
+// ────────────────────────────────────────────────────────────
 // PowerShell — Invoke-RestMethod
 // ────────────────────────────────────────────────────────────
 function genPowershell(i: CodegenInputs): string {
@@ -1689,7 +1704,7 @@ function genPowershell(i: CodegenInputs): string {
     const headerLines = Object.entries(i.headers)
       .filter(([, v]) => v)
       .filter(([k]) => k.toLowerCase() !== 'authorization')
-      .map(([k, v]) => `  "${k}" = "${v.replace(/"/g, '`"')}"`)
+      .map(([k, v]) => `  ${psQuote(k)} = ${psQuote(v)}`)
       .join('\n');
     const lines = reqs
       .map((r) => {
@@ -1697,7 +1712,7 @@ function genPowershell(i: CodegenInputs): string {
         const body = r.body
           ? ` -ContentType 'application/json' -Body '${JSON.stringify(r.body).replace(/'/g, "''")}'`
           : '';
-        return `Invoke-RestMethod -Method ${r.method} -Uri "${url}" -Headers $headers${body}`;
+        return `Invoke-RestMethod -Method ${r.method} -Uri ${psQuote(url)} -Headers $headers${body}`;
       })
       .join('\n');
     return `# PowerShell — Invoke-RestMethod (multi-request)
@@ -1714,7 +1729,7 @@ ${lines}
   const headerLines = Object.entries(i.headers)
     .filter(([, v]) => v)
     .filter(([k]) => k.toLowerCase() !== 'authorization')
-    .map(([k, v]) => `  "${k}" = "${v.replace(/"/g, '`"')}"`)
+    .map(([k, v]) => `  ${psQuote(k)} = ${psQuote(v)}`)
     .join('\n');
   return `# PowerShell — Invoke-RestMethod
 # Replace <access-token> with a real bearer token (Get-AzAccessToken / msal-token).
@@ -1727,7 +1742,7 @@ ${headerLines}
 
 ${i.method !== 'GET' ? `$body = @'\n${JSON.stringify(i.body ?? {}, null, 2)}\n'@\n\n` : ''}$response = Invoke-RestMethod \`
   -Method ${i.method} \`
-  -Uri "${url}" \`
+  -Uri ${psQuote(url)} \`
   -Headers $headers${i.method !== 'GET' ? ' `\n  -ContentType "application/json" `\n  -Body $body' : ''}
 
 $response | ConvertTo-Json -Depth 8
@@ -1743,7 +1758,7 @@ function genCurl(i: CodegenInputs): string {
     const hdrs = stripAuth(i.headers);
     const hdrLines = Object.entries(hdrs)
       .filter(([, v]) => v)
-      .map(([k, v]) => `  -H "${k}: ${v.replace(/"/g, '\\"')}"`)
+      .map(([k, v]) => `  -H ${shQuote(`${k}: ${v}`)}`)
       .join(' \\\n');
     const lines = reqs
       .map((r) => {
@@ -1752,7 +1767,7 @@ function genCurl(i: CodegenInputs): string {
         const body = r.body
           ? ` \\\n  --data-raw '${JSON.stringify(r.body).replace(/'/g, "'\\''")}'`
           : '';
-        return `${desc}curl -X ${r.method} --globoff "${url}" \\\n  -H "Authorization: Bearer <access-token>" \\\n${hdrLines}${body}`;
+        return `${desc}curl -X ${r.method} --globoff ${shQuote(url)} \\\n  -H "Authorization: Bearer <access-token>" \\\n${hdrLines}${body}`;
       })
       .join('\n\n');
     return `# cURL — multi-request (Associate / Disassociate over a collection)\n# Each association is a separate request per the docs.\n\n${lines}\n`;
@@ -1761,20 +1776,21 @@ function genCurl(i: CodegenInputs): string {
   const hdrs = stripAuth(i.headers);
   const hdrLines = Object.entries(hdrs)
     .filter(([, v]) => v)
-    .map(([k, v]) => `  -H "${k}: ${v.replace(/"/g, '\\"')}"`)
+    .map(([k, v]) => `  -H ${shQuote(`${k}: ${v}`)}`)
     .join(' \\\n');
   const body =
     i.method !== 'GET' && i.method !== 'DELETE'
       ? ` \\\n  --data-raw '${JSON.stringify(i.body ?? {}).replace(/'/g, "'\\''")}'`
       : '';
   return `# cURL — shell context
-# --globoff prevents curl from interpreting the literal $ in OData query options
+# The URL is single-quoted so the shell doesn't expand $select / $filter / $ref
+# --globoff stops curl's own [] {} URL globbing (OData literals can contain them)
 # --compressed asks the server for gzipped responses
 
 curl -X ${i.method} \\
   --globoff \\
   --compressed \\
-  "${url}" \\
+  ${shQuote(url)} \\
   -H "Authorization: Bearer <access-token>" \\
 ${hdrLines}${body}
 `;
