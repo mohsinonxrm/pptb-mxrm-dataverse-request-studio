@@ -188,8 +188,7 @@ function SearchPicker({
     normalizeGuid(lastResolvedRef.current.id) === normalizeGuid(selectedId)
       ? lastResolvedRef.current.primary
       : null;
-  const selectedLabel =
-    resolvedForSelection ?? (selectedId ? `(${selectedId.slice(0, 8)}…)` : '');
+  const selectedLabel = resolvedForSelection ?? (selectedId ? `(${selectedId.slice(0, 8)}…)` : '');
   const displayValue = userIsTyping ? search : selectedLabel;
 
   const onClear = () => {
