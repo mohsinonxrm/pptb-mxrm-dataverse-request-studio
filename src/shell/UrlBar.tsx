@@ -27,7 +27,7 @@ export interface UrlBarProps {
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   executeIcon?: FC<any>;
-  onExecute: () => void;
+  onExecute: () => void | Promise<unknown>;
   loading: boolean;
 
   /**
@@ -61,14 +61,19 @@ export function UrlBar({
   // Re-entry guard. `loading` only flips after the mode re-renders, so a
   // held / repeated Ctrl+Enter (or a click in the same frame) could start a
   // second execute — a duplicate write for Create and friends (#47). The ref
-  // closes that window immediately and re-syncs with `loading` on render.
-  const busyRef = useRef(loading);
-  busyRef.current = loading;
+  // is set synchronously before `onExecute` runs and released when its
+  // promise settles (every mode's onExecute is async), so it never depends
+  // on render timing and can't stay stuck.
+  const busyRef = useRef(false);
   const execute = useCallback(() => {
-    if (busyRef.current || disabledReason) return;
+    if (busyRef.current || loading || disabledReason) return;
     busyRef.current = true;
-    onExecute();
-  }, [disabledReason, onExecute]);
+    Promise.resolve()
+      .then(onExecute)
+      .finally(() => {
+        busyRef.current = false;
+      });
+  }, [disabledReason, loading, onExecute]);
 
   // Ctrl+Enter shortcut
   useEffect(() => {
