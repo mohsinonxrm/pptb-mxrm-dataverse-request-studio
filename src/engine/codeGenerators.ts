@@ -152,7 +152,8 @@ export function generateCode(fmt: CodeFormat, i: CodegenInputs): string {
 // Shared helpers
 // ────────────────────────────────────────────────────────────
 function fullUrl(i: CodegenInputs): string {
-  if (i.isNextLink && i.rawNextLink) return i.rawNextLink;
+  // The nextLink comes straight from a textarea — drop pasted whitespace.
+  if (i.isNextLink && i.rawNextLink) return i.rawNextLink.trim();
   return `https://${ENV.host}${i.built.relativeUrl}`;
 }
 
@@ -196,7 +197,15 @@ function safeDecode(v: string): string {
 
 /** Escape a string for inclusion inside a single-quoted JS literal. */
 function jsEscape(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  // Backslash and quote, plus line terminators — a raw newline (e.g. a
+  // pasted nextLink with a trailing line break) would end the literal (#50).
+  return s
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
 /** Render headers as a JS object body, indented. */
@@ -241,14 +250,14 @@ function decodeFunctionAlias(odataLiteral: string): string {
   // Single-quoted string — keep as JS string literal
   if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
     const inner = trimmed.slice(1, -1).replace(/''/g, "'");
-    return `'${inner.replace(/'/g, "\\'")}'`;
+    return `'${jsEscape(inner)}'`;
   }
   // Booleans
   if (trimmed === 'true' || trimmed === 'false') return trimmed;
   // Number
   if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) return trimmed;
   // GUID or unrecognized — pass through as quoted string for safety
-  return `'${trimmed.replace(/'/g, "\\'")}'`;
+  return `'${jsEscape(trimmed)}'`;
 }
 
 function formatJsValue(v: unknown, indent: string): string {
@@ -386,7 +395,7 @@ function genXrm(i: CodegenInputs): string {
     return `// Xrm.WebApi doesn't take a raw nextLink URL — follow it via fetch:
 // (Run this in a model-driven app form script context)
 
-const nextLink = '${jsEscape(i.rawNextLink)}';
+const nextLink = '${jsEscape(i.rawNextLink.trim())}';
 const res = await fetch(nextLink, {
   headers: { 'Accept': 'application/json' },
 });
@@ -463,7 +472,7 @@ ${Object.entries(i.body ?? {})
       `    ${/^[a-zA-Z_$][\w$]*$/.test(k) ? k : `'${jsEscape(k)}'`}: ${formatJsValue(v, '    ')},`,
   )
   .join('\n')}
-${isBound ? `    entity: { entityType: '${logical}', id: '${recordId}' },\n` : ''}    getMetadata: () => ({
+${isBound ? `    entity: { entityType: '${logical}', id: '${jsEscape(recordId ?? '')}' },\n` : ''}    getMetadata: () => ({
       boundParameter: ${isBound ? `'entity'` : 'null'},
       operationType: 0,  // 0 = Action · 1 = Function · 2 = CRUD
       operationName: '${actionName}',
@@ -598,7 +607,7 @@ ${genFetchMulti(i)}`;
 
 (async () => {
   const entityLogicalName = '${logical}';
-${recordId ? `  const id = '${recordId}';\n` : ''}${dataLiteral}  const result = await Xrm.WebApi.${verb}(${callArgs});
+${recordId ? `  const id = '${jsEscape(recordId)}';\n` : ''}${dataLiteral}  const result = await Xrm.WebApi.${verb}(${callArgs});
   console.log('Result:', result);
 })().catch(err => console.error('Xrm.WebApi error:', err));
 `;
@@ -688,7 +697,7 @@ function genXrmBatch(i: CodegenInputs): string {
   const requests = [
     {
 ${bodyEntries.map(([k, v]) => `      ${/^[a-zA-Z_$][\w$]*$/.test(k) ? k : `'${jsEscape(k)}'`}: ${formatJsValue(v, '      ')},`).join('\n')}
-${isBound ? `      entity: { entityType: '${logical}', id: '${recordId}' },\n` : ''}      getMetadata: () => ({
+${isBound ? `      entity: { entityType: '${logical}', id: '${jsEscape(recordId ?? '')}' },\n` : ''}      getMetadata: () => ({
         boundParameter: ${isBound ? `'entity'` : 'null'},
         operationType: 0,  // 0 = Action
         operationName: '${actionName}',
@@ -859,7 +868,7 @@ ${sources
     // have caught this case — log a console warning if we get here).
     const collectionName = i.built.entitySet || (logical ? `${logical}s` : '<entity-set>');
     const entityLine = recordId
-      ? `      entity: { entityType: '${logical || '<entity-logical>'}', id: '${recordId}' },`
+      ? `      entity: { entityType: '${logical || '<entity-logical>'}', id: '${jsEscape(recordId ?? '')}' },`
       : `      collection: '${collectionName}',`;
     return `// Xrm.WebApi.online.executeMultiple — batched ${opName.toLowerCase()} via CRUD descriptor.
 //
