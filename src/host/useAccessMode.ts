@@ -38,8 +38,8 @@ export function useAccessMode() {
           // unfiltered list — the old AF-only prewarm overwrote it (#44).
           if (summary && !summary.noAccessMode) {
             loadAllEntities().catch((err) => {
-                console.warn('[useAccessMode] failed to preload entity metadata:', err);
-              });
+              console.warn('[useAccessMode] failed to preload entity metadata:', err);
+            });
           }
         }
       } catch (err) {
