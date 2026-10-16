@@ -92,7 +92,10 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('retrieve-single');
   const [state, setState] = useState(initialState);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
-  useLiveTable(state.table || null);
+  // The live table is a memo dependency below: build*() reads metadata via
+  // findTable(), which is empty until the fetch lands — keying on `state`
+  // alone left the URL / Code tab blank after picking a table (#78).
+  const { table: liveTable } = useLiveTable(state.table || null);
   // Pre-warm entities referenced by nested $expand (inner $select/$filter/
   // $orderby) so encoders resolve against the right related entity — even on
   // saved-request reload / pasted URL where no expand editor was opened.
@@ -109,7 +112,7 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
 
-  const built = useMemo(() => buildRetrieveSingle(state), [state]);
+  const built = useMemo(() => buildRetrieveSingle(state), [state, liveTable]);
   const tbl = findTable(state.table);
 
   // Hash + dirty are derived from the live state every render. Same identity

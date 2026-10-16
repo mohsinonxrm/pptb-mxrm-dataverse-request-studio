@@ -135,7 +135,10 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('delete');
   const [state, setState] = useState(initialState);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
-  useLiveTable(state.table || null);
+  // The live table is a memo dependency below: build*() reads metadata via
+  // findTable(), which is empty until the fetch lands — keying on `state`
+  // alone left the URL / Code tab blank after picking a table (#78).
+  const { table: liveTable } = useLiveTable(state.table || null);
   const { entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
@@ -147,7 +150,7 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
 
-  const built = useMemo(() => buildDelete(state), [state]);
+  const built = useMemo(() => buildDelete(state), [state, liveTable]);
   const tbl = findTable(state.table);
 
   // ── Live row preview ──

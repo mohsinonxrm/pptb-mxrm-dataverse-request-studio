@@ -226,7 +226,10 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   const [state, setState] = useState(initialState);
   // Live-metadata subscription so the entity-set name resolves once the
   // table cache lands.
-  useLiveTable(state.table || null);
+  // The live table is a memo dependency below: build*() reads metadata via
+  // findTable(), which is empty until the fetch lands — keying on `state`
+  // alone left the URL / Code tab blank after picking a table (#78).
+  const { table: liveTable } = useLiveTable(state.table || null);
   const { entities } = useScopedEntities();
   const [activeNode, setActiveNode] = useState<ClauseId>('target');
   const [tab, setTab] = useState<MainTab>('builder');
@@ -250,7 +253,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   // selection.
   const [comboInput, setComboInput] = useState<string>('');
 
-  const built = useMemo(() => buildPredefinedQuery(state), [state]);
+  const built = useMemo(() => buildPredefinedQuery(state), [state, liveTable]);
   const tbl = findTable(state.table);
   const selectedQuery = queries.find((q) => q.id === state.queryId) ?? null;
 

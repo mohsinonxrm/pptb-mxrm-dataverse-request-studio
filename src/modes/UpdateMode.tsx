@@ -133,7 +133,10 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   // (b) tbl metadata resolving from the live registry. Before this, the
   // original-row fetch effect would early-return on the missing tbl, leaving
   // originalLoading=false + originalRow=null → diff renders the error state.
-  const { loading: tableLoading } = useLiveTable(state.table || null);
+  // The live table is a memo dependency below: build*() reads metadata via
+  // findTable(), which is empty until the fetch lands — keying on `state`
+  // alone left the URL / Code tab blank after picking a table (#78).
+  const { loading: tableLoading, table: liveTable } = useLiveTable(state.table || null);
   const { entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
@@ -148,8 +151,8 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   // the live row fetch completes (Search-mode picks deliver this for free).
   const [pickedPrimaryFromPicker, setPickedPrimaryFromPicker] = useState<string>('');
 
-  const built = useMemo(() => buildUpdate(state), [state]);
-  const body = useMemo(() => buildUpdateBody(state), [state]);
+  const built = useMemo(() => buildUpdate(state), [state, liveTable]);
+  const body = useMemo(() => buildUpdateBody(state), [state, liveTable]);
   const tbl = findTable(state.table);
 
   const markDirty = (id: string) =>
