@@ -164,7 +164,14 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
   // The picker primary wins when available; the fetch fills the rest
   // (and can fail silently — the typed-confirm still works off the
   // picker primary).
-  const [pickedPrimaryFromPicker, setPickedPrimaryFromPicker] = useState<string>('');
+  // Keyed by the record it was picked for: any other path that changes
+  // `recordId` (saved-request load, GUID paste) must not inherit the
+  // previous pick's name (#46).
+  const [pickerPick, setPickerPick] = useState<{ id: string; name: string } | null>(null);
+  const pickedPrimaryFromPicker =
+    pickerPick && state.recordId && pickerPick.id.toLowerCase() === state.recordId.toLowerCase()
+      ? pickerPick.name
+      : '';
   const [pickedRow, setPickedRow] = useState<Record<string, unknown> | null>(null);
   const [pickedRowLoading, setPickedRowLoading] = useState(false);
   const [pickedRowError, setPickedRowError] = useState<string | null>(null);
@@ -569,11 +576,11 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
               dirty: new Set(['target', 'scope']),
             }));
             setResult(null);
-            setPickedPrimaryFromPicker('');
+            setPickerPick(null);
           }}
           onRecordChange={(id, primary) => {
             set('recordId', id, 'target');
-            setPickedPrimaryFromPicker(primary ?? '');
+            setPickerPick(id && primary ? { id, name: primary } : null);
           }}
           onProceedToConfirmation={() => setActivePath('confirmation')}
         />
