@@ -679,6 +679,31 @@ export function tableNameFromState(state: unknown): string {
   return '—';
 }
 
+// ── Same-target check (silent-overwrite guard) ────────────────────────
+//
+// State keys that pick WHAT a request targets. Changing one of them
+// (switching the table, the action, the workflow, …) starts a different
+// request, so a save made before the switch must not be silently
+// overwritten by the new draft. Keys absent from both states are ignored,
+// so each mode is compared on whichever of these it carries.
+const TARGET_KEYS = ['table', 'actionName', 'functionName', 'workflowId'] as const;
+
+function targetKeyValue(state: unknown, key: string): string {
+  if (!state || typeof state !== 'object') return '';
+  const v = (state as Record<string, unknown>)[key];
+  return typeof v === 'string' ? v : '';
+}
+
+/**
+ * True when two serialized snapshots point at the same target (same table /
+ * action / function / workflow). The SaveButton uses this to decide whether
+ * a remembered `lastSavedId` still belongs to the current draft before it
+ * pre-fills that entry's name or overwrites it without asking (#58).
+ */
+export function sameSaveTarget(a: unknown, b: unknown): boolean {
+  return TARGET_KEYS.every((k) => targetKeyValue(a, k) === targetKeyValue(b, k));
+}
+
 // ── id generation ─────────────────────────────────────────────────────
 
 export function newSavedId(): string {

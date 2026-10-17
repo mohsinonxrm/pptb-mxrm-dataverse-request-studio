@@ -322,6 +322,10 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
             }));
             setSourceName('');
             setResult(null);
+            // New table → fresh draft. Forget the last save so Save can't
+            // overwrite an entry that belongs to the old table (#58).
+            setLastSavedId(undefined);
+            setLastSavedHash(null);
           }}
           recordId={state.sourceId}
           onRecordChange={(id, primary) => {

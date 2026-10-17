@@ -426,6 +426,10 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   const onTableChange = (logical: string) => {
     setState((ss) => ({ ...ss, table: logical, queryId: null }));
     markDirty('target');
+    // New table → fresh draft. Forget the last save so Save can't
+    // overwrite an entry that belongs to the old table (#58).
+    setLastSavedId(undefined);
+    setLastSavedHash(null);
   };
 
   const onExecute = async () => {
