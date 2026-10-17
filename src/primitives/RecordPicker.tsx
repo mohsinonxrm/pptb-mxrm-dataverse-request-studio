@@ -46,7 +46,11 @@ import {
 } from '@fluentui/react-components';
 import { Dismiss16Regular, Warning20Filled, CheckmarkCircle16Filled } from '@fluentui/react-icons';
 import { findTable } from '../mock/metadata';
-import { useLookupRecords } from '../host/useLookupRecords';
+import {
+  fetchRecordName,
+  useLookupRecords,
+  useLookupRecordsVersion,
+} from '../host/useLookupRecords';
 
 export interface PickedRecord {
   id: string; // primary key value
@@ -167,6 +171,30 @@ function SearchPicker({
       lastResolvedRef.current = null;
     }
   }, [matchedRow, selectedId]);
+
+  // After DRS writes records (#81) the selected record may have a new name.
+  // The refreshed rows relabel it when it's on the current page; otherwise
+  // re-read its name directly so the field doesn't keep the old one.
+  const lookupVersion = useLookupRecordsVersion();
+  const [, setRelabeled] = useState(0);
+  useEffect(() => {
+    if (lookupVersion === 0 || !selectedId || !tbl) return;
+    let cancelled = false;
+    fetchRecordName(tbl, selectedId)
+      .then((name) => {
+        if (cancelled || name === null) return;
+        lastResolvedRef.current = { id: selectedId, primary: name };
+        setRelabeled((n) => n + 1);
+      })
+      .catch(() => {
+        // Best effort — e.g. the record was just deleted. Keep the label.
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Only on invalidation; selection changes resolve through the rows.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lookupVersion]);
 
   // Reset search state whenever the parent clears the selection externally
   // (e.g. switching tables, loading a saved request that targets a
