@@ -167,6 +167,12 @@ export interface FieldSetEditorProps {
    * value explicitly.
    */
   purpose?: 'create' | 'update' | 'upsert';
+  /**
+   * HTTP verb named in the pane header. Defaults from `purpose`: POST for
+   * create, PATCH for update / upsert. Update's single-column PUT passes
+   * 'PUT'.
+   */
+  method?: 'POST' | 'PATCH' | 'PUT';
 }
 
 type Filter = 'all' | 'required' | 'set' | 'common';
@@ -183,7 +189,14 @@ export function FieldSetEditor({
   group = 'write',
   themeMode = 'light',
   purpose = 'create',
+  method,
 }: FieldSetEditorProps) {
+  const verb = method ?? (purpose === 'create' ? 'POST' : 'PATCH');
+  // Create (and Upsert, which may create) must carry every required column.
+  // Update is a partial PATCH: columns left out of the body keep their
+  // value, so an unset required column is fine — only clearing one to null
+  // is a problem (#80).
+  const requiresAllRequired = purpose !== 'update';
   // Internal fallback when the caller doesn't wire up explicit-null tracking.
   // Keeps the affordance hidden in those modes (the Set-null button checks
   // for the controlled handler before rendering itself).
@@ -268,12 +281,14 @@ export function FieldSetEditor({
   // Required-field check: a column marked explicit-null still counts as
   // "missing" since the server will reject a null on a required column —
   // this matches Dataverse's runtime behavior and surfaces the issue.
+  // Update only flags required columns explicitly set to null.
   const missingRequired = useMemo(
     () =>
       requiredFields.filter(
-        (c) => !(c.logicalName in values) || nullFields.includes(c.logicalName),
+        (c) =>
+          (requiresAllRequired && !(c.logicalName in values)) || nullFields.includes(c.logicalName),
       ),
-    [requiredFields, values, nullFields],
+    [requiredFields, values, nullFields, requiresAllRequired],
   );
 
   // What to render in the form area.
@@ -362,7 +377,7 @@ export function FieldSetEditor({
         title="Field set"
         sub={
           <span>
-            Pick the columns this <code>POST</code> should set.{' '}
+            Pick the columns this <code>{verb}</code> should set.{' '}
             <span style={{ color: tokens.colorNeutralForeground3 }}>
               Only fields below are emitted in the body — empty columns stay out.
             </span>
@@ -381,7 +396,7 @@ export function FieldSetEditor({
           />
         )}
         <Badge appearance="ghost">{populatedFields.length} populated</Badge>
-        {requiredFields.length > 0 && (
+        {requiresAllRequired && requiredFields.length > 0 && (
           <Badge appearance="tint" color={missingRequired.length ? 'danger' : 'success'}>
             {requiredFields.length - missingRequired.length}/{requiredFields.length} required
           </Badge>
@@ -407,24 +422,42 @@ export function FieldSetEditor({
         </SegmentedToggle>
       </PaneHead>
 
-      {missingRequired.length > 0 && (
-        <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 12 }}>
-          <MessageBarBody>
-            <MessageBarTitle>
-              {missingRequired.length} required field
-              {missingRequired.length === 1 ? ' is' : 's are'} unset.
-            </MessageBarTitle>
-            Dataverse will reject the create with{' '}
-            <code>0x80040217 · A required field is missing</code> unless every required column has a
-            value. <strong>Missing:</strong>{' '}
-            {missingRequired.map((c) => (
-              <code key={c.logicalName} style={{ marginRight: 6 }}>
-                {c.logicalName}
-              </code>
-            ))}
-          </MessageBarBody>
-        </MessageBar>
-      )}
+      {missingRequired.length > 0 &&
+        (requiresAllRequired ? (
+          <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 12 }}>
+            <MessageBarBody>
+              <MessageBarTitle>
+                {missingRequired.length} required field
+                {missingRequired.length === 1 ? ' is' : 's are'} unset.
+              </MessageBarTitle>
+              Dataverse will reject the{' '}
+              {purpose === 'upsert' ? 'upsert when it creates the row' : 'create'} with{' '}
+              <code>0x80040217 · A required field is missing</code> unless every required column has
+              a value. <strong>Missing:</strong>{' '}
+              {missingRequired.map((c) => (
+                <code key={c.logicalName} style={{ marginRight: 6 }}>
+                  {c.logicalName}
+                </code>
+              ))}
+            </MessageBarBody>
+          </MessageBar>
+        ) : (
+          <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 12 }}>
+            <MessageBarBody>
+              <MessageBarTitle>
+                {missingRequired.length} required field
+                {missingRequired.length === 1 ? ' is' : 's are'} set to null.
+              </MessageBarTitle>
+              Dataverse may reject the update for clearing a required column. Columns left out of
+              the body keep their current value. <strong>Cleared:</strong>{' '}
+              {missingRequired.map((c) => (
+                <code key={c.logicalName} style={{ marginRight: 6 }}>
+                  {c.logicalName}
+                </code>
+              ))}
+            </MessageBarBody>
+          </MessageBar>
+        ))}
 
       {bodyMode === 'form' ? (
         <>
@@ -486,6 +519,7 @@ export function FieldSetEditor({
                     populated={col.logicalName in values || nullFields.includes(col.logicalName)}
                     isNull={isNull(col.logicalName)}
                     nullSupported={nullFieldsSupported}
+                    requiredOnWrite={requiresAllRequired}
                     onChange={(v) => setField(col.logicalName, v)}
                     onRemove={() => {
                       // Remove from both value map AND null flag — a single
@@ -595,6 +629,7 @@ function FieldRow({
   populated,
   isNull,
   nullSupported,
+  requiredOnWrite,
   onChange,
   onRemove,
   onSetNull,
@@ -610,13 +645,16 @@ function FieldRow({
    *  "Set null" button renders. Modes that haven't opted into the feature
    *  still get a clean row without the affordance. */
   nullSupported: boolean;
+  /** True when the body must carry every required column (create / upsert).
+   *  False for update, where an unset required column is left unchanged. */
+  requiredOnWrite: boolean;
   onChange: (v: CreateFieldValue) => void;
   onRemove: () => void;
   onSetNull: () => void;
   onClearNull: () => void;
 }) {
   const s = useStudioStyles();
-  const isMissing = col.required && !populated;
+  const isMissing = col.required && (requiredOnWrite ? !populated : isNull);
 
   return (
     <div
@@ -638,7 +676,11 @@ function FieldRow({
           </span>
           {col.required && (
             <Tooltip
-              content="Required — Dataverse rejects the create when this is empty."
+              content={
+                requiredOnWrite
+                  ? 'Required — Dataverse rejects the create when this is empty.'
+                  : 'Required — leave it out to keep its value; clearing it to null may be rejected.'
+              }
               relationship="description"
             >
               <Badge appearance="tint" color="danger" size="extra-small">
