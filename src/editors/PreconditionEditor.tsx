@@ -40,6 +40,8 @@ import { PaneHead } from './PaneHead';
 import { useStudioStyles } from '../primitives/styles';
 import type { ConcurrencyMode } from '../state/writeState';
 import type { RequestGroup } from '../registry/requestTypes';
+import { HostHeaderNotice } from './HostHeaderNotice';
+import { isConcurrencyEnforcementRequired } from '../engine/hostHeaderAdvisories';
 
 export type PreconditionKind = ConcurrencyMode['kind'];
 
@@ -118,6 +120,19 @@ export function PreconditionEditor({
         sub="Optimistic concurrency & existence checks — controls the If-Match / If-None-Match header."
         group={group}
       />
+
+      {isConcurrencyEnforcementRequired(
+        // Only Upsert offers create-only; Update and Delete share the same rules.
+        available.includes('create-only') ? 'upsert' : 'update',
+        mode,
+      ) && (
+        <HostHeaderNotice>
+          The <code>If-Match</code> / <code>If-None-Match</code> header is dropped at execute time,
+          so this condition wouldn't be enforced and <strong>Execute</strong> is disabled. Pick a
+          different precondition to run the request here, or copy it from the Code tab to run it
+          elsewhere.
+        </HostHeaderNotice>
+      )}
 
       <div style={{ maxWidth: 720 }}>
         <RadioGroup value={selected} onChange={(_, d) => onPick(d.value as PreconditionKind)}>
