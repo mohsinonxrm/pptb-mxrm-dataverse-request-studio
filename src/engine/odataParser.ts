@@ -968,6 +968,17 @@ function parseFilter(
   }
 }
 
+/**
+ * Inline child groups that share the parent's combinator (`a and (b and c)`
+ * → `a and b and c`). A *negated* child group is kept as-is: inlining it
+ * would drop its `not` and silently invert the query (#117).
+ */
+function flattenSame(children: FilterNode[], combinator: 'and' | 'or'): FilterNode[] {
+  return children.flatMap((c) =>
+    c.type === 'group' && c.combinator === combinator && !c.negated ? c.rules : [c],
+  );
+}
+
 /** orExpr := andExpr ('or' andExpr)* */
 function parseOrExpr(ctx: ParseFilterCtx): FilterNode {
   const left = parseAndExpr(ctx);
@@ -981,7 +992,7 @@ function parseOrExpr(ctx: ParseFilterCtx): FilterNode {
     id: newId('g'),
     type: 'group',
     combinator: 'or',
-    rules: children.flatMap((c) => (c.type === 'group' && c.combinator === 'or' ? c.rules : [c])),
+    rules: flattenSame(children, 'or'),
   };
 }
 
@@ -998,7 +1009,7 @@ function parseAndExpr(ctx: ParseFilterCtx): FilterNode {
     id: newId('g'),
     type: 'group',
     combinator: 'and',
-    rules: children.flatMap((c) => (c.type === 'group' && c.combinator === 'and' ? c.rules : [c])),
+    rules: flattenSame(children, 'and'),
   };
 }
 
