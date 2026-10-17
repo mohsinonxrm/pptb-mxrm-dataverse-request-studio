@@ -33,7 +33,7 @@ npm install
 | `npm run build` | Full production build into `dist/` |
 | `npm run preview` | Serve the production build locally |
 | `npm run validate` | Run `pptb-validate` against the manifest |
-| `npm run finalize-package` | `validate` → `build` → `npm shrinkwrap` (pre-release) |
+| `npm run finalize-package` | `validate` → `build` (pre-release) |
 
 ### Standalone vs PPTB-embedded
 

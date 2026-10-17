@@ -66,6 +66,16 @@ ToolBox 1.2.7 against a live Dataverse environment.
   on a second line under each name, so patches can be told apart. Search
   matches them too.
 
+### 📦 Packaging
+
+- **No more `npm-shrinkwrap.json` in the package.** Installing the tool no
+  longer pins every transitive dependency. `finalize-package` now runs
+  `validate` → `build`. The lockfile is committed as `package-lock.json`,
+  which npm never publishes, so `npm ci` works in the repo
+  ([#65](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/65)).
+- **README:** version badges now read from npm (latest and beta) instead of a
+  hard-coded version.
+
 ### ⚠️ Known issues
 
 - **The tool icon shows in a single colour in Power Platform ToolBox 1.2.7,
