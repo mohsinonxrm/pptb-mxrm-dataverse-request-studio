@@ -28,8 +28,9 @@
 //      result for the non-negated form.)
 //   ⚠️ `$apply` with `bottomcount`/`topcount` or compute() — uncommon, not
 //      currently modeled.
-//   ⚠️ `$search`, `$format`, `$skiptoken` — Dataverse doesn't support these
-//      and DRS doesn't model them. Skipped silently.
+//   ⚠️ `$skiptoken` — paging cursor from an @odata.nextLink. Dropped with a
+//      warning; the rest of the query is applied (#83).
+//   ❌ `$search`, `$format` and any other option — rejected as unknown.
 
 import type { TableMeta, NavProperty } from '../mock/metadata';
 import { findTable } from '../mock/metadata';
@@ -203,6 +204,20 @@ export async function parseODataUrl(
     const tbl = findTable(table);
 
     const opts = splitQueryOptions(query);
+
+    // ── Static: paging cursor ──
+    // `$skiptoken` only appears in an @odata.nextLink and is only valid on
+    // that exact URL. Drop it with a warning rather than rejecting the whole
+    // paste, so a copied nextLink still loads its query into the builder (#83).
+    if ('$skiptoken' in opts) {
+      delete opts.$skiptoken;
+      warnings.push(
+        iss(
+          'Dropped `$skiptoken` — it is the paging cursor from an @odata.nextLink. The builder loads the query itself (first page); to follow this exact page, use Retrieve NextLink.',
+          DOCS.queryOptions,
+        ),
+      );
+    }
 
     // ── Static: unknown query options ──
     for (const k of Object.keys(opts)) {
