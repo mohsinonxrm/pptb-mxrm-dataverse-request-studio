@@ -53,6 +53,7 @@ import { countRules } from '../editors/filter/filterTree';
 import { findTable } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildRetrieveSingle } from '../engine/urlBuilder';
+import { relatedMetadataAdvisories } from '../engine/navPath';
 import { runtime, type ExecResult } from '../engine/runtime';
 import type { ExpandSpec } from '../editors/ExpandEditor';
 import type { RetrieveSingleState, RecentRun } from '../state/readState';
@@ -99,7 +100,8 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   // Pre-warm entities referenced by nested $expand (inner $select/$filter/
   // $orderby) so encoders resolve against the right related entity — even on
   // saved-request reload / pasted URL where no expand editor was opened.
-  useWarmReferencedTables(state.table || null, { expand: state.expand });
+  // `related.version` re-encodes `built` when a related table lands (#63).
+  const related = useWarmReferencedTables(state.table || null, { expand: state.expand });
   const { entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
@@ -112,7 +114,11 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
 
-  const built = useMemo(() => buildRetrieveSingle(state), [state, liveTable]);
+  const built = useMemo(
+    () => buildRetrieveSingle(state),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state, liveTable, related.version],
+  );
   const tbl = findTable(state.table);
 
   // Hash + dirty are derived from the live state every render. Same identity
@@ -218,9 +224,16 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
         body: `"${state.recordId}" doesn't look like a GUID. Dataverse record ids are 36-char UUIDs (with or without braces).`,
       });
     }
+    out.push(...relatedMetadataAdvisories(related.pending, related.failed));
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.table, state.recordId, tbl?.displayName]);
+  }, [
+    state.table,
+    state.recordId,
+    tbl?.displayName,
+    related.pending.join(','),
+    related.failed.join(','),
+  ]);
 
   // ── Execute ───────────────────────────────────────────────────────
   const onExecute = async () => {
