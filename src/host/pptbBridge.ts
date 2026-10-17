@@ -42,6 +42,12 @@ export interface HostSession {
   environmentUrl: string;
   /** Environment label from the host — "Dev" / "Test" / "UAT" / "Production" or empty. */
   environment: string;
+  /**
+   * True once the initial host handshake (theme + active connection) has
+   * resolved. Always true standalone. Lets consumers tell "still connecting"
+   * apart from "no connection".
+   */
+  handshakeDone: boolean;
 }
 
 type Listener = (session: HostSession) => void;
@@ -63,6 +69,7 @@ let session: HostSession = {
   theme: readBootTheme(),
   environmentUrl: '',
   environment: '',
+  handshakeDone: !EMBEDDED,
 };
 
 function readBootTheme(): 'light' | 'dark' {
@@ -167,7 +174,7 @@ if (EMBEDDED && typeof window !== 'undefined' && window.toolboxAPI) {
   void (async () => {
     const theme = await fetchInitialTheme(api);
     const conn = await fetchInitialConnection(api);
-    emit({ ...session, theme, ...conn });
+    emit({ ...session, theme, ...conn, handshakeDone: true });
     hookEvents(api);
   })();
 }

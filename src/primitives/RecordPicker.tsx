@@ -179,8 +179,16 @@ function SearchPicker({
     }
   }, [selectedId]);
 
-  const selectedLabel =
-    lastResolvedRef.current?.primary ?? (selectedId ? `(${selectedId.slice(0, 8)}…)` : '');
+  // Only trust the cached label when it belongs to the current selection —
+  // loading a saved request swaps `selectedId` without a pick, and the
+  // previous record's name must not stay in the field (#46).
+  const resolvedForSelection =
+    lastResolvedRef.current &&
+    selectedId &&
+    normalizeGuid(lastResolvedRef.current.id) === normalizeGuid(selectedId)
+      ? lastResolvedRef.current.primary
+      : null;
+  const selectedLabel = resolvedForSelection ?? (selectedId ? `(${selectedId.slice(0, 8)}…)` : '');
   const displayValue = userIsTyping ? search : selectedLabel;
 
   const onClear = () => {

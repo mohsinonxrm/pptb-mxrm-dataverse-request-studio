@@ -63,6 +63,7 @@ import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../edit
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
 import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
+import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { RecordPicker } from '../primitives/RecordPicker';
 import { CodeView } from '../views/CodeView';
@@ -121,7 +122,10 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('merge');
   const [state, setState] = useState(initialState);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
-  useLiveTable(state.table || null);
+  // The live table is a memo dependency below: build*() reads metadata via
+  // findTable(), which is empty until the fetch lands — keying on `state`
+  // alone left the URL / Code tab blank after picking a table (#78).
+  const { table: liveTable } = useLiveTable(state.table || null);
   const { entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
@@ -137,8 +141,8 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
   const [targetLoading, setTargetLoading] = useState(false);
   const [subordinateLoading, setSubordinateLoading] = useState(false);
 
-  const built = useMemo(() => buildMerge(state), [state]);
-  const body = useMemo(() => buildMergeBody(state), [state]);
+  const built = useMemo(() => buildMerge(state), [state, liveTable]);
+  const body = useMemo(() => buildMergeBody(state), [state, liveTable]);
   const tbl = findTable(state.table);
 
   // ── Live row fetches ──
@@ -317,7 +321,10 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Advisories — bypass family + GUID validation + same-record guard ──
   const advisories = useMemo<Advisory[]>(() => {
-    const out: Advisory[] = [...detectBypassAdvisories(state.bypass, 'bypass')];
+    const out: Advisory[] = [
+      ...detectBypassAdvisories(state.bypass, 'bypass'),
+      ...detectUnsentHeaderAdvisories({ op: 'merge', bypass: state.bypass }),
+    ];
     if (state.targetId && !isValidGuid(state.targetId)) {
       out.push({
         id: 'merge-bad-target-guid',

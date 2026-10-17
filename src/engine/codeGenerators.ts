@@ -152,7 +152,8 @@ export function generateCode(fmt: CodeFormat, i: CodegenInputs): string {
 // Shared helpers
 // ────────────────────────────────────────────────────────────
 function fullUrl(i: CodegenInputs): string {
-  if (i.isNextLink && i.rawNextLink) return i.rawNextLink;
+  // The nextLink comes straight from a textarea — drop pasted whitespace.
+  if (i.isNextLink && i.rawNextLink) return i.rawNextLink.trim();
   return `https://${ENV.host}${i.built.relativeUrl}`;
 }
 
@@ -167,9 +168,44 @@ function stripAuth(headers: Record<string, string>): Record<string, string> {
   return out;
 }
 
+/**
+ * Decode a percent-encoded query value for readability inside a snippet's
+ * options string, but keep the characters that would change its meaning
+ * encoded: `&` starts a new option, `#` a fragment, `+` reads as a space and
+ * `%` starts an escape (#50). Malformed escapes are left as-is.
+ */
+function readableQueryValue(v: string): string {
+  return v.replace(/(?:%[0-9A-Fa-f]{2})+/g, (run) => {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(run);
+    } catch {
+      return run;
+    }
+    return decoded.replace(/[&#+%]/g, (c) => encodeURIComponent(c));
+  });
+}
+
+/** `decodeURIComponent` that returns the input instead of throwing. */
+function safeDecode(v: string): string {
+  try {
+    return decodeURIComponent(v);
+  } catch {
+    return v;
+  }
+}
+
 /** Escape a string for inclusion inside a single-quoted JS literal. */
 function jsEscape(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  // Backslash and quote, plus line terminators — a raw newline (e.g. a
+  // pasted nextLink with a trailing line break) would end the literal (#50).
+  return s
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
 /** Render headers as a JS object body, indented. */
@@ -214,14 +250,14 @@ function decodeFunctionAlias(odataLiteral: string): string {
   // Single-quoted string — keep as JS string literal
   if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
     const inner = trimmed.slice(1, -1).replace(/''/g, "'");
-    return `'${inner.replace(/'/g, "\\'")}'`;
+    return `'${jsEscape(inner)}'`;
   }
   // Booleans
   if (trimmed === 'true' || trimmed === 'false') return trimmed;
   // Number
   if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) return trimmed;
   // GUID or unrecognized — pass through as quoted string for safety
-  return `'${trimmed.replace(/'/g, "\\'")}'`;
+  return `'${jsEscape(trimmed)}'`;
 }
 
 function formatJsValue(v: unknown, indent: string): string {
@@ -261,7 +297,7 @@ function genFetch(i: CodegenInputs): string {
 // call Xrm.WebApi directly — see the Xrm.WebApi tab.
 
 (async () => {
-${payloadDecl}  const url = '${url}';
+${payloadDecl}  const url = '${jsEscape(url)}';
 
   const res = await fetch(url, {
     method: '${i.method}',
@@ -308,7 +344,7 @@ function genFetchMulti(i: CodegenInputs): string {
       const url = `https://${ENV.host}${r.relativeUrl}`;
       const bodyLine = r.body ? `, body: JSON.stringify(${formatJsObject(r.body, '    ')})` : '';
       const desc = r.description ? `  // ${r.description}\n` : '';
-      return `${desc}  { method: '${r.method}', url: '${url}'${bodyLine} },`;
+      return `${desc}  { method: '${r.method}', url: '${jsEscape(url)}'${bodyLine} },`;
     })
     .join('\n');
 
@@ -359,7 +395,7 @@ function genXrm(i: CodegenInputs): string {
     return `// Xrm.WebApi doesn't take a raw nextLink URL — follow it via fetch:
 // (Run this in a model-driven app form script context)
 
-const nextLink = '${i.rawNextLink}';
+const nextLink = '${jsEscape(i.rawNextLink.trim())}';
 const res = await fetch(nextLink, {
   headers: { 'Accept': 'application/json' },
 });
@@ -385,7 +421,7 @@ ${genFetchMulti(i)}`;
   const recordId = i.built.recordId;
   // Re-derive the options string from queryParts (decoded for readability inside Xrm.WebApi)
   const optsBody = i.built.queryParts
-    .map((p) => `${p.key}=${decodeURIComponent(p.value)}`)
+    .map((p) => `${p.key}=${readableQueryValue(p.value)}`)
     .join('&');
   const options = optsBody ? `?${optsBody}` : '';
 
@@ -436,7 +472,7 @@ ${Object.entries(i.body ?? {})
       `    ${/^[a-zA-Z_$][\w$]*$/.test(k) ? k : `'${jsEscape(k)}'`}: ${formatJsValue(v, '    ')},`,
   )
   .join('\n')}
-${isBound ? `    entity: { entityType: '${logical}', id: '${recordId}' },\n` : ''}    getMetadata: () => ({
+${isBound ? `    entity: { entityType: '${logical}', id: '${jsEscape(recordId ?? '')}' },\n` : ''}    getMetadata: () => ({
       boundParameter: ${isBound ? `'entity'` : 'null'},
       operationType: 0,  // 0 = Action · 1 = Function · 2 = CRUD
       operationName: '${actionName}',
@@ -511,7 +547,7 @@ ${genFetchMulti(i)}`;
 
 (async () => {
   const entityLogicalName = '${logical}';
-  const options = '${options}';${maxPageSize ? `\n  const maxPageSize = ${maxPageSize};` : ''}
+  const options = '${jsEscape(options)}';${maxPageSize ? `\n  const maxPageSize = ${maxPageSize};` : ''}
 
   const result = await Xrm.WebApi.retrieveMultipleRecords(entityLogicalName, options${maxPageSize ? ', maxPageSize' : ''});
 
@@ -533,7 +569,7 @@ ${genFetchMulti(i)}`;
 (async () => {
   const entityLogicalName = '${logical}';
   const id = '${recordId ?? '<id>'}';
-  const options = '${options}';
+  const options = '${jsEscape(options)}';
 
   const record = await Xrm.WebApi.retrieveRecord(entityLogicalName, id, options);
   console.log('Got record:', record);
@@ -571,7 +607,7 @@ ${genFetchMulti(i)}`;
 
 (async () => {
   const entityLogicalName = '${logical}';
-${recordId ? `  const id = '${recordId}';\n` : ''}${dataLiteral}  const result = await Xrm.WebApi.${verb}(${callArgs});
+${recordId ? `  const id = '${jsEscape(recordId)}';\n` : ''}${dataLiteral}  const result = await Xrm.WebApi.${verb}(${callArgs});
   console.log('Result:', result);
 })().catch(err => console.error('Xrm.WebApi error:', err));
 `;
@@ -636,7 +672,7 @@ function genXrmBatch(i: CodegenInputs): string {
   // Re-derive the OData query options string from the request's
   // queryParts (decoded for readability inside the JS snippet).
   const optsBody = i.built.queryParts
-    .map((p) => `${p.key}=${decodeURIComponent(p.value)}`)
+    .map((p) => `${p.key}=${readableQueryValue(p.value)}`)
     .join('&');
   const options = optsBody ? `?${optsBody}` : '';
 
@@ -661,7 +697,7 @@ function genXrmBatch(i: CodegenInputs): string {
   const requests = [
     {
 ${bodyEntries.map(([k, v]) => `      ${/^[a-zA-Z_$][\w$]*$/.test(k) ? k : `'${jsEscape(k)}'`}: ${formatJsValue(v, '      ')},`).join('\n')}
-${isBound ? `      entity: { entityType: '${logical}', id: '${recordId}' },\n` : ''}      getMetadata: () => ({
+${isBound ? `      entity: { entityType: '${logical}', id: '${jsEscape(recordId ?? '')}' },\n` : ''}      getMetadata: () => ({
         boundParameter: ${isBound ? `'entity'` : 'null'},
         operationType: 0,  // 0 = Action
         operationName: '${actionName}',
@@ -759,7 +795,7 @@ ${sources
   const requests = [
     {
       collection: '${i.built.entitySet || logical + 's'}',
-      query: '${options}',
+      query: '${jsEscape(options)}',
       getMetadata: () => ({
         boundParameter: null,
         parameterTypes: {},
@@ -791,7 +827,7 @@ ${sources
   const requests = [
     {
       entity: { entityType: '${logical}', id: '${recordId ?? '<id>'}' },
-      query: '${options}',
+      query: '${jsEscape(options)}',
       getMetadata: () => ({
         boundParameter: null,
         parameterTypes: {},
@@ -832,7 +868,7 @@ ${sources
     // have caught this case — log a console warning if we get here).
     const collectionName = i.built.entitySet || (logical ? `${logical}s` : '<entity-set>');
     const entityLine = recordId
-      ? `      entity: { entityType: '${logical || '<entity-logical>'}', id: '${recordId}' },`
+      ? `      entity: { entityType: '${logical || '<entity-logical>'}', id: '${jsEscape(recordId ?? '')}' },`
       : `      collection: '${collectionName}',`;
     return `// Xrm.WebApi.online.executeMultiple — batched ${opName.toLowerCase()} via CRUD descriptor.
 //
@@ -891,7 +927,7 @@ function genXhr(i: CodegenInputs): string {
   var clientUrl = (typeof Xrm !== 'undefined' && Xrm.Utility && Xrm.Utility.getGlobalContext)
     ? Xrm.Utility.getGlobalContext().getClientUrl()
     : '${ENV.host ? 'https://' + ENV.host : ''}';
-  var url = clientUrl + '${i.built.relativeUrl || (i.rawNextLink ?? '')}';
+  var url = clientUrl + '${jsEscape(i.built.relativeUrl || (i.rawNextLink ?? ''))}';
 
   var req = new XMLHttpRequest();
   req.open('${i.method}', url, true);
@@ -926,6 +962,119 @@ ${setHeaders ? '  ' + setHeaders.split('\n').join('\n  ') : ''}
 // row has a label, a read-only Input with the value, and a per-row Copy
 // button. The text-only Monaco rendering (genPowerAutomate below) is kept
 // as a fallback for environments that only show source.
+// ────────────────────────────────────────────────────────────
+// Power Automate — shared request classifier (#51)
+// ────────────────────────────────────────────────────────────
+// Both the field-by-field pane and the text cheat sheet map the request to a
+// Dataverse connector action from the URL *shape*, not just method + record
+// id. A DELETE on `/<set>(<id>)/<column>` clears one column / file / image —
+// mapping it to "Delete a row" would tell the user to delete the record.
+// Anything the connector's row actions can't express goes to
+// "Invoke an HTTP request" instead of falling through to "List rows".
+interface PowerAutomateClass {
+  isRetrieveSingle: boolean;
+  isCreate: boolean;
+  isUpdate: boolean;
+  isDelete: boolean;
+  isAction: boolean;
+  isFunction: boolean;
+  isList: boolean;
+  /** Set when only an HTTP request can express this — the reason, for the banner. */
+  httpReason: string | null;
+}
+
+function classifyPowerAutomate(i: CodegenInputs): PowerAutomateClass {
+  const set = i.built.entitySet;
+  const path = relativeToApi(i).split('?')[0];
+  const isRef = path.endsWith('/$ref');
+  const isMessage = path.includes('/Microsoft.Dynamics.CRM.') || path.endsWith('/Merge');
+  const onSet = !!set && (path === '/' + set || path.startsWith('/' + set + '('));
+  const isCollection = !!set && path === '/' + set;
+  // /<set>(<key>) — a single row, addressed by GUID or by alternate key
+  const isRow = onSet && /^\/[^/]+\([^)]*\)$/.test(path);
+  // Alternate keys are `name=value` pairs; anything else in the parens is a
+  // GUID — or the `<id>` placeholder before a record has been picked, which
+  // should still map to the row action (with an empty Row ID).
+  const isGuidRow = isRow && (!!i.built.recordId || !/\([^)]*=/.test(path));
+  // /<set>(<key>)/<column> — a single column value (incl. file / image columns)
+  const isColumn = onSet && !isRef && !isMessage && /^\/[^/]+\([^)]*\)\/[^/]+$/.test(path);
+
+  const isFunction = i.method === 'GET' && (isMessage || !set);
+  const isAction =
+    i.method === 'POST' && (isMessage || (!i.built.recordId && !i.built.entitySet && !!i.body));
+  const isRetrieveSingle = i.method === 'GET' && isGuidRow && !isFunction;
+  const isCreate = i.method === 'POST' && isCollection && !!i.body;
+  const isUpdate = i.method === 'PATCH' && isGuidRow && !!i.body;
+  const isDelete = i.method === 'DELETE' && isGuidRow;
+  const isList = i.method === 'GET' && isCollection;
+
+  let httpReason: string | null = null;
+  if (
+    !isRetrieveSingle &&
+    !isCreate &&
+    !isUpdate &&
+    !isDelete &&
+    !isAction &&
+    !isFunction &&
+    !isList
+  ) {
+    httpReason =
+      i.method === 'DELETE' && isColumn
+        ? 'This DELETE clears a single column (or a file / image column) — it does NOT delete the row. Don\'t use "Delete a row": send this request with the Dataverse connector\'s "Invoke an HTTP request" action.'
+        : i.method === 'PUT' && isColumn
+          ? 'A single-column PUT has no matching row action. Use "Update a row" with just that column, or send this request with "Invoke an HTTP request".'
+          : isRef
+            ? 'Associate / disassociate via $ref. The connector\'s "Relate rows" / "Unrelate rows" actions cover this, or send this request with "Invoke an HTTP request".'
+            : isRow && !isGuidRow
+              ? 'This request addresses the row by alternate key, which the connector\'s row actions don\'t take. Send it with "Invoke an HTTP request".'
+              : 'The connector\'s row actions can\'t express this request. Send it with "Invoke an HTTP request".';
+  }
+
+  return {
+    isRetrieveSingle,
+    isCreate,
+    isUpdate,
+    isDelete,
+    isAction,
+    isFunction,
+    isList,
+    httpReason,
+  };
+}
+
+function relativeToApi(i: CodegenInputs): string {
+  return i.built.relativeUrl.replace(/^\/api\/data\/v\d+\.\d+/, '');
+}
+
+function powerAutomateHttpSpec(i: CodegenInputs, reason: string): PowerAutomateActionSpec {
+  return {
+    actionName: 'Invoke an HTTP request',
+    connector: 'Microsoft Dataverse connector',
+    banner: reason,
+    fields: [
+      { label: 'Method', value: i.method },
+      {
+        label: 'Relative URI',
+        value: relativeToApi(i),
+        multiline: true,
+        hint: 'Strip the /api/data/v9.2 prefix — the connector adds it',
+      },
+      {
+        label: 'Body',
+        value: i.body ? JSON.stringify(i.body, null, 2) : '',
+        multiline: !!i.body,
+        hint: i.body ? 'JSON request body' : 'No body',
+      },
+    ],
+    notes: ["Request headers (If-Match, Prefer, MSCRM.*) go in the action's Headers field."],
+    httpFallback: {
+      method: i.method,
+      uri: `https://${ENV.host}${i.built.relativeUrl}`,
+      note: 'Generic HTTP action — use this when "Invoke an HTTP request" isn\'t available in your connector version.',
+    },
+  };
+}
+
 export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActionSpec {
   if (i.isNextLink && i.rawNextLink) {
     return {
@@ -942,7 +1091,7 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
 
   const valueOf = (key: string): string => {
     const p = i.built.queryParts.find((x) => x.key === key);
-    return p ? decodeURIComponent(p.value) : '';
+    return p ? safeDecode(p.value) : '';
   };
   const select = valueOf('$select');
   const filter = valueOf('$filter');
@@ -961,24 +1110,12 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
     if (m) maxPageSize = m[1];
   }
 
-  const isRetrieveSingle = i.method === 'GET' && !!i.built.recordId;
   const isPredefined = !!savedQ || !!userQ;
-  const isCreate =
-    i.method === 'POST' &&
-    !i.built.recordId &&
-    !!i.body &&
-    !i.built.relativeUrl.includes('/Microsoft.Dynamics.CRM.') &&
-    !i.built.relativeUrl.endsWith('/$ref') &&
-    !i.built.relativeUrl.includes('/Merge');
-  const isUpdate = i.method === 'PATCH' && !!i.built.recordId && !!i.body;
-  const isDelete =
-    i.method === 'DELETE' && !!i.built.recordId && !i.built.relativeUrl.endsWith('/$ref');
-  const isAction =
-    i.method === 'POST' &&
-    (i.built.relativeUrl.includes('/Microsoft.Dynamics.CRM.') ||
-      i.built.relativeUrl.endsWith('/Merge') ||
-      (!i.built.recordId && !i.built.entitySet && !!i.body));
-  const isFunction = i.method === 'GET' && !i.built.recordId && !i.built.entitySet;
+  const { isRetrieveSingle, isCreate, isUpdate, isDelete, isAction, isFunction, httpReason } =
+    classifyPowerAutomate(i);
+
+  // Column DELETE / PUT, $ref, alternate keys, … — HTTP request only
+  if (httpReason) return powerAutomateHttpSpec(i, httpReason);
 
   // "Update a row" — Update / Upsert
   if (isUpdate) {
@@ -1344,7 +1481,7 @@ function genPowerAutomate(i: CodegenInputs): string {
   // Pull each query option's value (decoded) from the built request.
   const valueOf = (key: string): string => {
     const p = i.built.queryParts.find((x) => x.key === key);
-    return p ? decodeURIComponent(p.value) : '';
+    return p ? safeDecode(p.value) : '';
   };
   const select = valueOf('$select');
   const filter = valueOf('$filter');
@@ -1367,24 +1504,23 @@ function genPowerAutomate(i: CodegenInputs): string {
   // Aligned "Field name  value" rendering — monospace in the editor lets users
   // double-click a value and Ctrl+C it straight into the flow designer.
   const row = (label: string, value: string): string => `${label.padEnd(25)} ${value}`;
-  const isRetrieveSingle = i.method === 'GET' && !!i.built.recordId;
   const isPredefined = !!savedQ || !!userQ;
-  const isCreate =
-    i.method === 'POST' &&
-    !i.built.recordId &&
-    !!i.body &&
-    !i.built.relativeUrl.includes('/Microsoft.Dynamics.CRM.') &&
-    !i.built.relativeUrl.endsWith('/$ref') &&
-    !i.built.relativeUrl.includes('/Merge');
-  const isUpdate = i.method === 'PATCH' && !!i.built.recordId && !!i.body;
-  const isDelete =
-    i.method === 'DELETE' && !!i.built.recordId && !i.built.relativeUrl.endsWith('/$ref');
-  const isAction =
-    i.method === 'POST' &&
-    (i.built.relativeUrl.includes('/Microsoft.Dynamics.CRM.') ||
-      i.built.relativeUrl.endsWith('/Merge') ||
-      (!i.built.recordId && !i.built.entitySet && !!i.body));
-  const isFunction = i.method === 'GET' && !i.built.recordId && !i.built.entitySet;
+  const { isRetrieveSingle, isCreate, isUpdate, isDelete, isAction, isFunction, httpReason } =
+    classifyPowerAutomate(i);
+
+  // ── Column DELETE / PUT, $ref, alternate keys, … — HTTP request only
+  if (httpReason) {
+    return `# Power Automate — Dataverse connector  ⟶  "Invoke an HTTP request" action
+# ${httpReason}
+
+${row('Method', i.method)}
+${row('Relative URI', relativeToApi(i))}
+${row('Body', i.body ? JSON.stringify(i.body) : '(none)')}
+
+# Request headers (If-Match, Prefer, MSCRM.*) go in the action's Headers field.
+# Generic HTTP action alternative: ${i.method} https://${ENV.host}${i.built.relativeUrl}
+`;
+  }
 
   // ── "Update a row" — Update / Upsert
   if (isUpdate) {
@@ -1681,6 +1817,21 @@ function methodCsharp(m: string): string {
 }
 
 // ────────────────────────────────────────────────────────────
+// Shell quoting — OData URLs are full of `$select` / `$filter` / `$ref`,
+// which bash and PowerShell both expand inside double quotes (to empty
+// strings / undefined variables), silently corrupting the request (#49).
+// Single-quoted literals expand nothing.
+// ────────────────────────────────────────────────────────────
+/** POSIX shell single-quoted literal: `it's` → `'it'\''s'`. */
+function shQuote(v: string): string {
+  return `'${v.replace(/'/g, "'\\''")}'`;
+}
+/** PowerShell verbatim (single-quoted) string: `it's` → `'it''s'`. */
+function psQuote(v: string): string {
+  return `'${v.replace(/'/g, "''")}'`;
+}
+
+// ────────────────────────────────────────────────────────────
 // PowerShell — Invoke-RestMethod
 // ────────────────────────────────────────────────────────────
 function genPowershell(i: CodegenInputs): string {
@@ -1689,7 +1840,7 @@ function genPowershell(i: CodegenInputs): string {
     const headerLines = Object.entries(i.headers)
       .filter(([, v]) => v)
       .filter(([k]) => k.toLowerCase() !== 'authorization')
-      .map(([k, v]) => `  "${k}" = "${v.replace(/"/g, '`"')}"`)
+      .map(([k, v]) => `  ${psQuote(k)} = ${psQuote(v)}`)
       .join('\n');
     const lines = reqs
       .map((r) => {
@@ -1697,7 +1848,7 @@ function genPowershell(i: CodegenInputs): string {
         const body = r.body
           ? ` -ContentType 'application/json' -Body '${JSON.stringify(r.body).replace(/'/g, "''")}'`
           : '';
-        return `Invoke-RestMethod -Method ${r.method} -Uri "${url}" -Headers $headers${body}`;
+        return `Invoke-RestMethod -Method ${r.method} -Uri ${psQuote(url)} -Headers $headers${body}`;
       })
       .join('\n');
     return `# PowerShell — Invoke-RestMethod (multi-request)
@@ -1714,7 +1865,7 @@ ${lines}
   const headerLines = Object.entries(i.headers)
     .filter(([, v]) => v)
     .filter(([k]) => k.toLowerCase() !== 'authorization')
-    .map(([k, v]) => `  "${k}" = "${v.replace(/"/g, '`"')}"`)
+    .map(([k, v]) => `  ${psQuote(k)} = ${psQuote(v)}`)
     .join('\n');
   return `# PowerShell — Invoke-RestMethod
 # Replace <access-token> with a real bearer token (Get-AzAccessToken / msal-token).
@@ -1727,7 +1878,7 @@ ${headerLines}
 
 ${i.method !== 'GET' ? `$body = @'\n${JSON.stringify(i.body ?? {}, null, 2)}\n'@\n\n` : ''}$response = Invoke-RestMethod \`
   -Method ${i.method} \`
-  -Uri "${url}" \`
+  -Uri ${psQuote(url)} \`
   -Headers $headers${i.method !== 'GET' ? ' `\n  -ContentType "application/json" `\n  -Body $body' : ''}
 
 $response | ConvertTo-Json -Depth 8
@@ -1743,7 +1894,7 @@ function genCurl(i: CodegenInputs): string {
     const hdrs = stripAuth(i.headers);
     const hdrLines = Object.entries(hdrs)
       .filter(([, v]) => v)
-      .map(([k, v]) => `  -H "${k}: ${v.replace(/"/g, '\\"')}"`)
+      .map(([k, v]) => `  -H ${shQuote(`${k}: ${v}`)}`)
       .join(' \\\n');
     const lines = reqs
       .map((r) => {
@@ -1752,7 +1903,7 @@ function genCurl(i: CodegenInputs): string {
         const body = r.body
           ? ` \\\n  --data-raw '${JSON.stringify(r.body).replace(/'/g, "'\\''")}'`
           : '';
-        return `${desc}curl -X ${r.method} --globoff "${url}" \\\n  -H "Authorization: Bearer <access-token>" \\\n${hdrLines}${body}`;
+        return `${desc}curl -X ${r.method} --globoff ${shQuote(url)} \\\n  -H "Authorization: Bearer <access-token>" \\\n${hdrLines}${body}`;
       })
       .join('\n\n');
     return `# cURL — multi-request (Associate / Disassociate over a collection)\n# Each association is a separate request per the docs.\n\n${lines}\n`;
@@ -1761,20 +1912,21 @@ function genCurl(i: CodegenInputs): string {
   const hdrs = stripAuth(i.headers);
   const hdrLines = Object.entries(hdrs)
     .filter(([, v]) => v)
-    .map(([k, v]) => `  -H "${k}: ${v.replace(/"/g, '\\"')}"`)
+    .map(([k, v]) => `  -H ${shQuote(`${k}: ${v}`)}`)
     .join(' \\\n');
   const body =
     i.method !== 'GET' && i.method !== 'DELETE'
       ? ` \\\n  --data-raw '${JSON.stringify(i.body ?? {}).replace(/'/g, "'\\''")}'`
       : '';
   return `# cURL — shell context
-# --globoff prevents curl from interpreting the literal $ in OData query options
+# The URL is single-quoted so the shell doesn't expand $select / $filter / $ref
+# --globoff stops curl's own [] {} URL globbing (OData literals can contain them)
 # --compressed asks the server for gzipped responses
 
 curl -X ${i.method} \\
   --globoff \\
   --compressed \\
-  "${url}" \\
+  ${shQuote(url)} \\
   -H "Authorization: Bearer <access-token>" \\
 ${hdrLines}${body}
 `;

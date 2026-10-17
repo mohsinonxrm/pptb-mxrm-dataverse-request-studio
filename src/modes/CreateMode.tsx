@@ -47,6 +47,7 @@ import {
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
 import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
+import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories } from '../primitives/advisories';
 import { Warning20Filled } from '@fluentui/react-icons';
 import { CodeView } from '../views/CodeView';
@@ -100,7 +101,10 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('create');
   const [state, setState] = useState(initialState);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
-  useLiveTable(state.table || null);
+  // The live table is a memo dependency below: build*() reads metadata via
+  // findTable(), which is empty until the fetch lands — keying on `state`
+  // alone left the URL / Code tab blank after picking a table (#78).
+  const { table: liveTable } = useLiveTable(state.table || null);
   const { entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
@@ -112,8 +116,8 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
 
-  const built = useMemo(() => buildCreate(state), [state]);
-  const body = useMemo(() => buildCreateBody(state), [state]);
+  const built = useMemo(() => buildCreate(state), [state, liveTable]);
+  const body = useMemo(() => buildCreateBody(state), [state, liveTable]);
   const tbl = findTable(state.table);
 
   const markDirty = (id: string) =>
@@ -220,7 +224,13 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   }, [state.headers, state.duplicateDetection, state.bypass]);
 
   // ── Advisories — bypass family ──
-  const advisories = useMemo(() => detectBypassAdvisories(state.bypass, 'bypass'), [state.bypass]);
+  const advisories = useMemo(
+    () => [
+      ...detectBypassAdvisories(state.bypass, 'bypass'),
+      ...detectUnsentHeaderAdvisories({ op: 'create', bypass: state.bypass }),
+    ],
+    [state.bypass],
+  );
   const bypassBlocker = disabledReasonFromAdvisories(advisories);
 
   // ── Save / Load ──

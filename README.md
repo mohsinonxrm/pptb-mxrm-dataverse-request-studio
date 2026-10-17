@@ -8,7 +8,7 @@ and file / image / attachment operations.
 Built for [Power Platform ToolBox](https://www.powerplatformtoolbox.com/) with
 React 18, Fluent UI v9, TypeScript, and live Dataverse metadata integration.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+[![npm](https://img.shields.io/npm/v/@mohsinonxrm/pptb-dataverse-request-studio?label=npm)](https://www.npmjs.com/package/@mohsinonxrm/pptb-dataverse-request-studio)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript)
 ![Fluent UI](https://img.shields.io/badge/Fluent%20UI-v9-0078D4?logo=microsoft)
@@ -201,7 +201,7 @@ npm run preview
 # Validate manifest against PPTB registry rules
 npm run validate
 
-# Pre-publish: validate → build → shrinkwrap
+# Pre-publish: validate → build
 npm run finalize-package
 ```
 

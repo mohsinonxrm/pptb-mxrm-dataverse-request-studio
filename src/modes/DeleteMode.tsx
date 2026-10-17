@@ -82,6 +82,7 @@ import { PreconditionEditor, preconditionToHeader } from '../editors/Preconditio
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
 import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
+import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
@@ -135,7 +136,10 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('delete');
   const [state, setState] = useState(initialState);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
-  useLiveTable(state.table || null);
+  // The live table is a memo dependency below: build*() reads metadata via
+  // findTable(), which is empty until the fetch lands — keying on `state`
+  // alone left the URL / Code tab blank after picking a table (#78).
+  const { table: liveTable } = useLiveTable(state.table || null);
   const { entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
@@ -147,7 +151,7 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
 
-  const built = useMemo(() => buildDelete(state), [state]);
+  const built = useMemo(() => buildDelete(state), [state, liveTable]);
   const tbl = findTable(state.table);
 
   // ── Live row preview ──
@@ -164,7 +168,14 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
   // The picker primary wins when available; the fetch fills the rest
   // (and can fail silently — the typed-confirm still works off the
   // picker primary).
-  const [pickedPrimaryFromPicker, setPickedPrimaryFromPicker] = useState<string>('');
+  // Keyed by the record it was picked for: any other path that changes
+  // `recordId` (saved-request load, GUID paste) must not inherit the
+  // previous pick's name (#46).
+  const [pickerPick, setPickerPick] = useState<{ id: string; name: string } | null>(null);
+  const pickedPrimaryFromPicker =
+    pickerPick && state.recordId && pickerPick.id.toLowerCase() === state.recordId.toLowerCase()
+      ? pickerPick.name
+      : '';
   const [pickedRow, setPickedRow] = useState<Record<string, unknown> | null>(null);
   const [pickedRowLoading, setPickedRowLoading] = useState(false);
   const [pickedRowError, setPickedRowError] = useState<string | null>(null);
@@ -203,20 +214,27 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     // PPTB's queryData accepts both forms in different paths but the
     // single-record form is more reliable with the leading slash.
     const url = `/${tbl.entitySetName}(${state.recordId})?$select=${[...cols].join(',')}`;
+    // Drop the previous record's row before fetching, so its name can't be
+    // offered for the typed confirmation while this fetch is in flight (#46).
+    setPickedRow(null);
+    setPickedRowError(null);
     setPickedRowLoading(true);
     window.dataverseAPI
       .queryData(url)
       .then((res) => {
         if (cancelled) return;
-        // PPTB normalizes single-record responses into either
-        // `{ value: <recordObject> }` OR `{ value: [<recordObject>] }`
-        // depending on the host build. Handle both.
+        // PPTB returns single-record responses as `{ value: <record> }`,
+        // `{ value: [<record>] }` or — PPTB 1.2.7 — the bare entity
+        // (`{ "@odata.context": "…/$entity", <pk>: … }`). Handle all three;
+        // missing the bare shape left the confirmation without a name (#46).
         const v = (res as { value?: unknown } | null)?.value;
         const row = Array.isArray(v)
           ? ((v[0] as Record<string, unknown> | undefined) ?? null)
           : v && typeof v === 'object'
             ? (v as Record<string, unknown>)
-            : null;
+            : res && typeof res === 'object' && tbl.primaryKey in (res as object)
+              ? (res as Record<string, unknown>)
+              : null;
         setPickedRow(row);
         setPickedRowLoading(false);
         setPickedRowError(null);
@@ -312,6 +330,14 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     // Bypass-pane signals (legacy detector — composes business-logic +
     // step-id + flow-suppress advisories into the same Advisory shape).
     out.push(...detectBypassAdvisories(state.bypass, 'bypass'));
+    out.push(
+      ...detectUnsentHeaderAdvisories({
+        op: 'delete',
+        concurrency: state.concurrency,
+        bypass: state.bypass,
+        bypassCustomPlugins: state.bypassCustomPlugins,
+      }),
+    );
 
     if (state.table && state.recordId && !isValidGuid(state.recordId)) {
       out.push({
@@ -354,7 +380,14 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     }
 
     return out;
-  }, [state.bypass, state.table, state.recordId, state.scope]);
+  }, [
+    state.bypass,
+    state.bypassCustomPlugins,
+    state.concurrency,
+    state.table,
+    state.recordId,
+    state.scope,
+  ]);
 
   const bypassBlocker = disabledReasonFromAdvisories(advisories);
 
@@ -370,13 +403,15 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
             ? 'Provide an etag value or switch the concurrency mode.'
             : state.headers.some((h) => h.enabled && !h.name)
               ? 'Fix empty header name.'
-              : requireTypedConfirm && !primaryName
-                ? 'Waiting for record metadata — pick again or check the GUID.'
-                : requireTypedConfirm && !typedConfirmOk
-                  ? `Type the record name "${primaryName}" to confirm.`
-                  : requireTypedConfirm && !state.acknowledged
-                    ? 'Acknowledge that this action cannot be undone.'
-                    : bypassBlocker;
+              : requireTypedConfirm && pickedRowLoading && !pickedPrimaryFromPicker
+                ? 'Loading the record…'
+                : requireTypedConfirm && !primaryName
+                  ? 'Waiting for record metadata — pick again or check the GUID.'
+                  : requireTypedConfirm && !typedConfirmOk
+                    ? `Type the record name "${primaryName}" to confirm.`
+                    : requireTypedConfirm && !state.acknowledged
+                      ? 'Acknowledge that this action cannot be undone.'
+                      : bypassBlocker;
 
   const onExecute = async () => {
     setLoading(true);
@@ -569,11 +604,11 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
               dirty: new Set(['target', 'scope']),
             }));
             setResult(null);
-            setPickedPrimaryFromPicker('');
+            setPickerPick(null);
           }}
           onRecordChange={(id, primary) => {
             set('recordId', id, 'target');
-            setPickedPrimaryFromPicker(primary ?? '');
+            setPickerPick(id && primary ? { id, name: primary } : null);
           }}
           onProceedToConfirmation={() => setActivePath('confirmation')}
         />

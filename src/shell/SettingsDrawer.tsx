@@ -53,7 +53,7 @@ import {
   ArrowClockwise20Regular,
 } from '@fluentui/react-icons';
 import type { DisplaySettings, ValueDisplayMode, EntityScopeMode } from '../state/displaySettings';
-import type { AccessSummary } from '../host/pptbClient';
+import type { AccessSummary, Solution } from '../host/pptbClient';
 import { metadata } from '../host/metadataProvider';
 import { usePublisherFilter } from '../host/usePublisherFilter';
 import { useSolutionFilter } from '../host/useSolutionFilter';
@@ -414,11 +414,7 @@ function PublisherSolutionPickers({
     for (const p of publishers) m.set(p.publisherid, p.friendlyname || p.uniquename);
     return m;
   }, [publishers]);
-  const solutionById = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const s of solutions) m.set(s.solutionid, s.friendlyname || s.uniquename);
-    return m;
-  }, [solutions]);
+  const solutionLabels = useSolutionLabels(solutions);
 
   return (
     <>
@@ -467,7 +463,7 @@ function PublisherSolutionPickers({
         <MultiPicker
           values={selectedSolutionIds}
           options={solutions.map((s) => s.solutionid)}
-          labelByKey={solutionById}
+          {...solutionLabels}
           placeholder="Search solutions…"
           onChange={onSolutionIdsChange}
           disabled={selectedPublisherIds.length === 0}
@@ -488,11 +484,7 @@ function SolutionOnlyPicker({
   onSolutionIdsChange: (ids: string[]) => void;
 }) {
   const { solutions, solutionsLoading, solutionsError } = useSolutionFilter();
-  const solutionById = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const s of solutions) m.set(s.solutionid, s.friendlyname || s.uniquename);
-    return m;
-  }, [solutions]);
+  const solutionLabels = useSolutionLabels(solutions);
 
   return (
     <div style={{ marginTop: tokens.spacingVerticalM, marginBottom: tokens.spacingVerticalM }}>
@@ -516,12 +508,46 @@ function SolutionOnlyPicker({
       <MultiPicker
         values={selectedSolutionIds}
         options={solutions.map((s) => s.solutionid)}
-        labelByKey={solutionById}
+        {...solutionLabels}
         placeholder="Search solutions…"
         onChange={onSolutionIdsChange}
       />
     </div>
   );
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Solution labels (#40)
+// ───────────────────────────────────────────────────────────────────────
+// Display names alone are ambiguous — a patch shares its parent's friendly
+// name. Options get a secondary line with the unique name, version and
+// managed state (all already selected by the solution queries), selected
+// tags carry the version, and search matches the unique name too.
+
+function useSolutionLabels(solutions: Solution[]): {
+  labelByKey: Map<string, string>;
+  detailByKey: Map<string, string>;
+  tagLabelByKey: Map<string, string>;
+} {
+  return useMemo(() => {
+    const labelByKey = new Map<string, string>();
+    const detailByKey = new Map<string, string>();
+    const tagLabelByKey = new Map<string, string>();
+    for (const s of solutions) {
+      const label = s.friendlyname || s.uniquename;
+      // `version` only — `solutionpackageversion` is the package format
+      // version (e.g. "9.2"), not the solution's own version.
+      const version = s.version || undefined;
+      const managed = s.ismanaged === undefined ? undefined : s.ismanaged ? 'Managed' : 'Unmanaged';
+      labelByKey.set(s.solutionid, label);
+      detailByKey.set(
+        s.solutionid,
+        [s.uniquename, version && `v${version}`, managed].filter(Boolean).join(' · '),
+      );
+      tagLabelByKey.set(s.solutionid, version ? `${label} (v${version})` : label);
+    }
+    return { labelByKey, detailByKey, tagLabelByKey };
+  }, [solutions]);
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -531,6 +557,8 @@ function MultiPicker({
   values,
   options,
   labelByKey,
+  detailByKey,
+  tagLabelByKey,
   placeholder,
   disabled,
   onChange,
@@ -538,6 +566,10 @@ function MultiPicker({
   values: string[];
   options: string[];
   labelByKey: Map<string, string>;
+  /** Optional secondary line under each option; also searchable. */
+  detailByKey?: Map<string, string>;
+  /** Optional label for selected tags (defaults to `labelByKey`). */
+  tagLabelByKey?: Map<string, string>;
   placeholder?: string;
   disabled?: boolean;
   onChange: (next: string[]) => void;
@@ -550,13 +582,26 @@ function MultiPicker({
     noOptionsElement: <TagPickerOption value="__no-matches">No matches</TagPickerOption>,
     renderOption: (key) => (
       <TagPickerOption key={key} value={key} text={labelByKey.get(key) ?? key}>
-        {labelByKey.get(key) ?? key}
+        {detailByKey?.get(key) ? (
+          // Detail as a true second line under the name. Fluent's
+          // `secondaryContent` renders a squeezed right-hand column instead.
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <span>{labelByKey.get(key) ?? key}</span>
+            <Caption1 style={{ color: tokens.colorNeutralForeground3, wordBreak: 'break-all' }}>
+              {detailByKey.get(key)}
+            </Caption1>
+          </div>
+        ) : (
+          (labelByKey.get(key) ?? key)
+        )}
       </TagPickerOption>
     ),
     filter: (key) => {
       if (values.includes(key)) return false;
+      const q = query.toLowerCase();
       const label = labelByKey.get(key) ?? key;
-      return label.toLowerCase().includes(query.toLowerCase());
+      const detail = detailByKey?.get(key) ?? '';
+      return label.toLowerCase().includes(q) || detail.toLowerCase().includes(q);
     },
   });
 
@@ -580,8 +625,14 @@ function MultiPicker({
               size="small"
               dismissible
               dismissIcon={{ 'aria-label': 'remove' }}
+              title={detailByKey?.get(k)}
+              // Long names + version must not overflow the picker.
+              style={{ maxWidth: '100%' }}
+              primaryText={{
+                style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+              }}
             >
-              {labelByKey.get(k) ?? k}
+              {tagLabelByKey?.get(k) ?? labelByKey.get(k) ?? k}
             </Tag>
           ))}
         </TagPickerGroup>

@@ -62,6 +62,7 @@ import type { RetrieveNextLinkState, RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { getEnv } from '../mock/environment';
 import type { Advisory } from '../primitives/advisories';
+import { decodeForDisplay } from '../primitives/decodeForDisplay';
 
 const initialState = (): RetrieveNextLinkState => ({
   url: '',
@@ -382,7 +383,7 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
                 {analysis.params.map((p, i) => (
                   <span key={i} style={{ display: 'contents' }}>
                     <span style={{ color: tokens.colorBrandForeground1 }}>{p.key}</span>
-                    <span style={{ wordBreak: 'break-all' }}>{decodeURIComponent(p.value)}</span>
+                    <span style={{ wordBreak: 'break-all' }}>{decodeForDisplay(p.value)}</span>
                   </span>
                 ))}
               </div>

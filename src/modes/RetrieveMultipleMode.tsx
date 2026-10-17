@@ -135,7 +135,10 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   //
   // The hook intentionally returns nothing we use here; its side effect
   // (subscription + warming) is the point.
-  useLiveTable(state.table || null);
+  // The live table is a memo dependency below: build*() reads metadata via
+  // findTable(), which is empty until the fetch lands — keying on `state`
+  // alone left the URL / Code tab blank after picking a table (#78).
+  const { table: liveTable } = useLiveTable(state.table || null);
   // Pre-warm RELATED entities referenced by nav-path filters / lambdas /
   // $expand / $apply / $orderby so the encoders resolve leaf column TYPES
   // against the correct entity (issue #33) — even on saved-request reload,
@@ -174,7 +177,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     return currentHash !== lastSavedHash;
   }, [state.table, lastSavedHash, currentHash]);
 
-  const built = useMemo(() => buildRetrieveMultiple(state), [state]);
+  const built = useMemo(() => buildRetrieveMultiple(state), [state, liveTable]);
   const tbl = findTable(state.table);
   const filterCount = useMemo(() => countRules(state.filter), [state.filter]);
 

@@ -45,6 +45,7 @@ import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../edit
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
 import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
+import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { PreconditionEditor, preconditionToHeader } from '../editors/PreconditionEditor';
 import { CodeView } from '../views/CodeView';
@@ -109,7 +110,10 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('upsert');
   const [state, setState] = useState(initialState);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
-  useLiveTable(state.table || null);
+  // The live table is a memo dependency below: build*() reads metadata via
+  // findTable(), which is empty until the fetch lands — keying on `state`
+  // alone left the URL / Code tab blank after picking a table (#78).
+  const { table: liveTable } = useLiveTable(state.table || null);
   const { entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
@@ -121,8 +125,8 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
 
-  const built = useMemo(() => buildUpsert(state), [state]);
-  const body = useMemo(() => buildUpsertBody(state), [state]);
+  const built = useMemo(() => buildUpsert(state), [state, liveTable]);
+  const body = useMemo(() => buildUpsertBody(state), [state, liveTable]);
   const tbl = findTable(state.table);
 
   const markDirty = (id: string) =>
@@ -239,7 +243,14 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Advisories — bypass + GUID + alt-key host limitation ──
   const advisories = useMemo<Advisory[]>(() => {
-    const out: Advisory[] = [...detectBypassAdvisories(state.bypass, 'bypass')];
+    const out: Advisory[] = [
+      ...detectBypassAdvisories(state.bypass, 'bypass'),
+      ...detectUnsentHeaderAdvisories({
+        op: 'upsert',
+        concurrency: state.concurrency,
+        bypass: state.bypass,
+      }),
+    ];
 
     if (state.key.kind === 'guid' && state.key.recordId && !isValidGuid(state.key.recordId)) {
       out.push({
@@ -278,7 +289,7 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
     }
 
     return out;
-  }, [state.bypass, state.key, tbl]);
+  }, [state.bypass, state.concurrency, state.key, tbl]);
   const bypassBlocker = disabledReasonFromAdvisories(advisories);
 
   // ── Save / Load ──

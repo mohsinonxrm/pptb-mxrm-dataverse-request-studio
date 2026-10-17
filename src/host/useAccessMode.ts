@@ -10,8 +10,8 @@
 //      first time the user opens the entity picker.
 
 import { useState, useEffect } from 'react';
-import { getAccessSummary, getAllAdvancedFindEntities, type AccessSummary } from './pptbClient';
-import { metadataCache } from './cache';
+import { getAccessSummary, type AccessSummary } from './pptbClient';
+import { loadAllEntities } from './dataverseMetadata';
 
 export function useAccessMode() {
   const [accessSummary, setAccessSummary] = useState<AccessSummary | null>(null);
@@ -33,15 +33,13 @@ export function useAccessMode() {
 
           // Pre-warm: most users will open the entity picker right after
           // mount. Fire the all-entities fetch in the background so it's
-          // hot when they get there.
+          // hot when they get there. Goes through the shared loader so it
+          // de-dupes with the picker's own request and caches the same
+          // unfiltered list — the old AF-only prewarm overwrote it (#44).
           if (summary && !summary.noAccessMode) {
-            getAllAdvancedFindEntities()
-              .then((entities) => {
-                metadataCache.setAllEntities(entities);
-              })
-              .catch((err) => {
-                console.warn('[useAccessMode] failed to preload entity metadata:', err);
-              });
+            loadAllEntities().catch((err) => {
+              console.warn('[useAccessMode] failed to preload entity metadata:', err);
+            });
           }
         }
       } catch (err) {

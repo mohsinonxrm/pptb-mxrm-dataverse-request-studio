@@ -5,6 +5,94 @@ All notable changes to Dataverse Request Studio will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.4] - 2026-10-17
+
+Bug-fix release. Every fix below was verified end-to-end in Power Platform
+ToolBox 1.2.7 against a live Dataverse environment.
+
+### 🐛 Fixed
+
+- **Table list loads on first open**
+  ([#41](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/41),
+  [#44](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/44)).
+  The entity list waits for the PPTB connection instead of showing
+  "0 entities" until a tab switch. Load errors and "no active connection"
+  show in the Target pane with a **Retry** button. Solution scoping no longer
+  caches an empty list, and "All Entities" no longer drops tables that aren't
+  Advanced-Find-eligible.
+- **Request headers PPTB can't send block Execute instead of being silently
+  dropped**
+  ([#45](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/45)).
+  An ETag precondition, Upsert "create-only" / "update-only", or any bypass
+  option now disables Execute with an explanation. Before, an Upsert set to
+  create-only could overwrite an existing row. The default Update
+  (`If-Match: *`) still runs. Sending the headers is planned with PPTB 1.2.7
+  support ([#43](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/43)).
+- **Delete confirmation shows the right record after loading a saved request**
+  ([#46](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/46)).
+  The name is resolved for the saved record id: PPTB 1.2.7's bare single-record
+  response is now recognised. The record picker no longer keeps the previously
+  picked name.
+- **Execute can't fire twice while a request is running**
+  ([#47](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/47)).
+  A held or repeated Ctrl+Enter no longer creates duplicate records.
+- **No crash on a literal `%`**
+  ([#48](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/48))
+  in Retrieve NextLink's parsed view or Execute Function's URL preview.
+- **cURL and PowerShell snippets keep `$select`, `$filter`, `$top`, `$ref`**
+  ([#49](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/49)).
+  URLs and headers are single-quoted, so the shell no longer expands them.
+- **JavaScript snippets are valid with quotes and reserved characters**
+  ([#50](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/50))
+  — fetch, Xrm.WebApi, executeMultiple and XHR.
+- **Power Automate tab no longer says "Delete a row" for a column delete**
+  ([#51](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/51)).
+  Requests the connector's row actions can't express map to
+  "Invoke an HTTP request".
+- **URL bar and Code tab fill in as soon as a table is picked**
+  ([#78](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/78)).
+- **Paste OData URL accepts an `@odata.nextLink`**
+  ([#83](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/83)).
+  `$skiptoken` is dropped with a warning instead of rejecting the paste.
+- **Tool icon ships at `dist/icons/icon.svg`**
+  ([#25](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/25)),
+  where PPTB looks for it. Prerelease builds use the Insider icon. The icon's
+  `viewBox` is cropped to the hexagon, so it fills PPTB's 20 px icon slot.
+
+### ✨ Improved
+
+- **Solution pickers show unique name, version and managed state**
+  ([#40](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/40))
+  on a second line under each name, so patches can be told apart. Search
+  matches them too.
+
+### 📦 Packaging
+
+- **No more `npm-shrinkwrap.json` in the package.** Installing the tool no
+  longer pins every transitive dependency. `finalize-package` now runs
+  `validate` → `build`. The lockfile is committed as `package-lock.json`,
+  which npm never publishes, so `npm ci` works in the repo
+  ([#65](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/65)).
+- **README:** the version badge now reads from npm instead of a hard-coded
+  version.
+
+### ⚠️ Known issues
+
+- **The tool icon shows in a single colour in Power Platform ToolBox 1.2.7,
+  and not at all when the tool is loaded locally.** PPTB draws every SVG tool
+  icon as a single-colour mask. Colour icons will render once
+  [PowerPlatformToolBox/desktop-app#738](https://github.com/PowerPlatformToolBox/desktop-app/pull/738)
+  ships
+  ([#25](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/25)).
+- **Execute Action / Function / Custom API** can't list operations on
+  environments whose `$metadata` is larger than 16 MB. This is a regression
+  in Power Platform ToolBox 1.2.7; it worked in 1.2.6
+  ([#79](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/79),
+  [PowerPlatformToolBox/desktop-app#736](https://github.com/PowerPlatformToolBox/desktop-app/issues/736)).
+  The Execute modes now explain the limit instead of showing the raw host
+  error. The same host limit fails any single response over 16 MB. Use
+  `$top` / `$select` for large tables.
+
 ## [1.1.3] - 2026-06-10
 
 ### ✨ Added

@@ -1,9 +1,7 @@
 // useScopedEntities — entity list narrowed by the user's Settings drawer
 // selections. Switches data source by `settings.entityScopeMode`:
 //
-//   - 'all':                returns the unfiltered list from listEntities()
-//                           (also honors the persisted advancedFindOnly toggle
-//                           by filtering client-side when set).
+//   - 'all':                returns the unfiltered list from listEntities().
 //   - 'solution-only':      fetches solution components for the selected
 //                           solutions and filters the all-entities list to
 //                           that set.
@@ -12,17 +10,23 @@
 //
 // We always start from the cached `loadAllEntities()` result — per-component
 // lookups never trigger a fresh entity metadata fetch.
+//
+// Both layers wait for an active PPTB connection and re-run when it arrives
+// or changes. A fetch fired before the host handshake resolved used to fail
+// once and never retry, leaving "0 entities" until a remount (#41).
 
-import { useEffect, useMemo, useState } from 'react';
-import { getSolutionComponents, filterCachedEntitiesByNames } from './pptbClient';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { loadSolutionEntityNames } from './dataverseMetadata';
 import { metadata, type EntityListItem } from './metadataProvider';
-import { metadataCache } from './cache';
+import { useHostSession } from './HostContext';
 import { usePersistedSettings } from './usePersistedSettings';
 
 export interface UseScopedEntitiesResult {
   entities: EntityListItem[];
   loading: boolean;
   error: string | null;
+  /** Re-run the entity list (and solution scope) fetch after an error. */
+  retry: () => void;
   /**
    * True when the entity list is empty because the user has not yet
    * configured the Query Scope in Settings (scoped mode with no solutions
@@ -34,22 +38,50 @@ export interface UseScopedEntitiesResult {
   scopeMode: import('../state/displaySettings').EntityScopeMode;
 }
 
+const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+const NO_CONNECTION =
+  'No active Dataverse connection. Connect to an environment in Power Platform ToolBox, then Retry.';
+
 export function useScopedEntities(): UseScopedEntitiesResult {
   const [settings] = usePersistedSettings();
+  const session = useHostSession();
+  // Inside PPTB, wait for the host handshake and an active connection before
+  // querying. Standalone runs the fetch anyway so the "not available" error
+  // is surfaced. Handshake done without a connection is an error state, not
+  // an endless "Loading…".
+  const ready = !session.embedded || session.connected;
+  const noConnection = session.embedded && session.handshakeDone && !session.connected;
+  const connectionKey = `${ready}|${noConnection}|${session.environmentUrl}`;
+  const [attempt, setAttempt] = useState(0);
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
+
   const [all, setAll] = useState<EntityListItem[]>([]);
   const [allLoading, setAllLoading] = useState(true);
   const [allError, setAllError] = useState<string | null>(null);
 
   // ── Layer 1: unfiltered entity list ──
   useEffect(() => {
+    if (noConnection) {
+      setAll([]);
+      setAllLoading(false);
+      setAllError(NO_CONNECTION);
+      return;
+    }
+    if (!ready) {
+      setAllLoading(true);
+      return;
+    }
     let cancelled = false;
+    setAllLoading(true);
+    setAllError(null);
     metadata
       .listEntities()
       .then((list) => {
         if (!cancelled) setAll(list);
       })
       .catch((e) => {
-        if (!cancelled) setAllError(e instanceof Error ? e.message : String(e));
+        if (!cancelled) setAllError(errorText(e));
       })
       .finally(() => {
         if (!cancelled) setAllLoading(false);
@@ -57,7 +89,8 @@ export function useScopedEntities(): UseScopedEntitiesResult {
     return () => {
       cancelled = true;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectionKey, attempt]);
 
   // ── Layer 2: solution-component cascade ──
   const solutionKey = settings.selectedSolutionIds.join('|');
@@ -69,46 +102,39 @@ export function useScopedEntities(): UseScopedEntitiesResult {
     if (settings.entityScopeMode === 'all') {
       setScopedNames(null);
       setScopedError(null);
+      setScopedLoading(false);
       return;
     }
     if (settings.selectedSolutionIds.length === 0) {
       setScopedNames([]);
       setScopedError(null);
+      setScopedLoading(false);
+      return;
+    }
+    if (!ready) {
+      // Layer 1 reports a missing connection; don't spin here as well.
+      setScopedLoading(!noConnection);
       return;
     }
 
     let cancelled = false;
     setScopedLoading(true);
     setScopedError(null);
-
-    // Cache hit → instant.
-    const cached = metadataCache.getFilteredEntities(settings.selectedSolutionIds);
-    if (cached) {
-      setScopedNames(cached.map((e) => e.LogicalName));
-      setScopedLoading(false);
-      return;
-    }
-
-    (async () => {
-      try {
-        const components = await getSolutionComponents(settings.selectedSolutionIds);
-        if (cancelled) return;
-        const names = Array.from(new Set(components.map((c) => c.msdyn_name).filter(Boolean)));
-        // Cache the filtered entity-meta list too so re-renders short-circuit.
-        const data = filterCachedEntitiesByNames(names);
-        metadataCache.setFilteredEntities(settings.selectedSolutionIds, data);
-        setScopedNames(names);
-      } catch (e) {
-        if (!cancelled) setScopedError(e instanceof Error ? e.message : String(e));
-      } finally {
+    loadSolutionEntityNames(settings.selectedSolutionIds)
+      .then((names) => {
+        if (!cancelled) setScopedNames(names);
+      })
+      .catch((e) => {
+        if (!cancelled) setScopedError(errorText(e));
+      })
+      .finally(() => {
         if (!cancelled) setScopedLoading(false);
-      }
-    })();
+      });
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.entityScopeMode, solutionKey]);
+  }, [settings.entityScopeMode, solutionKey, connectionKey, attempt]);
 
   // ── Compose visible list ──
   const visible = useMemo(() => {
@@ -127,6 +153,7 @@ export function useScopedEntities(): UseScopedEntitiesResult {
     entities: visible,
     loading: allLoading || scopedLoading,
     error: allError ?? scopedError,
+    retry,
     needsSetup,
     scopeMode: settings.entityScopeMode,
   };

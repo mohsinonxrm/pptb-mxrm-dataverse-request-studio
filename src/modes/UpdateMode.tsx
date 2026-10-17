@@ -60,6 +60,7 @@ import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../edit
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
 import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
+import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { PreconditionEditor } from '../editors/PreconditionEditor';
 import { UpdateDiffPane } from '../editors/UpdateDiffPane';
@@ -133,7 +134,10 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   // (b) tbl metadata resolving from the live registry. Before this, the
   // original-row fetch effect would early-return on the missing tbl, leaving
   // originalLoading=false + originalRow=null → diff renders the error state.
-  const { loading: tableLoading } = useLiveTable(state.table || null);
+  // The live table is a memo dependency below: build*() reads metadata via
+  // findTable(), which is empty until the fetch lands — keying on `state`
+  // alone left the URL / Code tab blank after picking a table (#78).
+  const { loading: tableLoading, table: liveTable } = useLiveTable(state.table || null);
   const { entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
@@ -146,10 +150,17 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
   // Primary name from the RecordPicker — used as a fallback label until
   // the live row fetch completes (Search-mode picks deliver this for free).
-  const [pickedPrimaryFromPicker, setPickedPrimaryFromPicker] = useState<string>('');
+  // Keyed by the record it was picked for: any other path that changes
+  // `recordId` (saved-request load, GUID paste) must not inherit the
+  // previous pick's name (#46).
+  const [pickerPick, setPickerPick] = useState<{ id: string; name: string } | null>(null);
+  const pickedPrimaryFromPicker =
+    pickerPick && state.recordId && pickerPick.id.toLowerCase() === state.recordId.toLowerCase()
+      ? pickerPick.name
+      : '';
 
-  const built = useMemo(() => buildUpdate(state), [state]);
-  const body = useMemo(() => buildUpdateBody(state), [state]);
+  const built = useMemo(() => buildUpdate(state), [state, liveTable]);
+  const body = useMemo(() => buildUpdateBody(state), [state, liveTable]);
   const tbl = findTable(state.table);
 
   const markDirty = (id: string) =>
@@ -194,6 +205,9 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
       setOriginalRow(null);
       return;
     }
+    // Drop the previous record's row before fetching so its name / diff
+    // baseline can't show against a different record id (#46).
+    setOriginalRow(null);
     setOriginalLoading(true);
     // Use the same leading-slash URL form as executeRetrieveSingle — PPTB's
     // queryData is reliable with this form for single-record fetches.
@@ -390,7 +404,14 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   // We still let the user author the request (correct URL + body in the Code
   // tab) but block Execute and explain why.
   const advisories = useMemo<Advisory[]>(() => {
-    const out: Advisory[] = [...detectBypassAdvisories(state.bypass, 'bypass')];
+    const out: Advisory[] = [
+      ...detectBypassAdvisories(state.bypass, 'bypass'),
+      ...detectUnsentHeaderAdvisories({
+        op: 'update',
+        concurrency: state.concurrency,
+        bypass: state.bypass,
+      }),
+    ];
 
     if (state.table && state.recordId && !isValidGuid(state.recordId)) {
       out.push({
@@ -429,7 +450,15 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
     }
 
     return out;
-  }, [state.bypass, state.table, state.recordId, state.method, state.putColumn, tbl]);
+  }, [
+    state.bypass,
+    state.concurrency,
+    state.table,
+    state.recordId,
+    state.method,
+    state.putColumn,
+    tbl,
+  ]);
   const bypassBlocker = disabledReasonFromAdvisories(advisories);
 
   // ── Sidebar ──
@@ -631,12 +660,12 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
               dirty: new Set(['target', 'fieldset', 'method']),
             }));
             setResult(null);
-            setPickedPrimaryFromPicker('');
+            setPickerPick(null);
           }}
           recordId={state.recordId}
           onRecordChange={(id, primary) => {
             set('recordId', id, 'target');
-            setPickedPrimaryFromPicker(primary ?? '');
+            setPickerPick(id && primary ? { id, name: primary } : null);
           }}
           group="write"
           sub="Single-record update — pick the entity set and the record GUID."

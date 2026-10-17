@@ -120,15 +120,18 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('manage-file');
   const [state, setState] = useState(initialState);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
-  useLiveTable(state.table || null);
+  // The live table is a memo dependency below: build*() reads metadata via
+  // findTable(), which is empty until the fetch lands — keying on `state`
+  // alone left the URL / Code tab blank after picking a table (#78).
+  const { table: liveTable } = useLiveTable(state.table || null);
   const [activePath, setActivePath] = useState<string>('pipeline');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
-  const built = useMemo(() => buildManageFile(state), [state]);
-  const pipeline = useMemo(() => manageFilePipeline(state), [state]);
+  const built = useMemo(() => buildManageFile(state), [state, liveTable]);
+  const pipeline = useMemo(() => manageFilePipeline(state), [state, liveTable]);
   const tbl = findTable(state.table);
   const fileCol = useMemo(
     () =>
