@@ -25,9 +25,9 @@
 //      Type=mscrm.<entity> → bound-to-entity; Type=Collection(mscrm.<entity>)
 //      → bound-to-collection; otherwise unbound
 //   ✅ Composable functions (IsComposable="true")
-//   ✅ Custom API / Custom Action source classification (heuristic — custom
-//      messages have a publisher prefix like `new_` or `sample_`; OOB ones
-//      live under `Microsoft.Dynamics.CRM`)
+//   ✅ Custom API / Custom Action / OOB source classification — from the
+//      `customapis` + custom-process-action `workflows` rows, with a
+//      name-prefix heuristic only as a fallback (see `classifySource`)
 //
 // Things we intentionally DON'T parse here:
 //   ❌ EntityType / ComplexType / EnumType — those come from the regular
@@ -68,6 +68,7 @@ async function memoize<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
 
 const K_CSDL_RAW = 'csdl:raw';
 const K_CSDL_ACTIONS = 'csdl:actions';
+const K_MESSAGE_SOURCES = 'csdl:message-sources';
 
 // ── Public surface ──────────────────────────────────────────────────────
 
@@ -75,13 +76,32 @@ const K_CSDL_ACTIONS = 'csdl:actions';
  * Fetch + parse the live CSDL into `CsdlAction[]`. Cached for the session.
  * The raw XML is cached separately so re-parsing (e.g. after a manual cache
  * clear) doesn't re-fetch.
+ *
+ * `source` (oob / custom-api / custom-action) comes from Dataverse data, not
+ * from the name (#54): the `customapis` and custom-process-action
+ * `workflows` lookups run in parallel with the CSDL download and are cached
+ * with it. If either lookup fails (typically missing read privilege), the
+ * name-prefix heuristic fills in for that half — see `classifySource`.
  */
 export async function fetchCsdlActions(): Promise<CsdlAction[]> {
   return memoize(K_CSDL_ACTIONS, async () => {
     // fetchCsdlDocument is itself memoized so a second-load skips the network.
-    const xml = await fetchCsdlDocument();
-    return parseCsdl(xml);
+    const [xml, sources] = await Promise.all([fetchCsdlDocument(), fetchMessageSources()]);
+    return parseCsdl(xml).map((a) => ({ ...a, source: classifySource(a.name, sources) }));
   });
+}
+
+/**
+ * Which of the two classification lookups succeeded. `false` means that
+ * half of the classification fell back to the name heuristic — the Execute
+ * Custom API / Custom Action modes surface a notice in that case.
+ */
+export async function fetchSourceClassificationStatus(): Promise<{
+  customApis: boolean;
+  customActions: boolean;
+}> {
+  const s = await fetchMessageSources();
+  return { customApis: s.customApis !== null, customActions: s.customActions !== null };
 }
 
 // ── Optional: provider object matching the metadata provider's shape ────
@@ -432,7 +452,8 @@ function parseActionOrFunction(
     parameters: params,
     returnType,
     isComposable: isComposable || undefined,
-    source: classifySource(namespace, name),
+    // Heuristic only — fetchCsdlActions re-classifies from Dataverse data.
+    source: classifySource(name, NO_MESSAGE_SOURCES),
     isQueryFunction: isQueryFunction || undefined,
   };
 }
@@ -579,22 +600,109 @@ function typeMetadataFromRaw(raw: string): Partial<ActionParam> {
 
 // ── Source classification ──────────────────────────────────────────────
 // We classify actions into custom-api / custom-action / oob buckets so the
-// Execute picker can scope by source. Heuristic:
+// Execute picker can scope by source (#54). Every message lives in the
+// Microsoft.Dynamics.CRM namespace, so the CSDL alone can't tell them apart
+// and the name can't either (`contoso_myapi` is a Custom API,
+// `msdyn_GetKAObjectFromTemplate` is a first-party message). So we ask
+// Dataverse:
 //
-//   - Namespace "Microsoft.Dynamics.CRM" + lowercase-publisher-prefixed name
-//     (e.g. `new_AddNoteToContact`, `sample_CustomApiSendNotification`)
-//     → custom (further split: custom-action if it's an Action *or* uses
-//       PascalCase verb, custom-api if it's a Function or has Output*
-//       response shape)
-//   - Else → oob
+//   - Custom API      → a row in `customapis` (uniquename = message name)
+//   - Custom Action   → a `workflows` row with category 3 (Action), type 1
+//                       (Definition); its message is the `sdkmessageid`
+//                       lookup, whose formatted value is the message name
+//   - Everything else → oob
+//
+// Each lookup is independent: one that fails (no read privilege on the
+// table, or not embedded) is `null` and the name heuristic covers that half.
 
-const CUSTOM_PREFIX_RE = /^[a-z][a-z0-9]+_[A-Z]/;
+interface MessageSources {
+  /** Lower-cased Custom API unique names; null when the lookup failed. */
+  customApis: Set<string> | null;
+  /** Lower-cased custom process action message names; null when failed. */
+  customActions: Set<string> | null;
+}
 
-function classifySource(_namespace: string, name: string): CsdlAction['source'] {
-  if (!CUSTOM_PREFIX_RE.test(name)) return 'oob';
-  // Custom messages — we can't tell custom-api from custom-action purely
-  // from name. Default to custom-api since that's the modern recommendation;
-  // the editor picker still surfaces all custom messages either way.
+const NO_MESSAGE_SOURCES: MessageSources = { customApis: null, customActions: null };
+
+const FORMATTED = '@OData.Community.Display.V1.FormattedValue';
+
+function fetchMessageSources(): Promise<MessageSources> {
+  return memoize(K_MESSAGE_SOURCES, async () => {
+    const [customApis, customActions] = await Promise.all([
+      queryNames('customapis?$select=uniquename', (r) => [r.uniquename]),
+      queryNames(
+        'workflows?$select=uniquename,_sdkmessageid_value&$filter=category eq 3 and type eq 1',
+        // The message name is the sdkmessage lookup's formatted value. Also
+        // take uniquename when it carries a publisher prefix (it's the same
+        // string then); an unprefixed one could collide with an OOB message.
+        (r) => {
+          const u = r.uniquename;
+          return [
+            r[`_sdkmessageid_value${FORMATTED}`],
+            typeof u === 'string' && u.includes('_') ? u : undefined,
+          ];
+        },
+      ),
+    ]);
+    return { customApis, customActions };
+  });
+}
+
+/** Run an OData query (following `@odata.nextLink`) and collect the
+ *  lower-cased string names `pick` returns per row. Null on any failure. */
+async function queryNames(
+  path: string,
+  pick: (row: Record<string, unknown>) => unknown[],
+): Promise<Set<string> | null> {
+  try {
+    const names = new Set<string>();
+    let next: string | undefined = path;
+    // Page cap is a safety net; both tables are small in practice.
+    for (let page = 0; next && page < 50; page++) {
+      const res = (await dvHost.queryData(next)) as {
+        value?: Record<string, unknown>[];
+        '@odata.nextLink'?: string;
+      };
+      for (const row of res.value ?? []) {
+        for (const n of pick(row)) if (typeof n === 'string' && n) names.add(n.toLowerCase());
+      }
+      next = res['@odata.nextLink'] ? stripApiBase(res['@odata.nextLink']) : undefined;
+    }
+    return names;
+  } catch (e) {
+    console.warn(`[csdlProvider] message classification query failed (${path}):`, e);
+    return null;
+  }
+}
+
+/** queryData takes a path relative to /api/data/v9.x/ — strip the scheme,
+ *  host and version from an absolute nextLink. */
+function stripApiBase(url: string): string {
+  const i = url.indexOf('/api/data/');
+  if (i < 0) return url;
+  const rest = url.slice(i + '/api/data/'.length);
+  const slash = rest.indexOf('/');
+  return slash >= 0 ? rest.slice(slash + 1) : rest;
+}
+
+// Fallback when a lookup failed: a lower-case publisher prefix followed by
+// `_` reads as custom; Microsoft first-party prefixes (msdyn_, mscrm_,
+// msdynce_, adx_, …) read as OOB. The heuristic can't tell a Custom API from
+// a custom process action, so custom names default to custom-api.
+const CUSTOM_PREFIX_RE = /^[a-z][a-z0-9]*_[A-Za-z0-9]/;
+const FIRST_PARTY_PREFIX_RE = /^(ms[a-z0-9]*|adx)_/i;
+
+function classifySource(name: string, sources: MessageSources): CsdlAction['source'] {
+  const key = name.toLowerCase();
+  if (sources.customApis?.has(key)) return 'custom-api';
+  if (sources.customActions?.has(key)) return 'custom-action';
+  // Both lookups succeeded and neither matched → a platform message.
+  if (sources.customApis && sources.customActions) return 'oob';
+  const looksCustom = CUSTOM_PREFIX_RE.test(name) && !FIRST_PARTY_PREFIX_RE.test(name);
+  if (!looksCustom) return 'oob';
+  // Custom-looking and not a Custom API (that lookup worked) → only the
+  // custom-action half is unknown, so it's most likely a custom action.
+  if (sources.customApis) return 'custom-action';
   return 'custom-api';
 }
 
