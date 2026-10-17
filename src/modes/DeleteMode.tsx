@@ -415,7 +415,7 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.delete(state);
+    const res = await runtime.delete(state, headerItemsToObject(effectiveHeaders, null));
     setResult(res);
     setLoading(false);
     setTab('results');

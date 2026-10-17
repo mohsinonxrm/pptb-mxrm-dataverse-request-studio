@@ -201,7 +201,7 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.upsert(state);
+    const res = await runtime.upsert(state, headerItemsToObject(effectiveHeaders, null));
     setResult(res);
     setLoading(false);
     setTab('results');
