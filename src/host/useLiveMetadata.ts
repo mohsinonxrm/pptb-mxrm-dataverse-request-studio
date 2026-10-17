@@ -35,16 +35,21 @@ export function useLiveTable(logical: string | null | undefined): {
   useEffect(() => __subscribeLiveTables(() => bump((v) => v + 1)), []);
 
   const [loading, setLoading] = useState(false);
+  const table = logical ? findTable(logical) : undefined;
+  // Keyed on presence too, so the table is refetched when it drops out of
+  // the registry (a metadata reset) instead of staying blank until the
+  // user picks another table (#53).
+  const present = !!table;
 
   useEffect(() => {
     if (!logical) return;
     // Already cached → no fetch needed.
-    if (findTable(logical)) return;
+    if (present) return;
     setLoading(true);
     void metadata.getTable(logical).finally(() => setLoading(false));
-  }, [logical]);
+  }, [logical, present]);
 
-  return { table: logical ? findTable(logical) : undefined, loading };
+  return { table, loading };
 }
 
 /**

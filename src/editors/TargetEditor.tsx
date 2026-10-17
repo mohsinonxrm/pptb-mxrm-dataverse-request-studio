@@ -138,15 +138,19 @@ export function TargetEditor({
   // retrieve mode does; specialty modes like ExecuteAction omit them).
   const hasActions = !!onResetRequest || !!onApplyParsed;
 
-  // Refresh metadata: nukes every cached entity/attribute/relationship
-  // record so the next read re-fetches with the current $select projection.
-  // Useful when (a) the user changed a column in the maker, (b) DRS rolled
-  // a new metadata-projection version (new flags appear after the cache
-  // is cleared), or (c) suspected stale data.
+  // Refresh metadata: drops every cached entity/attribute/relationship
+  // record and rebuilds the loaded tables in place, same as Settings →
+  // Refresh metadata. Useful when (a) the user changed a column in the
+  // maker, (b) DRS rolled a new metadata-projection version (new flags
+  // appear after the cache is cleared), or (c) suspected stale data.
+  // In place, so the selected table never blanks out mid-refresh (#53).
+  const [refreshing, setRefreshing] = useState(false);
   const onRefreshMetadata = () => {
-    metadata.invalidateAll();
-    // Re-warm the currently-selected entity so the user doesn't lose state.
-    if (table) void metadata.getTable(table);
+    setRefreshing(true);
+    metadata
+      .refreshAll()
+      .catch((e) => console.warn('[TargetEditor] refresh metadata failed', e))
+      .finally(() => setRefreshing(false));
   };
 
   // Guidance banner — shown only after the entity list has finished loading
@@ -211,6 +215,7 @@ export function TargetEditor({
               appearance="outline"
               size="small"
               onClick={onRefreshMetadata}
+              disabled={refreshing}
               title="Re-fetch every entity / attribute / relationship from Dataverse. Clears the in-memory metadata cache. Useful after editing the schema in the maker, or to pick up newly-added metadata flags."
             >
               Refresh metadata

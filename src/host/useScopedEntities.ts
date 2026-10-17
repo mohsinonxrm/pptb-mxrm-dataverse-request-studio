@@ -17,7 +17,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { loadSolutionEntityNames } from './dataverseMetadata';
-import { metadata, type EntityListItem } from './metadataProvider';
+import { metadata, subscribeMetadataReset, type EntityListItem } from './metadataProvider';
 import { useHostSession } from './HostContext';
 import { usePersistedSettings } from './usePersistedSettings';
 
@@ -55,6 +55,9 @@ export function useScopedEntities(): UseScopedEntitiesResult {
   const connectionKey = `${ready}|${noConnection}|${session.environmentUrl}`;
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
+  // "Refresh metadata" drops the cached entity list — re-pull it so newly
+  // created tables show up without a remount.
+  useEffect(() => subscribeMetadataReset(retry), [retry]);
 
   const [all, setAll] = useState<EntityListItem[]>([]);
   const [allLoading, setAllLoading] = useState(true);
