@@ -5,9 +5,9 @@ All notable changes to Dataverse Request Studio will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.4-beta.1] - 2026-10-16
+## [1.1.4] - 2026-10-17
 
-Bug-fix prerelease. Every fix below was verified end-to-end in Power Platform
+Bug-fix release. Every fix below was verified end-to-end in Power Platform
 ToolBox 1.2.7 against a live Dataverse environment.
 
 ### 🐛 Fixed
@@ -73,8 +73,8 @@ ToolBox 1.2.7 against a live Dataverse environment.
   `validate` → `build`. The lockfile is committed as `package-lock.json`,
   which npm never publishes, so `npm ci` works in the repo
   ([#65](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/65)).
-- **README:** version badges now read from npm (latest and beta) instead of a
-  hard-coded version.
+- **README:** the version badge now reads from npm instead of a hard-coded
+  version.
 
 ### ⚠️ Known issues
 
