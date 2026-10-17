@@ -202,8 +202,10 @@ class MetadataCache {
 
   // ── filterCachedEntitiesByNames — used by publisher/solution filter hooks
   filterCachedEntitiesByNames(logicalNames: string[]): EntityMetadata[] {
+    // An empty name list (e.g. a solution with no table components) selects
+    // nothing — it used to return every entity (#44).
+    if (logicalNames.length === 0) return [];
     const all = this.fresh(this.allEntitiesCache) ?? [];
-    if (logicalNames.length === 0) return all;
     const set = new Set(logicalNames);
     return all.filter((e) => set.has(e.LogicalName));
   }

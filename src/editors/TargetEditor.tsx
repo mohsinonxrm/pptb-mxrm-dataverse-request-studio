@@ -75,7 +75,14 @@ export function TargetEditor({
   onResetRequest,
   onApplyParsed,
 }: TargetEditorProps) {
-  const { entities, loading: entitiesLoading, needsSetup, scopeMode } = useScopedEntities();
+  const {
+    entities,
+    loading: entitiesLoading,
+    error: entitiesError,
+    retry: retryEntities,
+    needsSetup,
+    scopeMode,
+  } = useScopedEntities();
   const openSettings = useOpenSettings();
   const { loading: tableLoading } = useLiveTable(table || null);
   const tbl = findTable(table);
@@ -175,6 +182,26 @@ export function TargetEditor({
           />
         </MessageBar>
       )}
+      {entitiesError && !entitiesLoading && (
+        <MessageBar intent="error" style={{ marginBottom: tokens.spacingVerticalM, width: '100%' }}>
+          <MessageBarBody>
+            <MessageBarTitle>Couldn't load the table list</MessageBarTitle>
+            {entitiesError}
+          </MessageBarBody>
+          <MessageBarActions
+            containerAction={
+              <Button
+                appearance="primary"
+                size="small"
+                icon={<ArrowSync20Regular />}
+                onClick={retryEntities}
+              >
+                Retry
+              </Button>
+            }
+          />
+        </MessageBar>
+      )}
       <PaneHead icon={Table20Filled} title="Target" sub={sub} group={group}>
         {hasActions && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -212,7 +239,9 @@ export function TargetEditor({
               ? `${tbl.entitySetName} · ${tbl.columns.length} columns${tableLoading ? ' · loading…' : ''}`
               : entitiesLoading
                 ? 'Loading entity list…'
-                : `${entities.length} entities`
+                : entitiesError
+                  ? 'Entity list failed to load'
+                  : `${entities.length} entities`
           }
         >
           <Combobox

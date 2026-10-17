@@ -179,6 +179,34 @@ export async function loadEntityKeys(logicalName: string) {
   return keys;
 }
 
+/** Logical names of the tables in a set of solutions (solution-scoped entity
+ *  pickers). Caches the raw components, never a list derived from the
+ *  all-entities cache — that cache may not be loaded yet, which used to
+ *  freeze an empty list for the solution set (#44). */
+const solutionNamesInFlight = new Map<string, Promise<string[]>>();
+
+export async function loadSolutionEntityNames(solutionIds: string[]): Promise<string[]> {
+  const toNames = (components: pptbClient.SolutionComponent[]) =>
+    Array.from(new Set(components.map((c) => c.msdyn_name).filter(Boolean)));
+
+  const cached = metadataCache.getSolutionComponents(solutionIds);
+  if (cached) return toNames(cached);
+
+  const key = solutionIds.slice().sort().join(',');
+  const inFlight = solutionNamesInFlight.get(key);
+  if (inFlight) return inFlight;
+
+  const promise = pptbClient
+    .getSolutionComponents(solutionIds)
+    .then((components) => {
+      metadataCache.setSolutionComponents(solutionIds, components);
+      return toNames(components);
+    })
+    .finally(() => solutionNamesInFlight.delete(key));
+  solutionNamesInFlight.set(key, promise);
+  return promise;
+}
+
 /** Nuke everything — used by the "Refresh metadata" button. */
 export function clearMetadataCache(): void {
   metadataCache.clear();
