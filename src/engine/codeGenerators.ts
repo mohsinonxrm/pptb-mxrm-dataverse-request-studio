@@ -926,6 +926,119 @@ ${setHeaders ? '  ' + setHeaders.split('\n').join('\n  ') : ''}
 // row has a label, a read-only Input with the value, and a per-row Copy
 // button. The text-only Monaco rendering (genPowerAutomate below) is kept
 // as a fallback for environments that only show source.
+// ────────────────────────────────────────────────────────────
+// Power Automate — shared request classifier (#51)
+// ────────────────────────────────────────────────────────────
+// Both the field-by-field pane and the text cheat sheet map the request to a
+// Dataverse connector action from the URL *shape*, not just method + record
+// id. A DELETE on `/<set>(<id>)/<column>` clears one column / file / image —
+// mapping it to "Delete a row" would tell the user to delete the record.
+// Anything the connector's row actions can't express goes to
+// "Invoke an HTTP request" instead of falling through to "List rows".
+interface PowerAutomateClass {
+  isRetrieveSingle: boolean;
+  isCreate: boolean;
+  isUpdate: boolean;
+  isDelete: boolean;
+  isAction: boolean;
+  isFunction: boolean;
+  isList: boolean;
+  /** Set when only an HTTP request can express this — the reason, for the banner. */
+  httpReason: string | null;
+}
+
+function classifyPowerAutomate(i: CodegenInputs): PowerAutomateClass {
+  const set = i.built.entitySet;
+  const path = relativeToApi(i).split('?')[0];
+  const isRef = path.endsWith('/$ref');
+  const isMessage = path.includes('/Microsoft.Dynamics.CRM.') || path.endsWith('/Merge');
+  const onSet = !!set && (path === '/' + set || path.startsWith('/' + set + '('));
+  const isCollection = !!set && path === '/' + set;
+  // /<set>(<key>) — a single row, addressed by GUID or by alternate key
+  const isRow = onSet && /^\/[^/]+\([^)]*\)$/.test(path);
+  // Alternate keys are `name=value` pairs; anything else in the parens is a
+  // GUID — or the `<id>` placeholder before a record has been picked, which
+  // should still map to the row action (with an empty Row ID).
+  const isGuidRow = isRow && (!!i.built.recordId || !/\([^)]*=/.test(path));
+  // /<set>(<key>)/<column> — a single column value (incl. file / image columns)
+  const isColumn = onSet && !isRef && !isMessage && /^\/[^/]+\([^)]*\)\/[^/]+$/.test(path);
+
+  const isFunction = i.method === 'GET' && (isMessage || !set);
+  const isAction =
+    i.method === 'POST' && (isMessage || (!i.built.recordId && !i.built.entitySet && !!i.body));
+  const isRetrieveSingle = i.method === 'GET' && isGuidRow && !isFunction;
+  const isCreate = i.method === 'POST' && isCollection && !!i.body;
+  const isUpdate = i.method === 'PATCH' && isGuidRow && !!i.body;
+  const isDelete = i.method === 'DELETE' && isGuidRow;
+  const isList = i.method === 'GET' && isCollection;
+
+  let httpReason: string | null = null;
+  if (
+    !isRetrieveSingle &&
+    !isCreate &&
+    !isUpdate &&
+    !isDelete &&
+    !isAction &&
+    !isFunction &&
+    !isList
+  ) {
+    httpReason =
+      i.method === 'DELETE' && isColumn
+        ? 'This DELETE clears a single column (or a file / image column) — it does NOT delete the row. Don\'t use "Delete a row": send this request with the Dataverse connector\'s "Invoke an HTTP request" action.'
+        : i.method === 'PUT' && isColumn
+          ? 'A single-column PUT has no matching row action. Use "Update a row" with just that column, or send this request with "Invoke an HTTP request".'
+          : isRef
+            ? 'Associate / disassociate via $ref. The connector\'s "Relate rows" / "Unrelate rows" actions cover this, or send this request with "Invoke an HTTP request".'
+            : isRow && !isGuidRow
+              ? 'This request addresses the row by alternate key, which the connector\'s row actions don\'t take. Send it with "Invoke an HTTP request".'
+              : 'The connector\'s row actions can\'t express this request. Send it with "Invoke an HTTP request".';
+  }
+
+  return {
+    isRetrieveSingle,
+    isCreate,
+    isUpdate,
+    isDelete,
+    isAction,
+    isFunction,
+    isList,
+    httpReason,
+  };
+}
+
+function relativeToApi(i: CodegenInputs): string {
+  return i.built.relativeUrl.replace(/^\/api\/data\/v\d+\.\d+/, '');
+}
+
+function powerAutomateHttpSpec(i: CodegenInputs, reason: string): PowerAutomateActionSpec {
+  return {
+    actionName: 'Invoke an HTTP request',
+    connector: 'Microsoft Dataverse connector',
+    banner: reason,
+    fields: [
+      { label: 'Method', value: i.method },
+      {
+        label: 'Relative URI',
+        value: relativeToApi(i),
+        multiline: true,
+        hint: 'Strip the /api/data/v9.2 prefix — the connector adds it',
+      },
+      {
+        label: 'Body',
+        value: i.body ? JSON.stringify(i.body, null, 2) : '',
+        multiline: !!i.body,
+        hint: i.body ? 'JSON request body' : 'No body',
+      },
+    ],
+    notes: ["Request headers (If-Match, Prefer, MSCRM.*) go in the action's Headers field."],
+    httpFallback: {
+      method: i.method,
+      uri: `https://${ENV.host}${i.built.relativeUrl}`,
+      note: 'Generic HTTP action — use this when "Invoke an HTTP request" isn\'t available in your connector version.',
+    },
+  };
+}
+
 export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActionSpec {
   if (i.isNextLink && i.rawNextLink) {
     return {
@@ -961,24 +1074,12 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
     if (m) maxPageSize = m[1];
   }
 
-  const isRetrieveSingle = i.method === 'GET' && !!i.built.recordId;
   const isPredefined = !!savedQ || !!userQ;
-  const isCreate =
-    i.method === 'POST' &&
-    !i.built.recordId &&
-    !!i.body &&
-    !i.built.relativeUrl.includes('/Microsoft.Dynamics.CRM.') &&
-    !i.built.relativeUrl.endsWith('/$ref') &&
-    !i.built.relativeUrl.includes('/Merge');
-  const isUpdate = i.method === 'PATCH' && !!i.built.recordId && !!i.body;
-  const isDelete =
-    i.method === 'DELETE' && !!i.built.recordId && !i.built.relativeUrl.endsWith('/$ref');
-  const isAction =
-    i.method === 'POST' &&
-    (i.built.relativeUrl.includes('/Microsoft.Dynamics.CRM.') ||
-      i.built.relativeUrl.endsWith('/Merge') ||
-      (!i.built.recordId && !i.built.entitySet && !!i.body));
-  const isFunction = i.method === 'GET' && !i.built.recordId && !i.built.entitySet;
+  const { isRetrieveSingle, isCreate, isUpdate, isDelete, isAction, isFunction, httpReason } =
+    classifyPowerAutomate(i);
+
+  // Column DELETE / PUT, $ref, alternate keys, … — HTTP request only
+  if (httpReason) return powerAutomateHttpSpec(i, httpReason);
 
   // "Update a row" — Update / Upsert
   if (isUpdate) {
@@ -1367,24 +1468,23 @@ function genPowerAutomate(i: CodegenInputs): string {
   // Aligned "Field name  value" rendering — monospace in the editor lets users
   // double-click a value and Ctrl+C it straight into the flow designer.
   const row = (label: string, value: string): string => `${label.padEnd(25)} ${value}`;
-  const isRetrieveSingle = i.method === 'GET' && !!i.built.recordId;
   const isPredefined = !!savedQ || !!userQ;
-  const isCreate =
-    i.method === 'POST' &&
-    !i.built.recordId &&
-    !!i.body &&
-    !i.built.relativeUrl.includes('/Microsoft.Dynamics.CRM.') &&
-    !i.built.relativeUrl.endsWith('/$ref') &&
-    !i.built.relativeUrl.includes('/Merge');
-  const isUpdate = i.method === 'PATCH' && !!i.built.recordId && !!i.body;
-  const isDelete =
-    i.method === 'DELETE' && !!i.built.recordId && !i.built.relativeUrl.endsWith('/$ref');
-  const isAction =
-    i.method === 'POST' &&
-    (i.built.relativeUrl.includes('/Microsoft.Dynamics.CRM.') ||
-      i.built.relativeUrl.endsWith('/Merge') ||
-      (!i.built.recordId && !i.built.entitySet && !!i.body));
-  const isFunction = i.method === 'GET' && !i.built.recordId && !i.built.entitySet;
+  const { isRetrieveSingle, isCreate, isUpdate, isDelete, isAction, isFunction, httpReason } =
+    classifyPowerAutomate(i);
+
+  // ── Column DELETE / PUT, $ref, alternate keys, … — HTTP request only
+  if (httpReason) {
+    return `# Power Automate — Dataverse connector  ⟶  "Invoke an HTTP request" action
+# ${httpReason}
+
+${row('Method', i.method)}
+${row('Relative URI', relativeToApi(i))}
+${row('Body', i.body ? JSON.stringify(i.body) : '(none)')}
+
+# Request headers (If-Match, Prefer, MSCRM.*) go in the action's Headers field.
+# Generic HTTP action alternative: ${i.method} https://${ENV.host}${i.built.relativeUrl}
+`;
+  }
 
   // ── "Update a row" — Update / Upsert
   if (isUpdate) {
