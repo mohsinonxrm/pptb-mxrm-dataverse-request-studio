@@ -77,6 +77,8 @@ export interface ResultsCommandBarProps {
   onRefresh: () => void;
   /** Walk every page via @odata.nextLink until the result set is fully loaded. */
   onRetrieveAll?: () => void;
+  /** Stop an in-flight page fetch; shown in place of Retrieve all while loading. */
+  onStopLoadingMore?: () => void;
   /** Row-search query (passed through to the grid). */
   searchQuery: string;
   onSearchChange: (q: string) => void;
@@ -93,6 +95,7 @@ export function ResultsCommandBar({
   body,
   onRefresh,
   onRetrieveAll,
+  onStopLoadingMore,
   searchQuery,
   onSearchChange,
   density,
@@ -157,17 +160,32 @@ export function ResultsCommandBar({
           </ToolbarButton>
         </Tooltip>
 
-        {onRetrieveAll && (
-          <Tooltip content={retrieveAllTooltip} relationship="description">
+        {onRetrieveAll && isLoadingMore && onStopLoadingMore ? (
+          <Tooltip
+            content="Stop fetching pages. Rows loaded so far are kept."
+            relationship="description"
+          >
             <ToolbarButton
               appearance="subtle"
-              icon={isLoadingMore ? <Spinner size="tiny" /> : <Stack20Regular />}
-              disabled={!hasMore || isLoadingMore}
-              onClick={onRetrieveAll}
+              icon={<Spinner size="tiny" />}
+              onClick={onStopLoadingMore}
             >
-              Retrieve all
+              Stop
             </ToolbarButton>
           </Tooltip>
+        ) : (
+          onRetrieveAll && (
+            <Tooltip content={retrieveAllTooltip} relationship="description">
+              <ToolbarButton
+                appearance="subtle"
+                icon={isLoadingMore ? <Spinner size="tiny" /> : <Stack20Regular />}
+                disabled={!hasMore || isLoadingMore}
+                onClick={onRetrieveAll}
+              >
+                Retrieve all
+              </ToolbarButton>
+            </Tooltip>
+          )
         )}
 
         <ToolbarDivider />
