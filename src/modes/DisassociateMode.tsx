@@ -86,7 +86,10 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('disassociate');
   const [state, setState] = useState(initialState);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
-  useLiveTable(state.table || null);
+  // The live table is a memo dependency below: build*() reads metadata via
+  // findTable(), which is empty until the fetch lands — keying on `state`
+  // alone left the URL / Code tab blank after picking a table (#78).
+  const { table: liveTable } = useLiveTable(state.table || null);
   const { entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('source');
   const [tab, setTab] = useState<MainTab>('builder');
@@ -109,8 +112,8 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
   );
   const [currentLookupLoading, setCurrentLookupLoading] = useState(false);
 
-  const built = useMemo(() => buildDisassociate(state), [state]);
-  const requests = useMemo(() => buildDisassociateRequests(state), [state]);
+  const built = useMemo(() => buildDisassociate(state), [state, liveTable]);
+  const requests = useMemo(() => buildDisassociateRequests(state), [state, liveTable]);
   const tbl = findTable(state.table);
   const nav = state.navProperty
     ? tbl?.navigationProperties.find((n) => n.name === state.navProperty)
