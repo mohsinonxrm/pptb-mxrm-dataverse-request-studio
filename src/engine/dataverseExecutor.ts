@@ -77,11 +77,14 @@ import { actions } from '../host/csdlProvider';
 
 /** Coarse outcome bucket on every `ExecResult`. ResultsView inspects this
  *  to render the "no rows" empty-state distinctly from a network success
- *  that happens to return a populated body. */
-export type ExecOutcome = 'ok' | '404' | '401' | '403' | 'empty';
+ *  that happens to return a populated body. Derived from `status` by
+ *  `outcomeFor`; `'error'` covers every other failure (4xx, 5xx, 501, and
+ *  host errors whose status is unknown). */
+export type ExecOutcome = 'ok' | '404' | '401' | '403' | 'error' | 'empty';
 
 /** Normalized execution result handed back to every mode. */
 export interface ExecResult {
+  /** HTTP status. `0` when the host rejected without reporting one. */
   status: number;
   statusText: string;
   ms: number;
@@ -89,6 +92,9 @@ export interface ExecResult {
   ok: boolean;
   outcome: ExecOutcome;
   body: unknown;
+  /** Response headers. The PPTB host doesn't expose them, so this is `{}`
+   *  for every live result; the Headers tab says so instead of showing
+   *  made-up values. */
   headers: Record<string, string>;
 }
 
@@ -103,9 +109,20 @@ const STATUS_TEXT: Record<number, string> = {
   401: 'Unauthorized',
   403: 'Forbidden',
   404: 'Not Found',
+  409: 'Conflict',
   412: 'Precondition Failed',
   500: 'Internal Server Error',
+  501: 'Not Implemented',
 };
+
+/** Outcome bucket for a status. 2xx is 'ok'; anything else is a failure. */
+function outcomeFor(status: number): ExecOutcome {
+  if (status >= 200 && status < 300) return 'ok';
+  if (status === 401) return '401';
+  if (status === 403) return '403';
+  if (status === 404) return '404';
+  return 'error';
+}
 
 interface HostError {
   message?: string;
@@ -123,91 +140,120 @@ function isHostError(e: unknown): e is HostError {
 /** `error.code` on the ExecResult when PPTB didn't send a request because
  *  the user declined (or didn't answer) its additional-headers prompt. */
 export const HEADER_CONSENT_DECLINED_CODE = 'DRS.HeaderConsentDeclined';
+/** `error.code` on the ExecResult when PPTB refused one of the
+ *  `additionalHeaders` (invalid or conflicting name) before sending anything. */
+export const HEADER_REJECTED_CODE = 'DRS.HeaderRejected';
 
 // PPTB 1.2.7 checks consent and validates `additionalHeaders` BEFORE it sends
 // anything, and rejects the call with these messages (desktop-app
 // dataverseHeaderConsentManager.ts / dataverseBatch.ts). Nothing reached
-// Dataverse, so we say so rather than show a generic 500.
+// Dataverse, so we say so rather than report a Dataverse failure.
 const CONSENT_DECLINED_RE = /additional headers were rejected|header consent/i;
 const HEADER_INVALID_RE =
   /invalid dataverse header|conflicting duplicate dataverse header|additional dataverse headers/i;
 
-// The host flattens Dataverse errors to "<code>: <message>" (or "HTTP <n>")
-// inside the IPC error text, so the HTTP status is lost. Recover it for the
-// codes a precondition produces so WriteResultCard renders its 412 / 404 copy.
+// PPTB rejects failed Dataverse calls with a plain `Error` whose message is
+// `<code>: <message>` (or `HTTP <status>: <body>` when the response has no
+// error envelope), so `statusCode` / `status` are usually absent. Recover
+// the status from the message where it's unambiguous: an `HTTP <nnn>`
+// prefix, or a Dataverse error code that always maps to one status. The
+// precondition codes let WriteResultCard render its 412 / 404 copy.
 const STATUS_BY_DATAVERSE_CODE: Record<string, number> = {
-  '0x80060882': 412, // ConcurrencyVersionMismatch — stale If-Match etag
-  '0x80040237': 412, // DuplicateRecord — If-None-Match: * on an existing row
-  '0x80040217': 404, // ObjectDoesNotExist — If-Match: * on a missing row
+  '0x80040217': 404, // ObjectDoesNotExist (also If-Match: * on a missing row)
+  '0x80040220': 403, // Caller is missing a privilege
+  '0x80040237': 412, // DuplicateRecord (also If-None-Match: * on an existing row)
+  '0x80060882': 412, // ConcurrencyVersionMismatch: stale If-Match ETag
+  '0x80060888': 400, // OData: could not find a property
 };
 
-function parseHostMessage(message: string): { status?: number; code?: string } {
-  const code = /\b(0x[0-9a-f]{8})\b/i.exec(message)?.[1]?.toLowerCase();
-  if (code && STATUS_BY_DATAVERSE_CODE[code])
-    return { status: STATUS_BY_DATAVERSE_CODE[code], code };
-  const http = /\bHTTP (\d{3})\b/.exec(message)?.[1];
-  return { status: http ? Number(http) : undefined, code };
+/** The first Dataverse error code (`0x8xxxxxxx`) in a host message, as written. */
+function dataverseCodeIn(message: string): string | undefined {
+  return /\b0x[0-9a-fA-F]{8}\b/.exec(message)?.[0];
 }
 
-function headersNotSent(
+/** Status recoverable from a host message: an explicit `HTTP <nnn>` wins,
+ *  then a Dataverse code with a fixed status. */
+function statusFromMessage(message: string): number | undefined {
+  const http = /\bHTTP (\d{3})\b/.exec(message);
+  if (http) return Number(http[1]);
+  const code = dataverseCodeIn(message);
+  return code ? STATUS_BY_DATAVERSE_CODE[code.toLowerCase()] : undefined;
+}
+
+/** The one shape every failed ExecResult takes. `statusText` defaults from
+ *  the status; status `0` means the host didn't report one. */
+function failure(
   status: number,
-  statusText: string,
-  code: string,
-  message: string,
+  error: { code?: string; message: string },
   ms: number,
+  statusText?: string,
 ): ExecResult {
   return {
     status,
-    statusText,
+    statusText:
+      statusText ?? STATUS_TEXT[status] ?? (status ? 'Error' : 'Status not reported by host'),
     ms,
     bytes: 0,
     ok: false,
-    outcome: status === 403 ? '403' : '404',
-    body: { error: { code, message } },
+    outcome: outcomeFor(status),
+    body: { error: error.code ? error : { message: error.message } },
     headers: {},
   };
 }
 
+/**
+ * Map anything a dvHost call threw to an ExecResult. `sentHeaders` is the
+ * `additionalHeaders` map the call carried, if any, so a host-side consent or
+ * header-validation rejection reads as "not sent" instead of a Dataverse error.
+ */
 function mapError(err: unknown, ms: number, sentHeaders?: Record<string, string>): ExecResult {
+  // Outside PPTB there is no host to send the request to. Report it as
+  // 501 Not Implemented (README → "Standalone vs PPTB-embedded").
+  if (err instanceof HostNotAvailableError) {
+    return failure(
+      501,
+      {
+        code: 'HostNotAvailable',
+        message:
+          'Running standalone: Execute needs the PPTB host. ' +
+          'Build the request here and copy it from the Code tab, or open DRS inside Power Platform ToolBox.',
+      },
+      ms,
+    );
+  }
   const e: HostError = isHostError(err) ? err : {};
   const message = e.message ?? e.innererror?.message ?? String(err);
   if (sentHeaders && CONSENT_DECLINED_RE.test(message)) {
-    return headersNotSent(
+    return failure(
       403,
-      'Headers not approved',
-      HEADER_CONSENT_DECLINED_CODE,
-      `Power Platform ToolBox didn't send this request because its headers ` +
-        `(${Object.keys(sentHeaders).join(', ')}) weren't approved, so nothing reached Dataverse. ` +
-        `Execute again and allow the headers when ToolBox asks. Host message: ${message}`,
+      {
+        code: HEADER_CONSENT_DECLINED_CODE,
+        message:
+          `Power Platform ToolBox didn't send this request because its headers ` +
+          `(${Object.keys(sentHeaders).join(', ')}) weren't approved, so nothing reached Dataverse. ` +
+          `Execute again and allow the headers when ToolBox asks. Host message: ${message}`,
+      },
       ms,
+      'Headers not approved',
     );
   }
   if (sentHeaders && HEADER_INVALID_RE.test(message)) {
-    return headersNotSent(
+    return failure(
       400,
-      'Bad Request',
-      'DRS.HeaderRejected',
-      `Power Platform ToolBox rejected a request header, so nothing was sent to Dataverse. ` +
-        `Fix the header in the Headers pane. Host message: ${message}`,
+      {
+        code: HEADER_REJECTED_CODE,
+        message:
+          `Power Platform ToolBox rejected a request header, so nothing was sent to Dataverse. ` +
+          `Fix the header in the Headers pane. Host message: ${message}`,
+      },
       ms,
     );
   }
-  const parsed =
-    e.statusCode === undefined && e.status === undefined ? parseHostMessage(message) : {};
-  const status = e.statusCode ?? e.status ?? parsed.status ?? 500;
-  const code = e.code ?? parsed.code ?? '0x80040217';
-  const outcome: ExecResult['outcome'] =
-    status === 404 ? '404' : status === 401 ? '401' : status === 403 ? '403' : 'ok';
-  return {
-    status,
-    statusText: STATUS_TEXT[status] ?? 'Error',
-    ms,
-    bytes: 0,
-    ok: false,
-    outcome: outcome === 'ok' ? '404' : outcome,
-    body: { error: { code, message } },
-    headers: {},
-  };
+  // 0 = the host didn't say. Better than a made-up 500 for what is usually
+  // a 400-class rejection.
+  const status = e.statusCode ?? e.status ?? statusFromMessage(message) ?? 0;
+  const code = e.code ?? dataverseCodeIn(message);
+  return failure(status, { code, message }, ms);
 }
 
 function ok(status: number, body: unknown, ms: number): ExecResult {
@@ -218,31 +264,25 @@ function ok(status: number, body: unknown, ms: number): ExecResult {
     ms,
     bytes,
     ok: status >= 200 && status < 300,
-    outcome: 'ok',
+    outcome: outcomeFor(status),
     body,
-    headers: { 'OData-Version': '4.0' },
+    // The host returns parsed bodies only — no response headers to show.
+    headers: {},
   };
 }
 
 /** Returned by the binary modes — host doesn't expose chunked upload. */
 function hostNotSupported(feature: string, ms: number): ExecResult {
-  return {
-    status: 501,
-    statusText: 'Not Implemented',
-    ms,
-    bytes: 0,
-    ok: false,
-    outcome: '403',
-    body: {
-      error: {
-        code: '0x80048345',
-        message:
-          `${feature} isn't supported through the PPTB Dataverse API today. ` +
-          `Build the request here and run it from an external Web API client.`,
-      },
+  return failure(
+    501,
+    {
+      code: '0x80048345',
+      message:
+        `${feature} isn't supported through the PPTB Dataverse API today. ` +
+        `Build the request here and run it from an external Web API client.`,
     },
-    headers: {},
-  };
+    ms,
+  );
 }
 
 /** Wrap an async dvHost call with timing + error mapping. Pass the headers

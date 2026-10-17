@@ -232,7 +232,13 @@ export function ResultsView({
             />
           ))}
         {tab === 'json' && <JsonPane body={result.body} />}
-        {tab === 'headers' && <HeadersPane headers={result.headers} status={result.status} />}
+        {tab === 'headers' && (
+          <HeadersPane
+            headers={result.headers}
+            status={result.status}
+            statusText={result.statusText}
+          />
+        )}
       </div>
     </div>
   );
@@ -290,10 +296,18 @@ function JsonPane({ body }: { body: unknown }) {
   );
 }
 
-function HeadersPane({ headers, status }: { headers: Record<string, string>; status: number }) {
+function HeadersPane({
+  headers,
+  status,
+  statusText,
+}: {
+  headers: Record<string, string>;
+  status: number;
+  statusText: string;
+}) {
   const s = useStudioStyles();
   const lines = Object.entries(headers).filter(([, v]) => v !== '');
-  const responseLine = `HTTP/1.1 ${status} ${status === 200 ? 'OK' : ''}`;
+  const responseLine = status ? `HTTP/1.1 ${status} ${statusText}` : statusText;
   return (
     <div className={s.inlineCard} style={{ padding: 16 }}>
       <Caption1
@@ -306,6 +320,11 @@ function HeadersPane({ headers, status }: { headers: Record<string, string>; sta
       >
         {responseLine}
       </Caption1>
+      {lines.length === 0 && (
+        <Caption1 style={{ color: tokens.colorNeutralForeground3, fontStyle: 'italic' }}>
+          Response headers aren&apos;t exposed by the PPTB host, so none can be shown here.
+        </Caption1>
+      )}
       <div
         style={{
           display: 'grid',
@@ -343,7 +362,11 @@ function ErrorState({ result }: { result: ExecResult }) {
         ? 'Forbidden · 403'
         : result.status === 404
           ? 'Not Found · 404'
-          : `Error · ${result.status}`;
+          : result.status === 501
+            ? 'Not Implemented · 501'
+            : result.status === 0
+              ? 'Request failed'
+              : `Error · ${result.status}`;
   const advice =
     result.status === 401
       ? 'Sign in to refresh your access token, then re-run.'
@@ -351,13 +374,21 @@ function ErrorState({ result }: { result: ExecResult }) {
         ? 'Caller is missing a required privilege. Check role assignments.'
         : result.status === 404
           ? 'Record (or entity) not found. Verify the GUID and entity set.'
-          : 'Inspect the JSON body and headers tabs for details.';
-  const kind: 'success' | 'danger' | 'warning' =
-    result.status >= 400 ? 'danger' : result.status >= 300 ? 'warning' : 'success';
+          : result.status === 501
+            ? 'The request was not sent. See the message below.'
+            : result.status === 0
+              ? "The PPTB host didn't report an HTTP status. The error message below comes from Dataverse."
+              : 'Inspect the error message below for details.';
+  // Any failure is 'danger', including a status the host didn't report (0).
+  const kind: 'success' | 'danger' | 'warning' = !result.ok
+    ? 'danger'
+    : result.status >= 300
+      ? 'warning'
+      : 'success';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <StatusPill status={kind} code={result.status} ms={result.ms} />
+        <StatusPill status={kind} code={result.status || 'Error'} ms={result.ms} />
         <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
           {(result.bytes / 1024).toFixed(1)} KB
         </Caption1>
@@ -414,7 +445,9 @@ function ErrorState({ result }: { result: ExecResult }) {
               overflowWrap: 'anywhere',
               boxSizing: 'border-box',
             }}
-          >{`code: ${err.code}\nmessage: ${err.message}`}</pre>
+          >
+            {err.code ? `code: ${err.code}\nmessage: ${err.message}` : `message: ${err.message}`}
+          </pre>
         )}
       </div>
     </div>
