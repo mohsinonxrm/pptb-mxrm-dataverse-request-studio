@@ -121,10 +121,7 @@ export async function fetchCsdlActions(): Promise<CsdlAction[]> {
     K_CSDL_ACTIONS,
     async () => {
       // Both are memoized, so a re-classification skips the CSDL download.
-      const [parsed, sources] = await Promise.all([
-        fetchParsedCsdl(org),
-        fetchMessageSources(org),
-      ]);
+      const [parsed, sources] = await Promise.all([fetchParsedCsdl(org), fetchMessageSources(org)]);
       const list = parsed.map((a) => ({ ...a, source: classifySource(a.name, sources) }));
       lastClassified.set(org, list);
       return { list, complete: sources.customApis !== null && sources.customActions !== null };
