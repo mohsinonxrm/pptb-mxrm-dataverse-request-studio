@@ -278,7 +278,7 @@ export function ActionPicker({
             Power Platform ToolBox 1.2.7 can't load a <code>$metadata</code> document larger than 16
             MB, so actions and functions can't be listed here. It worked in PPTB 1.2.6 and will work
             again once PPTB ships the fix (
-            <Link href={CSDL_SIZE_LIMIT_ISSUE_URL} target="_blank" rel="noreferrer">
+            <Link href={CSDL_SIZE_LIMIT_ISSUE_URL} target="_blank" rel="noopener noreferrer">
               desktop-app#736
             </Link>
             ). Other request types aren't affected.
