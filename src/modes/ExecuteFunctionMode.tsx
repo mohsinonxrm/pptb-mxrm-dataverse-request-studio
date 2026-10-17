@@ -3,6 +3,7 @@
 // Per docs:
 //   • Unbound:    GET /WhoAmI                or GET /F(p1=@p1)?@p1=...
 //   • Bound:      GET /<set>(<id>)/Microsoft.Dynamics.CRM.<function>(...)
+//   • Collection: GET /<set>/Microsoft.Dynamics.CRM.<function>(...)
 //   • Composable: append $select / $filter for collection-returning functions
 //   • Prefer parameter aliases to avoid URL-length issues + DateTimeOffset bugs.
 //
@@ -52,6 +53,7 @@ import type { ExecuteFunctionState } from '../state/executeState';
 import type { RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { useScopedEntities } from '../host/useScopedEntities';
+import { useLiveTable } from '../host/useLiveMetadata';
 import {
   serializeExecuteFunction,
   deserializeExecuteFunction,
@@ -84,8 +86,6 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
   const [loading, setLoading] = useState(false);
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
-  const built = useMemo(() => buildExecuteFunction(state), [state]);
-
   // Async live function lookup. actionsProvider caches the parsed CSDL.
   const [fn, setFn] = useState<CsdlAction | undefined>(undefined);
   useEffect(() => {
@@ -101,6 +101,17 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
       cancelled = true;
     };
   }, [state.functionName]);
+
+  // Bound functions (entity OR collection) need the binding table's metadata
+  // for the real entity set name. Load it and rebuild the URL when it (or
+  // the function) resolves. The executor sends this same URL (#55).
+  const bindingEntity = fn && fn.binding.kind !== 'unbound' ? fn.binding.entityType : null;
+  const { table: bindingTable } = useLiveTable(bindingEntity);
+  const built = useMemo(
+    () => buildExecuteFunction(state),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state, fn, bindingTable],
+  );
 
   // Save / Load
   const { entities } = useScopedEntities();
@@ -138,11 +149,13 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
     ? 'Pick a function.'
     : requiresBoundRecord && !state.boundRecordId
       ? `Function '${fn.name}' is bound to ${boundEntity} — supply a source record.`
-      : missingRequired.length > 0
-        ? `${missingRequired.length} required param${missingRequired.length === 1 ? '' : 's'} unset.`
-        : state.headers.some((h) => h.enabled && !h.name)
-          ? 'Fix empty header name.'
-          : null;
+      : bindingEntity && !bindingTable
+        ? `Can't build the URL yet — ${bindingEntity} table metadata isn't loaded.`
+        : missingRequired.length > 0
+          ? `${missingRequired.length} required param${missingRequired.length === 1 ? '' : 's'} unset.`
+          : state.headers.some((h) => h.enabled && !h.name)
+            ? 'Fix empty header name.'
+            : null;
 
   const onExecute = async () => {
     setLoading(true);
@@ -221,7 +234,9 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
       meta: fn
         ? fn.binding.kind === 'unbound'
           ? 'unbound'
-          : `bound to ${boundEntity}`
+          : fn.binding.kind === 'collection'
+            ? `bound to ${bindingEntity} collection`
+            : `bound to ${boundEntity}`
         : 'pick one',
       items: [
         {
@@ -371,7 +386,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
             setBoundRecordName(primary ?? '');
           }}
           group="execute"
-          sub={`Pick the ${boundEntity} record. The id slots into the URL: /${boundEntity}s(<id>)/Microsoft.Dynamics.CRM.${fn?.name}.`}
+          sub={`Pick the ${boundEntity} record. The id slots into the URL: /${bindingTable?.entitySetName ?? `${boundEntity}s`}(<id>)/Microsoft.Dynamics.CRM.${fn?.name}.`}
         />
       ) : null;
       break;

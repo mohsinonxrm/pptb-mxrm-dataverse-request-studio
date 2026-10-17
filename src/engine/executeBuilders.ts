@@ -1,8 +1,9 @@
 // URL + body construction for the Execute group.
 //
 // Three modes:
-//   • Execute Action      — POST /{action} (unbound) or POST /<set>(<id>)/Microsoft.Dynamics.CRM.<action> (bound)
-//   • Execute Function    — GET  /{function}(p1=@p1)?@p1=value
+//   • Execute Action      — POST /{action} (unbound), POST /<set>(<id>)/Microsoft.Dynamics.CRM.<action>
+//                           (entity-bound) or POST /<set>/Microsoft.Dynamics.CRM.<action> (collection-bound)
+//   • Execute Function    — GET  /{function}(p1=@p1)?@p1=value (same three binding shapes)
 //   • Execute Workflow    — POST /workflows(<wf-id>)/Microsoft.Dynamics.CRM.ExecuteWorkflow
 //
 // Per docs:
@@ -104,11 +105,74 @@ export function buildExecuteFunction(s: ExecuteFunctionState): BuiltRequest {
     };
   }
 
+  const { segment, queryParts, entitySet, entityLogical } = composeFunctionRequest(
+    s,
+    fn,
+    /*wire*/ false,
+  );
+  const qs = queryParts.map((p) => `${p.key}=${p.value}`).join('&');
+  const path = `${ENV.apiBase}${segment}${qs ? `?${qs}` : ''}`;
+  const noBase = `${segment}${qs ? `?${qs}` : ''}`;
+  return {
+    relativeUrl: path,
+    relativeNoBase: noBase,
+    bytes: path.length,
+    queryParts,
+    entitySet,
+    entityLogical,
+    recordId: s.boundRecordId ?? undefined,
+  };
+}
+
+/**
+ * The path the live executor sends for a function call, relative to the Web
+ * API base and without a leading slash (the shape `dataverseAPI.queryData`
+ * takes). Built by the SAME composer as `buildExecuteFunction`, so what runs
+ * is what the URL bar, URL preview and Code tab show (#55) — including the
+ * parameter-alias toggle and the real entity set name for bound calls. The
+ * only difference is percent-encoding of characters that would otherwise
+ * change the URL's meaning on the wire.
+ *
+ * Returns null when the function isn't in the CSDL cache or a bound
+ * function's entity set isn't resolved yet (table metadata not loaded).
+ */
+export function buildExecuteFunctionWirePath(s: ExecuteFunctionState): string | null {
+  const fn = s.functionName ? findActionSync(s.functionName) : undefined;
+  if (!fn || fn.kind !== 'Function') return null;
+  const { segment, queryParts, entitySet } = composeFunctionRequest(s, fn, /*wire*/ true);
+  if (fn.binding.kind !== 'unbound' && !entitySet) return null;
+  if (fn.binding.kind === 'entity' && !s.boundRecordId) return null;
+  const qs = queryParts.map((p) => `${p.key}=${p.value}`).join('&');
+  return `${segment.replace(/^\//, '')}${qs ? `?${qs}` : ''}`;
+}
+
+/**
+ * Shared function-URL composer. `wire` only switches value escaping:
+ *   • alias values (query string) → encodeURIComponent, so `&`, `#`, `+`,
+ *     `%` and `?` inside a string literal can't split or corrupt the query.
+ *   • inline literals (path) → escape only `%`, `#`, `?` and `\`, which
+ *     would otherwise end the path or be rewritten by the URL parser. Other
+ *     characters stay literal, matching the preview (aliases are the
+ *     documented answer for awkward values).
+ */
+function composeFunctionRequest(
+  s: ExecuteFunctionState,
+  fn: CsdlAction,
+  wire: boolean,
+): {
+  segment: string;
+  queryParts: { key: string; value: string }[];
+  entitySet: string;
+  entityLogical: string;
+} {
   const {
     segment: baseSegment,
     entitySet,
     entityLogical,
   } = buildActionUrlSegment(fn, s.boundRecordId);
+
+  const escAlias = (v: string) => (wire ? encodeURIComponent(v) : v);
+  const escInline = (v: string) => (wire ? v.replace(/[%#?\\]/g, (c) => encodeURIComponent(c)) : v);
 
   // Compose the parameter portion: either inline literals or alias placeholders
   const namedParams = fn.parameters;
@@ -125,7 +189,10 @@ export function buildExecuteFunction(s: ExecuteFunctionState): BuiltRequest {
         if (v === undefined || v === null) continue;
         const alias = `@p${aliasIndex++}`;
         aliasPairs.push(`${param.name}=${alias}`);
-        queryParts.push({ key: alias, value: encodeParamForUrl(param, v, /*aliased*/ true) });
+        queryParts.push({
+          key: alias,
+          value: escAlias(encodeParamForUrl(param, v, /*aliased*/ true)),
+        });
       }
       if (aliasPairs.length > 0) {
         segment = `${baseSegment}(${aliasPairs.join(',')})`;
@@ -138,25 +205,20 @@ export function buildExecuteFunction(s: ExecuteFunctionState): BuiltRequest {
       for (const param of namedParams) {
         const v = s.paramValues[param.name];
         if (v === undefined || v === null) continue;
-        inlinePairs.push(`${param.name}=${encodeParamForUrl(param, v, /*aliased*/ false)}`);
+        inlinePairs.push(
+          `${param.name}=${escInline(encodeParamForUrl(param, v, /*aliased*/ false))}`,
+        );
       }
       segment =
         inlinePairs.length > 0 ? `${baseSegment}(${inlinePairs.join(',')})` : `${baseSegment}()`;
     }
+  } else {
+    // Parameterless functions still need `()` on the wire (WhoAmI()).
+    // Dataverse accepts the bare name too, but `()` is the canonical form.
+    segment = `${baseSegment}()`;
   }
 
-  const qs = queryParts.map((p) => `${p.key}=${p.value}`).join('&');
-  const path = `${ENV.apiBase}${segment}${qs ? `?${qs}` : ''}`;
-  const noBase = `${segment}${qs ? `?${qs}` : ''}`;
-  return {
-    relativeUrl: path,
-    relativeNoBase: noBase,
-    bytes: path.length,
-    queryParts,
-    entitySet,
-    entityLogical,
-    recordId: s.boundRecordId ?? undefined,
-  };
+  return { segment, queryParts, entitySet, entityLogical };
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -200,9 +262,20 @@ function buildActionUrlSegment(
         entityLogical: '',
       };
     }
+    // Bound but the table's metadata isn't loaded yet: show a placeholder
+    // entity set rather than the bare (unbound) name, which would be a
+    // different — usually non-existent — operation (#55). `entitySet` stays
+    // empty so the modes / executor can tell the URL isn't ready.
     case 'entity': {
       const tbl = findTable(action.binding.entityType);
-      if (!tbl) return { segment: `/${action.name}`, entitySet: '', entityLogical: '' };
+      if (!tbl) {
+        const id = boundRecordId ?? `<${action.binding.entityType}-id>`;
+        return {
+          segment: `/<${action.binding.entityType}-set>(${id})/${fullName}`,
+          entitySet: '',
+          entityLogical: action.binding.entityType,
+        };
+      }
       const id = boundRecordId ?? `<${tbl.logicalName}-id>`;
       return {
         segment: `/${tbl.entitySetName}(${id})/${fullName}`,
@@ -212,7 +285,13 @@ function buildActionUrlSegment(
     }
     case 'collection': {
       const tbl = findTable(action.binding.entityType);
-      if (!tbl) return { segment: `/${action.name}`, entitySet: '', entityLogical: '' };
+      if (!tbl) {
+        return {
+          segment: `/<${action.binding.entityType}-set>/${fullName}`,
+          entitySet: '',
+          entityLogical: action.binding.entityType,
+        };
+      }
       return {
         segment: `/${tbl.entitySetName}/${fullName}`,
         entitySet: tbl.entitySetName,
