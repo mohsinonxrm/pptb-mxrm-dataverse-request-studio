@@ -69,7 +69,7 @@ function emitOne(it: ExpandSpec, parentTableLogical: string): string {
       if (expr) inner.push(`$filter=${expr}`);
     }
   }
-  if (it.orderby.length) inner.push(`$orderby=${orderbyToOData(it.orderby)}`);
+  if (it.orderby.length) inner.push(`$orderby=${orderbyToOData(it.orderby, targetTbl)}`);
   if (it.top != null && it.top > 0) inner.push(`$top=${it.top}`);
   if (it.nestedExpand && it.nestedExpand.length > 0 && nav) {
     const child = it.nestedExpand.map((c) => emitOne(c, nav.targetEntity)).join(',');
