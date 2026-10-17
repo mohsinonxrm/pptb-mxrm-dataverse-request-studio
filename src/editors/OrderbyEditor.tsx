@@ -24,6 +24,7 @@ import { findTable, isCompanionLogicalReadOnly, resolveNavPath } from '../mock/m
 import { PaneHead } from './PaneHead';
 import { ApplyOverridesBanner } from './ApplyOverridesBanner';
 import { SortableList, SortableItem } from '../primitives/Sortable';
+import { MoreOptionsHint, useOptionSearch } from '../primitives/optionSearch';
 import type { RequestGroup } from '../registry/requestTypes';
 
 export interface OrderbySpec {
@@ -293,13 +294,15 @@ function OrderbyColumnCombo({
   useEffect(() => {
     setQuery(currentDisplay ?? value);
   }, [currentDisplay, value]);
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q || q === (currentDisplay ?? '').toLowerCase()) return columns;
-    return columns.filter(
-      (c) => c.displayName.toLowerCase().includes(q) || c.logicalName.toLowerCase().includes(q),
-    );
-  }, [columns, query, currentDisplay]);
+  // Showing the committed column's label lists every column; capped +
+  // deferred because a table can have 800 columns (#21).
+  const effectiveQuery =
+    query.trim().toLowerCase() === (currentDisplay ?? '').toLowerCase() ? '' : query;
+  const {
+    visible: filtered,
+    matchCount,
+    hiddenCount,
+  } = useOptionSearch(columns, effectiveQuery, (c) => [c.displayName, c.logicalName]);
 
   return (
     <Combobox
@@ -321,7 +324,7 @@ function OrderbyColumnCombo({
       placeholder="Search columns…"
       listbox={{ style: { maxHeight: 320 } }}
     >
-      {filtered.length === 0 && (
+      {matchCount === 0 && (
         <Option value="__none" text="" disabled>
           <span style={{ color: tokens.colorNeutralForeground3, fontSize: 11 }}>
             No matches for "{query}"
@@ -342,6 +345,7 @@ function OrderbyColumnCombo({
           </span>
         </Option>
       ))}
+      <MoreOptionsHint hiddenCount={hiddenCount} />
     </Combobox>
   );
 }
