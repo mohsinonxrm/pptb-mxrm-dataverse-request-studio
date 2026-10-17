@@ -237,7 +237,12 @@ export function serializeUpdate(state: UpdateState): SerializedUpdateState {
 export function deserializeUpdate(snap: SerializedUpdateState): UpdateState {
   // `nullFields` backfill — entries saved before the field existed default
   // to []. The serializer always emits the field going forward.
-  return { ...snap, nullFields: snap.nullFields ?? [], dirty: new Set<string>() };
+  return {
+    ...snap,
+    nullFields: snap.nullFields ?? [],
+    rawBody: snap.rawBody ?? null,
+    dirty: new Set<string>(),
+  };
 }
 
 export function serializeCreate(state: CreateState): SerializedCreateState {
@@ -246,7 +251,12 @@ export function serializeCreate(state: CreateState): SerializedCreateState {
 }
 
 export function deserializeCreate(snap: SerializedCreateState): CreateState {
-  return { ...snap, nullFields: snap.nullFields ?? [], dirty: new Set<string>() };
+  return {
+    ...snap,
+    nullFields: snap.nullFields ?? [],
+    rawBody: snap.rawBody ?? null,
+    dirty: new Set<string>(),
+  };
 }
 
 export function serializeUpsert(state: UpsertState): SerializedUpsertState {
@@ -255,7 +265,12 @@ export function serializeUpsert(state: UpsertState): SerializedUpsertState {
 }
 
 export function deserializeUpsert(snap: SerializedUpsertState): UpsertState {
-  return { ...snap, nullFields: snap.nullFields ?? [], dirty: new Set<string>() };
+  return {
+    ...snap,
+    nullFields: snap.nullFields ?? [],
+    rawBody: snap.rawBody ?? null,
+    dirty: new Set<string>(),
+  };
 }
 
 export function serializeMerge(state: MergeState): SerializedMergeState {

@@ -88,6 +88,7 @@ import {
   type SerializedUpdateState,
 } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { rawBodyBlocker } from '../engine/fieldBody';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -99,6 +100,7 @@ const initialState = (): UpdateState => ({
   putColumn: null,
   fieldValues: {},
   nullFields: [],
+  rawBody: null,
   prefer: { ...emptyPrefer(), formattedValues: true, returnRepresentation: false },
   headers: defaultWriteHeaders(),
   returnSelect: [],
@@ -318,7 +320,10 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   );
 
   // ── Execute guards ──
-  const fieldCount = Object.keys(state.fieldValues).length;
+  // JSON mode: the typed body is what's sent, so count its keys.
+  const jsonMode = state.rawBody != null;
+  const jsonBlocker = state.method === 'PATCH' ? rawBodyBlocker(state.rawBody) : null;
+  const fieldCount = jsonMode ? Object.keys(body).length : Object.keys(state.fieldValues).length;
   const putValueOk =
     state.method !== 'PUT' ||
     (state.putColumn != null && state.fieldValues[state.putColumn] != null);
@@ -334,7 +339,8 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
             : !putValueOk
               ? `Set a value for ${state.putColumn}.`
               : null
-          : (fieldCount === 0
+          : jsonBlocker ||
+            (fieldCount === 0
               ? 'No field changes — nothing to PATCH. Pick at least one field to update.'
               : Object.keys(body).length === 0
                 ? 'Body is empty — set at least one value.'
@@ -654,6 +660,7 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
               table: t,
               recordId: null,
               fieldValues: {},
+              rawBody: null,
               method: 'PATCH',
               putColumn: null,
               returnSelect: [],
@@ -723,6 +730,8 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
           }
           nullFields={state.nullFields}
           setNullFields={(n) => set('nullFields', n, 'fieldset')}
+          rawBody={state.rawBody ?? null}
+          setRawBody={(t) => set('rawBody', t, 'fieldset')}
           group="write"
           themeMode={themeMode}
           purpose="update"

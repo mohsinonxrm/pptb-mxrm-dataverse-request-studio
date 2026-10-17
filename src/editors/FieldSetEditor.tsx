@@ -42,6 +42,7 @@ import {
   MessageBar,
   MessageBarBody,
   MessageBarTitle,
+  MessageBarActions,
   mergeClasses,
   tokens,
   TagPicker,
@@ -93,6 +94,13 @@ import {
   type OwnerColumnMeta,
 } from '../mock/metadata';
 import { useLookupRecords } from '../host/useLookupRecords';
+import {
+  decodeFieldBody,
+  encodeFieldBody,
+  parseRawBody,
+  type DecodedFieldBody,
+  type UnmappedBodyKey,
+} from '../engine/fieldBody';
 import { useColumnDetail } from '../host/useColumnDetail';
 // Monaco — same instance + worker setup as CodeView. The `loader.config`
 // side-effect runs when CodeView is first imported (every mode file
@@ -144,6 +152,17 @@ export interface FieldSetEditorProps {
    */
   nullFields?: string[];
   setNullFields?: (next: string[]) => void;
+  /**
+   * JSON-mode body text, owned by the caller's state. When `setRawBody` is
+   * passed, JSON mode is controlled: the typed text is the request body
+   * (sent as parsed — nulls, annotations and unknown keys included), the
+   * editor never rewrites it, and switching back to Form maps what it can
+   * and reports the rest. `null` = Form mode. Without `setRawBody` (nested
+   * entity params, the PUT single-column editor) JSON edits are parsed into
+   * `values` as you type and unmapped keys are listed as not sent.
+   */
+  rawBody?: string | null;
+  setRawBody?: (next: string | null) => void;
   group?: RequestGroup;
   /** Theme mode — drives the Monaco JSON editor's vs-dark vs light. Caller-
    *  optional because not every consumer (e.g. nested ActionParamForm rows)
@@ -176,10 +195,12 @@ type Filter = 'all' | 'required' | 'set' | 'common';
 // ──────────────────────────────────────────────────────────────
 export function FieldSetEditor({
   table,
-  values,
+  values: valuesProp,
   setValues,
   nullFields: nullFieldsProp,
   setNullFields: setNullFieldsProp,
+  rawBody,
+  setRawBody,
   group = 'write',
   themeMode = 'light',
   purpose = 'create',
@@ -187,7 +208,7 @@ export function FieldSetEditor({
   // Internal fallback when the caller doesn't wire up explicit-null tracking.
   // Keeps the affordance hidden in those modes (the Set-null button checks
   // for the controlled handler before rendering itself).
-  const nullFields = nullFieldsProp ?? [];
+  const storedNullFields = nullFieldsProp ?? [];
   const nullFieldsSupported = !!setNullFieldsProp;
   const isNull = (k: string) => nullFields.includes(k);
   const addNull = (k: string) => {
@@ -212,22 +233,30 @@ export function FieldSetEditor({
   const [addPickerOpen, setAddPickerOpen] = useState(false);
 
   // Form ↔ JSON toggle (per v2.2 Mode_Create design). When 'json', the user
-  // edits the body directly in a Textarea; when valid JSON, it parses back to
-  // `values`. When 'form', the existing per-field controls are the source of
-  // truth. The toggle holds its own draft text so editing doesn't ping-pong
-  // through every keystroke.
-  const [bodyMode, setBodyMode] = useState<'form' | 'json'>('form');
-  const [jsonText, setJsonText] = useState<string>('');
-  const [jsonError, setJsonError] = useState<string | null>(null);
+  // edits the body directly in Monaco. The text is only ever written by the
+  // user (and seeded once on entering JSON mode) — never re-serialized from
+  // `values`, which used to reformat it mid-edit (#91).
+  //
+  // Controlled (caller passes setRawBody): the text lives in the mode state
+  // and IS the body; the mode is derived from it, so it survives this pane
+  // unmounting. Uncontrolled: local text, parsed into `values` per keystroke.
+  const jsonControlled = !!setRawBody;
+  const [localMode, setLocalMode] = useState<'form' | 'json'>('form');
+  const [localText, setLocalText] = useState<string>('');
+  const bodyMode: 'form' | 'json' = jsonControlled
+    ? rawBody != null
+      ? 'json'
+      : 'form'
+    : localMode;
+  const jsonText = jsonControlled ? (rawBody ?? '') : localText;
+  // Pending JSON → Form switch that needs the user's call (invalid JSON, or
+  // keys the form can't show). Cleared on every edit.
+  const [switchIssue, setSwitchIssue] = useState<
+    { kind: 'invalid'; error: string } | { kind: 'unmapped'; decoded: DecodedFieldBody } | null
+  >(null);
 
-  // Snapshot values into jsonText whenever we enter JSON mode
-  useEffect(() => {
-    if (bodyMode !== 'json') return;
-    setJsonText(JSON.stringify(valuesToJsonBody(tbl, values), null, 2));
-    setJsonError(null);
-  }, [bodyMode, tbl, values]);
-
-  // Set / Update / Remove helpers
+  // Set / Update / Remove helpers. (`values` / `nullFields` are declared
+  // below, after the JSON preview; these only run in Form mode.)
   const setField = (k: string, v: CreateFieldValue) => setValues({ ...values, [k]: v });
   const removeField = (k: string) => {
     const next = { ...values };
@@ -256,6 +285,64 @@ export function FieldSetEditor({
         }),
     [tbl, purpose],
   );
+
+  // JSON mode: parse the typed body and preview what it maps to, so the
+  // header counts and required warnings describe the JSON, not the stale
+  // form values. In Form mode these are the caller's values as-is.
+  const jsonParse = useMemo(
+    () => (bodyMode === 'json' ? parseRawBody(jsonText) : null),
+    [bodyMode, jsonText],
+  );
+  const decodeOpts = useMemo(() => {
+    const ids = new Set(writable.map((c) => c.logicalName));
+    return { editable: (k: string) => ids.has(k), nullSupported: nullFieldsSupported };
+  }, [writable, nullFieldsSupported]);
+  const jsonDecoded = useMemo(
+    () => (tbl && jsonParse?.ok ? decodeFieldBody(tbl, jsonParse.body, decodeOpts) : null),
+    [tbl, jsonParse, decodeOpts],
+  );
+  const values = jsonDecoded ? jsonDecoded.values : valuesProp;
+  const nullFields = jsonDecoded ? jsonDecoded.nullFields : storedNullFields;
+
+  const enterJson = () => {
+    if (bodyMode === 'json' || !tbl) return;
+    const text = JSON.stringify(encodeFieldBody(tbl, valuesProp, storedNullFields), null, 2);
+    setSwitchIssue(null);
+    if (setRawBody) setRawBody(text);
+    else {
+      setLocalText(text);
+      setLocalMode('json');
+    }
+  };
+  const leaveJson = (decoded: DecodedFieldBody | null) => {
+    if (decoded) {
+      setValues(decoded.values);
+      if (setNullFieldsProp) setNullFieldsProp(decoded.nullFields);
+    }
+    setSwitchIssue(null);
+    if (setRawBody) setRawBody(null);
+    else setLocalMode('form');
+  };
+  const goForm = () => {
+    if (bodyMode === 'form' || !tbl) return;
+    // Uncontrolled: values already track the JSON keystroke by keystroke.
+    if (!jsonControlled) return leaveJson(null);
+    const p = parseRawBody(jsonText);
+    if (!p.ok) return setSwitchIssue({ kind: 'invalid', error: p.error });
+    const decoded = decodeFieldBody(tbl, p.body, decodeOpts);
+    if (decoded.unmapped.length > 0) return setSwitchIssue({ kind: 'unmapped', decoded });
+    leaveJson(decoded);
+  };
+  const onJsonChange = (t: string) => {
+    setSwitchIssue(null);
+    if (setRawBody) {
+      setRawBody(t);
+      return;
+    }
+    setLocalText(t);
+    const p = parseRawBody(t);
+    if (p.ok && tbl) setValues(decodeFieldBody(tbl, p.body, decodeOpts).values);
+  };
 
   const requiredFields = useMemo(() => writable.filter((c) => c.required), [writable]);
   // "Populated" includes both columns with a value AND columns flagged as
@@ -390,18 +477,10 @@ export function FieldSetEditor({
             primitive so it picks up the same hairline + radius treatment
             as FilterEditor (AND/OR) and OrderbyEditor (Asc/Desc). */}
         <SegmentedToggle ariaLabel="Body editor mode">
-          <ToggleButton
-            checked={bodyMode === 'form'}
-            icon={<FormNew20Regular />}
-            onClick={() => setBodyMode('form')}
-          >
+          <ToggleButton checked={bodyMode === 'form'} icon={<FormNew20Regular />} onClick={goForm}>
             Form
           </ToggleButton>
-          <ToggleButton
-            checked={bodyMode === 'json'}
-            icon={<Code20Regular />}
-            onClick={() => setBodyMode('json')}
-          >
+          <ToggleButton checked={bodyMode === 'json'} icon={<Code20Regular />} onClick={enterJson}>
             JSON
           </ToggleButton>
         </SegmentedToggle>
@@ -502,33 +581,26 @@ export function FieldSetEditor({
           </div>
         </>
       ) : (
-        // JSON edit mode — Monaco editor with json language. Parses back
-        // to fieldValues on every keystroke so the Form view stays in
-        // sync.
+        // JSON edit mode — Monaco editor with json language. The text is
+        // never rewritten by us; see the bodyMode comment above.
         <JsonEditPane
-          tbl={tbl}
           text={jsonText}
-          error={jsonError}
-          themeMode={themeMode}
-          onChange={(t) => {
-            setJsonText(t);
-            try {
-              const parsed = JSON.parse(t);
-              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-                setValues(jsonBodyToValues(tbl, parsed));
-                setJsonError(null);
-              } else {
-                setJsonError('Body must be a JSON object.');
-              }
-            } catch (e) {
-              setJsonError(e instanceof Error ? e.message : 'Invalid JSON.');
-            }
+          error={jsonParse && !jsonParse.ok ? jsonParse.error : null}
+          unmapped={jsonDecoded?.unmapped ?? []}
+          verbatim={jsonControlled}
+          switchIssue={switchIssue}
+          onDiscard={() => leaveJson(null)}
+          onSwitchAnyway={() => {
+            if (switchIssue?.kind === 'unmapped') leaveJson(switchIssue.decoded);
           }}
+          onStay={() => setSwitchIssue(null)}
+          themeMode={themeMode}
+          onChange={onJsonChange}
         />
       )}
 
       {/* Add field — only if there's something left to add */}
-      {addable.length > 0 && (
+      {bodyMode === 'form' && addable.length > 0 && (
         <div
           style={{ marginTop: 14, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}
         >
@@ -1786,24 +1858,56 @@ function FieldSection({
 // JSON edit pane — raw body editing for power users
 // ──────────────────────────────────────────────────────────────
 function JsonEditPane({
-  tbl,
   text,
   error,
+  unmapped,
+  verbatim,
+  switchIssue,
+  onDiscard,
+  onSwitchAnyway,
+  onStay,
   themeMode,
   onChange,
 }: {
-  tbl: TableMeta;
   text: string;
   error: string | null;
+  /** Keys in the typed body the Form view can't represent. */
+  unmapped: UnmappedBodyKey[];
+  /** True when the text is the request body (controlled JSON mode). */
+  verbatim: boolean;
+  switchIssue: { kind: 'invalid'; error: string } | { kind: 'unmapped' } | null;
+  onDiscard: () => void;
+  onSwitchAnyway: () => void;
+  onStay: () => void;
   themeMode: ThemeMode;
   onChange: (text: string) => void;
 }) {
-  void tbl;
+  const keyList = (
+    <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+      {unmapped.map((u) => (
+        <li key={u.key}>
+          <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{u.key}</code> — {u.reason}
+        </li>
+      ))}
+    </ul>
+  );
   return (
     <div style={{ maxWidth: 880, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <MessageBar layout="multiline" intent="info">
         <MessageBarBody>
-          Raw JSON edit mode — what you type here becomes the request body verbatim. Lookups use{' '}
+          {verbatim ? (
+            <>
+              Raw JSON edit mode — the request body is exactly this JSON, including{' '}
+              <code style={{ fontFamily: tokens.fontFamilyMonospace }}>null</code> values and keys
+              the form doesn&apos;t know.{' '}
+            </>
+          ) : (
+            <>
+              Raw JSON edit mode — edits are applied to the fields as you type. Keys that don&apos;t
+              map to a field aren&apos;t sent.{' '}
+            </>
+          )}
+          Lookups use{' '}
           <code style={{ fontFamily: tokens.fontFamilyMonospace }}>
             {'"<col>@odata.bind": "/<entitySet>(<guid>)"'}
           </code>{' '}
@@ -1811,10 +1915,68 @@ function JsonEditPane({
           <strong>Form</strong> to use the metadata-driven controls.
         </MessageBarBody>
       </MessageBar>
-      {error && (
+      {switchIssue?.kind === 'invalid' && (
+        <MessageBar layout="multiline" intent="error">
+          <MessageBarBody>
+            <MessageBarTitle>
+              Can&apos;t switch to Form — the JSON doesn&apos;t parse.
+            </MessageBarTitle>
+            {switchIssue.error} Fix it, or discard your JSON edits and go back to the form as it
+            was.
+          </MessageBarBody>
+          <MessageBarActions>
+            <Button size="small" onClick={onDiscard}>
+              Discard JSON edits
+            </Button>
+            <Button size="small" appearance="primary" onClick={onStay}>
+              Keep editing
+            </Button>
+          </MessageBarActions>
+        </MessageBar>
+      )}
+      {switchIssue?.kind === 'unmapped' && (
+        <MessageBar layout="multiline" intent="warning">
+          <MessageBarBody>
+            <MessageBarTitle>
+              {unmapped.length} key{unmapped.length === 1 ? '' : 's'} can&apos;t be shown in the
+              Form view.
+            </MessageBarTitle>
+            Switching to Form drops {unmapped.length === 1 ? 'it' : 'them'} from the body:
+            {keyList}
+          </MessageBarBody>
+          <MessageBarActions>
+            <Button size="small" onClick={onSwitchAnyway}>
+              Switch and drop {unmapped.length === 1 ? 'it' : 'them'}
+            </Button>
+            <Button size="small" appearance="primary" onClick={onStay}>
+              Stay in JSON
+            </Button>
+          </MessageBarActions>
+        </MessageBar>
+      )}
+      {error && !switchIssue && (
         <MessageBar layout="multiline" intent="error">
           <MessageBarBody>
             <strong>Invalid JSON.</strong> {error}
+            {verbatim && ' Execute is disabled until the body parses.'}
+          </MessageBarBody>
+        </MessageBar>
+      )}
+      {!error && !switchIssue && unmapped.length > 0 && (
+        <MessageBar layout="multiline" intent={verbatim ? 'info' : 'warning'}>
+          <MessageBarBody>
+            {verbatim ? (
+              <>
+                Sent as typed, but the Form view can&apos;t show{' '}
+                {unmapped.length === 1 ? 'this key' : 'these keys'}:
+              </>
+            ) : (
+              <>
+                Not sent — {unmapped.length === 1 ? 'this key doesn’t' : 'these keys don’t'} map to
+                a field:
+              </>
+            )}
+            {keyList}
           </MessageBarBody>
         </MessageBar>
       )}
@@ -1877,138 +2039,6 @@ function JsonEditPane({
       </div>
     </div>
   );
-}
-
-/**
- * Convert in-memory fieldValues into the wire-format JSON body — same encoding
- * rules as engine/urlBuilder.buildCreateBody but lives here too so the JSON
- * edit pane can stay self-contained (no engine import).
- */
-/**
- * Resolve the `@odata.bind` property name for a lookup column. See
- * engine/urlBuilder.bindPropertyFor for the full rationale. We keep a
- * twin copy here because FieldSetEditor's JSON preview is intentionally
- * engine-free (no urlBuilder import — the JSON pane needs to render even
- * before the request would otherwise execute).
- */
-function bindPropertyFor(
-  parentTbl: TableMeta,
-  columnLogical: string,
-  targetEntity: string,
-): string {
-  const nav = parentTbl.navigationProperties.find(
-    (n) =>
-      n.cardinality === 'ManyToOne' &&
-      n.referencingAttribute === columnLogical &&
-      n.targetEntity === targetEntity,
-  );
-  return `${nav?.name ?? columnLogical}@odata.bind`;
-}
-
-function valuesToJsonBody(
-  tbl: TableMeta | undefined,
-  values: Record<string, CreateFieldValue>,
-): Record<string, unknown> {
-  if (!tbl) return {};
-  const body: Record<string, unknown> = {};
-  for (const [field, raw] of Object.entries(values)) {
-    if (raw == null) continue;
-    const col = findColumn(tbl, field);
-    if (!col) continue;
-    if (isLookupLike(col)) {
-      const lk = raw as { id: string; targetEntity: string };
-      if (!lk?.id) continue;
-      const target = findTable(lk.targetEntity);
-      if (!target) continue;
-      // Polymorphic-safe — picks `customerid_account` / `regardingobjectid_account_task`
-      // when the column is multi-target, or the bare `<col>` when single-target.
-      const bindProp = bindPropertyFor(tbl, col.logicalName, lk.targetEntity);
-      body[bindProp] = `/${target.entitySetName}(${lk.id})`;
-      continue;
-    }
-    if (col.attributeType === 'MultiSelectPicklist') {
-      const arr = raw as number[];
-      if (!Array.isArray(arr) || arr.length === 0) continue;
-      body[col.logicalName] = arr.join(',');
-      continue;
-    }
-    if (typeof raw === 'string' && raw === '') continue;
-    body[col.logicalName] = raw;
-  }
-  return body;
-}
-
-/**
- * Reverse of valuesToJsonBody — parse a user-edited JSON body back into
- * in-memory fieldValues. Lookup-bind entries become LookupFieldValue, multi-
- * select comma-strings become number[]. Unknown columns are dropped.
- */
-function jsonBodyToValues(
-  tbl: TableMeta | undefined,
-  body: Record<string, unknown>,
-): Record<string, CreateFieldValue> {
-  if (!tbl) return {};
-  const values: Record<string, CreateFieldValue> = {};
-  for (const [k, v] of Object.entries(body)) {
-    if (k.startsWith('@')) continue;
-    if (k.endsWith('@odata.bind')) {
-      // The key before `@odata.bind` is the property name. Two shapes:
-      //   1. Bare attribute name (single-target lookups): `primarycontactid`
-      //   2. Target-disambiguated nav-property (polymorphic): `customerid_account`,
-      //      `regardingobjectid_account_task`
-      // We try (1) first via findColumn; if no lookup column matches, fall
-      // back to matching nav-properties by name. The nav's `referencingAttribute`
-      // gives us the underlying column, and `targetEntity` gives the target.
-      const propName = k.replace('@odata.bind', '');
-      const m = typeof v === 'string' ? v.match(/\/([^/(]+)\(([^)]+)\)/) : null;
-      if (!m) continue;
-      const [, entitySet, id] = m;
-
-      // (1) Try as a bare column name first.
-      const directCol = findColumn(tbl, propName);
-      if (directCol && isLookupLike(directCol)) {
-        // Resolve target entity from the URL's entity-set segment by
-        // walking the column's known targets. If none match, fall back
-        // to the first target. (Most plain Lookups have one target.)
-        const targetLogical =
-          directCol.targets.find((t) => findTable(t)?.entitySetName === entitySet) ??
-          directCol.targets[0];
-        values[propName] = { id, targetEntity: targetLogical };
-        continue;
-      }
-
-      // (2) Try as a disambiguated nav-property name.
-      const nav = tbl.navigationProperties.find(
-        (n) => n.cardinality === 'ManyToOne' && n.name === propName,
-      );
-      if (nav && nav.referencingAttribute) {
-        values[nav.referencingAttribute] = {
-          id,
-          targetEntity: nav.targetEntity,
-        };
-        continue;
-      }
-      // Unknown property — drop. Keeps the parser tolerant of stray
-      // annotations the user might have copied from elsewhere.
-      continue;
-    }
-    const col = findColumn(tbl, k);
-    if (!col) continue;
-    if (col.attributeType === 'MultiSelectPicklist') {
-      if (typeof v === 'string') {
-        const arr = v
-          .split(',')
-          .map((n) => Number(n.trim()))
-          .filter((n) => Number.isFinite(n));
-        values[k] = arr;
-      } else if (Array.isArray(v)) {
-        values[k] = v.map(Number).filter((n) => Number.isFinite(n));
-      }
-      continue;
-    }
-    values[k] = v as CreateFieldValue;
-  }
-  return values;
 }
 
 /** Seed values for a new Create against a given table — populates required fields. */

@@ -74,6 +74,7 @@ import {
   type SerializedCreateState,
 } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { rawBodyBlocker, rawBodyColumns } from '../engine/fieldBody';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -87,6 +88,7 @@ const initialState = (): CreateState => ({
   table: '',
   fieldValues: {},
   nullFields: [],
+  rawBody: null,
   prefer: { ...emptyPrefer(), formattedValues: true, returnRepresentation: true },
   headers: defaultWriteHeaders(),
   returnSelect: [],
@@ -159,11 +161,17 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   //
   // (Recommended-level columns are still excluded — those are UI hints
   // in model-driven forms, not server-enforced at all.)
+  const rawCols = useMemo(
+    () => (tbl ? rawBodyColumns(tbl, state.rawBody) : null),
+    [tbl, state.rawBody],
+  );
   const missingRequired = useMemo(() => {
     if (!tbl) return [];
     return tbl.columns
       .filter((c) => c.requiredLevel === 'ApplicationRequired' && c.isValidForCreate !== false)
       .filter((c) => {
+        // JSON mode: the typed body is what's sent — check it instead.
+        if (rawCols) return !rawCols.has(c.logicalName);
         const v = state.fieldValues[c.logicalName];
         if (v == null) return true;
         if (typeof v === 'string' && v === '') return true;
@@ -175,17 +183,20 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
         return false;
       })
       .map((c) => c.logicalName);
-  }, [tbl, state.fieldValues]);
+  }, [tbl, state.fieldValues, rawCols]);
 
+  const jsonBlocker = rawBodyBlocker(state.rawBody);
   const disabledReason = !tbl
     ? 'Pick a target table first.'
-    : missingRequired.length > 0
-      ? `${missingRequired.length} required field${missingRequired.length === 1 ? '' : 's'} unset: ${missingRequired.slice(0, 3).join(', ')}${missingRequired.length > 3 ? '…' : ''}`
-      : state.headers.some((h) => h.enabled && !h.name)
-        ? 'Fix empty header name.'
-        : Object.keys(body).length === 0
-          ? 'Body is empty — set at least one field.'
-          : null;
+    : jsonBlocker
+      ? jsonBlocker
+      : missingRequired.length > 0
+        ? `${missingRequired.length} required field${missingRequired.length === 1 ? '' : 's'} unset: ${missingRequired.slice(0, 3).join(', ')}${missingRequired.length > 3 ? '…' : ''}`
+        : state.headers.some((h) => h.enabled && !h.name)
+          ? 'Fix empty header name.'
+          : Object.keys(body).length === 0
+            ? 'Body is empty — set at least one field.'
+            : null;
 
   // ── Execute ──
   const onExecute = async () => {
@@ -278,7 +289,9 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   );
 
   // ── Sidebar config ──
-  const populatedCount = Object.keys(state.fieldValues).length;
+  // JSON mode: the typed body is what's sent, so count its keys.
+  const populatedCount =
+    state.rawBody != null ? Object.keys(body).length : Object.keys(state.fieldValues).length;
   const returnRep = state.prefer.returnRepresentation;
   const sections = [
     {
@@ -400,6 +413,7 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
               ...s,
               table: t,
               fieldValues: newSeed,
+              rawBody: null,
               returnSelect: [],
               dirty: new Set(['target', 'fieldset']),
             }));
@@ -420,6 +434,8 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
           }
           nullFields={state.nullFields}
           setNullFields={(n) => set('nullFields', n, 'fieldset')}
+          rawBody={state.rawBody ?? null}
+          setRawBody={(t) => set('rawBody', t, 'fieldset')}
           group="write"
           themeMode={themeMode}
           purpose="create"

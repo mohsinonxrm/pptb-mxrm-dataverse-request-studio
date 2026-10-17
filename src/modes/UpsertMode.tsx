@@ -72,6 +72,7 @@ import {
   type SerializedUpsertState,
 } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { rawBodyBlocker, rawBodyColumns } from '../engine/fieldBody';
 
 // Empty initial state — user picks the table first, which then re-seeds
 // the key shape (GUID by default; switches to first alternate key once
@@ -81,6 +82,7 @@ const initialState = (): UpsertState => ({
   key: { kind: 'guid', recordId: null },
   fieldValues: {},
   nullFields: [],
+  rawBody: null,
   prefer: { ...emptyPrefer(), formattedValues: true, returnRepresentation: true },
   headers: defaultWriteHeaders(),
   returnSelect: [],
@@ -148,7 +150,9 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
     return def.columns.every((c) => (k.keyValues[c] ?? '').trim() !== '');
   })();
 
-  const fieldCount = Object.keys(state.fieldValues).length;
+  // JSON mode: the typed body is what's sent, so count its keys.
+  const fieldCount =
+    state.rawBody != null ? Object.keys(body).length : Object.keys(state.fieldValues).length;
 
   // Required-field guard — conditional on disposition mode.
   //
@@ -162,12 +166,18 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
   //
   // ApplicationRequired only (same call as Create mode). SystemRequired
   // columns that survive the create filter are server-defaulted.
+  const rawCols = useMemo(
+    () => (tbl ? rawBodyColumns(tbl, state.rawBody) : null),
+    [tbl, state.rawBody],
+  );
   const missingRequired = useMemo(() => {
     if (!tbl) return [] as string[];
     if (state.concurrency.kind !== 'create-only') return [];
     return tbl.columns
       .filter((c) => c.requiredLevel === 'ApplicationRequired' && c.isValidForCreate !== false)
       .filter((c) => {
+        // JSON mode: the typed body is what's sent — check it instead.
+        if (rawCols) return !rawCols.has(c.logicalName);
         const v = state.fieldValues[c.logicalName];
         if (v == null) return true;
         if (typeof v === 'string' && v === '') return true;
@@ -179,7 +189,9 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
         return false;
       })
       .map((c) => c.logicalName);
-  }, [tbl, state.concurrency.kind, state.fieldValues]);
+  }, [tbl, state.concurrency.kind, state.fieldValues, rawCols]);
+
+  const jsonBlocker = rawBodyBlocker(state.rawBody);
 
   const disabledReason = !tbl
     ? 'Pick a target table first.'
@@ -189,15 +201,17 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
         : 'Fill in every alternate-key column.'
       : state.key.kind === 'guid' && state.key.recordId && !isValidGuid(state.key.recordId)
         ? 'Record id is not a valid GUID.'
-        : missingRequired.length > 0
-          ? `${missingRequired.length} required field${missingRequired.length === 1 ? '' : 's'} unset for create-only: ${missingRequired.slice(0, 3).join(', ')}${missingRequired.length > 3 ? '…' : ''}`
-          : Object.keys(body).length === 0
-            ? 'Body is empty — set at least one field.'
-            : state.concurrency.kind === 'etag' && !state.concurrency.etag.trim()
-              ? 'Provide an etag value or switch the concurrency mode.'
-              : state.headers.some((h) => h.enabled && !h.name)
-                ? 'Fix empty header name.'
-                : null;
+        : jsonBlocker
+          ? jsonBlocker
+          : missingRequired.length > 0
+            ? `${missingRequired.length} required field${missingRequired.length === 1 ? '' : 's'} unset for create-only: ${missingRequired.slice(0, 3).join(', ')}${missingRequired.length > 3 ? '…' : ''}`
+            : Object.keys(body).length === 0
+              ? 'Body is empty — set at least one field.'
+              : state.concurrency.kind === 'etag' && !state.concurrency.etag.trim()
+                ? 'Provide an etag value or switch the concurrency mode.'
+                : state.headers.some((h) => h.enabled && !h.name)
+                  ? 'Fix empty header name.'
+                  : null;
 
   const onExecute = async () => {
     setLoading(true);
@@ -515,6 +529,7 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
                 ? { kind: 'alternate', keyName: firstAltKey.name, keyValues: {} }
                 : { kind: 'guid', recordId: null },
               fieldValues: {},
+              rawBody: null,
               returnSelect: [],
               dirty: new Set(['target', 'key', 'fieldset']),
             }));
@@ -546,6 +561,8 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
           }
           nullFields={state.nullFields}
           setNullFields={(n) => set('nullFields', n, 'fieldset')}
+          rawBody={state.rawBody ?? null}
+          setRawBody={(t) => set('rawBody', t, 'fieldset')}
           group="write"
           themeMode={themeMode}
           // Intersection of IsValidForCreate AND IsValidForUpdate — the
