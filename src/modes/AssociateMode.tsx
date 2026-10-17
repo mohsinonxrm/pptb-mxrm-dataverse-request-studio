@@ -52,6 +52,7 @@ import { findTable } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildAssociate, buildAssociateBody, buildAssociateRequests } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
+import { relateDoneCount } from '../engine/dataverseExecutor';
 import type { AssociateState } from '../state/relateState';
 import { isSingleValuedNav } from '../state/relateState';
 import type { RecentRun } from '../state/readState';
@@ -161,7 +162,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
           ts: Date.now(),
           status: res.status,
           ms: res.ms,
-          rowCount: res.ok ? requests.length : 0,
+          rowCount: relateDoneCount(res, requests.length) ?? 0,
         },
         ...rs,
       ].slice(0, 8),
@@ -444,7 +445,11 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
         />
       }
     >
-      <MainTabs tab={tab} onTabChange={setTab} resultCount={result?.ok ? requests.length : null}>
+      <MainTabs
+        tab={tab}
+        onTabChange={setTab}
+        resultCount={relateDoneCount(result, requests.length)}
+      >
         {tab === 'builder' && pane}
         {tab === 'code' && <CodeView themeMode={themeMode} inputs={codeInputs} />}
         {tab === 'results' && (
@@ -462,6 +467,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
               targetNames: state.targets
                 .map((id) => state.targetNames[id])
                 .filter((n): n is string => !!n),
+              targetNameById: state.targetNames,
             }}
           />
         )}
