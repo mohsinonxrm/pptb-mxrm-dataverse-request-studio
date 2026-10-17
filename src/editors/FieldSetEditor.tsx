@@ -94,6 +94,15 @@ import {
 } from '../mock/metadata';
 import { useLookupRecords } from '../host/useLookupRecords';
 import { useColumnDetail } from '../host/useColumnDetail';
+import {
+  behaviorHint,
+  behaviorOf,
+  combineDateAndTime,
+  isDateOnlyColumn,
+  localZoneLabel,
+  parseDateTimeValue,
+  serializeDateTimeValue,
+} from './dateTimeValue';
 // Monaco — same instance + worker setup as CodeView. The `loader.config`
 // side-effect runs when CodeView is first imported (every mode file
 // imports it), so by the time FieldSetEditor renders, Monaco is ready.
@@ -1137,84 +1146,79 @@ function DateTimeFieldInput({
   value: string | undefined;
   onChange: (v: string) => void;
 }) {
-  const isDateOnly = col.format === 'DateOnly' || col.dateTimeBehavior === 'DateOnly';
-  const behaviorHint =
-    col.dateTimeBehavior === 'UserLocal'
-      ? 'stored as UTC, displayed in user TZ'
-      : col.dateTimeBehavior === 'DateOnly'
-        ? 'midnight UTC, no TZ conversion'
-        : 'wall-clock as UTC (no TZ math)';
-
-  const parsed = value ? new Date(value) : null;
-  const dateOnly = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+  // Parsing / serializing is per behavior — see editors/dateTimeValue.ts.
+  // `current`'s LOCAL fields are what the pickers show.
+  const isDateOnly = isDateOnlyColumn(col);
+  const current = parseDateTimeValue(value, col);
+  const hint = behaviorHint(col, current);
 
   const writeDate = (d: Date | null | undefined) => {
     if (!d) {
       onChange('');
       return;
     }
-    if (isDateOnly) {
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
-      onChange(`${yyyy}-${mm}-${dd}`);
-    } else {
-      const prior = parsed && !Number.isNaN(parsed.getTime()) ? parsed : new Date(d);
-      const next = new Date(d);
-      next.setHours(prior.getHours(), prior.getMinutes(), 0, 0);
-      onChange(next.toISOString());
-    }
+    // Keep the time already picked when the date changes.
+    onChange(serializeDateTimeValue(combineDateAndTime(d, isDateOnly ? null : current), col));
   };
   const writeTime = (d: Date | null | undefined) => {
-    if (!d || !dateOnly) return;
-    const next = new Date(dateOnly);
-    next.setHours(d.getHours(), d.getMinutes(), 0, 0);
-    onChange(next.toISOString());
+    if (!d || !current) return;
+    onChange(serializeDateTimeValue(combineDateAndTime(current, d), col));
   };
+
+  // What's on the wire — shown under the pickers so the zone is never a
+  // guess (#92).
+  const sent = value ? (
+    <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
+      Sends <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{value}</code>
+      {behaviorOf(col) === 'UserLocal' && (
+        <> (UTC) · shown in {localZoneLabel(current ?? undefined)}</>
+      )}
+    </Caption1>
+  ) : null;
 
   if (isDateOnly) {
     return (
-      <Tooltip
-        content={`Behavior: ${col.dateTimeBehavior} — ${behaviorHint}`}
-        relationship="description"
-      >
-        <DatePicker
-          size="small"
-          value={dateOnly}
-          onSelectDate={writeDate}
-          placeholder="Pick a date…"
-          formatDate={(d) => (d ? d.toLocaleDateString() : '')}
-          allowTextInput
-        />
-      </Tooltip>
+      <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+        <Tooltip content={`Behavior: ${behaviorOf(col)} — ${hint}`} relationship="description">
+          <DatePicker
+            size="small"
+            value={current}
+            onSelectDate={writeDate}
+            placeholder="Pick a date…"
+            formatDate={(d) => (d ? d.toLocaleDateString() : '')}
+            allowTextInput
+          />
+        </Tooltip>
+        {sent}
+      </span>
     );
   }
   return (
-    <Tooltip
-      content={`Behavior: ${col.dateTimeBehavior} — ${behaviorHint}`}
-      relationship="description"
-    >
-      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-        <DatePicker
-          size="small"
-          value={dateOnly}
-          onSelectDate={writeDate}
-          placeholder="Date…"
-          formatDate={(d) => (d ? d.toLocaleDateString() : '')}
-          style={{ minWidth: 130 }}
-          allowTextInput
-        />
-        <TimePicker
-          size="small"
-          freeform
-          selectedTime={dateOnly}
-          onTimeChange={(_, d) => writeTime(d.selectedTime)}
-          placeholder="Time…"
-          style={{ minWidth: 100 }}
-          hourCycle="h23"
-        />
-      </span>
-    </Tooltip>
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+      <Tooltip content={`Behavior: ${behaviorOf(col)} — ${hint}`} relationship="description">
+        <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <DatePicker
+            size="small"
+            value={current}
+            onSelectDate={writeDate}
+            placeholder="Date…"
+            formatDate={(d) => (d ? d.toLocaleDateString() : '')}
+            style={{ minWidth: 130 }}
+            allowTextInput
+          />
+          <TimePicker
+            size="small"
+            freeform
+            selectedTime={current}
+            onTimeChange={(_, d) => writeTime(d.selectedTime)}
+            placeholder="Time…"
+            style={{ minWidth: 100 }}
+            hourCycle="h23"
+          />
+        </span>
+      </Tooltip>
+      {sent}
+    </span>
   );
 }
 
