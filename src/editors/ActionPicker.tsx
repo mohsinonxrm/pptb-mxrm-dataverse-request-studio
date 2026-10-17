@@ -22,12 +22,18 @@ import {
   Spinner,
   MessageBar,
   MessageBarBody,
+  MessageBarTitle,
+  Link,
 } from '@fluentui/react-components';
 import { Flash20Filled, Code20Filled, BoxMultiple20Regular } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
 import { type CsdlAction } from '../mock/actionsCsdl';
 import { findTable } from '../mock/metadata';
-import { actions as actionsProvider } from '../host/csdlProvider';
+import {
+  actions as actionsProvider,
+  isCsdlSizeLimitError,
+  CSDL_SIZE_LIMIT_ISSUE_URL,
+} from '../host/csdlProvider';
 import type { RequestGroup } from '../registry/requestTypes';
 
 export interface ActionPickerProps {
@@ -261,10 +267,30 @@ export function ActionPicker({
         )}
       </PaneHead>
 
-      {loadError && (
+      {loadError && isCsdlSizeLimitError(loadError) ? (
+        // PPTB 1.2.7 caps getCSDLDocument at 16 MB; Dynamics orgs exceed it.
+        // Explain instead of showing the raw buffer error (#79).
         <MessageBar intent="error" layout="multiline" style={{ marginBottom: 12, maxWidth: 760 }}>
-          <MessageBarBody>Couldn't load CSDL metadata: {loadError}</MessageBarBody>
+          <MessageBarBody>
+            <MessageBarTitle>
+              This environment's metadata is too large for PPTB 1.2.7
+            </MessageBarTitle>
+            Power Platform ToolBox 1.2.7 can't load a <code>$metadata</code> document larger than 16
+            MB, so actions and functions can't be listed here. It worked in PPTB 1.2.6 and will work
+            again once PPTB ships the fix (
+            <Link href={CSDL_SIZE_LIMIT_ISSUE_URL} target="_blank" rel="noopener noreferrer">
+              desktop-app#736
+            </Link>
+            ). Other request types aren't affected.
+            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>Host error: {loadError}</div>
+          </MessageBarBody>
         </MessageBar>
+      ) : (
+        loadError && (
+          <MessageBar intent="error" layout="multiline" style={{ marginBottom: 12, maxWidth: 760 }}>
+            <MessageBarBody>Couldn't load CSDL metadata: {loadError}</MessageBarBody>
+          </MessageBar>
+        )
       )}
 
       <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 14 }}>

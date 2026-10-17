@@ -597,3 +597,16 @@ function classifySource(_namespace: string, name: string): CsdlAction['source'] 
   // the editor picker still surfaces all custom messages either way.
   return 'custom-api';
 }
+
+/**
+ * True when `getCSDLDocument()` failed because of PPTB 1.2.7's 16 MB response
+ * cap (Dynamics orgs exceed it): "Cannot create a Buffer larger than 16777216
+ * bytes" from the decompress step, or "metadata response exceeds the maximum
+ * size" from the raw-byte guard. PowerPlatformToolBox/desktop-app#736 (#79).
+ */
+export function isCsdlSizeLimitError(message: string): boolean {
+  return /16777216|exceeds the maximum size/i.test(message);
+}
+
+export const CSDL_SIZE_LIMIT_ISSUE_URL =
+  'https://github.com/PowerPlatformToolBox/desktop-app/issues/736';
