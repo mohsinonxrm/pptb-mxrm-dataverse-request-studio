@@ -45,18 +45,25 @@ import type {
 } from '../mock/actionsCsdl';
 
 // Tiny inline memoizer — CSDL is fetched at most twice per session (raw XML
-// + parsed actions). A 4-line cache is enough; we don't need the full
-// metadataCache machinery here.
+// + parsed actions). A small cache is enough; we don't need the full
+// metadataCache machinery here. Concurrent calls share one in-flight
+// promise. A rejected fetch is never cached, and `shouldCache` can refuse a
+// resolved value too (a failed lookup reported as a value, e.g. `null`), so
+// the next call retries instead of pinning the failure for the session.
 const csdlCache = new Map<string, unknown>();
 const csdlInflight = new Map<string, Promise<unknown>>();
-async function memoize<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+async function memoize<T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  shouldCache: (value: T) => boolean = () => true,
+): Promise<T> {
   if (csdlCache.has(key)) return csdlCache.get(key) as T;
   const pending = csdlInflight.get(key);
   if (pending) return pending as Promise<T>;
   const promise = (async () => {
     try {
       const value = await fetcher();
-      csdlCache.set(key, value);
+      if (shouldCache(value)) csdlCache.set(key, value);
       return value;
     } finally {
       csdlInflight.delete(key);
@@ -67,8 +74,18 @@ async function memoize<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
 }
 
 const K_CSDL_RAW = 'csdl:raw';
+const K_CSDL_PARSED = 'csdl:parsed';
 const K_CSDL_ACTIONS = 'csdl:actions';
-const K_MESSAGE_SOURCES = 'csdl:message-sources';
+const K_CUSTOM_APIS = 'csdl:source:customapis';
+const K_CUSTOM_ACTIONS = 'csdl:source:workflows';
+
+/**
+ * The most recently classified action list, for `findActionSync`. Kept
+ * outside `csdlCache` because a list classified with a failed lookup isn't
+ * cached (the next load re-classifies it) but must still be readable
+ * synchronously meanwhile.
+ */
+let lastClassified: CsdlAction[] | undefined;
 
 // ── Public surface ──────────────────────────────────────────────────────
 
@@ -79,16 +96,31 @@ const K_MESSAGE_SOURCES = 'csdl:message-sources';
  *
  * `source` (oob / custom-api / custom-action) comes from Dataverse data, not
  * from the name (#54): the `customapis` and custom-process-action
- * `workflows` lookups run in parallel with the CSDL download and are cached
- * with it. If either lookup fails (typically missing read privilege), the
- * name-prefix heuristic fills in for that half — see `classifySource`.
+ * `workflows` lookups run in parallel with the CSDL download. If either
+ * lookup fails (missing read privilege, a transient error, or a call before
+ * the connection is ready), the name-prefix heuristic fills in for that half
+ * — see `classifySource` — and the classified list is NOT cached: the next
+ * load retries the failed lookup (the parsed CSDL stays cached, so only the
+ * lookup is re-sent) and re-classifies.
  */
 export async function fetchCsdlActions(): Promise<CsdlAction[]> {
-  return memoize(K_CSDL_ACTIONS, async () => {
-    // fetchCsdlDocument is itself memoized so a second-load skips the network.
-    const [xml, sources] = await Promise.all([fetchCsdlDocument(), fetchMessageSources()]);
-    return parseCsdl(xml).map((a) => ({ ...a, source: classifySource(a.name, sources) }));
-  });
+  const res = await memoize(
+    K_CSDL_ACTIONS,
+    async () => {
+      // Both are memoized, so a re-classification skips the CSDL download.
+      const [parsed, sources] = await Promise.all([fetchParsedCsdl(), fetchMessageSources()]);
+      const list = parsed.map((a) => ({ ...a, source: classifySource(a.name, sources) }));
+      lastClassified = list;
+      return { list, complete: sources.customApis !== null && sources.customActions !== null };
+    },
+    (r) => r.complete,
+  );
+  return res.list;
+}
+
+/** Parsed `$metadata` actions/functions (source not yet classified). */
+function fetchParsedCsdl(): Promise<CsdlAction[]> {
+  return memoize(K_CSDL_PARSED, async () => parseCsdl(await fetchCsdlDocument()));
 }
 
 /**
@@ -143,9 +175,8 @@ export const actions: ActionsProvider = {
  * can't await an async fetch.
  *
  * The flow: when the user picks an action in the picker, the picker has
- * already kicked off `actions.loadAll()` which populates the `csdlCache`
- * entry under `K_CSDL_ACTIONS`. By the time `buildExecuteAction` runs,
- * the cache IS populated and this sync lookup hits.
+ * already kicked off `actions.loadAll()` which sets `lastClassified`. By the
+ * time `buildExecuteAction` runs, it IS populated and this sync lookup hits.
  *
  * Returns undefined when the cache is empty (cold session, not yet loaded)
  * or when the named action doesn't exist. Callers must handle undefined
@@ -153,8 +184,7 @@ export const actions: ActionsProvider = {
  */
 export function findActionSync(name: string): CsdlAction | undefined {
   if (!name) return undefined;
-  const cached = csdlCache.get(K_CSDL_ACTIONS) as CsdlAction[] | undefined;
-  return cached?.find((a) => a.name === name);
+  return lastClassified?.find((a) => a.name === name);
 }
 
 /** Raw `$metadata` XML — exposed for debug/inspection. Rarely needed by app
@@ -626,26 +656,37 @@ const NO_MESSAGE_SOURCES: MessageSources = { customApis: null, customActions: nu
 
 const FORMATTED = '@OData.Community.Display.V1.FormattedValue';
 
-function fetchMessageSources(): Promise<MessageSources> {
-  return memoize(K_MESSAGE_SOURCES, async () => {
-    const [customApis, customActions] = await Promise.all([
-      queryNames('customapis?$select=uniquename', (r) => [r.uniquename]),
-      queryNames(
-        'workflows?$select=uniquename,_sdkmessageid_value&$filter=category eq 3 and type eq 1',
-        // The message name is the sdkmessage lookup's formatted value. Also
-        // take uniquename when it carries a publisher prefix (it's the same
-        // string then); an unprefixed one could collide with an OOB message.
-        (r) => {
-          const u = r.uniquename;
-          return [
-            r[`_sdkmessageid_value${FORMATTED}`],
-            typeof u === 'string' && u.includes('_') ? u : undefined,
-          ];
-        },
-      ),
-    ]);
-    return { customApis, customActions };
-  });
+// Each lookup is memoized on its own and only when it succeeded: a failed
+// one (null) is retried by the next load rather than pinning the name
+// heuristic for the whole session.
+async function fetchMessageSources(): Promise<MessageSources> {
+  const notFailed = (v: Set<string> | null) => v !== null;
+  const [customApis, customActions] = await Promise.all([
+    memoize(
+      K_CUSTOM_APIS,
+      () => queryNames('customapis?$select=uniquename', (r) => [r.uniquename]),
+      notFailed,
+    ),
+    memoize(
+      K_CUSTOM_ACTIONS,
+      () =>
+        queryNames(
+          'workflows?$select=uniquename,_sdkmessageid_value&$filter=category eq 3 and type eq 1',
+          // The message name is the sdkmessage lookup's formatted value. Also
+          // take uniquename when it carries a publisher prefix (it's the same
+          // string then); an unprefixed one could collide with an OOB message.
+          (r) => {
+            const u = r.uniquename;
+            return [
+              r[`_sdkmessageid_value${FORMATTED}`],
+              typeof u === 'string' && u.includes('_') ? u : undefined,
+            ];
+          },
+        ),
+      notFailed,
+    ),
+  ]);
+  return { customApis, customActions };
 }
 
 /** Run an OData query (following `@odata.nextLink`) and collect the
