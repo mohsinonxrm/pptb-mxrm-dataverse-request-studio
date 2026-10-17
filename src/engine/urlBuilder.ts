@@ -5,6 +5,7 @@ import { ENV } from '../mock/environment';
 import { findTable, findColumn, isLookupLike, type TableMeta } from '../mock/metadata';
 import { groupToOData } from '../editors/filter/filterTree';
 import { attrRefByName } from './odataAttr';
+import { readRowLookup } from './recordSnapshot';
 import { orderbyToOData } from '../editors/OrderbyEditor';
 import { expandToOData } from '../editors/ExpandEditor';
 import { applyToOData } from '../editors/ApplyEditor';
@@ -675,16 +676,20 @@ export function buildMergeBody(s: MergeState): Record<string, unknown> {
     if (!col) continue;
     if (choice === 'subordinate') {
       if (!subRow) continue;
-      const raw = subRow[field];
-      if (raw == null) continue;
       if (isLookupLike(col)) {
-        // For lookup-like fields, the subordinate's _<col>_value holds the GUID.
-        const id = (subRow as Record<string, unknown>)[`_${field}_value`];
-        if (typeof id === 'string' && id) {
-          update[field] = { id, targetEntity: col.targets[0] };
+        // The row carries lookups only as `_<col>_value` (never under the
+        // logical name), so this must run before the generic null check.
+        // Bind to the entity the annotation names — for polymorphic
+        // lookups (customer / owner / regarding) `targets[0]` may be the
+        // wrong entity set (#96). Unknown target → skip rather than guess.
+        const lk = readRowLookup(subRow, col);
+        if (lk?.targetEntity) {
+          update[field] = { id: lk.id, targetEntity: lk.targetEntity };
         }
         continue;
       }
+      const raw = subRow[field];
+      if (raw == null) continue;
       if (col.attributeType === 'MultiSelectPicklist') {
         if (typeof raw === 'string' && raw) {
           update[field] = raw

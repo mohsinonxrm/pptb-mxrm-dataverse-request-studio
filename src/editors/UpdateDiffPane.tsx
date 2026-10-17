@@ -38,6 +38,7 @@ import {
 import { PaneHead } from './PaneHead';
 import { findTable, columnOptions, isLookupLike, type ColumnMeta } from '../mock/metadata';
 import type { CreateFieldValue, LookupFieldValue } from '../state/writeState';
+import { readRowValue, sameLookup, formatLookup } from '../engine/recordSnapshot';
 
 // ──────────────────────────────────────────────────────────────
 // Columns we exclude from the diff (system / binary)
@@ -96,7 +97,9 @@ export function UpdateDiffPane({
     for (const col of tbl.columns) {
       if (HIDDEN_FROM_DIFF.has(col.logicalName)) continue;
       if (col.attributeType === 'File' || col.attributeType === 'Image') continue;
-      const before = original[col.logicalName];
+      // Lookups come back as `_<col>_value` + annotations, not under the
+      // logical name — read them as { id, targetEntity, name } (#96).
+      const before = readRowValue(original, col);
       const inDiff = col.logicalName in fieldValues;
       const raw = fieldValues[col.logicalName];
       const after = inDiff ? toComparable(col, raw) : before;
@@ -421,8 +424,7 @@ function formatValue(col: ColumnMeta, value: unknown): string {
   }
   if (isLookupLike(col)) {
     if (typeof value === 'object' && value !== null && 'id' in value) {
-      const lk = value as LookupFieldValue;
-      return `${lk.targetEntity}(${lk.id.slice(0, 8)}…)`;
+      return formatLookup(value as LookupFieldValue);
     }
     if (typeof value === 'string') return value;
   }
@@ -462,11 +464,12 @@ function formatValue(col: ColumnMeta, value: unknown): string {
 }
 
 // Convert a CreateFieldValue (in-memory shape) into a comparable wire value.
+// Lookups stay as { id, targetEntity } so the After cell renders like Before.
 function toComparable(col: ColumnMeta, raw: CreateFieldValue): unknown {
   if (raw == null) return null;
   if (isLookupLike(col)) {
     const lk = raw as LookupFieldValue;
-    return lk?.id ?? null;
+    return lk?.id ? lk : null;
   }
   if (col.attributeType === 'MultiSelectPicklist' && Array.isArray(raw)) {
     return raw.join(',');
@@ -475,6 +478,12 @@ function toComparable(col: ColumnMeta, raw: CreateFieldValue): unknown {
 }
 
 function sameAsBefore(col: ColumnMeta, before: unknown, after: CreateFieldValue): boolean {
+  if (isLookupLike(col)) {
+    return sameLookup(
+      before as LookupFieldValue | null,
+      toComparable(col, after) as LookupFieldValue | null,
+    );
+  }
   const cmp = toComparable(col, after);
   if (before == null && (cmp == null || cmp === '')) return true;
   if (cmp == null) return false;

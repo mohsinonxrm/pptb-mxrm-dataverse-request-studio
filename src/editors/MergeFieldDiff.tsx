@@ -65,6 +65,12 @@ import {
 import type { CreateFieldValue, LookupFieldValue, MergeFieldChoice } from '../state/writeState';
 import { LookupFieldInput } from './FieldSetEditor';
 import { useColumnDetail } from '../host/useColumnDetail';
+import {
+  readRowValue,
+  sameLookup,
+  formatLookup,
+  type RowLookupValue,
+} from '../engine/recordSnapshot';
 
 // ──────────────────────────────────────────────────────────────
 // Columns we hide from the merge diff (audit + system-managed + binary)
@@ -137,14 +143,18 @@ export function MergeFieldDiff(props: MergeFieldDiffProps) {
       (c) => !isHidden(c) && c.isValidForUpdate !== false && !isCompanionLogicalReadOnly(c),
     );
     const out: Row[] = visible.map((col) => {
-      const t = target[col.logicalName];
-      const u = sub[col.logicalName];
+      // Lookups live at `_<col>_value` + annotations, not under the
+      // logical name — read them as { id, targetEntity, name } (#96).
+      const t = readRowValue(target, col);
+      const u = readRowValue(sub, col);
       const tEmpty = t == null || t === '';
       const uEmpty = u == null || u === '';
       let state: Row['state'];
       if (tEmpty && uEmpty) state = 'both-empty';
       else if (tEmpty && !uEmpty) state = 'auto-fill';
       else if (!tEmpty && uEmpty) state = 'sub-empty';
+      else if (isLookupLike(col))
+        state = sameLookup(t as RowLookupValue, u as RowLookupValue) ? 'same' : 'differs';
       else state = String(t) === String(u) ? 'same' : 'differs';
       return { col, targetVal: t, subVal: u, state };
     });
@@ -405,7 +415,7 @@ function MergeRow({
                 col={col}
                 value={customValue}
                 onChange={onCustom}
-                fallback={String(targetVal ?? '')}
+                fallback={typeof targetVal === 'object' ? '' : String(targetVal ?? '')}
                 parentTable={tbl.logicalName}
               />
             </div>
@@ -506,7 +516,8 @@ function ValueCell({ col, value, tbl }: { col: ColumnMeta; value: unknown; tbl: 
     <span
       style={{
         fontFamily:
-          col.attributeType === 'Uniqueidentifier' || col.attributeType === 'Lookup'
+          col.attributeType === 'Uniqueidentifier' ||
+          (isLookupLike(col) && !(value as RowLookupValue).name)
             ? tokens.fontFamilyMonospace
             : tokens.fontFamilyBase,
         fontSize: 12,
@@ -525,6 +536,9 @@ function formatValue(col: ColumnMeta, value: unknown): string {
     return value === true || value === '1' || value === 1
       ? col.trueOption.label
       : col.falseOption.label;
+  }
+  if (isLookupLike(col) && typeof value === 'object' && 'id' in value) {
+    return formatLookup(value as RowLookupValue);
   }
   const opts = columnOptions(col);
   if (opts) {
