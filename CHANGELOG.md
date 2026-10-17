@@ -68,11 +68,13 @@ ToolBox 1.2.7 against a live Dataverse environment.
 ### ⚠️ Known issues
 
 - **Execute Action / Function / Custom API** can't list operations on
-  environments whose `$metadata` is larger than 16 MB, a PPTB host limit
+  environments whose `$metadata` is larger than 16 MB. This is a regression
+  in Power Platform ToolBox 1.2.7; it worked in 1.2.6
   ([#79](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/79),
   [PowerPlatformToolBox/desktop-app#736](https://github.com/PowerPlatformToolBox/desktop-app/issues/736)).
-  The same host limit fails any single response over 16 MB. Use `$top` /
-  `$select` for large tables.
+  The Execute modes now explain the limit instead of showing the raw host
+  error. The same host limit fails any single response over 16 MB. Use
+  `$top` / `$select` for large tables.
 
 ## [1.1.3] - 2026-06-10
 
