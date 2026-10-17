@@ -229,18 +229,21 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
     setLastSavedId(saved.id);
     setLastSavedHash(hashState(saved.state));
   };
-  const onLoadSaved = (entry: SavedRequest) => {
+  const onLoadSaved = async (entry: SavedRequest) => {
     if (entry.modeId !== 'exec-action') return;
     const snap = entry.state as SerializedExecuteActionState;
     // Entity-existence guard only matters for bound actions; unbound is fine
     // even on orgs that don't have the source's entity provisioned (rare).
-    if (
-      boundEntity &&
-      entities.length > 0 &&
-      !entities.some((e) => e.logicalName === boundEntity)
-    ) {
+    // Resolve the SNAPSHOT's action — not the one currently selected (#56).
+    // A CSDL load failure skips the guard; the picker surfaces that error.
+    const snapAction = snap.actionName
+      ? await actionsProvider.find(snap.actionName).catch(() => undefined)
+      : undefined;
+    const snapEntity =
+      snapAction && snapAction.binding.kind !== 'unbound' ? snapAction.binding.entityType : null;
+    if (snapEntity && entities.length > 0 && !entities.some((e) => e.logicalName === snapEntity)) {
       window.alert(
-        `Can't load "${entry.name}": bound entity \`${boundEntity}\` ` +
+        `Can't load "${entry.name}": bound entity \`${snapEntity}\` ` +
           `isn't available in this environment.`,
       );
       return;

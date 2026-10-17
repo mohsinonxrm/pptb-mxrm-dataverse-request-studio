@@ -147,12 +147,15 @@ function ModeRouter({
       return <AssociateMode themeMode={themeMode} />;
     case 'disassociate':
       return <DisassociateMode themeMode={themeMode} />;
+    // The three Execute Action sub-modes share one component at the same tree
+    // position. `key` forces a fresh mount per sub-mode so the selected
+    // action, params, result and recents don't leak between them (#56).
     case 'exec-action':
-      return <ExecuteActionMode themeMode={themeMode} category="oob" />;
+      return <ExecuteActionMode key={modeId} themeMode={themeMode} category="oob" />;
     case 'exec-customapi':
-      return <ExecuteActionMode themeMode={themeMode} category="custom-api" />;
+      return <ExecuteActionMode key={modeId} themeMode={themeMode} category="custom-api" />;
     case 'exec-customaction':
-      return <ExecuteActionMode themeMode={themeMode} category="custom-action" />;
+      return <ExecuteActionMode key={modeId} themeMode={themeMode} category="custom-action" />;
     case 'exec-function':
       return <ExecuteFunctionMode themeMode={themeMode} />;
     case 'exec-workflow':
