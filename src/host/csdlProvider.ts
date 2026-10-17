@@ -36,6 +36,7 @@
 //      metadata endpoint with cascade configuration
 
 import { dvHost } from './pptbBridge';
+import { activeOrg } from './activeOrg';
 import type {
   CsdlAction,
   ActionParam,
@@ -44,12 +45,20 @@ import type {
   EdmType,
 } from '../mock/actionsCsdl';
 
-// Tiny inline memoizer — CSDL is fetched at most twice per session (raw XML
+// Tiny inline memoizer — CSDL is fetched at most twice per org (raw XML
 // + parsed actions). A 4-line cache is enough; we don't need the full
 // metadataCache machinery here.
+//
+// Entries are keyed by the active org (#107), like the metadata caches
+// (#52): after a connection switch every lookup misses and refetches from
+// the new environment, a fetch that started before the switch lands under
+// the org it ran against, and switching back finds the old org's catalog
+// still warm.
 const csdlCache = new Map<string, unknown>();
 const csdlInflight = new Map<string, Promise<unknown>>();
-async function memoize<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+const orgKey = (key: string): string => `${activeOrg()}|${key}`;
+async function memoize<T>(baseKey: string, fetcher: () => Promise<T>): Promise<T> {
+  const key = orgKey(baseKey);
   if (csdlCache.has(key)) return csdlCache.get(key) as T;
   const pending = csdlInflight.get(key);
   if (pending) return pending as Promise<T>;
@@ -153,7 +162,7 @@ export const actions: ActionsProvider = {
  */
 export function findActionSync(name: string): CsdlAction | undefined {
   if (!name) return undefined;
-  const cached = csdlCache.get(K_CSDL_ACTIONS) as CsdlAction[] | undefined;
+  const cached = csdlCache.get(orgKey(K_CSDL_ACTIONS)) as CsdlAction[] | undefined;
   return cached?.find((a) => a.name === name);
 }
 
