@@ -349,7 +349,10 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const describePageError = (more: ExecResult) => {
     const msg = (more.body as { error?: { message?: string } } | null)?.error?.message;
-    return `HTTP ${more.status}${msg ? ` — ${msg}` : ''}`;
+    // Status 0 means the host didn't report one (#59): show the status text
+    // (or a generic label) rather than a misleading "HTTP 0".
+    const status = more.status ? `HTTP ${more.status}` : more.statusText || 'Request failed';
+    return `${status}${msg ? ` — ${msg}` : ''}`;
   };
 
   // Shared start-up for both paging handlers: claims a paging id under the
