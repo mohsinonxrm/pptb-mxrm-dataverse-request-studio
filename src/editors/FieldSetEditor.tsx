@@ -52,6 +52,7 @@ import {
   TagPickerOption,
   useTagPickerFilter,
   Tag,
+  makeStyles,
 } from '@fluentui/react-components';
 import { DatePicker } from '@fluentui/react-datepicker-compat';
 import { TimePicker } from '@fluentui/react-timepicker-compat';
@@ -585,6 +586,40 @@ export function FieldSetEditor({
   );
 }
 
+// Row layout has to hold at PPTB's default tool width (~840 px), where the
+// value cell is only ~250 px wide (#112). The label column gives up width
+// first (35 % of the row, 120–220 px), the value input keeps a 160 px floor,
+// and the "Send as null" switch wraps onto its own line below the input
+// instead of overlapping it. Fluent's Combobox / Dropdown / DatePicker carry
+// intrinsic min-widths (250 px and up) that would otherwise push past the
+// cell, so they're released to the cell width here.
+const useFieldRowStyles = makeStyles({
+  valueLine: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: '8px',
+    rowGap: '4px',
+    minWidth: 0,
+  },
+  valueInput: {
+    flex: '1 1 160px',
+    minWidth: 0,
+    '& .fui-Input, & .fui-Combobox, & .fui-Dropdown, & .fui-SpinButton, & .fui-Textarea, & .fui-TagPickerControl':
+      {
+        minWidth: 0,
+        maxWidth: '100%',
+      },
+    // The lookup search box sets an inline 240 px min-width.
+    '& .fui-Combobox': {
+      minWidth: '0 !important',
+    },
+  },
+  nullSwitch: {
+    flexShrink: 0,
+  },
+});
+
 // ──────────────────────────────────────────────────────────────
 // FieldRow — one column's label + value + remove
 // ──────────────────────────────────────────────────────────────
@@ -618,13 +653,14 @@ function FieldRow({
   const s = useStudioStyles();
   const isMissing = col.required && !populated;
 
+  const rs = useFieldRowStyles();
   return (
     <div
       className={mergeClasses(s.inlineCard)}
       style={{
         padding: '10px 12px',
         display: 'grid',
-        gridTemplateColumns: '220px 1fr 30px',
+        gridTemplateColumns: 'minmax(120px, min(220px, 35%)) minmax(0, 1fr) 30px',
         gap: 12,
         alignItems: 'start',
         borderColor: isMissing ? tokens.colorPaletteRedBorder2 : undefined,
@@ -687,8 +723,8 @@ function FieldRow({
           fragment preview but the switch stays in the same position so
           the layout doesn't shift. Description (if any) renders below. */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
+        <div className={rs.valueLine}>
+          <div className={rs.valueInput}>
             {isNull ? (
               // Null-mode preview. Same row footprint as the input, so the
               // Switch's position doesn't jump when the user toggles. Shows
@@ -742,6 +778,7 @@ function FieldRow({
             // gesture feels like "enable this modifier" rather than
             // "this is the primary affordance".
             <Switch
+              className={rs.nullSwitch}
               checked={isNull}
               onChange={(_, d) => {
                 if (d.checked) onSetNull();
