@@ -58,6 +58,7 @@ import {
   type SavedRequest,
   type SerializedExecuteWorkflowState,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 // Workflow shape used by the picker — the wire response fields are
@@ -83,7 +84,8 @@ type RootClauseId = 'pick' | 'target' | 'headers';
 
 export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('exec-workflow');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('exec-workflow', deserializeExecuteWorkflow, initialState);
+  const [state, setState] = useState(draft.state);
   const [activePath, setActivePath] = useState<string>('pick');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
@@ -159,8 +161,8 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // Save / Load
   const { entities } = useScopedEntities();
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const [entityRecordName, setEntityRecordName] = useState<string>('');
 
   const markDirty = (id: string) =>
@@ -212,6 +214,7 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeExecuteWorkflow(state), [state]);
+  useStashModeDraft('exec-workflow', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 

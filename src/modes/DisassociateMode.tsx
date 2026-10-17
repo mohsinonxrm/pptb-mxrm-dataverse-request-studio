@@ -66,6 +66,7 @@ import {
   type SavedRequest,
   type SerializedDisassociateState,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 // Empty initial state — same pattern as MergeMode/AssociateMode. User picks
@@ -84,7 +85,8 @@ type RootClauseId = 'source' | 'nav' | 'target' | 'headers';
 
 export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('disassociate');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('disassociate', deserializeDisassociate, initialState);
+  const [state, setState] = useState(draft.state);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
   // The live table is a memo dependency below: build*() reads metadata via
   // findTable(), which is empty until the fetch lands — keying on `state`
@@ -98,8 +100,8 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
   // Save / Load tracking
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
 
   // Source-record primary-name cache — populated when the user picks via
   // TargetEditor. Used for the WriteResultCard narrative + sidebar label.
@@ -219,6 +221,7 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeDisassociate(state), [state]);
+  useStashModeDraft('disassociate', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 

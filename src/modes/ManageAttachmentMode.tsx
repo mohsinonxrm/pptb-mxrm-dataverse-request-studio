@@ -93,6 +93,7 @@ import {
   type SavedRequest,
   type SerializedManageAttachmentState,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 // Default cap = Organization.MaxUploadFileSize default per doc (5 MB).
@@ -130,7 +131,8 @@ type RootClauseId =
 
 export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('manage-attachment');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('manage-attachment', deserializeManageAttachment, initialState);
+  const [state, setState] = useState(draft.state);
   const [activePath, setActivePath] = useState<string>('pipeline');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
@@ -200,9 +202,10 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const { entities } = useScopedEntities();
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const currentSerialized = useMemo(() => serializeManageAttachment(state), [state]);
+  useStashModeDraft('manage-attachment', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
   const onSaved = (saved: SavedRequest) => {

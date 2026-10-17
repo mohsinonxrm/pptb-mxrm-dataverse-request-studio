@@ -87,6 +87,7 @@ import {
   type SavedRequest,
   type SerializedUpdateState,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 // ──────────────────────────────────────────────────────────────
@@ -127,7 +128,8 @@ type RootClauseId =
 
 export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('update');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('update', deserializeUpdate, initialState);
+  const [state, setState] = useState(draft.state);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
   // We also need the loading flag so the Diff pane doesn't flash "Couldn't load"
   // during the brief window between (a) picker firing → recordId set, and
@@ -146,8 +148,8 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
   // Last-saved tracking → Save button dirty/clean state, library checkmark.
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   // Primary name from the RecordPicker — used as a fallback label until
   // the live row fetch completes (Search-mode picks deliver this for free).
   // Keyed by the record it was picked for: any other path that changes
@@ -274,6 +276,7 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeUpdate(state), [state]);
+  useStashModeDraft('update', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 
