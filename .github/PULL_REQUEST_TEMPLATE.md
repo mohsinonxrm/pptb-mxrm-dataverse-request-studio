@@ -39,6 +39,7 @@ relevant.
 
 - [ ] `npm run typecheck` is clean
 - [ ] `npm run build` is clean
+- [ ] `npm test` passes (add or update tests for engine changes)
 - [ ] No secrets included (tokens, client secrets, Authorization headers)
 - [ ] Accessibility considered (keyboard nav, focus rings, contrast)
 - [ ] `CHANGELOG.md` updated under `## [Unreleased]` (if user-facing)
