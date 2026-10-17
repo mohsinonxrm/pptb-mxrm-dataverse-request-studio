@@ -65,6 +65,7 @@ import { ResultsView } from '../views/ResultsView';
 import { findTable, type FileColumnMeta } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildManageFile, manageFilePipeline, formatSize } from '../engine/urlBuilder';
+import { pipelineCodegen } from '../engine/binaryBuilders';
 import { runtime, type ExecResult } from '../engine/runtime';
 import {
   checkUploadSize,
@@ -514,19 +515,10 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
   const codeInputs = {
     method: firstStepMethod,
     built,
-    headers: headersMap,
+    // Per-step headers + bodies (#60) — chunked uploads need
+    // x-ms-transfer-mode / x-ms-file-name / Content-Range per request.
+    ...pipelineCodegen(pipeline, headersMap),
     entityLogical: built.entityLogical,
-    multiRequests:
-      pipeline.length > 1
-        ? pipeline.map((step) => ({
-            method: step.method,
-            relativeUrl: step.relativeUrl.startsWith('<')
-              ? step.relativeUrl
-              : step.relativeUrl.replace(/^https?:\/\/[^/]+/, ''),
-            body: typeof step.body === 'object' ? step.body : undefined,
-            description: step.title,
-          }))
-        : undefined,
   };
 
   return (
