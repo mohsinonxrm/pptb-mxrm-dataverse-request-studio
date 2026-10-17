@@ -1,7 +1,7 @@
 import { Button, Tooltip, tokens, Caption1, Spinner } from '@fluentui/react-components';
 import { Copy20Regular, Play20Filled, Open20Regular } from '@fluentui/react-icons';
 import type { FC } from 'react';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useStudioStyles } from '../primitives/styles';
 import { MethodPill } from '../primitives/MethodPill';
 import { AdvisoryDrawer } from '../primitives/AdvisoryDrawer';
@@ -27,7 +27,7 @@ export interface UrlBarProps {
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   executeIcon?: FC<any>;
-  onExecute: () => void;
+  onExecute: () => void | Promise<unknown>;
   loading: boolean;
 
   /**
@@ -58,16 +58,34 @@ export function UrlBar({
   const s = useStudioStyles();
   const fullUrl = `https://${ENV.host}${url}`;
 
+  // Re-entry guard. `loading` only flips after the mode re-renders, so a
+  // held / repeated Ctrl+Enter (or a click in the same frame) could start a
+  // second execute — a duplicate write for Create and friends (#47). The ref
+  // is set synchronously before `onExecute` runs and released when its
+  // promise settles (every mode's onExecute is async), so it never depends
+  // on render timing and can't stay stuck.
+  const busyRef = useRef(false);
+  const execute = useCallback(() => {
+    if (busyRef.current || loading || disabledReason) return;
+    busyRef.current = true;
+    Promise.resolve()
+      .then(onExecute)
+      .finally(() => {
+        busyRef.current = false;
+      });
+  }, [disabledReason, loading, onExecute]);
+
   // Ctrl+Enter shortcut
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-        if (!disabledReason) onExecute();
+        if (e.repeat) return;
+        execute();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [disabledReason, onExecute]);
+  }, [execute]);
 
   return (
     <footer className={s.footer}>
@@ -116,7 +134,7 @@ export function UrlBar({
           icon={loading ? <Spinner size="tiny" /> : <ExecIcon />}
           appearance="primary"
           size="medium"
-          onClick={onExecute}
+          onClick={execute}
           disabled={!!disabledReason || loading}
         >
           {executeVerb}
