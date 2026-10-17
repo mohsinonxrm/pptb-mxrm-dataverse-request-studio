@@ -22,6 +22,7 @@ import { ExecuteWorkflowMode } from './modes/ExecuteWorkflowMode';
 import { ManageFileMode } from './modes/ManageFileMode';
 import { ManageImageMode } from './modes/ManageImageMode';
 import { ManageAttachmentMode } from './modes/ManageAttachmentMode';
+import { ErrorBoundary } from './shell/ErrorBoundary';
 import { StubMode } from './modes/StubMode';
 import { findTable } from './mock/metadata';
 import { _setTableLookup } from './editors/filter/filterTree';
@@ -116,6 +117,27 @@ function Frame({
 }
 
 function ModeRouter({
+  modeId,
+  themeMode,
+  setActiveId,
+}: {
+  modeId: string;
+  themeMode: ThemeMode;
+  setActiveId: (id: string) => void;
+}) {
+  // One boundary around whichever mode is routed (#19): a crash shows a
+  // fallback in the mode's place while the header stays usable. It lives
+  // inside ModeRouter, so anything that remounts the router via `key` also
+  // resets it; switching modes (`resetKey`) clears a caught error.
+  const type = findRequestType(modeId);
+  return (
+    <ErrorBoundary scope="mode" label={type.id === modeId ? type.name : modeId} resetKey={modeId}>
+      <ModeSwitch modeId={modeId} themeMode={themeMode} setActiveId={setActiveId} />
+    </ErrorBoundary>
+  );
+}
+
+function ModeSwitch({
   modeId,
   themeMode,
   setActiveId,
