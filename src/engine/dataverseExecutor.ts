@@ -104,8 +104,8 @@ export interface ExecResult {
 /**
  * What happened to one target of a multi-target Associate / Disassociate.
  *   • `done`    — linked / unlinked by this run.
- *   • `skipped` — already in the requested state (linked for Associate,
- *                 not linked for Disassociate), so no request was sent.
+ *   • `skipped` — Associate only: already linked, so no request was sent.
+ *                 Disassociate never skips (see executeDisassociate).
  *   • `failed`  — the request failed; `status` / `error` come from the same
  *                 mapping as every other failure.
  */
@@ -645,7 +645,9 @@ async function linkedTargets(
  * already in the requested state, and fold the per-target outcomes into one
  * ExecResult:
  *   • nothing failed       → 204, ok (skips included).
- *   • everything failed    → the first failure's status and error.
+ *   • nothing succeeded    → the first failure's status and error (skipped
+ *                            targets don't count as successes: nothing
+ *                            changed).
  *   • some of each         → 207 "Partial success", not ok.
  * `targets` and the body's `targets` list every target either way.
  */
@@ -681,11 +683,11 @@ async function runPerTarget(
     }
   }
   const ms = Math.round(performance.now() - t0);
-  const failed = targets.filter((t) => t.state === 'failed').length;
+  const succeeded = targets.filter((t) => t.state === 'done').length;
   if (!firstFailure) return { ...ok(204, { targets }, ms), targets };
   const error = (firstFailure.body as { error: unknown }).error;
   const body = { error, targets };
-  if (failed === targets.length) {
+  if (succeeded === 0) {
     return { ...firstFailure, ms, body, bytes: JSON.stringify(body).length, targets };
   }
   return {
@@ -772,22 +774,17 @@ export async function executeDisassociate(s: DisassociateState): Promise<ExecRes
     if (isExecResult(res)) return res;
     return ok(204, null, res.ms);
   }
-  // Collection-valued → DELETE per target via PPTB's .disassociate. Targets
-  // that aren't linked (e.g. removed by an earlier, partly failed run) are
-  // skipped.
+  // Collection-valued → DELETE per target via PPTB's .disassociate. Every
+  // target's DELETE is sent: unlike Associate there's no "already in that
+  // state" pre-check, because the check's GET only returns related rows the
+  // caller can read at their privilege depth — a linked row outside that
+  // scope would look unlinked and its DELETE would never be sent. Dataverse
+  // has no documented error code for "this row isn't linked", so a failed
+  // DELETE is reported as the failure Dataverse returned.
   const ids = reqs.map((r) => r.targetId).filter((id): id is string => !!id);
-  const tbl = metadata.peekTable(s.table) ?? (await metadata.getTable(s.table));
-  const relatedEntity =
-    tbl?.navigationProperties.find((n) => n.name === navProperty)?.targetEntity ?? '';
-  let linked: Set<string> | null;
-  try {
-    linked = await linkedTargets(s.table, sourceId, navProperty, relatedEntity, ids);
-  } catch (e) {
-    return mapError(e, Math.round(performance.now() - t0));
-  }
   return runPerTarget(
     ids,
-    (id) => !!linked && !linked.has(id.toLowerCase()),
+    () => false,
     (id) => dvHost.disassociate(s.table, sourceId, navProperty, id),
     t0,
   );

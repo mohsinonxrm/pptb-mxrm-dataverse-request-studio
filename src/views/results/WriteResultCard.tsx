@@ -651,9 +651,11 @@ function relateNarrative(
     skipped > 0
       ? ` ${skipped} ${skipped === 1 ? 'was' : 'were'} already ${assoc ? 'linked' : 'unlinked'}, so no request was sent for ${skipped === 1 ? 'it' : 'them'}.`
       : '';
+  // Associate skips targets that are already linked; Disassociate sends
+  // every target's DELETE again, so a re-run should list only the failures.
   const rerun = assoc
     ? 'Fix the failures and Execute again: targets that are already linked are skipped.'
-    : 'Fix the failures and Execute again: targets that are no longer linked are skipped.';
+    : 'Fix the failures, remove the targets that were unlinked, and Execute again: every listed target is sent again.';
 
   if (failed === 0) {
     const verb = assoc ? 'Linked' : 'Removed links to';
@@ -671,18 +673,24 @@ function relateNarrative(
       ).trim(),
     };
   }
-  if (failed === n) {
+  if (done === 0) {
+    // Nothing changed: every target either failed or was already linked.
     return {
-      title: `${assoc ? 'Associate' : 'Disassociate'} failed for all ${n} targets`,
-      body: `Nothing was changed on ${sourceFrag}. Each target's error is listed below.`,
+      title:
+        failed === n
+          ? `${assoc ? 'Associate' : 'Disassociate'} failed for all ${n} targets`
+          : `${assoc ? 'Associate' : 'Disassociate'} failed for ${failed} of ${plural(n)}`,
+      body: (
+        `Nothing was changed on ${sourceFrag}.` +
+        skippedFrag +
+        ` Each failed target's error is listed below.`
+      ).trim(),
     };
   }
   return {
     title: `${assoc ? 'Associated' : 'Disassociated'} ${done} of ${plural(n)} — ${failed} failed`,
     body: (
-      (done > 0
-        ? `${assoc ? 'Linked' : 'Removed links to'} ${plural(done)} on ${sourceFrag}${navLabel}; those changes are saved.`
-        : '') +
+      `${assoc ? 'Linked' : 'Removed links to'} ${plural(done)} on ${sourceFrag}${navLabel}; those changes are saved.` +
       skippedFrag +
       ` ${rerun}`
     ).trim(),
@@ -706,9 +714,7 @@ function TargetResultList({
         ? 'Linked'
         : 'Unlinked'
       : t.state === 'skipped'
-        ? assoc
-          ? 'Already linked · skipped'
-          : 'Not linked · skipped'
+        ? 'Already linked · skipped'
         : t.status
           ? `Failed · ${t.status} ${t.statusText ?? ''}`.trim()
           : 'Failed';
