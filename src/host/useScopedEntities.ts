@@ -23,6 +23,14 @@ import { usePersistedSettings } from './usePersistedSettings';
 
 export interface UseScopedEntitiesResult {
   entities: EntityListItem[];
+  /**
+   * The full, unscoped entity list. For pickers whose choices are fixed by
+   * the platform rather than by the user's Query Scope (e.g. Merge, which
+   * only supports account / contact / lead / incident).
+   */
+  allEntities: EntityListItem[];
+  /** True while the unscoped list is loading. */
+  allLoading: boolean;
   loading: boolean;
   error: string | null;
   /** Re-run the entity list (and solution scope) fetch after an error. */
@@ -151,6 +159,8 @@ export function useScopedEntities(): UseScopedEntitiesResult {
 
   return {
     entities: visible,
+    allEntities: all,
+    allLoading,
     loading: allLoading || scopedLoading,
     error: allError ?? scopedError,
     retry,
