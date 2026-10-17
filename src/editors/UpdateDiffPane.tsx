@@ -77,6 +77,11 @@ export interface UpdateDiffPaneProps {
   originalLoading: boolean;
   /** Drill into a single column → triggers PUT mode in the parent. */
   onDrillColumn: (column: string) => void;
+  /**
+   * Where `fieldValues` came from, when it isn't the form — e.g. "decoded
+   * from the typed JSON body". Shown above the table.
+   */
+  sourceNote?: { intent: 'info' | 'warning'; text: string } | null;
 }
 
 export function UpdateDiffPane({
@@ -86,6 +91,7 @@ export function UpdateDiffPane({
   original,
   originalLoading,
   onDrillColumn,
+  sourceNote,
 }: UpdateDiffPaneProps) {
   const tbl = findTable(table);
   const [showUnchanged, setShowUnchanged] = useState(false);
@@ -200,6 +206,16 @@ export function UpdateDiffPane({
           {changedCount} change{changedCount === 1 ? '' : 's'}
         </Badge>
       </PaneHead>
+
+      {sourceNote && (
+        <MessageBar
+          layout="multiline"
+          intent={sourceNote.intent}
+          style={{ marginBottom: 14, maxWidth: 720 }}
+        >
+          <MessageBarBody>{sourceNote.text}</MessageBarBody>
+        </MessageBar>
+      )}
 
       {changedCount === 0 && !showUnchanged && (
         <MessageBar layout="multiline" intent="info" style={{ marginBottom: 14 }}>

@@ -407,6 +407,40 @@ export function rawBodyColumns(tbl: TableMeta, rawBody: string | null | undefine
   return p.ok ? columnsSetByBody(tbl, p.body) : new Set<string>();
 }
 
+/**
+ * The column values a write will actually send, for the Update Diff pane:
+ * the form's fieldValues, or — in JSON mode, where fieldValues are stale —
+ * the typed body decoded back to columns. Explicit nulls are folded in as
+ * `null` values (null wins, as in encodeFieldBody). `unmapped` lists body
+ * keys that couldn't be mapped to a column; `error` is set when the typed
+ * body doesn't parse (values is then empty).
+ */
+export function sentFieldValues(
+  tbl: TableMeta | undefined,
+  rawBody: string | null | undefined,
+  fieldValues: Record<string, CreateFieldValue>,
+  nullFields: string[],
+): {
+  values: Record<string, CreateFieldValue>;
+  fromJson: boolean;
+  unmapped: UnmappedBodyKey[];
+  error?: string;
+} {
+  const withNulls = (values: Record<string, CreateFieldValue>, nulls: string[]) => {
+    const out = { ...values };
+    for (const n of nulls) out[n] = null;
+    return out;
+  };
+  if (rawBody == null) {
+    return { values: withNulls(fieldValues, nullFields), fromJson: false, unmapped: [] };
+  }
+  const p = parseRawBody(rawBody);
+  if (!p.ok) return { values: {}, fromJson: true, unmapped: [], error: p.error };
+  if (!tbl) return { values: {}, fromJson: true, unmapped: [] };
+  const d = decodeFieldBody(tbl, p.body);
+  return { values: withNulls(d.values, d.nullFields), fromJson: true, unmapped: d.unmapped };
+}
+
 /** Execute-blocking message for an invalid JSON-mode body, or null. */
 export function rawBodyBlocker(rawBody: string | null | undefined): string | null {
   if (rawBody == null) return null;

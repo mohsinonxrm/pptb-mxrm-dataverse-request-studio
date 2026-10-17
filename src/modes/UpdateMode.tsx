@@ -88,7 +88,7 @@ import {
   type SerializedUpdateState,
 } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
-import { rawBodyBlocker } from '../engine/fieldBody';
+import { rawBodyBlocker, sentFieldValues } from '../engine/fieldBody';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -164,6 +164,39 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   const built = useMemo(() => buildUpdate(state), [state, liveTable]);
   const body = useMemo(() => buildUpdateBody(state), [state, liveTable]);
   const tbl = findTable(state.table);
+
+  // What the Diff pane compares against the record: the PATCH that will
+  // actually be sent. In JSON mode that's the typed body (fieldValues are
+  // stale there), decoded back to columns; explicit nulls show as "→ empty".
+  const diff = useMemo((): {
+    values: Record<string, CreateFieldValue>;
+    note: { intent: 'info' | 'warning'; text: string } | null;
+  } => {
+    const sent = sentFieldValues(tbl, state.rawBody, state.fieldValues, state.nullFields);
+    if (!sent.fromJson) return { values: sent.values, note: null };
+    if (sent.error) {
+      return {
+        values: sent.values,
+        note: {
+          intent: 'warning',
+          text: `The JSON body is invalid (${sent.error}), so there is nothing to compare.`,
+        },
+      };
+    }
+    const skipped = sent.unmapped.map((u) => u.key);
+    return {
+      values: sent.values,
+      note: {
+        intent: 'info',
+        text:
+          'Compared against the typed JSON body.' +
+          (skipped.length > 0
+            ? ` Not shown (no matching column, or a value the diff can't map): ${skipped.join(', ')}.`
+            : ''),
+      },
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.rawBody, state.fieldValues, state.nullFields, tbl, liveTable]);
 
   const markDirty = (id: string) =>
     setState((s) => {
@@ -696,7 +729,8 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
         <UpdateDiffPane
           table={state.table}
           recordId={state.recordId}
-          fieldValues={state.fieldValues}
+          fieldValues={diff.values}
+          sourceNote={diff.note}
           original={originalRow}
           // Combine both load signals — the diff should show "loading"
           // when EITHER the table metadata is still resolving OR the
