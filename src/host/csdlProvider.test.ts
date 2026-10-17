@@ -157,7 +157,9 @@ describe('parseCsdl', () => {
   });
 
   it('resolves EnumType parameters to option sets', () => {
-    expect(byName(actions, 'SetStatus').parameters).toEqual([
+    // toMatchObject: enum params may carry extra metadata (e.g. the qualified
+    // enum name and IsFlags, used to emit Type'Member' literals).
+    expect(byName(actions, 'SetStatus').parameters).toMatchObject([
       {
         name: 'Status',
         type: 'OptionSetValue',
@@ -172,7 +174,7 @@ describe('parseCsdl', () => {
 
   it('resolves ComplexType parameters, including enum and navigation members', () => {
     const [, principalAccess] = byName(actions, 'GrantAccess').parameters;
-    expect(principalAccess).toEqual({
+    expect(principalAccess).toMatchObject({
       name: 'PrincipalAccess',
       type: 'ComplexType',
       required: true,
