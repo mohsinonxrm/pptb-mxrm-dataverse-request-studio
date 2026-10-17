@@ -246,7 +246,17 @@ function formatJsObject(obj: Record<string, unknown>, baseIndent: string): strin
  * Used by genXrm to surface function params inside the request descriptor.
  */
 function decodeFunctionAlias(odataLiteral: string): string {
-  const trimmed = odataLiteral.trim();
+  // Alias values in queryParts are percent-escaped for the URL (#61) — the
+  // request descriptor takes the raw value.
+  const trimmed = safeDecode(odataLiteral).trim();
+  // JSON array (collection parameter) — already a valid JS literal.
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      return JSON.stringify(JSON.parse(trimmed));
+    } catch {
+      // fall through — not JSON
+    }
+  }
   // Single-quoted string — keep as JS string literal
   if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
     const inner = trimmed.slice(1, -1).replace(/''/g, "'");

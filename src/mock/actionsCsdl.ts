@@ -54,6 +54,14 @@ export interface ActionParam {
   entityType?: string;
   /** When type is OptionSetValue: the option set definition. */
   optionSet?: { value: number; label: string }[];
+  /**
+   * When type is OptionSetValue and the CSDL declares it as an EnumType: the
+   * fully-qualified enum type name (e.g. `Microsoft.Dynamics.CRM.EntityFilters`)
+   * and whether it's a flags enum. Function URLs need the OData enum literal
+   * `<EnumType>'<Member>'` rather than the integer value.
+   */
+  enumType?: string;
+  enumIsFlags?: boolean;
   /** When type is ComplexType: the complex type's display name + nested fields. */
   complexType?: { name: string; fields: ActionParam[] };
   /** Inline description from the CSDL (when annotations are loaded). */
