@@ -34,7 +34,7 @@ import { StatusPill } from '../../primitives/StatusPill';
 import { RecordDetailCard } from '../detail/RecordDetailCard';
 import { ENV } from '../../mock/environment';
 import { findTable } from '../../mock/metadata';
-import type { ExecResult } from '../../engine/dataverseExecutor';
+import { HEADER_CONSENT_DECLINED_CODE, type ExecResult } from '../../engine/dataverseExecutor';
 
 export type WriteOperation =
   | 'create'
@@ -314,6 +314,13 @@ function buildNarrative(
 
   // ── Failure framings — common error codes get specific copy ──
   if (!ok) {
+    const errCode = (result.body as { error?: { code?: string } } | null)?.error?.code;
+    if (errCode === HEADER_CONSENT_DECLINED_CODE) {
+      return {
+        title: 'Not sent — headers not approved',
+        body: "Power Platform ToolBox didn't send the request because its headers weren't approved, so nothing changed in Dataverse. Execute again and approve the headers when ToolBox asks.",
+      };
+    }
     if (result.status === 412) {
       const why =
         ctx.operation === 'upsert'

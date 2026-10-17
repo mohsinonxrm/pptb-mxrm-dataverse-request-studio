@@ -42,6 +42,7 @@ import type { ConcurrencyMode } from '../state/writeState';
 import type { RequestGroup } from '../registry/requestTypes';
 import { HostHeaderNotice } from './HostHeaderNotice';
 import { isConcurrencyEnforcementRequired } from '../engine/hostHeaderAdvisories';
+import { hostSupportsAdditionalHeaders } from '../host/pptbBridge';
 
 export type PreconditionKind = ConcurrencyMode['kind'];
 
@@ -121,12 +122,20 @@ export function PreconditionEditor({
         group={group}
       />
 
-      {isConcurrencyEnforcementRequired(
-        // Only Upsert offers create-only; Update and Delete share the same rules.
-        available.includes('create-only') ? 'upsert' : 'update',
-        mode,
-      ) && (
-        <HostHeaderNotice>
+      {(hostSupportsAdditionalHeaders()
+        ? mode.kind !== 'none'
+        : isConcurrencyEnforcementRequired(
+            // Only Upsert offers create-only; Update and Delete share the same rules.
+            available.includes('create-only') ? 'upsert' : 'update',
+            mode,
+          )) && (
+        <HostHeaderNotice
+          header={
+            <>
+              the <code>{mode.kind === 'create-only' ? 'If-None-Match' : 'If-Match'}</code> header
+            </>
+          }
+        >
           The <code>If-Match</code> / <code>If-None-Match</code> header is dropped at execute time,
           so this condition wouldn't be enforced and <strong>Execute</strong> is disabled. Pick a
           different precondition to run the request here, or copy it from the Code tab to run it
