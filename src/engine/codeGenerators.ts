@@ -152,7 +152,8 @@ export function generateCode(fmt: CodeFormat, i: CodegenInputs): string {
 // Shared helpers
 // ────────────────────────────────────────────────────────────
 function fullUrl(i: CodegenInputs): string {
-  if (i.isNextLink && i.rawNextLink) return i.rawNextLink;
+  // The nextLink comes straight from a textarea — drop pasted whitespace.
+  if (i.isNextLink && i.rawNextLink) return i.rawNextLink.trim();
   return `https://${ENV.host}${i.built.relativeUrl}`;
 }
 
@@ -167,9 +168,44 @@ function stripAuth(headers: Record<string, string>): Record<string, string> {
   return out;
 }
 
+/**
+ * Decode a percent-encoded query value for readability inside a snippet's
+ * options string, but keep the characters that would change its meaning
+ * encoded: `&` starts a new option, `#` a fragment, `+` reads as a space and
+ * `%` starts an escape (#50). Malformed escapes are left as-is.
+ */
+function readableQueryValue(v: string): string {
+  return v.replace(/(?:%[0-9A-Fa-f]{2})+/g, (run) => {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(run);
+    } catch {
+      return run;
+    }
+    return decoded.replace(/[&#+%]/g, (c) => encodeURIComponent(c));
+  });
+}
+
+/** `decodeURIComponent` that returns the input instead of throwing. */
+function safeDecode(v: string): string {
+  try {
+    return decodeURIComponent(v);
+  } catch {
+    return v;
+  }
+}
+
 /** Escape a string for inclusion inside a single-quoted JS literal. */
 function jsEscape(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  // Backslash and quote, plus line terminators — a raw newline (e.g. a
+  // pasted nextLink with a trailing line break) would end the literal (#50).
+  return s
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
 /** Render headers as a JS object body, indented. */
@@ -214,14 +250,14 @@ function decodeFunctionAlias(odataLiteral: string): string {
   // Single-quoted string — keep as JS string literal
   if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
     const inner = trimmed.slice(1, -1).replace(/''/g, "'");
-    return `'${inner.replace(/'/g, "\\'")}'`;
+    return `'${jsEscape(inner)}'`;
   }
   // Booleans
   if (trimmed === 'true' || trimmed === 'false') return trimmed;
   // Number
   if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) return trimmed;
   // GUID or unrecognized — pass through as quoted string for safety
-  return `'${trimmed.replace(/'/g, "\\'")}'`;
+  return `'${jsEscape(trimmed)}'`;
 }
 
 function formatJsValue(v: unknown, indent: string): string {
@@ -261,7 +297,7 @@ function genFetch(i: CodegenInputs): string {
 // call Xrm.WebApi directly — see the Xrm.WebApi tab.
 
 (async () => {
-${payloadDecl}  const url = '${url}';
+${payloadDecl}  const url = '${jsEscape(url)}';
 
   const res = await fetch(url, {
     method: '${i.method}',
@@ -308,7 +344,7 @@ function genFetchMulti(i: CodegenInputs): string {
       const url = `https://${ENV.host}${r.relativeUrl}`;
       const bodyLine = r.body ? `, body: JSON.stringify(${formatJsObject(r.body, '    ')})` : '';
       const desc = r.description ? `  // ${r.description}\n` : '';
-      return `${desc}  { method: '${r.method}', url: '${url}'${bodyLine} },`;
+      return `${desc}  { method: '${r.method}', url: '${jsEscape(url)}'${bodyLine} },`;
     })
     .join('\n');
 
@@ -359,7 +395,7 @@ function genXrm(i: CodegenInputs): string {
     return `// Xrm.WebApi doesn't take a raw nextLink URL — follow it via fetch:
 // (Run this in a model-driven app form script context)
 
-const nextLink = '${i.rawNextLink}';
+const nextLink = '${jsEscape(i.rawNextLink.trim())}';
 const res = await fetch(nextLink, {
   headers: { 'Accept': 'application/json' },
 });
@@ -385,7 +421,7 @@ ${genFetchMulti(i)}`;
   const recordId = i.built.recordId;
   // Re-derive the options string from queryParts (decoded for readability inside Xrm.WebApi)
   const optsBody = i.built.queryParts
-    .map((p) => `${p.key}=${decodeURIComponent(p.value)}`)
+    .map((p) => `${p.key}=${readableQueryValue(p.value)}`)
     .join('&');
   const options = optsBody ? `?${optsBody}` : '';
 
@@ -436,7 +472,7 @@ ${Object.entries(i.body ?? {})
       `    ${/^[a-zA-Z_$][\w$]*$/.test(k) ? k : `'${jsEscape(k)}'`}: ${formatJsValue(v, '    ')},`,
   )
   .join('\n')}
-${isBound ? `    entity: { entityType: '${logical}', id: '${recordId}' },\n` : ''}    getMetadata: () => ({
+${isBound ? `    entity: { entityType: '${logical}', id: '${jsEscape(recordId ?? '')}' },\n` : ''}    getMetadata: () => ({
       boundParameter: ${isBound ? `'entity'` : 'null'},
       operationType: 0,  // 0 = Action · 1 = Function · 2 = CRUD
       operationName: '${actionName}',
@@ -511,7 +547,7 @@ ${genFetchMulti(i)}`;
 
 (async () => {
   const entityLogicalName = '${logical}';
-  const options = '${options}';${maxPageSize ? `\n  const maxPageSize = ${maxPageSize};` : ''}
+  const options = '${jsEscape(options)}';${maxPageSize ? `\n  const maxPageSize = ${maxPageSize};` : ''}
 
   const result = await Xrm.WebApi.retrieveMultipleRecords(entityLogicalName, options${maxPageSize ? ', maxPageSize' : ''});
 
@@ -533,7 +569,7 @@ ${genFetchMulti(i)}`;
 (async () => {
   const entityLogicalName = '${logical}';
   const id = '${recordId ?? '<id>'}';
-  const options = '${options}';
+  const options = '${jsEscape(options)}';
 
   const record = await Xrm.WebApi.retrieveRecord(entityLogicalName, id, options);
   console.log('Got record:', record);
@@ -571,7 +607,7 @@ ${genFetchMulti(i)}`;
 
 (async () => {
   const entityLogicalName = '${logical}';
-${recordId ? `  const id = '${recordId}';\n` : ''}${dataLiteral}  const result = await Xrm.WebApi.${verb}(${callArgs});
+${recordId ? `  const id = '${jsEscape(recordId)}';\n` : ''}${dataLiteral}  const result = await Xrm.WebApi.${verb}(${callArgs});
   console.log('Result:', result);
 })().catch(err => console.error('Xrm.WebApi error:', err));
 `;
@@ -636,7 +672,7 @@ function genXrmBatch(i: CodegenInputs): string {
   // Re-derive the OData query options string from the request's
   // queryParts (decoded for readability inside the JS snippet).
   const optsBody = i.built.queryParts
-    .map((p) => `${p.key}=${decodeURIComponent(p.value)}`)
+    .map((p) => `${p.key}=${readableQueryValue(p.value)}`)
     .join('&');
   const options = optsBody ? `?${optsBody}` : '';
 
@@ -661,7 +697,7 @@ function genXrmBatch(i: CodegenInputs): string {
   const requests = [
     {
 ${bodyEntries.map(([k, v]) => `      ${/^[a-zA-Z_$][\w$]*$/.test(k) ? k : `'${jsEscape(k)}'`}: ${formatJsValue(v, '      ')},`).join('\n')}
-${isBound ? `      entity: { entityType: '${logical}', id: '${recordId}' },\n` : ''}      getMetadata: () => ({
+${isBound ? `      entity: { entityType: '${logical}', id: '${jsEscape(recordId ?? '')}' },\n` : ''}      getMetadata: () => ({
         boundParameter: ${isBound ? `'entity'` : 'null'},
         operationType: 0,  // 0 = Action
         operationName: '${actionName}',
@@ -759,7 +795,7 @@ ${sources
   const requests = [
     {
       collection: '${i.built.entitySet || logical + 's'}',
-      query: '${options}',
+      query: '${jsEscape(options)}',
       getMetadata: () => ({
         boundParameter: null,
         parameterTypes: {},
@@ -791,7 +827,7 @@ ${sources
   const requests = [
     {
       entity: { entityType: '${logical}', id: '${recordId ?? '<id>'}' },
-      query: '${options}',
+      query: '${jsEscape(options)}',
       getMetadata: () => ({
         boundParameter: null,
         parameterTypes: {},
@@ -832,7 +868,7 @@ ${sources
     // have caught this case — log a console warning if we get here).
     const collectionName = i.built.entitySet || (logical ? `${logical}s` : '<entity-set>');
     const entityLine = recordId
-      ? `      entity: { entityType: '${logical || '<entity-logical>'}', id: '${recordId}' },`
+      ? `      entity: { entityType: '${logical || '<entity-logical>'}', id: '${jsEscape(recordId ?? '')}' },`
       : `      collection: '${collectionName}',`;
     return `// Xrm.WebApi.online.executeMultiple — batched ${opName.toLowerCase()} via CRUD descriptor.
 //
@@ -891,7 +927,7 @@ function genXhr(i: CodegenInputs): string {
   var clientUrl = (typeof Xrm !== 'undefined' && Xrm.Utility && Xrm.Utility.getGlobalContext)
     ? Xrm.Utility.getGlobalContext().getClientUrl()
     : '${ENV.host ? 'https://' + ENV.host : ''}';
-  var url = clientUrl + '${i.built.relativeUrl || (i.rawNextLink ?? '')}';
+  var url = clientUrl + '${jsEscape(i.built.relativeUrl || (i.rawNextLink ?? ''))}';
 
   var req = new XMLHttpRequest();
   req.open('${i.method}', url, true);
@@ -1055,7 +1091,7 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
 
   const valueOf = (key: string): string => {
     const p = i.built.queryParts.find((x) => x.key === key);
-    return p ? decodeURIComponent(p.value) : '';
+    return p ? safeDecode(p.value) : '';
   };
   const select = valueOf('$select');
   const filter = valueOf('$filter');
@@ -1445,7 +1481,7 @@ function genPowerAutomate(i: CodegenInputs): string {
   // Pull each query option's value (decoded) from the built request.
   const valueOf = (key: string): string => {
     const p = i.built.queryParts.find((x) => x.key === key);
-    return p ? decodeURIComponent(p.value) : '';
+    return p ? safeDecode(p.value) : '';
   };
   const select = valueOf('$select');
   const filter = valueOf('$filter');
