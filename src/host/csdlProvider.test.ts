@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { CsdlAction } from '../mock/actionsCsdl';
 
 const getCSDLDocument = vi.hoisted(() => vi.fn<() => Promise<string>>());
-vi.mock('./pptbBridge', () => ({
+// Partial mock: keep the bridge's real exports (e.g. `subscribe`, which other
+// host modules use at import time) and stub only the Dataverse calls.
+vi.mock('./pptbBridge', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./pptbBridge')>()),
   dvHost: {
     metadata: { getCSDLDocument },
     queryData: vi.fn(async () => ({ value: [] })),
