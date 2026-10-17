@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { findTable } from '../mock/metadata';
 import { metadata } from './metadataProvider';
+import { activeOrg, onActiveOrgChange, useActiveOrg } from './activeOrg';
 
 export interface LookupRow {
   id: string;
@@ -37,6 +38,8 @@ export function useLookupRecords(
   loading: boolean;
   error: string | null;
 } {
+  // Re-query when the PPTB connection switches to another org (#52).
+  const org = useActiveOrg();
   const [rows, setRows] = useState<LookupRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +90,8 @@ export function useLookupRecords(
           `${tbl.entitySetName}?$select=${tbl.primaryKey},${tbl.primaryName}` +
           `&$top=${PAGE}${filterPart}`;
         const result = await window.dataverseAPI.queryData(queryUrl);
-        if (cancelled || myReq !== lastReq.current) return;
+        // A result from before a connection switch belongs to the old org.
+        if (cancelled || myReq !== lastReq.current || org !== activeOrg()) return;
         const list = (result.value ?? []) as Record<string, unknown>[];
         const mapped: LookupRow[] = list.map((r) => ({
           id: String(r[tbl.primaryKey] ?? ''),
@@ -108,7 +112,12 @@ export function useLookupRecords(
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [targetEntity, query]);
+  }, [targetEntity, query, org]);
 
   return { rows, loading, error };
 }
+
+// Cached searches belong to the org they ran against — drop them when the
+// PPTB connection switches (#52). Record data is cheap to re-query, so
+// unlike metadata it isn't kept per org.
+onActiveOrgChange(() => __cache.clear());
