@@ -56,7 +56,8 @@ ToolBox 1.2.7 against a live Dataverse environment.
   `$skiptoken` is dropped with a warning instead of rejecting the paste.
 - **Tool icon ships at `dist/icons/icon.svg`**
   ([#25](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/25)),
-  where PPTB looks for it. Prerelease builds use the Insider icon.
+  where PPTB looks for it. Prerelease builds use the Insider icon. The icon's
+  `viewBox` is cropped to the hexagon, so it fills PPTB's 20 px icon slot.
 
 ### ✨ Improved
 
@@ -67,6 +68,12 @@ ToolBox 1.2.7 against a live Dataverse environment.
 
 ### ⚠️ Known issues
 
+- **The tool icon shows in a single colour in Power Platform ToolBox 1.2.7,
+  and not at all when the tool is loaded locally.** PPTB draws every SVG tool
+  icon as a single-colour mask. Colour icons will render once
+  [PowerPlatformToolBox/desktop-app#738](https://github.com/PowerPlatformToolBox/desktop-app/pull/738)
+  ships
+  ([#25](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/25)).
 - **Execute Action / Function / Custom API** can't list operations on
   environments whose `$metadata` is larger than 16 MB. This is a regression
   in Power Platform ToolBox 1.2.7; it worked in 1.2.6
