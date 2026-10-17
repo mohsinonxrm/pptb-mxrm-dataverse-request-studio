@@ -21,7 +21,7 @@
 // access control at the request boundary.
 
 import { useEffect, useMemo, useState } from 'react';
-import Editor from '@monaco-editor/react';
+import Editor from '../monaco/MonacoEditor';
 import {
   Filter20Regular,
   Filter20Filled,

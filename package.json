@@ -66,6 +66,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:analyze": "vite build --mode analyze",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "format": "prettier --write .",
