@@ -464,11 +464,29 @@ export function buildUpdateBody(s: UpdateState): Record<string, unknown> {
 //   • Composite alt-key: PATCH /sample_things(sample_key1=1,sample_key2=1)
 //
 // Alternate-key values follow OData literal rules: strings get single-quoted,
-// numbers / GUIDs / booleans are bare. We dispatch on the column metadata to
-// pick the right literal form.
+// numbers / GUIDs / booleans / date-times are bare. We dispatch on the column
+// metadata to pick the right literal form. The key segment is part of the
+// URL path, so every value is percent-encoded (`#`, `?`, `%`, spaces, … would
+// otherwise truncate or corrupt the URL when it's copied out) — MS Learn's own
+// example is `new_skts(new_name='M%26M')`. A lookup key column is addressed by
+// its lookup property, `_<name>_value` (MS Learn: "Use an alternate key to
+// reference a record").
+
+/** Placeholder for a key part the user hasn't filled in yet (preview only —
+ *  Execute is gated on every part being set). Mirrors the `(<id>)` placeholder. */
+const UNSET_KEY_PART = '<value>';
+
+/**
+ * Characters Dataverse rejects inside an alternate-key value even when
+ * percent-encoded (MS Learn: "Alternate keys with special character values").
+ * `#` is listed on the maker-portal page for PATCH.
+ */
+const ALT_KEY_RESERVED_CHARS = /[/<>*%&:\\?+#]/;
+
+const quoteKeyString = (value: string) => `'${encodeURIComponent(value.replace(/'/g, "''"))}'`;
 
 function odataLiteral(value: string, col: ReturnType<typeof findColumn>): string {
-  if (!col) return `'${value.replace(/'/g, "''")}'`;
+  if (!col) return quoteKeyString(value);
   switch (col.attributeType) {
     case 'Integer':
     case 'BigInt':
@@ -480,16 +498,25 @@ function odataLiteral(value: string, col: ReturnType<typeof findColumn>): string
     case 'State':
     case 'Status':
     case 'EntityName':
-      return value === '' ? '0' : value;
-    case 'Boolean':
-      return value === 'true' || value === '1' ? 'true' : 'false';
     case 'Uniqueidentifier':
     case 'Lookup':
     case 'Customer':
-    case 'Owner':
-      return value;
+    case 'Owner': {
+      const v = value.trim();
+      return v === '' ? UNSET_KEY_PART : encodeURIComponent(v);
+    }
+    case 'DateTime': {
+      // Edm.DateTimeOffset / Edm.Date literals are unquoted:
+      // `(new_effectivedate=2024-05-01T00:00:00Z)`. `:` is a legal path
+      // character and part of the literal, so keep it readable; `+` in an
+      // offset (`+05:30`) must be encoded or it can read as a space.
+      const v = value.trim();
+      return v === '' ? UNSET_KEY_PART : encodeURIComponent(v).replace(/%3A/gi, ':');
+    }
+    case 'Boolean':
+      return value === 'true' || value === '1' ? 'true' : 'false';
     default:
-      return `'${value.replace(/'/g, "''")}'`;
+      return quoteKeyString(value);
   }
 }
 
@@ -502,9 +529,28 @@ function altKeySegment(
   const parts = keyColumns.map((col) => {
     const c = tbl ? findColumn(tbl, col) : undefined;
     const raw = keyValues[col] ?? '';
-    return `${col}=${odataLiteral(raw, c)}`;
+    return `${attrRefByName(tbl, col)}=${odataLiteral(raw, c)}`;
   });
   return `(${parts.join(',')})`;
+}
+
+/**
+ * Key columns whose (string) value contains a character Dataverse rejects in
+ * an alternate-key URL even when encoded. Drives the Upsert advisory that
+ * points at the `$filter` workaround. Non-string parts are skipped — the `:`
+ * in a date-time literal is syntax, not data.
+ */
+export function altKeyReservedCharColumns(
+  table: string,
+  keyColumns: string[],
+  keyValues: Record<string, string>,
+): string[] {
+  const tbl = findTable(table);
+  return keyColumns.filter((col) => {
+    const c = tbl ? findColumn(tbl, col) : undefined;
+    if (c && c.attributeType !== 'String' && c.attributeType !== 'Memo') return false;
+    return ALT_KEY_RESERVED_CHARS.test(keyValues[col] ?? '');
+  });
 }
 
 export function buildUpsert(s: UpsertState): BuiltRequest {

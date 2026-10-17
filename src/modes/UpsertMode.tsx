@@ -52,7 +52,7 @@ import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { findTable, isLookupLike } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
-import { buildUpsert, buildUpsertBody } from '../engine/urlBuilder';
+import { altKeyReservedCharColumns, buildUpsert, buildUpsertBody } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
 import {
   defaultBypassOptions,
@@ -286,10 +286,40 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
           </>
         ),
       });
+
+      const key = state.key;
+      const def = tbl?.alternateKeys?.find((d) => d.name === key.keyName);
+      const reserved = def
+        ? altKeyReservedCharColumns(state.table, def.columns, key.keyValues)
+        : [];
+      if (reserved.length > 0) {
+        out.push({
+          id: 'ups-altkey-reserved-chars',
+          severity: 'warning',
+          source: 'validation',
+          focusNode: 'key',
+          title: 'Alternate-key value has characters Dataverse rejects',
+          body: (
+            <>
+              {reserved.map((c, i) => (
+                <span key={c}>
+                  {i > 0 && ', '}
+                  <code>{c}</code>
+                </span>
+              ))}{' '}
+              contains one of <code>/ &lt; &gt; * % &amp; : \ ? + #</code>. DRS percent-encodes the
+              value, but Dataverse still rejects these characters inside an alternate-key URL. Look
+              the row up with <code>$filter</code> instead (for example{' '}
+              <code>?$filter=accountnumber eq &apos;…&apos;&amp;$select=…id</code>), then upsert by
+              its GUID.
+            </>
+          ),
+        });
+      }
     }
 
     return out;
-  }, [state.bypass, state.concurrency, state.key, tbl]);
+  }, [state.bypass, state.concurrency, state.key, state.table, tbl]);
   const bypassBlocker = disabledReasonFromAdvisories(advisories);
 
   // ── Save / Load ──
