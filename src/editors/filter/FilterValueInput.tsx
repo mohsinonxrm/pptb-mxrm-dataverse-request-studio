@@ -52,7 +52,15 @@ import {
 } from '../../mock/metadata';
 import { useLookupRecords } from '../../host/useLookupRecords';
 import { useColumnDetail } from '../../host/useColumnDetail';
+import { parseDateTimeValue } from '../dateTimeValue';
 import type { JSX } from 'react';
+
+// Filter date values are either `YYYY-MM-DD` or a UTC instant
+// (`toISOString`), whatever the column's behavior, so read them the
+// UserLocal way: a bare date is that local calendar day. `new Date()` reads
+// it as UTC midnight, the previous day west of UTC (#106).
+const parseFilterDate = (value: string): Date | null =>
+  parseDateTimeValue(value, { dateTimeBehavior: 'UserLocal' });
 
 // ============================================================
 // Shared value-source shape (same as before, plus valKind)
@@ -356,8 +364,8 @@ function DateTimeInputCtl({
         : 'wall-clock as UTC (no TZ math)';
 
   // Parse the stored ISO string back to a Date for the pickers
-  const parsed: Date | null = val ? new Date(val) : null;
-  const dateOnly: Date | null = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+  const parsed: Date | null = parseFilterDate(val);
+  const dateOnly: Date | null = parsed;
 
   const writeDate = (d: Date | null | undefined) => {
     if (!d) {
@@ -874,7 +882,7 @@ function TwoValueInput({ rule, op, col, onChange }: ValueInputProps): JSX.Elemen
   // Date types — render two DatePickers (covers Between / NotBetween on
   // a DateTime column, where both PropertyValues are dates).
   if (col?.attributeType === 'DateTime') {
-    const parse = (s: string) => (s ? new Date(s) : null);
+    const parse = parseFilterDate;
     const isDateOnly = col.format === 'DateOnly';
     const writeISO = (d: Date | null | undefined) => {
       if (!d) return '';
