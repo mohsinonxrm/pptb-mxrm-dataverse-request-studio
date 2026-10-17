@@ -605,6 +605,10 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
             }));
             setResult(null);
             setPickerPick(null);
+            // New table → fresh draft. Forget the last save so Save can't
+            // overwrite an entry that belongs to the old table (#58).
+            setLastSavedId(undefined);
+            setLastSavedHash(null);
           }}
           onRecordChange={(id, primary) => {
             set('recordId', id, 'target');

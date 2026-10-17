@@ -468,6 +468,10 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
               dirty: new Set(['target', 'column']),
             }));
             setResult(null);
+            // New table → fresh draft. Forget the last save so Save can't
+            // overwrite an entry that belongs to the old table (#58).
+            setLastSavedId(undefined);
+            setLastSavedHash(null);
           }}
           recordId={state.recordId}
           onRecordChange={(id, primary) => {
