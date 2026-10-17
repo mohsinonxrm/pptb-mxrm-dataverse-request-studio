@@ -23,6 +23,7 @@
 //   • `rename(id, name)`   — set the name field
 //   • `remove(id)`         — drop one entry by id
 //   • `clearAll()`         — wipe the entire store (used by a "reset" affordance)
+//   • `importEntries(list)`— merge entries from an export file (newer wins by id)
 //   • `findById(id)`       — read a single entry
 //   • `findByName(name)`   — case-insensitive name lookup, for collision detection
 //   • `error`              — last write error message, null if clean
@@ -33,7 +34,10 @@ import {
   persistSaved,
   MAX_SAVED,
   SAVED_REQUESTS_KEY_PREFIX,
+  SAVED_SCHEMA_VERSION,
+  getOrgScope,
   getSavedRequestsKey,
+  hashState,
   type SavedRequest,
 } from './savedRequests';
 
@@ -97,6 +101,16 @@ export interface SaveResult {
   full?: boolean;
 }
 
+export interface ImportResult extends SaveResult {
+  added: number;
+  /** Existing entries (same id) replaced by a newer copy from the file. */
+  updated: number;
+  /** Already present, identical or newer here. */
+  unchanged: number;
+  /** New entries left out because the library reached MAX_SAVED. */
+  skippedFull: number;
+}
+
 export interface SavedCapacity {
   /** MAX_SAVED — entries allowed per org scope, across all modes. */
   max: number;
@@ -115,6 +129,7 @@ export interface UseSavedRequestsApi {
   rename: (id: string, name: string) => void;
   remove: (id: string) => void;
   clearAll: () => void;
+  importEntries: (entries: SavedRequest[]) => ImportResult;
   findById: (id: string) => SavedRequest | undefined;
   findByName: (name: string) => SavedRequest | undefined;
   /** Last localStorage write error, if any. Cleared on next successful write. */
@@ -161,7 +176,8 @@ export function useSavedRequests(): UseSavedRequestsApi {
   //     the library is shared by every mode, so the oldest entry is often
   //     one the user can't even see from the current mode's list.
   const save = useCallback(
-    (entry: SavedRequest, opts?: { replaceId?: string }): SaveResult => {
+    (input: SavedRequest, opts?: { replaceId?: string }): SaveResult => {
+      const entry: SavedRequest = { ...input, schemaVersion: SAVED_SCHEMA_VERSION };
       const idx = list.findIndex((e) => e.id === entry.id);
       let next: SavedRequest[];
       if (idx >= 0) {
@@ -215,11 +231,60 @@ export function useSavedRequests(): UseSavedRequestsApi {
     writeBack([]);
   }, [writeBack]);
 
+  // Import: entries land in the CURRENT org's library (re-tagged with its
+  // scope). Same id → the copy with the later savedAt wins; new ids are
+  // added until MAX_SAVED, the rest reported as skipped — never evicting.
+  const importEntries = useCallback(
+    (entries: SavedRequest[]): ImportResult => {
+      const scope = getOrgScope();
+      const next = [...list];
+      const r = { added: 0, updated: 0, unchanged: 0, skippedFull: 0 };
+      for (const raw of entries) {
+        const entry: SavedRequest = {
+          ...raw,
+          orgScope: scope,
+          schemaVersion: raw.schemaVersion ?? 1,
+        };
+        const idx = next.findIndex((e) => e.id === entry.id);
+        if (idx >= 0) {
+          const cur = next[idx];
+          const same = cur.name === entry.name && hashState(cur.state) === hashState(entry.state);
+          if (!same && entry.savedAt > cur.savedAt) {
+            next[idx] = entry;
+            r.updated++;
+          } else {
+            r.unchanged++;
+          }
+        } else if (next.length >= MAX_SAVED) {
+          r.skippedFull++;
+        } else {
+          next.push(entry);
+          r.added++;
+        }
+      }
+      if (r.added === 0 && r.updated === 0) return { ok: true, ...r };
+      next.sort((a, b) => b.savedAt - a.savedAt);
+      return { ...writeBack(next), ...r };
+    },
+    [list, writeBack],
+  );
+
   const findById = useCallback((id: string) => list.find((e) => e.id === id), [list]);
   const findByName = useCallback(
     (name: string) => list.find((e) => e.name.toLowerCase() === name.toLowerCase()),
     [list],
   );
 
-  return { saved: list, save, capacity, rename, remove, clearAll, findById, findByName, error };
+  return {
+    saved: list,
+    save,
+    capacity,
+    rename,
+    remove,
+    clearAll,
+    importEntries,
+    findById,
+    findByName,
+    error,
+  };
 }

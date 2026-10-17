@@ -6,13 +6,14 @@
 //                           collides with an existing entry, shows an
 //                           overwrite confirm.
 //   <SavedLibraryButton> — opens a popover listing all saved entries
-//                           with click-to-load + rename + delete.
+//                           with click-to-load + rename + delete, and
+//                           Export / Import of the whole library (#105).
 //
 // Library lives in localStorage (see savedRequests.ts). Per-mode load
 // routing is the caller's responsibility — the dialog just hands back
 // the SavedRequest; the mode decides what to do with `state`.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dialog,
   DialogTrigger,
@@ -45,9 +46,15 @@ import {
   Dismiss20Regular,
   Open16Regular,
   Checkmark16Filled,
+  ArrowDownload16Regular,
+  ArrowUpload16Regular,
 } from '@fluentui/react-icons';
+import { isEmbedded, saveFileSafe, tbHost } from '../host/pptbBridge';
 import {
   autoSuggestName,
+  buildSavedExport,
+  parseSavedImport,
+  MAX_SAVED,
   newSavedId,
   getOrgScope,
   sameSaveTarget,
@@ -105,6 +112,20 @@ const useStyles = makeStyles({
     fontSize: tokens.fontSizeBase100,
     color: tokens.colorNeutralForeground3,
     fontFamily: tokens.fontFamilyMonospace,
+  },
+  transfer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    marginTop: '6px',
+    paddingTop: '6px',
+    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+    maxWidth: '420px',
+  },
+  transferActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
   },
   libraryEmpty: {
     padding: '32px 16px',
@@ -519,8 +540,167 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
             })}
           </div>
         )}
+        <SavedLibraryTransfer />
       </PopoverSurface>
     </Popover>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════
+//  Export / Import — footer of the Saved library popover (#105)
+// ═════════════════════════════════════════════════════════════════════
+
+const JSON_FILTER = [{ name: 'JSON', extensions: ['json'] }];
+
+interface TransferStatus {
+  intent: 'success' | 'warning' | 'error';
+  title: string;
+  text: string;
+}
+
+/**
+ * Backs up / restores the whole library of the current connection (every
+ * mode) as a JSON file. Uses the host's native dialogs inside PPTB and a
+ * download / file input standalone. Results show inline — no native dialogs.
+ */
+function SavedLibraryTransfer() {
+  const s = useStyles();
+  const { saved, importEntries } = useSavedRequests();
+  const [status, setStatus] = useState<TransferStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const fail = (title: string, e: unknown) =>
+    setStatus({ intent: 'error', title, text: e instanceof Error ? e.message : String(e) });
+
+  const applyImport = (text: string) => {
+    try {
+      const { entries, invalid } = parseSavedImport(text);
+      const r = importEntries(entries);
+      if (!r.ok) {
+        setStatus({ intent: 'error', title: "Couldn't import", text: r.error ?? '' });
+        return;
+      }
+      const notes: string[] = [
+        `${r.added} added, ${r.updated} updated, ${r.unchanged} already up to date.`,
+      ];
+      if (r.skippedFull > 0) {
+        notes.push(
+          `${r.skippedFull} not imported: this connection's library is full (${MAX_SAVED}).`,
+        );
+      }
+      if (invalid > 0) {
+        notes.push(`${invalid} item(s) in the file weren't valid saved requests and were skipped.`);
+      }
+      setStatus({
+        intent: r.skippedFull > 0 || invalid > 0 ? 'warning' : 'success',
+        title: 'Import finished',
+        text: notes.join(' '),
+      });
+    } catch (e) {
+      fail("Couldn't import", e);
+    }
+  };
+
+  const onExport = async () => {
+    setStatus(null);
+    setBusy(true);
+    try {
+      const scope = getOrgScope();
+      const fileName = `drs-saved-requests-${scope.replace(/[^a-z0-9.-]+/gi, '_')}-${new Date()
+        .toISOString()
+        .slice(0, 10)}.json`;
+      const path = await saveFileSafe(fileName, buildSavedExport(saved, scope), JSON_FILTER);
+      // Inside PPTB a null path means the user cancelled the save dialog.
+      if (path || !isEmbedded()) {
+        setStatus({
+          intent: 'success',
+          title: 'Exported',
+          text: `${saved.length} saved request(s) written to ${path ?? fileName}.`,
+        });
+      }
+    } catch (e) {
+      fail("Couldn't export", e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onImport = async () => {
+    setStatus(null);
+    if (!isEmbedded() || !window.toolboxAPI) {
+      fileInput.current?.click();
+      return;
+    }
+    setBusy(true);
+    try {
+      const path = await tbHost.fileSystem.selectPath({
+        type: 'file',
+        title: 'Import saved requests',
+        buttonLabel: 'Import',
+        filters: JSON_FILTER,
+      });
+      if (path) applyImport(await tbHost.fileSystem.readText(path));
+    } catch (e) {
+      fail("Couldn't import", e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className={s.transfer}>
+      <div className={s.transferActions}>
+        <Tooltip
+          content="Save every saved request for this connection (all modes) to a JSON file"
+          relationship="description"
+        >
+          <Button
+            appearance="subtle"
+            size="small"
+            icon={<ArrowDownload16Regular />}
+            disabled={busy || saved.length === 0}
+            onClick={() => void onExport()}
+          >
+            Export
+          </Button>
+        </Tooltip>
+        <Tooltip
+          content="Add saved requests from an exported JSON file to this connection"
+          relationship="description"
+        >
+          <Button
+            appearance="subtle"
+            size="small"
+            icon={<ArrowUpload16Regular />}
+            disabled={busy}
+            onClick={() => void onImport()}
+          >
+            Import
+          </Button>
+        </Tooltip>
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".json,application/json"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (!file) return;
+            file.text().then(applyImport, (err: unknown) => fail("Couldn't import", err));
+          }}
+        />
+      </div>
+      {status && (
+        <MessageBar layout="multiline" intent={status.intent}>
+          <MessageBarBody>
+            <MessageBarTitle>{status.title}</MessageBarTitle>
+            <span style={{ wordBreak: 'break-word' }}>{status.text}</span>
+          </MessageBarBody>
+        </MessageBar>
+      )}
+    </div>
   );
 }
 
