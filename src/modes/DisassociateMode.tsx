@@ -82,6 +82,14 @@ const initialState = (): DisassociateState => ({
 
 type RootClauseId = 'source' | 'nav' | 'target' | 'headers';
 
+/** The source row's current single-valued lookup, as read for the preview. */
+interface CurrentLookup {
+  id: string;
+  name: string | null;
+  /** Logical name of the referenced table (`lookuplogicalname` annotation). */
+  entity: string | null;
+}
+
 export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('disassociate');
   const [state, setState] = useState(initialState);
@@ -107,10 +115,11 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // For single-valued: we live-fetch the source row's current lookup value so
   // the Target pane can preview "this is what'll be cleared".
-  const [currentLookup, setCurrentLookup] = useState<{ id: string; name: string | null } | null>(
-    null,
-  );
+  const [currentLookup, setCurrentLookup] = useState<CurrentLookup | null>(null);
   const [currentLookupLoading, setCurrentLookupLoading] = useState(false);
+  // Set when the read fails (or can't run outside PPTB). The value is then
+  // unknown — warn, but don't treat it as "empty" and block Execute (#57).
+  const [currentLookupError, setCurrentLookupError] = useState<string | null>(null);
 
   const built = useMemo(() => buildDisassociate(state), [state, liveTable]);
   const requests = useMemo(() => buildDisassociateRequests(state), [state, liveTable]);
@@ -132,32 +141,65 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
   // "PATCH … @odata.bind: null".
   useEffect(() => {
     let cancelled = false;
+    setCurrentLookupError(null);
     if (!isSingle || !state.sourceId || !tbl || !nav) {
       setCurrentLookup(null);
+      setCurrentLookupLoading(false);
       return;
     }
-    if (typeof window === 'undefined' || !window.dataverseAPI?.queryData) return;
+    if (typeof window === 'undefined' || !window.dataverseAPI?.queryData) {
+      setCurrentLookup(null);
+      setCurrentLookupLoading(false);
+      setCurrentLookupError('The PPTB host is not available, so the current value cannot be read.');
+      return;
+    }
+    // Drop the previous record's value while this fetch is in flight.
+    setCurrentLookup(null);
     setCurrentLookupLoading(true);
+    // The `_<attr>_value` column is named after the lookup ATTRIBUTE, not
+    // the nav property. They differ for polymorphic navs
+    // (`parentcustomerid_account` → `parentcustomerid`) and for custom navs
+    // whose nav name uses SchemaName casing. Selecting `_<nav>_value` there
+    // is a 400.
+    const col = `_${nav.referencingAttribute || nav.name}_value`;
     // Project the lookup's raw value + formatted-value annotation. The
     // formatted-value gives us the related row's primary-name without a
     // second fetch.
-    const url = `/${tbl.entitySetName}(${state.sourceId})?$select=_${nav.name}_value`;
+    const url = `/${tbl.entitySetName}(${state.sourceId})?$select=${col}`;
     window.dataverseAPI
       .queryData(url)
       .then((res) => {
         if (cancelled) return;
-        const r = res as Record<string, unknown> | null;
-        const lookupId = r ? String(r[`_${nav.name}_value`] ?? '') : '';
-        const lookupName = r
-          ? String(r[`_${nav.name}_value@OData.Community.Display.V1.FormattedValue`] ?? '')
-          : '';
-        setCurrentLookup(lookupId ? { id: lookupId, name: lookupName || null } : null);
+        // PPTB returns single-record responses as `{ value: <record> }`,
+        // `{ value: [<record>] }` or the bare entity — same unwrap as
+        // DeleteMode's record preview.
+        const v = (res as { value?: unknown } | null)?.value;
+        const row = Array.isArray(v)
+          ? ((v[0] as Record<string, unknown> | undefined) ?? null)
+          : v && typeof v === 'object'
+            ? (v as Record<string, unknown>)
+            : res && typeof res === 'object' && (col in res || tbl.primaryKey in res)
+              ? (res as Record<string, unknown>)
+              : null;
+        if (!row) {
+          setCurrentLookupError('Dataverse returned no row for the source record.');
+        } else {
+          const lookupId = String(row[col] ?? '');
+          const lookupName = String(row[`${col}@OData.Community.Display.V1.FormattedValue`] ?? '');
+          const lookupEntity = String(row[`${col}@Microsoft.Dynamics.CRM.lookuplogicalname`] ?? '');
+          setCurrentLookup(
+            lookupId
+              ? { id: lookupId, name: lookupName || null, entity: lookupEntity || null }
+              : null,
+          );
+        }
         setCurrentLookupLoading(false);
       })
-      .catch(() => {
+      .catch((e: unknown) => {
         if (cancelled) return;
         setCurrentLookup(null);
         setCurrentLookupLoading(false);
+        setCurrentLookupError(e instanceof Error ? e.message : String(e));
       });
     return () => {
       cancelled = true;
@@ -187,7 +229,7 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
         ? 'Pick a navigation property.'
         : isCollection && state.targetIds.length === 0
           ? 'Pick at least one target record to disassociate.'
-          : isSingle && currentLookup === null && !currentLookupLoading
+          : isSingle && currentLookup === null && !currentLookupLoading && !currentLookupError
             ? "Source's lookup is already empty — nothing to disassociate."
             : state.headers.some((h) => h.enabled && !h.name)
               ? 'Fix empty header name.'
@@ -304,7 +346,9 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
       meta: isSingle
         ? currentLookup
           ? `clear: ${currentLookup.name ?? currentLookup.id.slice(0, 8)}…`
-          : 'lookup empty'
+          : currentLookupError
+            ? 'value unknown'
+            : 'lookup empty'
         : state.targetIds.length
           ? `${state.targetIds.length} target${state.targetIds.length === 1 ? '' : 's'}`
           : 'none',
@@ -403,6 +447,7 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
           setTargetNames={(n) => set('targetNames', n)}
           currentLookup={currentLookup}
           currentLookupLoading={currentLookupLoading}
+          currentLookupError={currentLookupError}
         />
       );
       break;
@@ -509,13 +554,15 @@ function TargetPane({
   setTargetNames,
   currentLookup,
   currentLookupLoading,
+  currentLookupError,
 }: {
   state: DisassociateState;
   setTargetIds: (ids: string[]) => void;
   targetNames: Record<string, string>;
   setTargetNames: (next: Record<string, string>) => void;
-  currentLookup: { id: string; name: string | null } | null;
+  currentLookup: CurrentLookup | null;
   currentLookupLoading: boolean;
+  currentLookupError: string | null;
 }) {
   const tbl = findTable(state.table);
   const nav = state.navProperty
@@ -587,27 +634,53 @@ function TargetPane({
               <Caption1>Fetching the lookup's current value from Dataverse…</Caption1>
             </div>
           ) : currentLookup ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Persona
-                size="small"
-                name={currentLookup.name ?? '(unknown)'}
-                avatar={{ color: 'colorful' }}
-              />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 600 }}>
-                  {currentLookup.name ?? '(name not available)'}
-                </div>
-                <div
-                  style={{
-                    fontFamily: tokens.fontFamilyMonospace,
-                    fontSize: 10,
-                    color: tokens.colorNeutralForeground3,
-                  }}
-                >
-                  /{targetTbl?.entitySetName ?? nav.targetEntity}({currentLookup.id})
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Persona
+                  size="small"
+                  name={currentLookup.name ?? '(unknown)'}
+                  avatar={{ color: 'colorful' }}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>
+                    {currentLookup.name ?? '(name not available)'}
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: tokens.fontFamilyMonospace,
+                      fontSize: 10,
+                      color: tokens.colorNeutralForeground3,
+                    }}
+                  >
+                    /
+                    {(currentLookup.entity && findTable(currentLookup.entity)?.entitySetName) ??
+                      targetTbl?.entitySetName ??
+                      nav.targetEntity}
+                    ({currentLookup.id})
+                  </div>
                 </div>
               </div>
-            </div>
+              {/* Polymorphic lookups (Customer / Regarding / multi-table)
+                  share one column across several navs. Say so when the
+                  column currently points at a different table than this
+                  nav's target. */}
+              {currentLookup.entity && currentLookup.entity !== nav.targetEntity && (
+                <Caption1
+                  style={{ display: 'block', marginTop: 8, color: tokens.colorNeutralForeground3 }}
+                >
+                  The lookup currently references a <code>{currentLookup.entity}</code> row, not{' '}
+                  <code>{nav.targetEntity}</code>.
+                </Caption1>
+              )}
+            </>
+          ) : currentLookupError ? (
+            <MessageBar layout="multiline" intent="warning">
+              <MessageBarBody>
+                <MessageBarTitle>Couldn&apos;t read the current value.</MessageBarTitle>
+                Execute still sends the <code>PATCH</code>; if the lookup is already empty it
+                changes nothing. <code>{currentLookupError}</code>
+              </MessageBarBody>
+            </MessageBar>
           ) : (
             <Caption1 style={{ color: tokens.colorNeutralForeground3, fontStyle: 'italic' }}>
               Source's lookup is already empty — the PATCH would be a no-op.
