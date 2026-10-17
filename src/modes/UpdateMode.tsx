@@ -150,7 +150,14 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
   // Primary name from the RecordPicker — used as a fallback label until
   // the live row fetch completes (Search-mode picks deliver this for free).
-  const [pickedPrimaryFromPicker, setPickedPrimaryFromPicker] = useState<string>('');
+  // Keyed by the record it was picked for: any other path that changes
+  // `recordId` (saved-request load, GUID paste) must not inherit the
+  // previous pick's name (#46).
+  const [pickerPick, setPickerPick] = useState<{ id: string; name: string } | null>(null);
+  const pickedPrimaryFromPicker =
+    pickerPick && state.recordId && pickerPick.id.toLowerCase() === state.recordId.toLowerCase()
+      ? pickerPick.name
+      : '';
 
   const built = useMemo(() => buildUpdate(state), [state, liveTable]);
   const body = useMemo(() => buildUpdateBody(state), [state, liveTable]);
@@ -198,6 +205,9 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
       setOriginalRow(null);
       return;
     }
+    // Drop the previous record's row before fetching so its name / diff
+    // baseline can't show against a different record id (#46).
+    setOriginalRow(null);
     setOriginalLoading(true);
     // Use the same leading-slash URL form as executeRetrieveSingle — PPTB's
     // queryData is reliable with this form for single-record fetches.
@@ -650,12 +660,12 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
               dirty: new Set(['target', 'fieldset', 'method']),
             }));
             setResult(null);
-            setPickedPrimaryFromPicker('');
+            setPickerPick(null);
           }}
           recordId={state.recordId}
           onRecordChange={(id, primary) => {
             set('recordId', id, 'target');
-            setPickedPrimaryFromPicker(primary ?? '');
+            setPickerPick(id && primary ? { id, name: primary } : null);
           }}
           group="write"
           sub="Single-record update — pick the entity set and the record GUID."
