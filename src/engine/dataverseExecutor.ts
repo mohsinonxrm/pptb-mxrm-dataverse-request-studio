@@ -7,13 +7,17 @@
 // ignored in live mode (it's a mock-only affordance for synthesizing 4xx
 // responses without round-trips); the host returns real status codes.
 //
+// Request headers: the write group (Create / Update / Upsert / Delete /
+// Merge) passes the headers its mode composed for the Code tab. On PPTB
+// 1.2.7+ the precondition (`If-Match` / `If-None-Match`), bypass (`MSCRM.*`)
+// and user-added headers go out as `additionalHeaders` once the user
+// approves them in the host. Headers the host builds itself (see
+// HOST_OWNED_HEADERS) stay with the host. Older hosts drop the map; there
+// `hostHeaderAdvisories` blocks the requests whose meaning depends on it.
+//
 // What's expressly NOT implemented:
-//   - Custom `MSCRM.*` bypass headers — the host strips them. The studio
-//     still builds + shows them in the UI and the Code tab, but the live
-//     executor doesn't send them. Users can copy the snippet from the Code
-//     tab and run it via an external Web API client.
-//   - `Prefer: return=representation` / `Prefer: odata.maxpagesize` —
-//     the host owns the Prefer header; we can't override it.
+//   - Headers on the read / relate / execute groups. Those still run with
+//     the host's own headers, including its default `Prefer`.
 //   - Binary (file/image) chunked upload — host doesn't expose this API.
 //     ManageFile / ManageImage modes return `host-not-supported` from the
 //     live executor so the user can BUILD the request and copy out, but
@@ -27,7 +31,7 @@
 //      so `ResultsView` rendering doesn't need to know which executor
 //      ran.
 
-import { dvHost, HostNotAvailableError } from '../host/pptbBridge';
+import { dvHost, HostNotAvailableError, hostSupportsAdditionalHeaders } from '../host/pptbBridge';
 import { metadata } from '../host/metadataProvider';
 import {
   buildRetrieveMultiple,
@@ -116,11 +120,82 @@ function isHostError(e: unknown): e is HostError {
   return typeof e === 'object' && e !== null;
 }
 
-function mapError(err: unknown, ms: number): ExecResult {
+/** `error.code` on the ExecResult when PPTB didn't send a request because
+ *  the user declined (or didn't answer) its additional-headers prompt. */
+export const HEADER_CONSENT_DECLINED_CODE = 'DRS.HeaderConsentDeclined';
+
+// PPTB 1.2.7 checks consent and validates `additionalHeaders` BEFORE it sends
+// anything, and rejects the call with these messages (desktop-app
+// dataverseHeaderConsentManager.ts / dataverseBatch.ts). Nothing reached
+// Dataverse, so we say so rather than show a generic 500.
+const CONSENT_DECLINED_RE = /additional headers were rejected|header consent/i;
+const HEADER_INVALID_RE =
+  /invalid dataverse header|conflicting duplicate dataverse header|additional dataverse headers/i;
+
+// The host flattens Dataverse errors to "<code>: <message>" (or "HTTP <n>")
+// inside the IPC error text, so the HTTP status is lost. Recover it for the
+// codes a precondition produces so WriteResultCard renders its 412 / 404 copy.
+const STATUS_BY_DATAVERSE_CODE: Record<string, number> = {
+  '0x80060882': 412, // ConcurrencyVersionMismatch — stale If-Match etag
+  '0x80040237': 412, // DuplicateRecord — If-None-Match: * on an existing row
+  '0x80040217': 404, // ObjectDoesNotExist — If-Match: * on a missing row
+};
+
+function parseHostMessage(message: string): { status?: number; code?: string } {
+  const code = /\b(0x[0-9a-f]{8})\b/i.exec(message)?.[1]?.toLowerCase();
+  if (code && STATUS_BY_DATAVERSE_CODE[code])
+    return { status: STATUS_BY_DATAVERSE_CODE[code], code };
+  const http = /\bHTTP (\d{3})\b/.exec(message)?.[1];
+  return { status: http ? Number(http) : undefined, code };
+}
+
+function headersNotSent(
+  status: number,
+  statusText: string,
+  code: string,
+  message: string,
+  ms: number,
+): ExecResult {
+  return {
+    status,
+    statusText,
+    ms,
+    bytes: 0,
+    ok: false,
+    outcome: status === 403 ? '403' : '404',
+    body: { error: { code, message } },
+    headers: {},
+  };
+}
+
+function mapError(err: unknown, ms: number, sentHeaders?: Record<string, string>): ExecResult {
   const e: HostError = isHostError(err) ? err : {};
-  const status = e.statusCode ?? e.status ?? 500;
   const message = e.message ?? e.innererror?.message ?? String(err);
-  const code = e.code ?? '0x80040217';
+  if (sentHeaders && CONSENT_DECLINED_RE.test(message)) {
+    return headersNotSent(
+      403,
+      'Headers not approved',
+      HEADER_CONSENT_DECLINED_CODE,
+      `Power Platform ToolBox didn't send this request because its headers ` +
+        `(${Object.keys(sentHeaders).join(', ')}) weren't approved, so nothing reached Dataverse. ` +
+        `Execute again and allow the headers when ToolBox asks. Host message: ${message}`,
+      ms,
+    );
+  }
+  if (sentHeaders && HEADER_INVALID_RE.test(message)) {
+    return headersNotSent(
+      400,
+      'Bad Request',
+      'DRS.HeaderRejected',
+      `Power Platform ToolBox rejected a request header, so nothing was sent to Dataverse. ` +
+        `Fix the header in the Headers pane. Host message: ${message}`,
+      ms,
+    );
+  }
+  const parsed =
+    e.statusCode === undefined && e.status === undefined ? parseHostMessage(message) : {};
+  const status = e.statusCode ?? e.status ?? parsed.status ?? 500;
+  const code = e.code ?? parsed.code ?? '0x80040217';
   const outcome: ExecResult['outcome'] =
     status === 404 ? '404' : status === 401 ? '401' : status === 403 ? '403' : 'ok';
   return {
@@ -170,15 +245,61 @@ function hostNotSupported(feature: string, ms: number): ExecResult {
   };
 }
 
-/** Wrap an async dvHost call with timing + error mapping. */
-async function timed<T>(fn: () => Promise<T>): Promise<{ ms: number; value: T } | ExecResult> {
+/** Wrap an async dvHost call with timing + error mapping. Pass the headers
+ *  the call sends so a declined consent prompt maps to a clear result. */
+async function timed<T>(
+  fn: () => Promise<T>,
+  sentHeaders?: Record<string, string>,
+): Promise<{ ms: number; value: T } | ExecResult> {
   const t0 = performance.now();
   try {
     const value = await fn();
     return { ms: Math.round(performance.now() - t0), value };
   } catch (e) {
-    return mapError(e, Math.round(performance.now() - t0));
+    return mapError(e, Math.round(performance.now() - t0), sentHeaders);
   }
+}
+
+// Headers PPTB's Dataverse client always sets itself. Its client spreads
+// `additionalHeaders` over its own, so sending these would override them
+// (and prompt for consent for nothing). `Prefer` is host-owned too: the host
+// always sends `return=representation` on writes and would only append ours.
+const HOST_OWNED_HEADERS = new Set([
+  'authorization',
+  'accept',
+  'content-type',
+  'content-length',
+  'odata-version',
+  'odata-maxversion',
+  'prefer',
+]);
+
+/**
+ * The part of a mode's composed headers (the Code tab map) that we hand to
+ * the host as `additionalHeaders`: host-owned headers removed, names
+ * de-duplicated case-insensitively (the later row wins, as the composers
+ * append precondition/bypass rows after the user's). `undefined` when
+ * nothing is left — the call then stays header-free and never prompts.
+ */
+export function toWireHeaders(
+  headers?: Record<string, string>,
+): Record<string, string> | undefined {
+  if (!headers) return undefined;
+  const byName = new Map<string, [string, string]>();
+  for (const [rawName, value] of Object.entries(headers)) {
+    const name = rawName.trim();
+    const key = name.toLowerCase();
+    if (!key || HOST_OWNED_HEADERS.has(key)) continue;
+    byName.delete(key);
+    byName.set(key, [name, value]);
+  }
+  return byName.size > 0 ? Object.fromEntries(byName.values()) : undefined;
+}
+
+/** `toWireHeaders`, but only when the host can actually send them — so the
+ *  consent-declined mapping never fires on a host that dropped them. */
+function sendable(headers?: Record<string, string>): Record<string, string> | undefined {
+  return hostSupportsAdditionalHeaders() ? toWireHeaders(headers) : undefined;
 }
 
 function isExecResult(x: unknown): x is ExecResult {
@@ -251,14 +372,21 @@ export async function executePredefined(s: PredefinedQueryState): Promise<ExecRe
 
 // ── Write group ──────────────────────────────────────────────────────────
 
-export async function executeCreate(s: CreateState): Promise<ExecResult> {
+export async function executeCreate(
+  s: CreateState,
+  headers?: Record<string, string>,
+): Promise<ExecResult> {
   const body = buildCreateBody(s);
-  const res = await timed(() => dvHost.create(s.table, body));
+  const wire = sendable(headers);
+  const res = await timed(() => dvHost.create(s.table, body, wire), wire);
   if (isExecResult(res)) return res;
   return ok(201, res.value, res.ms);
 }
 
-export async function executeUpdate(s: UpdateState): Promise<ExecResult> {
+export async function executeUpdate(
+  s: UpdateState,
+  headers?: Record<string, string>,
+): Promise<ExecResult> {
   if (!s.recordId) return mapError({ statusCode: 400, message: 'Pick a record to update.' }, 0);
   // CRITICAL: PUT single-column (PUT /<entityset>(<id>)/<column> with body
   // `{ value: <scalar> }`) is a real Web API pattern but PPTB's
@@ -282,7 +410,8 @@ export async function executeUpdate(s: UpdateState): Promise<ExecResult> {
   const body = buildUpdateBody(s);
   // The host's `update()` is PATCH semantics. For Upsert-via-Update (when
   // concurrency is `none`) the server still does the right thing.
-  const res = await timed(() => dvHost.update(s.table, s.recordId!, body));
+  const wire = sendable(headers);
+  const res = await timed(() => dvHost.update(s.table, s.recordId!, body, wire), wire);
   if (isExecResult(res)) return res;
   // dvHost.update resolves to void on 204 No Content. Best-effort GET to
   // hydrate the updated row for the Results pane, then fall back to a
@@ -291,7 +420,10 @@ export async function executeUpdate(s: UpdateState): Promise<ExecResult> {
   return ok(204, { '@odata.context': 'update' }, res.ms);
 }
 
-export async function executeUpsert(s: UpsertState): Promise<ExecResult> {
+export async function executeUpsert(
+  s: UpsertState,
+  headers?: Record<string, string>,
+): Promise<ExecResult> {
   // The host's `update()` is PATCH semantics, addressed by logical name +
   // GUID. For alt-key Upsert the address is `<entitySet>(<keyCol>='value')`
   // and PPTB's dataverseAPI doesn't expose a raw-request hook for that
@@ -322,12 +454,16 @@ export async function executeUpsert(s: UpsertState): Promise<ExecResult> {
   // s.fieldValues directly, which is the in-memory shape (Lookup is
   // `{id, targetEntity}` object) — not what Web API accepts.
   const body = buildUpsertBody(s);
-  const res = await timed(() => dvHost.update(s.table, recordId, body));
+  const wire = sendable(headers);
+  const res = await timed(() => dvHost.update(s.table, recordId, body, wire), wire);
   if (isExecResult(res)) return res;
   return ok(204, { '@odata.context': 'upsert' }, res.ms);
 }
 
-export async function executeDelete(s: DeleteState): Promise<ExecResult> {
+export async function executeDelete(
+  s: DeleteState,
+  headers?: Record<string, string>,
+): Promise<ExecResult> {
   if (!s.recordId) return mapError({ statusCode: 400, message: 'Pick a record to delete.' }, 0);
   // CRITICAL: single-property delete (DELETE /<entityset>(<id>)/<column>) is
   // a real Web API pattern (per the docs) but PPTB's dataverseAPI surface
@@ -349,20 +485,30 @@ export async function executeDelete(s: DeleteState): Promise<ExecResult> {
     );
   }
   void buildDelete;
-  const res = await timed(() => dvHost.delete(s.table, s.recordId!));
+  const wire = sendable(headers);
+  const res = await timed(() => dvHost.delete(s.table, s.recordId!, wire), wire);
   if (isExecResult(res)) return res;
   return ok(204, null, res.ms);
 }
 
-export async function executeMerge(s: MergeState): Promise<ExecResult> {
+export async function executeMerge(
+  s: MergeState,
+  headers?: Record<string, string>,
+): Promise<ExecResult> {
   // Per docs: POST /Merge with { Target, Subordinate, UpdateContent, PerformParentingChecks }
   const body = buildMergeBody(s);
-  const res = await timed(() =>
-    dvHost.execute({
-      operationName: 'Merge',
-      operationType: 'action',
-      parameters: body,
-    }),
+  const wire = sendable(headers);
+  const res = await timed(
+    () =>
+      dvHost.execute(
+        {
+          operationName: 'Merge',
+          operationType: 'action',
+          parameters: body,
+        },
+        wire,
+      ),
+    wire,
   );
   if (isExecResult(res)) return res;
   return ok(204, res.value, res.ms);
