@@ -53,6 +53,7 @@ import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from '../editors/PaneHead';
 import { TargetEditor } from '../editors/TargetEditor';
@@ -213,7 +214,7 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
     if (entry.modeId !== 'manage-file') return;
     const snap = entry.state as SerializedManageFileState;
     if (entities.length > 0 && snap.table && !entities.some((e) => e.logicalName === snap.table)) {
-      window.alert(
+      notify(
         `Can't load "${entry.name}": entity \`${snap.table}\` ` +
           `isn't available in this environment.`,
       );

@@ -34,6 +34,7 @@ import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { PaneHead } from '../editors/PaneHead';
 import { ActionPicker } from '../editors/ActionPicker';
 import { ActionParamForm } from '../editors/ActionParamForm';
@@ -185,7 +186,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
       entities.length > 0 &&
       !entities.some((e) => e.logicalName === boundEntity)
     ) {
-      window.alert(
+      notify(
         `Can't load "${entry.name}": bound entity \`${boundEntity}\` ` +
           `isn't available in this environment.`,
       );

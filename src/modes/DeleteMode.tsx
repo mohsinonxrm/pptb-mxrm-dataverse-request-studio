@@ -69,6 +69,7 @@ import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { useStudioStyles } from '../primitives/styles';
 import { TargetEditor } from '../editors/TargetEditor';
 import { PaneHead } from '../editors/PaneHead';
@@ -291,7 +292,7 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     const snap = entry.state as SerializedDeleteState;
     // Lenient table check — entity list may still be warming up.
     if (entities.length > 0 && !entities.some((e) => e.logicalName === snap.table)) {
-      window.alert(
+      notify(
         `Can't load "${entry.name}": entity \`${snap.table}\` ` +
           `isn't available in this environment. The solution may have been ` +
           `removed or you may be connected to a different org.`,

@@ -42,6 +42,7 @@ import { Sidebar, type SidebarClauseItem } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { TargetEditor } from '../editors/TargetEditor';
 import { SelectEditor } from '../editors/SelectEditor';
 import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/PreferEditor';
@@ -158,7 +159,7 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
     if (entitiesLoaded) {
       const known = entities.some((e) => e.logicalName === snap.table);
       if (!known) {
-        window.alert(
+        notify(
           `Can't load "${entry.name}": entity \`${snap.table}\` ` +
             `isn't available in this environment. The solution may have been ` +
             `removed or you may be connected to a different org.`,

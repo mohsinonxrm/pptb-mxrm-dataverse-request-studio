@@ -12,7 +12,7 @@
 // routing is the caller's responsibility — the dialog just hands back
 // the SavedRequest; the mode decides what to do with `state`.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dialog,
   DialogTrigger,
@@ -55,6 +55,7 @@ import {
   type SavedModeId,
 } from '../state/savedRequests';
 import { useSavedRequests } from '../state/useSavedRequests';
+import { useConfirm } from '../shell/dialogs';
 
 const useStyles = makeStyles({
   libraryList: {
@@ -309,6 +310,10 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const { saved, rename, remove } = useSavedRequests();
+  const askConfirm = useConfirm();
+  // Keeps the popover open while the in-app delete confirm is up: clicks on
+  // that dialog land outside the popover and would otherwise dismiss it.
+  const confirmingRef = useRef(false);
 
   // Filter to this mode's entries AND the current org scope. The bucket
   // is already org-scoped via getSavedRequestsKey(), so this filter is a
@@ -336,6 +341,7 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
     <Popover
       open={open}
       onOpenChange={(_, d) => {
+        if (!d.open && confirmingRef.current) return;
         setOpen(d.open);
         setRenameId(null);
       }}
@@ -462,7 +468,16 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
                         icon={<Delete20Regular />}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (confirm(`Delete "${entry.name}"?`)) remove(entry.id);
+                          confirmingRef.current = true;
+                          void askConfirm({
+                            title: 'Delete saved request?',
+                            message: `"${entry.name}" will be removed from your saved requests.`,
+                            confirmLabel: 'Delete',
+                            destructive: true,
+                          }).then((ok) => {
+                            confirmingRef.current = false;
+                            if (ok) remove(entry.id);
+                          });
                         }}
                         aria-label={`Delete ${entry.name}`}
                       />
