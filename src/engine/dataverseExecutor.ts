@@ -528,6 +528,18 @@ export async function executeManageAttachment(_s: ManageAttachmentState): Promis
   return hostNotSupported('Manage Attachment/Annotation (chunked upload/download)', 0);
 }
 
+// ── Unexpected failures ──────────────────────────────────────────────────
+
+/**
+ * Result for an exception thrown while running a request (outside `timed`,
+ * e.g. a `$metadata` fetch failing inside `actions.find`). `runtime` routes
+ * every throw through this so a mode's Execute always gets a result back
+ * and its spinner clears (#102).
+ */
+export function execFailure(err: unknown, ms: number): ExecResult {
+  return mapError(err, ms);
+}
+
 // ── Bridge connectivity check (used by an "are we online" indicator) ─────
 export async function pingHost(): Promise<boolean> {
   try {
