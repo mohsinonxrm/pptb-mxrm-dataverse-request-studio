@@ -139,7 +139,10 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [confirmOverwrite, setConfirmOverwrite] = useState(false);
-  const { save, findById, findByName, error } = useSavedRequests();
+  // Library at MAX_SAVED and this save would add an entry: ask which one
+  // to drop instead of evicting one silently (#100).
+  const [confirmReplace, setConfirmReplace] = useState(false);
+  const { save, capacity, findById, findByName, error } = useSavedRequests();
 
   // Auto-suggest name whenever the dialog opens. If the user previously
   // saved this request, default to the existing name so a quick re-save
@@ -155,7 +158,7 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
     setConfirmOverwrite(false);
   }, [open, state, modeId, lastSavedId, findById]);
 
-  const doSave = (overwriteId?: string) => {
+  const doSave = (overwriteId?: string, replaceId?: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
     const id = overwriteId ?? newSavedId();
@@ -167,8 +170,11 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
       state,
       savedAt: Date.now(),
     };
-    const r = save(entry);
-    if (!r.ok) return; // error surfaced via useSavedRequests().error
+    const r = save(entry, replaceId ? { replaceId } : undefined);
+    if (!r.ok) {
+      if (r.full) setConfirmReplace(true);
+      return; // other errors surface via useSavedRequests().error
+    }
     onSaved(entry);
     setOpen(false);
   };
@@ -189,12 +195,22 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
       setConfirmOverwrite(true);
       return;
     }
+    if (capacity.full) {
+      setConfirmReplace(true);
+      return;
+    }
     doSave();
   };
 
   // Render: the trigger button itself (in the URL bar) + the dialog content.
   return (
-    <Dialog open={open} onOpenChange={(_, d) => setOpen(d.open)}>
+    <Dialog
+      open={open}
+      onOpenChange={(_, d) => {
+        setOpen(d.open);
+        setConfirmReplace(false);
+      }}
+    >
       <DialogTrigger disableButtonEnhancement>
         <Tooltip
           content={dirty ? 'Save current request (unsaved changes)' : 'No changes since last save'}
@@ -229,18 +245,21 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
               <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{getOrgScope()}</code>. Other
               Dataverse connections have their own saved-request lists. Name auto-suggested from the
               current entity, select, and filter counts.
+              {capacity.count >= capacity.max - 10 &&
+                ` ${capacity.count} of ${capacity.max} saved requests used for this connection (all modes).`}
             </Caption1>
             <Input
               value={name}
               onChange={(_, d) => {
                 setName(d.value);
                 setConfirmOverwrite(false);
+                setConfirmReplace(false);
               }}
               placeholder="Untitled request"
               style={{ width: '100%' }}
               autoFocus
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !confirmOverwrite) {
+                if (e.key === 'Enter' && !confirmOverwrite && !confirmReplace) {
                   e.preventDefault();
                   onClickSave();
                 }
@@ -252,6 +271,23 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
                   <MessageBarTitle>Name in use</MessageBarTitle>A saved request already uses{' '}
                   <code>{name.trim()}</code>. Save again to overwrite it, or change the name above
                   and Save.
+                </MessageBarBody>
+              </MessageBar>
+            )}
+            {confirmReplace && (
+              <MessageBar layout="multiline" intent="warning" style={{ marginTop: 12 }}>
+                <MessageBarBody>
+                  <MessageBarTitle>Saved requests are full</MessageBarTitle>
+                  This connection already has {capacity.max} saved requests (across all modes).
+                  Delete some from the Saved list, save under an existing name to overwrite it, or
+                  replace the oldest one
+                  {capacity.oldest && (
+                    <>
+                      : <code>{capacity.oldest.name}</code> ({modeIdShort(capacity.oldest.modeId)},
+                      saved {timeAgo(capacity.oldest.savedAt)})
+                    </>
+                  )}
+                  .
                 </MessageBarBody>
               </MessageBar>
             )}
@@ -272,16 +308,18 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
               appearance="primary"
               icon={<Save20Filled />}
               onClick={() => {
-                if (confirmOverwrite) {
+                if (confirmReplace) {
+                  if (capacity.oldest) doSave(undefined, capacity.oldest.id);
+                } else if (confirmOverwrite) {
                   const existing = findByName(name.trim());
                   if (existing) doSave(existing.id);
                 } else {
                   onClickSave();
                 }
               }}
-              disabled={!name.trim()}
+              disabled={!name.trim() || (confirmReplace && !capacity.oldest)}
             >
-              {confirmOverwrite ? 'Overwrite' : 'Save'}
+              {confirmReplace ? 'Replace oldest' : confirmOverwrite ? 'Overwrite' : 'Save'}
             </Button>
           </DialogActions>
         </DialogBody>

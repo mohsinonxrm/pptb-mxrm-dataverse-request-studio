@@ -2,7 +2,7 @@
 //
 // Persistence layers:
 //   • In-memory recents      — last 8 runs per mode, lost on reload
-//   • localStorage saves     — this module, up to 50 entries per org scope
+//   • localStorage saves     — this module, up to MAX_SAVED entries per org scope
 //   • Export/Import to disk  — future, via the host's filesystem API
 //
 // One saved entry = a named snapshot of a mode's state shape. Each mode
@@ -44,7 +44,14 @@ import { getEnv } from '../mock/environment';
 // the live env host via `getSavedRequestsKey()`.
 
 export const SAVED_REQUESTS_KEY_PREFIX = 'drs:saved-requests:v1';
-export const MAX_SAVED = 50;
+/**
+ * Library size per org scope, shared by every mode. A bound, not a target:
+ * an entry is a few KB of JSON, so 200 stays far below the browser's
+ * localStorage quota (a quota failure is reported by `persistSaved`
+ * anyway). At the cap, saving a NEW request is refused until the user
+ * deletes or replaces one — nothing is evicted silently (#100).
+ */
+export const MAX_SAVED = 200;
 
 /**
  * The localStorage key for the CURRENT connection. Recomputed at every
