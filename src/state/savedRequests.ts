@@ -83,6 +83,8 @@ export type SavedModeId =
   | 'create'
   | 'upsert'
   | 'merge'
+  // Bulk Write (#8) — rows + operation; see engine/bulkWrite.
+  | 'bulk-write'
   | 'associate'
   | 'disassociate'
   // Execute group — exec-action covers OOB / Custom API / Custom Action
@@ -449,6 +451,17 @@ export function autoSuggestName(modeId: SavedModeId, state: unknown): string {
       return autoSuggestUpsert(state as SerializedUpsertState);
     case 'merge':
       return autoSuggestMerge(state as SerializedMergeState);
+    case 'bulk-write': {
+      // Format: "CreateMultiple · account · 12 rows · 2026-10-17"
+      const b = state as { operation?: string; table?: string; rows?: unknown[] };
+      const n = b.rows?.length ?? 0;
+      return [
+        b.operation || 'bulk',
+        b.table || 'untitled',
+        `${n} row${n === 1 ? '' : 's'}`,
+        new Date().toISOString().slice(0, 10),
+      ].join(' · ');
+    }
     case 'associate':
       return autoSuggestAssociate(state as SerializedAssociateState);
     case 'disassociate':

@@ -24,6 +24,7 @@
         --color-request-relate: #8764b8;
         --color-request-execute: #ca5010;
         --color-request-binary: #9d432c;
+        --color-request-bulk: #03787c;
 
         --color-method-get: #005a9e;
         --color-method-post: #107c10;
@@ -40,6 +41,7 @@
         --color-request-relate: #b4a0ff;
         --color-request-execute: #f7894a;
         --color-request-binary: #d69c8b;
+        --color-request-bulk: #4bc2c5;
 
         --color-method-get: #62b1f8;
         --color-method-post: #6ccb5f;
@@ -76,6 +78,23 @@
          IS blue, so we only override for non-read groups. This avoids
          a no-op cascade for the most common mode group.
          ───────────────────────────────────────────────────────────── */
+      /* Bulk group (Bulk Write / Bulk Delete). Dark theme: the teal tint is
+         light, so on-brand text goes dark there. */
+      [data-mode-group='bulk'] {
+        --colorBrandBackground: var(--color-request-bulk);
+        --colorBrandBackgroundHover: var(--color-request-bulk);
+        --colorBrandBackgroundPressed: var(--color-request-bulk);
+        --colorBrandBackgroundSelected: var(--color-request-bulk);
+        --colorBrandStroke1: var(--color-request-bulk);
+        --colorBrandStroke2: var(--color-request-bulk);
+        --colorBrandForeground1: var(--color-request-bulk);
+        --colorBrandForeground2: var(--color-request-bulk);
+        --colorCompoundBrandBackground: var(--color-request-bulk);
+        --colorCompoundBrandStroke: var(--color-request-bulk);
+      }
+      :root[data-theme='dark'] [data-mode-group='bulk'] {
+        --colorNeutralForegroundOnBrand: #000000;
+      }
       [data-mode-group='write'] {
         --colorBrandBackground: var(--color-request-write);
         --colorBrandBackgroundHover: var(--color-request-write);

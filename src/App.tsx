@@ -6,6 +6,8 @@ import { FrameHeader } from './shell/FrameHeader';
 import { SaveContextRoot, type SaveContextValue } from './state/SaveContext';
 import { findRequestType } from './registry/requestTypes';
 import { RetrieveMultipleMode } from './modes/RetrieveMultipleMode';
+// Bulk Write loads on first use (#8, #22).
+import { BulkWriteMode } from './modes/BulkWriteMode.lazy';
 import { RetrieveSingleMode } from './modes/RetrieveSingleMode';
 import { RetrieveNextLinkMode } from './modes/RetrieveNextLinkMode';
 import { PredefinedQueryMode } from './modes/PredefinedQueryMode';
@@ -143,6 +145,8 @@ function ModeRouter({
       return <DeleteMode themeMode={themeMode} />;
     case 'merge':
       return <MergeMode themeMode={themeMode} />;
+    case 'bulk-write':
+      return <BulkWriteMode themeMode={themeMode} />;
     case 'associate':
       return <AssociateMode themeMode={themeMode} />;
     case 'disassociate':
