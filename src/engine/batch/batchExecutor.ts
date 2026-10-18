@@ -59,6 +59,12 @@ export interface SegmentResult {
   changesetError?: HostBatchResult;
   /** True when this segment was never sent because an earlier one failed. */
   skipped?: boolean;
+  /**
+   * The host call threw, but its message shows Dataverse answered with a
+   * failed request (the host couldn't parse the partial response) — so at
+   * least one request in the segment failed.
+   */
+  requestFailed?: boolean;
 }
 
 export interface BatchRunResult {
@@ -127,17 +133,44 @@ export function mapSegmentResults(
 
 const CONSENT_DECLINED_RE = /additional headers were rejected|header consent/i;
 const PARTIAL_RE = /invalid content id correlation|missing operation results/i;
+const CORRELATION_RE = /invalid content id correlation/i;
+
+/**
+ * Drop the Electron IPC wrapper the host adds to a rejection —
+ * `Error invoking remote method 'dataverse.executeBatch': Error: …` — so the
+ * message starts with the host's own text (#198).
+ */
+export function stripIpcPrefix(message: string): string {
+  return message
+    .replace(/^\s*Error invoking remote method '[^']*':\s*/i, '')
+    .replace(/^(?:\w*Error:\s*)+/, '')
+    .trim();
+}
 
 /** Plain-language message for a host rejection. */
 export function describeHostError(
-  message: string,
+  rawMessage: string,
   ctx: { transaction: boolean; continueOnError: boolean; sentHeaders: boolean },
 ): string {
+  const message = stripIpcPrefix(rawMessage);
   if (CONSENT_DECLINED_RE.test(message)) {
     return (
       'Power Platform ToolBox didn’t send this batch because its request headers weren’t ' +
       'approved, so nothing reached Dataverse. Send again and allow the headers when ToolBox ' +
       `asks, or remove them. Host message: ${message}`
+    );
+  }
+  // #198 — PPTB 1.2.8's batch parser throws on a continue-on-error response
+  // in which a failed request is followed by more requests (`[bad, good]`
+  // fails; `[bad]` and `[good, bad]` work). Dataverse ran the batch; the
+  // host just can't read the answer.
+  if (!ctx.transaction && ctx.continueOnError && CORRELATION_RE.test(message)) {
+    return (
+      'A request in this batch failed, and Power Platform ToolBox couldn’t read the ' +
+      'continue-on-error response because more requests followed the failed one (a known ' +
+      'ToolBox batch-parser bug). Dataverse still ran every request: the ones that succeeded ' +
+      'were applied. To see each result, put requests that might fail last in the batch, or ' +
+      `send them on their own. Host message: ${message}`
     );
   }
   if (!ctx.transaction && !ctx.continueOnError && PARTIAL_RE.test(message)) {
@@ -199,6 +232,7 @@ export async function executeBatchPlan(
         contentIds,
         ms: Math.round(performance.now() - s0),
         ok: false,
+        requestFailed: PARTIAL_RE.test(raw),
         error: describeHostError(raw, {
           transaction: seg.transaction,
           continueOnError: opts.continueOnError,

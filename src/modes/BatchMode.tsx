@@ -68,9 +68,10 @@ import { convertSnapshot, type RequestSnapshot } from '../engine/batch/savedToBa
 import {
   BATCH_CODE_LABELS,
   generateBatchCode,
+  toEncodableGroups,
   type BatchCodeFormat,
 } from '../engine/batch/batchCode';
-import { makeBoundary } from '../engine/batch/multipart';
+import { encodeBatch, makeBoundary } from '../engine/batch/multipart';
 import { generateExecuteMultipleCSharp } from '../engine/batch/executeMultipleCode';
 import { useScopedEntities } from '../host/useScopedEntities';
 import { findTable } from '../mock/metadata';
@@ -88,6 +89,9 @@ const EM_CODE_LABELS: Record<EmCodeFormat, string> = {
   csharp: 'ExecuteMultipleRequest (C#)',
   http: 'Web API equivalent ($batch)',
 };
+
+/** Job / composite modes "Add last request" doesn't offer (#198). */
+const NOT_BATCHABLE_MODES = new Set(['bulk-delete', 'bulk-write', 'batch', 'execute-multiple']);
 
 export type BatchVariant = 'batch' | 'execute-multiple';
 
@@ -199,7 +203,9 @@ export function BatchMode({
     });
 
   // ── Add from Saved / last request ──
-  const last = lastPublishedRequest();
+  // Job and composite modes can't go inside a $batch (#198).
+  const published = lastPublishedRequest();
+  const last = published && !NOT_BATCHABLE_MODES.has(published.modeId) ? published : null;
   const lastLabel = last ? findRequestType(last.modeId).name : null;
   const addSnapshots = async (snaps: RequestSnapshot[]) => {
     const added: BatchItem[] = [];
@@ -318,6 +324,13 @@ export function BatchMode({
       changeset: (i: number) => (boundaryRef.current.cs[i] ??= makeBoundary('changeset')),
     }),
     [],
+  );
+  // Size of the multipart body for the URL bar's byte counter (#198).
+  const bodyBytes = useMemo(
+    () =>
+      new TextEncoder().encode(encodeBatch(toEncodableGroups(compiled.items), boundaries).body)
+        .length,
+    [compiled, boundaries],
   );
   const generate = (fmt: BatchCodeFormat) =>
     generateBatchCode(fmt, {
@@ -554,6 +567,7 @@ export function BatchMode({
         <UrlBar
           method="BATCH"
           url={`${API_BASE}/$batch`}
+          bytes={bodyBytes}
           executeVerb={type.executeVerb}
           disabledReason={disabledReason}
           loading={loading}

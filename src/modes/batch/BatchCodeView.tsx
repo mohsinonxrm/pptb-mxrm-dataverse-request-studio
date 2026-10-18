@@ -13,11 +13,14 @@ export function BatchCodeView<F extends string>({
   labels,
   generate,
   note,
+  crlfFormats = ['http' as F],
 }: {
   formats: F[];
   labels: Record<F, string>;
   generate: (fmt: F) => string;
   note?: string;
+  /** Formats that show the raw multipart body — only these get the CRLF note (#198). */
+  crlfFormats?: F[];
 }) {
   const [fmt, setFmt] = useState<F>(formats[0]);
   const [copied, setCopied] = useState(false);
@@ -64,9 +67,11 @@ export function BatchCodeView<F extends string>({
       >
         {code}
       </pre>
-      <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-        Line breaks in a $batch body are CRLF on the wire.
-      </Caption1>
+      {crlfFormats.includes(fmt) && (
+        <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
+          Line breaks in a $batch body are CRLF on the wire.
+        </Caption1>
+      )}
     </div>
   );
 }
