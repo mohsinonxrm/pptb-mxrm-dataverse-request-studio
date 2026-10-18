@@ -102,7 +102,7 @@ export function Sidebar({
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {timeAgo(r.ts)} · {r.status} · {r.rowCount ?? '—'} rows
+                    {timeAgo(r.ts)} · {r.status} · {r.summary ?? `${r.rowCount ?? '—'} rows`}
                   </span>
                 </div>
               ))}

@@ -131,6 +131,42 @@ export function mapSegmentResults(
   };
 }
 
+/**
+ * What Recent Runs shows for a batch run (#204). `status` is the outer
+ * `$batch` response — 200 whenever Dataverse answered at least one call,
+ * 0 when none got an answer (host / transport error, consent declined) —
+ * never a single part's status. `summary` counts the parts, e.g.
+ * "3 requests · 1 failed". Pure — unit tested.
+ */
+export function summarizeBatchRun(res: BatchRunResult): {
+  status: number;
+  summary: string;
+  succeeded: number;
+} {
+  const answered = res.segments.some((s) => !s.skipped && (!s.error || s.requestFailed));
+  const n = res.items.length;
+  let succeeded = 0;
+  let failed = 0;
+  let rolledBack = 0;
+  let notRun = 0;
+  let unknown = 0;
+  for (const i of res.items) {
+    if (i.outcome === 'done') {
+      if ((i.status ?? 0) >= 400) failed++;
+      else succeeded++;
+    } else if (i.outcome === 'rolled-back') rolledBack++;
+    else if (i.outcome === 'not-run') notRun++;
+    else unknown++;
+  }
+  const parts = [`${n} request${n === 1 ? '' : 's'}`];
+  if (failed) parts.push(`${failed} failed`);
+  if (rolledBack) parts.push(`${rolledBack} rolled back`);
+  if (notRun) parts.push(`${notRun} not run`);
+  if (unknown) parts.push(`${unknown} no result`);
+  if (n > 0 && succeeded === n) parts.push('all succeeded');
+  return { status: answered ? 200 : 0, summary: parts.join(' · '), succeeded };
+}
+
 const CONSENT_DECLINED_RE = /additional headers were rejected|header consent/i;
 const PARTIAL_RE = /invalid content id correlation|missing operation results/i;
 const CORRELATION_RE = /invalid content id correlation/i;
