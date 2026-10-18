@@ -169,13 +169,105 @@ describe('parseODataUrl — $filter', () => {
     });
   });
 
-  // KNOWN BUG: parseAndExpr / parseOrExpr flatten any child group with the
-  // same combinator — including a *negated* one — so `a and not b eq 0`
-  // loses its `not` and the pasted query is silently inverted. Flip this to
-  // `it` once the flattening skips negated groups.
-  it.fails('keeps a negated comparison negated inside an and-chain', async () => {
+  // #117: parseAndExpr / parseOrExpr used to flatten any child group with the
+  // same combinator — including a *negated* one — so the `not` was lost and
+  // the pasted query was silently inverted.
+  it('keeps a negated comparison negated inside an and-chain', async () => {
     const p = await parseOk("accounts?$filter=name eq 'x' and not numberofemployees eq 0");
-    expect(p.filter.rules[1]).toMatchObject({ type: 'group', negated: true });
+    expect(shape(p.filter)).toEqual(
+      shape(
+        group('and', [
+          rule('name', 'eq', 'x', { valKind: 'literal' }),
+          group('and', [rule('numberofemployees', 'eq', '0', { valKind: 'literal' })], {
+            negated: true,
+          }),
+        ]),
+      ),
+    );
+  });
+
+  it('keeps a negated same-combinator group intact (and / or)', async () => {
+    const and = await parseOk(
+      "accounts?$filter=name eq 'x' and not (revenue gt 1 and numberofemployees eq 0)",
+    );
+    expect(and.filter.rules).toHaveLength(2);
+    expect(and.filter.rules[1]).toMatchObject({
+      type: 'group',
+      combinator: 'and',
+      negated: true,
+      rules: [{ col: 'revenue' }, { col: 'numberofemployees' }],
+    });
+
+    const or = await parseOk(
+      "accounts?$filter=name eq 'x' or not (revenue gt 1 or numberofemployees eq 0)",
+    );
+    expect(or.filter).toMatchObject({ combinator: 'or' });
+    expect(or.filter.rules).toHaveLength(2);
+    expect(or.filter.rules[1]).toMatchObject({
+      type: 'group',
+      combinator: 'or',
+      negated: true,
+      rules: [{ col: 'revenue' }, { col: 'numberofemployees' }],
+    });
+  });
+
+  it('keeps a not inside an or-branch', async () => {
+    const p = await parseOk("accounts?$filter=name eq 'x' or not numberofemployees eq 0");
+    expect(p.filter).toMatchObject({ combinator: 'or' });
+    expect(p.filter.negated).toBeFalsy();
+    expect(p.filter.rules[1]).toMatchObject({
+      type: 'group',
+      negated: true,
+      rules: [{ col: 'numberofemployees', op: 'eq', val: '0' }],
+    });
+  });
+
+  it('keeps nested nots at every level', async () => {
+    const p = await parseOk(
+      "accounts?$filter=name eq 'x' and not (revenue gt 1 and not (numberofemployees eq 0 and donotemail eq true))",
+    );
+    const outer = p.filter.rules[1] as FilterGroup;
+    expect(outer).toMatchObject({ type: 'group', combinator: 'and', negated: true });
+    expect(outer.rules).toHaveLength(2);
+    expect(outer.rules[1]).toMatchObject({
+      type: 'group',
+      combinator: 'and',
+      negated: true,
+      rules: [{ col: 'numberofemployees' }, { col: 'donotemail' }],
+    });
+  });
+
+  it('cancels a double not, and only then flattens the group', async () => {
+    const p = await parseOk(
+      "accounts?$filter=name eq 'x' and not not (revenue gt 1 and numberofemployees eq 0)",
+    );
+    expect(p.filter.negated).toBeFalsy();
+    expect((p.filter.rules as FilterRule[]).map((r) => [r.type, r.col])).toEqual([
+      ['rule', 'name'],
+      ['rule', 'revenue'],
+      ['rule', 'numberofemployees'],
+    ]);
+  });
+
+  it('round-trips negated groups through the URL builder', async () => {
+    const rebuild = async (url: string) => {
+      const p = await parseOk(url);
+      return decodeURIComponent(
+        buildRetrieveMultiple(retrieveMultipleState({ ...p, apply: p.apply ?? emptyApply() }))
+          .relativeUrl,
+      );
+    };
+    const nots = (s: string) => s.match(/\bnot \(/g)?.length ?? 0;
+    for (const filter of [
+      "name eq 'x' and not (numberofemployees eq 0)",
+      "name eq 'x' or not (revenue gt 1 or numberofemployees eq 0)",
+      "name eq 'x' and not (revenue gt 1 and not (numberofemployees eq 0))",
+    ]) {
+      const once = await rebuild(`accounts?$filter=${filter}`);
+      expect(nots(once)).toBe(nots(filter));
+      // Parsing the rebuilt URL must be a fixed point.
+      expect(await rebuild(once)).toBe(once);
+    }
   });
 
   it('parses Dataverse query functions of each arity', async () => {
