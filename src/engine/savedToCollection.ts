@@ -313,6 +313,14 @@ export function savedToCollectionItem(entry: SavedRequest): SavedConversion {
         const s = deserializeManageAttachment(entry.state as SerializedManageAttachmentState);
         return multi(entry, pipelineSteps(manageAttachmentPipeline(s), composeHeaders(s)));
       }
+      default:
+        // Modes added later (e.g. bulk or batch modes) aren't exportable yet;
+        // skip them with a reason instead of failing the whole export.
+        return {
+          ok: false,
+          name: entry.name,
+          reason: `${entry.modeId} requests can't be exported as a collection yet`,
+        };
     }
   } catch (e) {
     return { ok: false, name: entry.name, reason: e instanceof Error ? e.message : String(e) };
