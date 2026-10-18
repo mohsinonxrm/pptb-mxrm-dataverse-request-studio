@@ -50,9 +50,14 @@ export function expandToOData(items: ExpandSpec[], parentTableLogical: string): 
   return items.map((it) => emitOne(it, parentTableLogical)).join(',');
 }
 
-function emitOne(it: ExpandSpec, parentTableLogical: string): string {
+// Inner clauses are ALWAYS emitted, whether or not the parent / target
+// entity's metadata is in the registry yet (#63). Metadata only refines the
+// encoding (lookup `_x_value` names, literal types); dropping a clause while
+// it loads would silently run the expand unfiltered. `parentTableLogical` is
+// undefined when the parent level's nav couldn't be resolved yet.
+function emitOne(it: ExpandSpec, parentTableLogical: string | undefined): string {
   const inner: string[] = [];
-  const parentTbl = findTable(parentTableLogical);
+  const parentTbl = parentTableLogical ? findTable(parentTableLogical) : undefined;
   const nav = parentTbl?.navigationProperties.find((n) => n.name === it.nav);
   // Resolve the target entity so we can encode the inner $select's
   // lookup columns as `_<logical>_value` instead of the nav name.
@@ -62,17 +67,14 @@ function emitOne(it: ExpandSpec, parentTableLogical: string): string {
     const encoded = it.select.map((c) => attrRefByName(targetTbl, c)).join(',');
     inner.push(`$select=${encoded}`);
   }
-  if (it.filter && it.filter.rules.length > 0 && nav) {
-    const targetTbl = findTable(nav.targetEntity);
-    if (targetTbl) {
-      const expr = groupToOData(it.filter, targetTbl);
-      if (expr) inner.push(`$filter=${expr}`);
-    }
+  if (it.filter && it.filter.rules.length > 0) {
+    const expr = groupToOData(it.filter, targetTbl);
+    if (expr) inner.push(`$filter=${expr}`);
   }
   if (it.orderby.length) inner.push(`$orderby=${orderbyToOData(it.orderby, targetTbl)}`);
   if (it.top != null && it.top > 0) inner.push(`$top=${it.top}`);
-  if (it.nestedExpand && it.nestedExpand.length > 0 && nav) {
-    const child = it.nestedExpand.map((c) => emitOne(c, nav.targetEntity)).join(',');
+  if (it.nestedExpand && it.nestedExpand.length > 0) {
+    const child = it.nestedExpand.map((c) => emitOne(c, nav?.targetEntity)).join(',');
     if (child) inner.push(`$expand=${child}`);
   }
   return inner.length ? `${it.nav}(${inner.join(';')})` : it.nav;

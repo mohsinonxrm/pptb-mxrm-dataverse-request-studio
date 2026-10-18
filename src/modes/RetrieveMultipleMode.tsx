@@ -47,6 +47,7 @@ import { countRules, newId } from '../editors/filter/filterTree';
 import { findTable } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildRetrieveMultiple } from '../engine/urlBuilder';
+import { relatedMetadataAdvisories } from '../engine/navPath';
 // Phase 1 wiring: routes through `runtime.retrieveMultiple` which auto-picks
 // the live (dvHost.queryData) or mock executor based on `isEmbedded()`. The
 // mode doesn't need to know which.
@@ -148,7 +149,9 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // against the correct entity (issue #33) — even on saved-request reload,
   // pasted-URL apply, or a direct Execute where no editor was opened to
   // lazily trigger the loads.
-  useWarmReferencedTables(state.table || null, {
+  // `relatedVersion` bumps when a related table lands so `built` re-encodes
+  // (#63); `pending` / `failed` drive the metadata advisory.
+  const related = useWarmReferencedTables(state.table || null, {
     filter: state.filter,
     expand: state.expand,
     apply: state.apply,
@@ -182,7 +185,11 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     return currentHash !== lastSavedHash;
   }, [state.table, lastSavedHash, currentHash]);
 
-  const built = useMemo(() => buildRetrieveMultiple(state), [state, liveTable]);
+  const built = useMemo(
+    () => buildRetrieveMultiple(state),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state, liveTable, related.version],
+  );
   const tbl = findTable(state.table);
   const filterCount = useMemo(() => countRules(state.filter), [state.filter]);
 
@@ -511,7 +518,12 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
       });
     }
 
-    return [...antipatterns, ...validations, ...nestingAdvisories];
+    return [
+      ...antipatterns,
+      ...validations,
+      ...nestingAdvisories,
+      ...relatedMetadataAdvisories(related.pending, related.failed),
+    ];
   }, [
     state.table,
     state.select,
@@ -520,6 +532,8 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     state.expand,
     state.apply,
     state.top,
+    related.pending.join(','),
+    related.failed.join(','),
   ]);
 
   const blockerReason = disabledReasonFromAdvisories(advisories);
