@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
@@ -66,5 +67,10 @@ export default defineConfig({
         },
       },
     },
+  },
+  test: {
+    // jsdom provides DOMParser, which the CSDL parser (host/csdlProvider) relies on.
+    environment: 'jsdom',
+    include: ['src/**/*.test.{ts,tsx}'],
   },
 });
