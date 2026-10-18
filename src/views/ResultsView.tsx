@@ -328,6 +328,14 @@ function HeadersPane({ headers, status }: { headers: Record<string, string>; sta
   );
 }
 
+/**
+ * True when the host refused the response because of its per-response size
+ * cap ("... exceeds the maximum size", or the 16 MB Buffer limit) (#126).
+ */
+function isResponseSizeLimitError(message: string | undefined): boolean {
+  return !!message && /16777216|exceeds the maximum size/i.test(message);
+}
+
 function ErrorState({ result }: { result: ExecResult }) {
   const Icon =
     result.status === 401
@@ -336,6 +344,12 @@ function ErrorState({ result }: { result: ExecResult }) {
         ? ShieldDismiss20Regular
         : ErrorCircle20Regular;
   const err = (result.body as { error?: { code?: string; message?: string } } | null)?.error;
+  // #126 — the host caps response size; say how to shrink the response.
+  const sizeHint = isResponseSizeLimitError(err?.message)
+    ? 'The response is larger than the host allows. Narrow it: add $select on the table and ' +
+      'inside each $expand, filter the expanded rows, or set Prefer: odata.maxpagesize to ' +
+      'return fewer rows per page.'
+    : null;
   const title =
     result.status === 401
       ? 'Unauthorized · 401'
@@ -389,6 +403,11 @@ function ErrorState({ result }: { result: ExecResult }) {
         <Caption1 style={{ color: tokens.colorNeutralForeground2, maxWidth: 420 }}>
           {advice}
         </Caption1>
+        {sizeHint && (
+          <Caption1 style={{ color: tokens.colorNeutralForeground1, maxWidth: 420 }}>
+            {sizeHint}
+          </Caption1>
+        )}
         {err && (
           // `whiteSpace: pre-wrap` keeps `\n` breaks but wraps the rest;
           // `wordBreak: break-word` + `overflowWrap: anywhere` break long

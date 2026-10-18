@@ -394,43 +394,35 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
       apply: state.apply,
     });
 
-    // Dataverse rule (empirically confirmed against the docs):
-    //   When the query contains a nested $expand AND ANY expand in the
-    //   tree targets a collection-valued nav (1:N or N:N), the top-level
-    //   $top and $orderby are forbidden. Server returns:
-    //     0x80060888 "Only $select, $filter and $orderby clauses can be
-    //                provided at top level while doing $expand on nested
-    //                one-to-many relationship."
-    //   (yes — the error names $orderby as both allowed and forbidden;
-    //    empirically $orderby is also rejected when $top is also set,
-    //    so we treat both as blockers.)
-    //
-    // Workaround: drop $top (and any non-empty $orderby) and use
-    // `Prefer: odata.maxpagesize=N` instead. The mode's PreferEditor
-    // already has the slot.
+    // Nested $expand involving a collection-valued nav (1:N / N:N anywhere
+    // in the tree). The Dataverse "Join tables using OData" doc says $top /
+    // $orderby are "Not supported with nested $expand" as options INSIDE
+    // the collection $expand; it doesn't forbid $top on the outer entity
+    // set (#126). So outer $top is a non-blocking warning — the server is
+    // the arbiter — and `Prefer: odata.maxpagesize` (which also pages each
+    // expanded collection) is offered as the fallback.
     const collectionNested =
       state.table && hasCollectionInvolvedNestedExpand(state.expand, state.table);
     const nestingAdvisories: Advisory[] = [];
     if (collectionNested && state.top != null) {
       nestingAdvisories.push({
         id: 'nested-collection-top',
-        severity: 'error',
+        severity: 'warning',
         source: 'validation',
         focusNode: 'top',
-        title: '$top is forbidden with a nested $expand on a collection',
+        title: '$top with a nested $expand on a collection',
         body: (
           <>
             Your query has a nested <code>$expand</code> involving a 1:N or N:N relationship.
-            Dataverse rejects top-level <code>$top</code> in this shape:{' '}
-            <em>
-              "Only $select, $filter and $orderby clauses can be provided at top level while doing
-              $expand on nested one-to-many relationship."
-            </em>
-            <br />
-            Drop <code>$top</code> and use <code>Prefer: odata.maxpagesize</code> in the Prefer pane
-            instead — paging will then apply correctly to each expanded collection.
+            Microsoft documents that <code>$top</code> isn't supported inside such an{' '}
+            <code>$expand</code>; <code>$top</code> on the table itself isn't restricted. If
+            Dataverse still rejects it (<code>0x80060888</code>), drop <code>$top</code> and use{' '}
+            <code>Prefer: odata.maxpagesize</code> in the Prefer pane instead — it also pages each
+            expanded collection.
           </>
         ),
+        learnMoreUrl:
+          'https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/query/join-tables#nested-expand-on-collection-valued-navigation-properties',
       });
     }
     if (collectionNested && state.orderby.length > 0) {
@@ -442,9 +434,9 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
         title: '$orderby is forbidden with a nested $expand on a collection',
         body: (
           <>
-            Same Dataverse rule as the <code>$top</code> case — top-level <code>$orderby</code>{' '}
-            isn't allowed when a nested <code>$expand</code> involves a 1:N or N:N. Either clear{' '}
-            <code>$orderby</code>, or sort client-side after the request returns.
+            Top-level <code>$orderby</code> isn't allowed when a nested <code>$expand</code>{' '}
+            involves a 1:N or N:N. Either clear <code>$orderby</code>, or sort client-side after the
+            request returns.
           </>
         ),
       });

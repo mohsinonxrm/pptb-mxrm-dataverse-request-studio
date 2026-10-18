@@ -216,8 +216,9 @@ export function hasAnyNestedExpand(items: ExpandSpec[]): boolean {
  * True iff the tree contains nesting AND at least one expand in the tree
  * targets a collection-valued navigation property (1:N or N:N).
  *
- * This is the EXACT trigger for Dataverse's runtime restriction on top-
- * level `$top` and `$orderby`. The error message is:
+ * Trigger for the RetrieveMultiple advisories on top-level `$top` (a
+ * warning since #126 — the Join tables doc only restricts `$top` inside the
+ * collection `$expand`) and `$orderby`. The error message seen was:
  *
  *   "Only $select, $filter and $orderby clauses can be provided at top
  *    level while doing $expand on nested one-to-many relationship."
