@@ -30,6 +30,7 @@ import { collectStrippedWildcards } from '../editors/filter/filterTree';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { validateRequest } from '../state/validateRequest';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { TargetEditor } from '../editors/TargetEditor';
 import { SelectEditor } from '../editors/SelectEditor';
 import { FilterEditor } from '../editors/filter/FilterEditor';
@@ -226,7 +227,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     if (entitiesLoaded) {
       const known = entities.some((e) => e.logicalName === snap.table);
       if (!known) {
-        window.alert(
+        notify(
           `Can't load "${entry.name}": entity \`${snap.table}\` ` +
             `isn't available in this environment. The solution may have been ` +
             `removed or you may be connected to a different org.`,

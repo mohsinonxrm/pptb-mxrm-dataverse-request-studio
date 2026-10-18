@@ -36,6 +36,7 @@ import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { PaneHead } from '../editors/PaneHead';
 import { KvGrid } from '../primitives/KvGrid';
 import { RecordPicker } from '../primitives/RecordPicker';
@@ -230,7 +231,7 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
       entities.length > 0 &&
       !entities.some((e) => e.logicalName === targetWf.primaryEntity)
     ) {
-      window.alert(
+      notify(
         `Can't load "${entry.name}": workflow's primary entity \`${targetWf.primaryEntity}\` ` +
           `isn't available in this environment.`,
       );

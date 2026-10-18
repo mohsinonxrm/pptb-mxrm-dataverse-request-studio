@@ -34,6 +34,7 @@ import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { TargetEditor } from '../editors/TargetEditor';
 import { SelectEditor } from '../editors/SelectEditor';
 import { FieldSetEditor, seedRequiredFieldValues } from '../editors/FieldSetEditor';
@@ -247,7 +248,7 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
     if (entry.modeId !== 'create') return;
     const snap = entry.state as SerializedCreateState;
     if (entities.length > 0 && !entities.some((e) => e.logicalName === snap.table)) {
-      window.alert(
+      notify(
         `Can't load "${entry.name}": entity \`${snap.table}\` ` +
           `isn't available in this environment. The solution may have been ` +
           `removed or you may be connected to a different org.`,

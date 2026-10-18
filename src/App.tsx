@@ -3,6 +3,7 @@ import { FluentProvider } from '@fluentui/react-components';
 import { useStudioStyles } from './primitives/styles';
 import { studioLight, studioDark, applyThemeAttr, type ThemeMode } from './theme/theme';
 import { FrameHeader } from './shell/FrameHeader';
+import { AppDialogHost } from './shell/dialogs';
 import { SaveContextRoot, type SaveContextValue } from './state/SaveContext';
 import { findRequestType } from './registry/requestTypes';
 import { RetrieveMultipleMode } from './modes/RetrieveMultipleMode';
@@ -66,6 +67,8 @@ function ThemedApp() {
           setActiveId={setActiveId}
         />
       </OpenSettingsProvider>
+      {/* In-app confirm dialogs and notices; replaces the native confirm/alert boxes (#111). */}
+      <AppDialogHost />
     </FluentProvider>
   );
 }
