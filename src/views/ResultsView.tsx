@@ -26,6 +26,7 @@ import { StatusPill } from '../primitives/StatusPill';
 import type { ExecResult } from '../engine/dataverseExecutor';
 import { ResultsGrid } from './results/ResultsGrid';
 import { ResultsCommandBar } from './results/ResultsCommandBar';
+import { usePersistedSettings } from '../host/usePersistedSettings';
 import { RecordDetailCard } from './detail/RecordDetailCard';
 import { WriteResultCard, type WriteResultContext } from './results/WriteResultCard';
 import type { ExpandSpec } from '../editors/ExpandEditor';
@@ -99,7 +100,9 @@ export function ResultsView({
   // Grid-local UI state. We hoist it here (not inside ResultsGrid) so the
   // command bar can drive it without prop-drilling through the grid.
   const [searchQuery, setSearchQuery] = useState('');
-  const [density, setDensity] = useState<'cozy' | 'compact'>('cozy');
+  // Row density is a persisted display setting (#16).
+  const [settings, setSettings] = usePersistedSettings();
+  const density = settings.gridDensity;
   const s = useStudioStyles();
 
   if (!result) {
@@ -210,7 +213,7 @@ export function ResultsView({
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           density={density}
-          onDensityChange={setDensity}
+          onDensityChange={(d) => setSettings({ ...settings, gridDensity: d })}
         />
       )}
 

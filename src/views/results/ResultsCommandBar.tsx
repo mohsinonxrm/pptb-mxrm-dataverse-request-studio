@@ -30,7 +30,7 @@ import {
   MenuButton,
   Spinner,
   Input,
-  ToggleButton,
+  MenuItemRadio,
 } from '@fluentui/react-components';
 import {
   ArrowClockwise20Regular,
@@ -41,9 +41,8 @@ import {
   Stack20Regular,
   Search20Regular,
   TextDensity20Regular,
-  TextAlignDistributed20Regular,
 } from '@fluentui/react-icons';
-import { SegmentedToggle } from '../../primitives/SegmentedToggle';
+import type { GridDensity } from '../../state/displaySettings';
 import { useHostSession } from '../../host/HostContext';
 
 const useStyles = makeStyles({
@@ -65,6 +64,12 @@ const useStyles = makeStyles({
   spacer: { flexGrow: 1 },
 });
 
+const DENSITY_LABEL: Record<GridDensity, string> = {
+  medium: 'Medium',
+  small: 'Small',
+  'extra-small': 'Extra small',
+};
+
 export interface ResultsCommandBarProps {
   hasMore: boolean;
   isLoading: boolean;
@@ -82,9 +87,9 @@ export interface ResultsCommandBarProps {
   /** Row-search query (passed through to the grid). */
   searchQuery: string;
   onSearchChange: (q: string) => void;
-  /** Row density. */
-  density: 'cozy' | 'compact';
-  onDensityChange: (d: 'cozy' | 'compact') => void;
+  /** Row density (persisted in the display settings, #16). */
+  density: GridDensity;
+  onDensityChange: (d: GridDensity) => void;
 }
 
 export function ResultsCommandBar({
@@ -231,24 +236,30 @@ export function ResultsCommandBar({
           style={{ minWidth: 220 }}
         />
 
-        <SegmentedToggle ariaLabel="Row density">
-          <ToggleButton
-            checked={density === 'cozy'}
-            icon={<TextAlignDistributed20Regular />}
-            onClick={() => onDensityChange('cozy')}
-            title="Cozy"
-          >
-            Cozy
-          </ToggleButton>
-          <ToggleButton
-            checked={density === 'compact'}
-            icon={<TextDensity20Regular />}
-            onClick={() => onDensityChange('compact')}
-            title="Compact"
-          >
-            Compact
-          </ToggleButton>
-        </SegmentedToggle>
+        <Menu
+          checkedValues={{ density: [density] }}
+          onCheckedValueChange={(_, d) => {
+            const next = d.checkedItems[0] as GridDensity | undefined;
+            if (next) onDensityChange(next);
+          }}
+        >
+          <MenuTrigger disableButtonEnhancement>
+            <Tooltip content="Row density" relationship="description">
+              <MenuButton appearance="subtle" size="small" icon={<TextDensity20Regular />}>
+                {DENSITY_LABEL[density] ?? DENSITY_LABEL.medium}
+              </MenuButton>
+            </Tooltip>
+          </MenuTrigger>
+          <MenuPopover>
+            <MenuList>
+              {(Object.keys(DENSITY_LABEL) as GridDensity[]).map((d) => (
+                <MenuItemRadio key={d} name="density" value={d}>
+                  {DENSITY_LABEL[d]}
+                </MenuItemRadio>
+              ))}
+            </MenuList>
+          </MenuPopover>
+        </Menu>
       </Toolbar>
 
       <span className={s.spacer} />
