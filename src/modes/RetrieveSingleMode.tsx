@@ -18,7 +18,7 @@
 // are distinguished by `modeId: 'retrieve-single'`. The library popover
 // filters by mode so each mode sees only its own saves.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Table20Regular,
   Table20Filled,
@@ -67,6 +67,7 @@ import {
   type SerializedRetrieveSingleState,
 } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { takeModeHandoff } from '../state/modeHandoff';
 import type { Advisory } from '../primitives/advisories';
 
 const initialState = (): RetrieveSingleState => ({
@@ -256,6 +257,30 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
         : state.headers.some((h) => h.enabled && !h.name)
           ? 'Fix empty header name.'
           : null;
+
+  // ── Handoff from another mode (#3) ────────────────────────────────
+  // WriteResultCard's "Retrieve this record" switches here with a table +
+  // record id waiting. Take it once on mount, start a fresh request for that
+  // record (not saved, so no Save baseline), and run it as soon as the
+  // table's metadata has landed — the URL needs its entity set name.
+  const [autoRunPending, setAutoRunPending] = useState(false);
+  useEffect(() => {
+    const handoff = takeModeHandoff('retrieve-single');
+    if (!handoff) return;
+    setState({ ...initialState(), table: handoff.table, recordId: handoff.recordId });
+    setLastSavedId(undefined);
+    setLastSavedHash(null);
+    setResult(null);
+    setActivePath('target');
+    setAutoRunPending(!!handoff.autoExecute);
+  }, []);
+  useEffect(() => {
+    if (!autoRunPending || loading) return;
+    if (!liveTable || !tbl?.entitySetName || disabledReason) return;
+    setAutoRunPending(false);
+    void onExecute();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRunPending, liveTable, tbl?.entitySetName, disabledReason, loading]);
 
   // ── Sidebar tree for $expand (recursive) ──────────────────────────
   // Same shape + visibility rules as Retrieve Multiple (see comment block
