@@ -583,6 +583,7 @@ function CustomValueInput({
     case 'Memo':
       return (
         <Textarea
+          aria-label={`${col.displayName} (custom value)`}
           rows={2}
           size="small"
           value={(value as string) ?? fallback}
@@ -597,6 +598,7 @@ function CustomValueInput({
     case 'Money':
       return (
         <SpinButton
+          aria-label={`${col.displayName} (custom value)`}
           size="small"
           value={Number(value ?? 0)}
           onChange={(_, d) => {
@@ -621,6 +623,7 @@ function CustomValueInput({
       const cur = opts.find((o) => o.value === value);
       return (
         <Combobox
+          aria-label={`${col.displayName} (custom value)`}
           size="small"
           value={cur?.label ?? (value != null ? String(value) : '')}
           selectedOptions={value != null ? [String(value)] : []}
@@ -664,6 +667,7 @@ function CustomValueInput({
           : [];
       return (
         <Combobox
+          aria-label={`${col.displayName} (custom value)`}
           size="small"
           multiselect
           value={currentArr
@@ -691,6 +695,7 @@ function CustomValueInput({
       // server accepts ISO 8601 either way.
       return (
         <Input
+          aria-label={`${col.displayName} (custom value)`}
           size="small"
           type={col.format === 'DateOnly' ? 'date' : 'datetime-local'}
           value={typeof value === 'string' ? value.slice(0, 16) : ''}
@@ -701,6 +706,7 @@ function CustomValueInput({
     default:
       return (
         <Input
+          aria-label={`${col.displayName} (custom value)`}
           size="small"
           value={(value as string) ?? fallback}
           onChange={(_, d) => onChange(d.value)}

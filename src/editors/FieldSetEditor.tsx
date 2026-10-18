@@ -24,7 +24,7 @@
 // they're working with raw schema names. This is the same v9 design language
 // used in SelectEditor and FilterValueInput.
 
-import { useMemo, useState, useEffect } from 'react';
+import { createContext, useContext, useMemo, useState, useEffect } from 'react';
 import {
   Input,
   Textarea,
@@ -860,7 +860,18 @@ function FieldRow({
 // ──────────────────────────────────────────────────────────────
 // FieldInput — dispatch to the right control for the column's type
 // ──────────────────────────────────────────────────────────────
-function FieldInput({
+// Accessible name for value controls that don't get `col` (#120).
+const FieldLabelContext = createContext('Field value');
+
+function FieldInput(props: Parameters<typeof FieldInputBody>[0]) {
+  return (
+    <FieldLabelContext.Provider value={props.col.displayName}>
+      <FieldInputBody {...props} />
+    </FieldLabelContext.Provider>
+  );
+}
+
+function FieldInputBody({
   table,
   col,
   value,
@@ -949,6 +960,7 @@ function FieldInput({
     default:
       return (
         <Input
+          aria-label={col.displayName}
           size="small"
           value={String(value ?? '')}
           onChange={(_, d) => onChange(d.value)}
@@ -974,6 +986,7 @@ function StringFieldInput({
   if (isLong) {
     return (
       <Textarea
+        aria-label={col.displayName}
         rows={3}
         value={value ?? ''}
         maxLength={col.maxLength}
@@ -1002,6 +1015,7 @@ function StringFieldInput({
             : `up to ${col.maxLength} chars`;
   return (
     <Input
+      aria-label={col.displayName}
       size="small"
       type={type}
       value={value ?? ''}
@@ -1031,6 +1045,7 @@ function MemoFieldInput({
       }
     >
       <Textarea
+        aria-label={col.displayName}
         rows={4}
         value={v}
         maxLength={col.maxLength}
@@ -1055,6 +1070,7 @@ function IntegerFieldInput({
   if (col.format === 'Language' || col.format === 'Locale') {
     return (
       <Combobox
+        aria-label={col.displayName}
         size="small"
         value={value != null ? String(value) : ''}
         selectedOptions={value != null ? [String(value)] : []}
@@ -1131,8 +1147,10 @@ function NumericFieldInput({
   step?: number;
   integer?: boolean;
 }) {
+  const fieldLabel = useContext(FieldLabelContext);
   return (
     <SpinButton
+      aria-label={fieldLabel}
       size="small"
       value={value ?? 0}
       min={min}
@@ -1297,6 +1315,7 @@ function ChoiceFieldInput({
   const cur = options.find((o) => o.value === value);
   return (
     <Combobox
+      aria-label={col.displayName}
       size="small"
       value={cur?.label ?? (value != null ? String(value) : '')}
       selectedOptions={value != null ? [String(value)] : []}
@@ -1509,7 +1528,13 @@ export function LookupFieldInput({
         <Badge appearance="ghost" style={{ fontFamily: tokens.fontFamilyMonospace }}>
           → loading targets…
         </Badge>
-        <Combobox size="small" disabled placeholder="Loading…" style={{ minWidth: 240 }}>
+        <Combobox
+          aria-label={col.displayName}
+          size="small"
+          disabled
+          placeholder="Loading…"
+          style={{ minWidth: 240 }}
+        >
           <Option value="__loading" text="" disabled>
             —
           </Option>
@@ -1522,6 +1547,7 @@ export function LookupFieldInput({
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
       {polymorphic ? (
         <Combobox
+          aria-label={`${col.displayName} (target table)`}
           size="small"
           value={targetTbl?.displayName ?? target}
           selectedOptions={[target]}
@@ -1552,6 +1578,7 @@ export function LookupFieldInput({
       )}
 
       <Combobox
+        aria-label={col.displayName}
         size="small"
         freeform
         clearable
@@ -1617,10 +1644,12 @@ function GuidFieldInput({
   value: string | undefined;
   onChange: (v: string) => void;
 }) {
+  const fieldLabel = useContext(FieldLabelContext);
   const v = value ?? '';
   const valid = !v || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
   return (
     <Input
+      aria-label={fieldLabel}
       size="small"
       value={v}
       placeholder="00000000-0000-0000-0000-000000000000"
