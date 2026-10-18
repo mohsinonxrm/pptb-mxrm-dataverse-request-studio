@@ -1027,8 +1027,9 @@ function parseUnaryExpr(ctx: ParseFilterCtx): FilterNode {
  * Apply a `not` to the parsed inner node. The mapping mirrors what DRS's
  * filter model now supports (empirically locked):
  *
- *   • `not <contains/startswith/endswith>(…)` → `rule.negated = true`
- *     (test 3.4–3.6 → 200; legacy per-rule toggle).
+ *   • `not <contains/startswith/endswith>(…)` → toggle `rule.negated`
+ *     (test 3.4–3.6 → 200; legacy per-rule toggle). A second `not`
+ *     cancels the first, like groups and lambdas (#207).
  *   • `not <plain comparison>` → wrap the single rule in a `negated`
  *     group of one — same wire shape as `not (<comparison>)`, which is
  *     what Dataverse expects (test 3.3 / 3.7 → 200).
@@ -1042,7 +1043,7 @@ function applyNot(node: FilterNode, ctx: ParseFilterCtx): FilterNode {
   if (node.type === 'rule') {
     const op = findOperator(node.op);
     if (op && op.kind === 'odata-fn') {
-      return { ...node, negated: true };
+      return { ...node, negated: !node.negated };
     }
     // Wrap the comparison in a `not (…)` group of one — encoder emits
     // exactly `not (<col> <op> <val>)` which Dataverse accepts.

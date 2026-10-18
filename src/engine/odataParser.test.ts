@@ -270,6 +270,25 @@ describe('parseODataUrl — $filter', () => {
     }
   });
 
+  it('cancels a double not on contains / startswith / endswith (#207)', async () => {
+    const rebuild = async (filter: string) => {
+      const p = await parseOk(`accounts?$filter=${filter}`);
+      const url = decodeURIComponent(
+        buildRetrieveMultiple(retrieveMultipleState({ ...p, apply: p.apply ?? emptyApply() }))
+          .relativeUrl,
+      );
+      return url.match(/\$filter=([^&]*)/)?.[1];
+    };
+    expect(await rebuild("not (not (contains(name,'a')))")).toBe("contains(name,'a')");
+    expect(await rebuild("not (not startswith(name,'a'))")).toBe("startswith(name,'a')");
+    expect(await rebuild("revenue lt 100 and not (not (endswith(name,'a')))")).toBe(
+      "revenue lt 100 and endswith(name,'a')",
+    );
+    // A single not is unchanged; three cancel down to one.
+    expect(await rebuild("not contains(name,'a')")).toBe("not contains(name,'a')");
+    expect(await rebuild("not (not (not contains(name,'a')))")).toBe("not contains(name,'a')");
+  });
+
   it('parses Dataverse query functions of each arity', async () => {
     const p = await parseOk(
       "accounts?$filter=Microsoft.Dynamics.CRM.LastXDays(PropertyName='createdon',PropertyValue=30)" +
