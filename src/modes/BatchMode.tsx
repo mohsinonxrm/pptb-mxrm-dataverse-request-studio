@@ -12,6 +12,13 @@
 // Execution goes through PPTB 1.2.7's `dataverseAPI.executeBatch` /
 // `executeTransaction` (see engine/batch/batchExecutor.ts). On older hosts
 // and standalone the batch can be composed and copied but not sent.
+//
+// `variant="execute-multiple"` (#11) is the same engine with the SDK's
+// ExecuteMultiple semantics: one flat list of independent requests,
+// ContinueOnError → `Prefer: odata.continue-on-error`, ReturnResponses →
+// results list faults only, and an ExecuteMultipleRequest (C#) in the Code
+// tab. ExecuteMultiple isn't a Web API action; `$batch` is its Web API
+// equivalent, so that's what gets sent.
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
@@ -40,6 +47,7 @@ import {
   compileBatch,
   deserializeBatch,
   initialBatchState,
+  initialExecuteMultipleState,
   itemSummary,
   newGroup,
   newItem,
@@ -63,6 +71,9 @@ import {
   type BatchCodeFormat,
 } from '../engine/batch/batchCode';
 import { makeBoundary } from '../engine/batch/multipart';
+import { generateExecuteMultipleCSharp } from '../engine/batch/executeMultipleCode';
+import { useScopedEntities } from '../host/useScopedEntities';
+import { findTable } from '../mock/metadata';
 import { BatchItemEditor } from './batch/BatchItemEditor';
 import { BatchGroupPane, BatchOverviewPane } from './batch/BatchPanes';
 import { BatchResultsView, type ResultRow } from './batch/BatchResultsView';
@@ -70,10 +81,31 @@ import { BatchCodeView } from './batch/BatchCodeView';
 import { AddFromSavedDialog } from './batch/AddFromSavedDialog';
 
 const CODE_FORMATS: BatchCodeFormat[] = ['http', 'fetch', 'pptb'];
+type EmCodeFormat = 'csharp' | BatchCodeFormat;
+const EM_CODE_FORMATS: EmCodeFormat[] = ['csharp', 'http', 'pptb'];
+const EM_CODE_LABELS: Record<EmCodeFormat, string> = {
+  ...BATCH_CODE_LABELS,
+  csharp: 'ExecuteMultipleRequest (C#)',
+  http: 'Web API equivalent ($batch)',
+};
 
-export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
-  const type = findRequestType('batch');
-  const [state, setState] = useState<BatchState>(initialBatchState);
+export type BatchVariant = 'batch' | 'execute-multiple';
+
+export function BatchMode({
+  themeMode: _themeMode,
+  variant = 'batch',
+}: {
+  themeMode: ThemeMode;
+  variant?: BatchVariant;
+}) {
+  const em = variant === 'execute-multiple';
+  const modeId = em ? ('execute-multiple' as const) : ('batch' as const);
+  const type = findRequestType(modeId);
+  const [state, setState] = useState<BatchState>(
+    em ? initialExecuteMultipleState : initialBatchState,
+  );
+  const returnResponses = state.returnResponses ?? true;
+  const { entities } = useScopedEntities();
   const [activePath, setActivePath] = useState('overview');
   const [tab, setTab] = useState<MainTab>('builder');
   const [run, setRun] = useState<BatchRunResult | null>(null);
@@ -232,7 +264,7 @@ export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
         [
           {
             id: `r-${Date.now()}`,
-            modeId: 'batch',
+            modeId,
             url: `${API_BASE}/$batch`,
             method: 'BATCH',
             ts: Date.now(),
@@ -252,7 +284,12 @@ export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
 
   const resultRows = useMemo<ResultRow[]>(() => {
     if (!run) return [];
-    return run.items.map((r) => {
+    // ExecuteMultiple with ReturnResponses = false returns faults only.
+    const shown =
+      em && !returnResponses
+        ? run.items.filter((r) => r.outcome !== 'done' || (r.status ?? 0) >= 400)
+        : run.items;
+    return shown.map((r) => {
       const c = compiled.items.find((x) => x.item.id === r.itemId);
       return {
         key: r.itemId,
@@ -267,7 +304,7 @@ export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
         body: r.body,
       };
     });
-  }, [run, compiled]);
+  }, [run, compiled, em, returnResponses]);
 
   // ── Code tab ──
   // Boundaries stay fixed for the session so the preview doesn't churn on every keystroke.
@@ -290,6 +327,19 @@ export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
       orgUrl,
       boundaries,
     });
+  const generateEm = (fmt: EmCodeFormat) =>
+    fmt === 'csharp'
+      ? generateExecuteMultipleCSharp(
+          compiled.items,
+          { continueOnError: state.continueOnError, returnResponses },
+          {
+            logicalOf: (set) => entities.find((e) => e.entitySetName === set)?.logicalName ?? null,
+            attrType: (logical, attr) =>
+              findTable(logical)?.columns.find((col) => col.logicalName === attr)?.attributeType ??
+              null,
+          },
+        )
+      : generate(fmt);
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeBatch(state), [state]);
@@ -301,7 +351,7 @@ export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
     setLastSavedHash(hashState(saved.state));
   };
   const onLoadSaved = (entry: SavedRequest) => {
-    if (entry.modeId !== 'batch') return;
+    if (entry.modeId !== modeId) return;
     const snap = entry.state as SerializedBatchState;
     setState(deserializeBatch(snap));
     setLastSavedId(entry.id);
@@ -315,7 +365,7 @@ export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
     useMemo(() => {
       return {
         state: currentSerialized,
-        modeId: 'batch' as const,
+        modeId,
         dirty: isDirty,
         lastSavedId,
         onSaved,
@@ -331,14 +381,14 @@ export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
   const sections: SidebarSection[] = [
     {
       id: 'batch',
-      label: 'Batch',
+      label: em ? 'ExecuteMultiple' : 'Batch',
       meta: `${total} request${total === 1 ? '' : 's'}`,
       items: [
         {
           id: 'overview',
           icon: Options20Regular,
           iconFilled: Options20Filled,
-          label: 'Options & add',
+          label: em ? 'Settings & add' : 'Options & add',
           badge: state.continueOnError ? 'continue' : null,
           badgeAppearance: 'tint',
           dirty: state.dirty.has('overview'),
@@ -348,14 +398,14 @@ export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
     ...state.groups.map(
       (g, gi): SidebarSection => ({
         id: g.id,
-        label: g.atomic ? `Change set ${gi + 1}` : `Independent ${gi + 1}`,
+        label: em ? 'Requests' : g.atomic ? `Change set ${gi + 1}` : `Independent ${gi + 1}`,
         meta: `${g.items.length}`,
         items: [
           {
             id: `group:${g.id}`,
             icon: g.atomic ? LockClosed20Regular : TextBulletListSquare20Regular,
             iconFilled: g.atomic ? LockClosed20Filled : TextBulletListSquare20Filled,
-            label: g.atomic ? 'Atomic group' : 'Independent requests',
+            label: em ? 'Add request' : g.atomic ? 'Atomic group' : 'Independent requests',
             badge: issuesFor(g.id).length || null,
             badgeColor: 'danger',
           },
@@ -431,6 +481,7 @@ export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
           group={g}
           index={gi}
           count={state.groups.length}
+          variant={variant}
           orgUrl={orgUrl}
           contentIdOf={(id) => compiled.items.find((x) => x.item.id === id)?.contentId ?? '?'}
           onSetAtomic={(atomic) =>
@@ -458,6 +509,9 @@ export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
   if (!pane) {
     pane = (
       <BatchOverviewPane
+        variant={variant}
+        returnResponses={returnResponses}
+        setReturnResponses={(v) => setState((s) => touch({ ...s, returnResponses: v }, 'overview'))}
         groups={state.groups}
         continueOnError={state.continueOnError}
         setContinueOnError={(v) => setState((s) => touch({ ...s, continueOnError: v }, 'overview'))}
@@ -486,7 +540,7 @@ export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
       sidebar={
         <Sidebar
           type={type}
-          urlPreview={`/$batch · ${total} request${total === 1 ? '' : 's'}`}
+          urlPreview={`/$batch · ${total} request${total === 1 ? '' : 's'}${em ? ' · ExecuteMultiple' : ''}`}
           sections={sections}
           activeNode={activePath}
           onSelect={(id) => {
@@ -514,7 +568,15 @@ export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
     >
       <MainTabs tab={tab} onTabChange={setTab} resultCount={run ? run.items.length : null}>
         {tab === 'builder' && pane}
-        {tab === 'code' && (
+        {tab === 'code' && em && (
+          <BatchCodeView
+            formats={EM_CODE_FORMATS}
+            labels={EM_CODE_LABELS}
+            generate={generateEm}
+            note="DRS sends these requests as a Web API $batch; the C# is the SDK form."
+          />
+        )}
+        {tab === 'code' && !em && (
           <BatchCodeView
             formats={CODE_FORMATS}
             labels={BATCH_CODE_LABELS}
@@ -526,7 +588,17 @@ export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
             }
           />
         )}
-        {tab === 'results' && <BatchResultsView run={run} rows={resultRows} />}
+        {tab === 'results' && (
+          <BatchResultsView
+            run={run}
+            rows={resultRows}
+            extraTitle={
+              em && !returnResponses && run
+                ? 'ReturnResponses = false: only faults are listed.'
+                : undefined
+            }
+          />
+        )}
       </MainTabs>
       <AddFromSavedDialog
         open={savedOpen}

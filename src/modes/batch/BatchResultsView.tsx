@@ -181,7 +181,8 @@ export function BatchResultsView({
     }
   };
 
-  const counts = rows.reduce(
+  // Count every request, even when ExecuteMultiple's ReturnResponses = false hides successes.
+  const counts = (run?.items ?? []).reduce(
     (acc, r) => {
       if (r.outcome === 'done' && r.status !== undefined && r.status < 400) acc.ok += 1;
       else if (r.outcome === 'done') acc.failed += 1;

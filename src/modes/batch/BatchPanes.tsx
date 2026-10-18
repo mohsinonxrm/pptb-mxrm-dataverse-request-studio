@@ -86,7 +86,13 @@ export function BatchOverviewPane({
   lastLabel,
   onSelect,
   notice,
+  variant = 'batch',
+  returnResponses = true,
+  setReturnResponses,
 }: {
+  variant?: 'batch' | 'execute-multiple';
+  returnResponses?: boolean;
+  setReturnResponses?: (v: boolean) => void;
   groups: BatchGroup[];
   continueOnError: boolean;
   setContinueOnError: (v: boolean) => void;
@@ -102,15 +108,35 @@ export function BatchOverviewPane({
   notice: string | null;
 }) {
   const total = groups.reduce((n, g) => n + g.items.length, 0);
+  const em = variant === 'execute-multiple';
   let n = 0;
   return (
     <div style={{ maxWidth: 860 }}>
       <PaneHead
         icon={Stack20Regular}
-        title="$batch request"
-        sub="Up to 1,000 requests in one POST to /$batch. Requests in a change set succeed or roll back together."
+        title={em ? 'ExecuteMultiple' : '$batch request'}
+        sub={
+          em
+            ? 'Up to 1,000 independent requests in one call, with the SDK’s ContinueOnError and ReturnResponses settings.'
+            : 'Up to 1,000 requests in one POST to /$batch. Requests in a change set succeed or roll back together.'
+        }
         group="batch"
       />
+
+      {em && (
+        <MessageBar intent="info" layout="multiline" style={{ marginBottom: 12 }}>
+          <MessageBarBody>
+            <MessageBarTitle>Sent as a Web API $batch</MessageBarTitle>
+            ExecuteMultiple is an SDK for .NET (Organization service) message; the Web API has no
+            ExecuteMultiple action. Its Web API equivalent is a <code>$batch</code> of independent
+            requests, which is what DRS sends. ContinueOnError maps to{' '}
+            <code>Prefer: odata.continue-on-error</code>; ReturnResponses = false shows only the
+            faults, as ExecuteMultipleResponse does. The Code tab has the ExecuteMultipleRequest
+            (C#). For all-or-nothing, use the $batch Request mode’s change sets
+            (ExecuteTransaction).
+          </MessageBarBody>
+        </MessageBar>
+      )}
 
       {unavailable && (
         <MessageBar intent="warning" layout="multiline" style={{ marginBottom: 12 }}>
@@ -127,12 +153,22 @@ export function BatchOverviewPane({
       )}
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-        <Button icon={<LockClosed20Regular />} onClick={() => onAddGroup(true)}>
-          Add change set
-        </Button>
-        <Button icon={<TextBulletListSquare20Regular />} onClick={() => onAddGroup(false)}>
-          Add independent group
-        </Button>
+        {em ? (
+          groups[0] && (
+            <Button icon={<Add20Regular />} onClick={() => onSelect(`group:${groups[0].id}`)}>
+              Add request
+            </Button>
+          )
+        ) : (
+          <>
+            <Button icon={<LockClosed20Regular />} onClick={() => onAddGroup(true)}>
+              Add change set
+            </Button>
+            <Button icon={<TextBulletListSquare20Regular />} onClick={() => onAddGroup(false)}>
+              Add independent group
+            </Button>
+          </>
+        )}
         <Button icon={<Add20Regular />} onClick={onOpenSaved}>
           Add from Saved…
         </Button>
@@ -159,14 +195,44 @@ export function BatchOverviewPane({
           aria-label="Continue on error"
         />
         <div>
-          <strong>Continue on error</strong>{' '}
+          <strong>{em ? 'ContinueOnError' : 'Continue on error'}</strong>{' '}
           <code style={{ fontSize: 12 }}>Prefer: odata.continue-on-error</code>
           <Caption1 block style={{ color: tokens.colorNeutralForeground3 }}>
-            Off: Dataverse stops at the first failed request or change set. On: it runs the rest and
-            returns every result. A change set is all-or-nothing either way.
+            {em
+              ? 'False: processing stops at the first fault; the rest don’t run. True: every request runs and each fault is reported. Requests that already ran aren’t undone either way.'
+              : 'Off: Dataverse stops at the first failed request or change set. On: it runs the rest and returns every result. A change set is all-or-nothing either way.'}
           </Caption1>
         </div>
       </div>
+
+      {em && setReturnResponses && (
+        <div
+          style={{
+            display: 'flex',
+            gap: 12,
+            alignItems: 'flex-start',
+            padding: 12,
+            border: `1px solid ${tokens.colorNeutralStroke2}`,
+            borderRadius: 6,
+            background: tokens.colorNeutralBackground1,
+            marginBottom: 16,
+          }}
+        >
+          <Switch
+            checked={returnResponses}
+            onChange={(_, d) => setReturnResponses(d.checked)}
+            aria-label="ReturnResponses"
+          />
+          <div>
+            <strong>ReturnResponses</strong>
+            <Caption1 block style={{ color: tokens.colorNeutralForeground3 }}>
+              True: a response for every request. False: only the faults, which is what you want for
+              bulk loads. A $batch always returns every response; DRS filters the Results the same
+              way and sets it in the C#.
+            </Caption1>
+          </div>
+        </div>
+      )}
 
       {needsConsent && (
         <MessageBar intent="info" layout="multiline" style={{ marginBottom: 12 }}>
@@ -216,7 +282,9 @@ export function BatchOverviewPane({
             onClick={() => onSelect(`group:${g.id}`)}
             style={{ padding: 0 }}
           >
-            <strong>{g.atomic ? `Change set ${gi + 1}` : `Independent group ${gi + 1}`}</strong>
+            <strong>
+              {em ? 'Requests' : g.atomic ? `Change set ${gi + 1}` : `Independent group ${gi + 1}`}
+            </strong>
           </Button>
           {g.items.length === 0 && (
             <Caption1 block style={{ color: tokens.colorNeutralForeground3 }}>
@@ -271,7 +339,9 @@ export function BatchGroupPane({
   onRemoveGroup,
   onMoveGroup,
   onSelect,
+  variant = 'batch',
 }: {
+  variant?: 'batch' | 'execute-multiple';
   group: BatchGroup;
   index: number;
   count: number;
@@ -284,35 +354,48 @@ export function BatchGroupPane({
   onSelect: (id: string) => void;
 }) {
   const hasGet = group.items.some((i) => itemSummary(i, orgUrl).method === 'GET');
+  const em = variant === 'execute-multiple';
   return (
     <div style={{ maxWidth: 860 }}>
       <PaneHead
         icon={group.atomic ? LockClosed20Regular : TextBulletListSquare20Regular}
-        title={group.atomic ? `Change set ${index + 1}` : `Independent group ${index + 1}`}
+        title={
+          em
+            ? 'Requests'
+            : group.atomic
+              ? `Change set ${index + 1}`
+              : `Independent group ${index + 1}`
+        }
         sub={
-          group.atomic
-            ? 'Atomic: if any request fails, Dataverse rolls back the whole change set. GET isn’t allowed here.'
-            : 'Each request runs on its own; a failure doesn’t undo the others.'
+          em
+            ? 'ExecuteMultiple runs each request on its own, in order. It isn’t transactional.'
+            : group.atomic
+              ? 'Atomic: if any request fails, Dataverse rolls back the whole change set. GET isn’t allowed here.'
+              : 'Each request runs on its own; a failure doesn’t undo the others.'
         }
         group="batch"
       >
-        <Button
-          icon={<ArrowUp20Regular />}
-          appearance="subtle"
-          aria-label="Move group up"
-          disabled={index === 0}
-          onClick={() => onMoveGroup(-1)}
-        />
-        <Button
-          icon={<ArrowDown20Regular />}
-          appearance="subtle"
-          aria-label="Move group down"
-          disabled={index === count - 1}
-          onClick={() => onMoveGroup(1)}
-        />
-        <Button icon={<Delete20Regular />} appearance="subtle" onClick={onRemoveGroup}>
-          Remove group
-        </Button>
+        {!em && (
+          <>
+            <Button
+              icon={<ArrowUp20Regular />}
+              appearance="subtle"
+              aria-label="Move group up"
+              disabled={index === 0}
+              onClick={() => onMoveGroup(-1)}
+            />
+            <Button
+              icon={<ArrowDown20Regular />}
+              appearance="subtle"
+              aria-label="Move group down"
+              disabled={index === count - 1}
+              onClick={() => onMoveGroup(1)}
+            />
+            <Button icon={<Delete20Regular />} appearance="subtle" onClick={onRemoveGroup}>
+              Remove group
+            </Button>
+          </>
+        )}
       </PaneHead>
 
       <div
@@ -324,14 +407,16 @@ export function BatchGroupPane({
           flexWrap: 'wrap',
         }}
       >
-        <SegmentedToggle ariaLabel="Group kind">
-          <ToggleButton checked={group.atomic} onClick={() => onSetAtomic(true)}>
-            Change set (atomic)
-          </ToggleButton>
-          <ToggleButton checked={!group.atomic} onClick={() => onSetAtomic(false)}>
-            Independent
-          </ToggleButton>
-        </SegmentedToggle>
+        {!em && (
+          <SegmentedToggle ariaLabel="Group kind">
+            <ToggleButton checked={group.atomic} onClick={() => onSetAtomic(true)}>
+              Change set (atomic)
+            </ToggleButton>
+            <ToggleButton checked={!group.atomic} onClick={() => onSetAtomic(false)}>
+              Independent
+            </ToggleButton>
+          </SegmentedToggle>
+        )}
         <AddRequestMenu onAdd={onAdd} disabledGet={group.atomic} />
       </div>
       {group.atomic && hasGet && (

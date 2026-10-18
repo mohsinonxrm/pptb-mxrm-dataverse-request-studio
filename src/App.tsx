@@ -11,7 +11,7 @@ import { RetrieveNextLinkMode } from './modes/RetrieveNextLinkMode';
 import { PredefinedQueryMode } from './modes/PredefinedQueryMode';
 import { CreateMode } from './modes/CreateMode';
 import { UpdateMode } from './modes/UpdateMode';
-import { BatchMode } from './modes/lazyBatchModes';
+import { BatchMode, ExecuteMultipleMode } from './modes/lazyBatchModes';
 import { UpsertMode } from './modes/UpsertMode';
 import { DeleteMode } from './modes/DeleteMode';
 import { MergeMode } from './modes/MergeMode';
@@ -140,6 +140,8 @@ function ModeRouter({
       return <UpdateMode themeMode={themeMode} />;
     case 'batch':
       return <BatchMode themeMode={themeMode} />;
+    case 'execute-multiple':
+      return <ExecuteMultipleMode themeMode={themeMode} />;
     case 'upsert':
       return <UpsertMode themeMode={themeMode} />;
     case 'delete':

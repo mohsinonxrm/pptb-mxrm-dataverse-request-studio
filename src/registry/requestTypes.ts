@@ -268,6 +268,16 @@ export const REQ_TYPES: RequestType[] = [
     implemented: true,
     executeVerb: 'Send',
   },
+  {
+    id: 'execute-multiple',
+    name: 'ExecuteMultiple',
+    method: 'BATCH',
+    group: 'batch',
+    icon: Stack20Regular,
+    sub: 'SDK-style bulk requests via $batch',
+    implemented: true,
+    executeVerb: 'Send',
+  },
 ];
 
 export const GROUPS: { id: RequestGroup; label: string }[] = [
