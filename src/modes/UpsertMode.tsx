@@ -52,7 +52,12 @@ import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { findTable, isLookupLike } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
-import { altKeyReservedCharColumns, buildUpsert, buildUpsertBody } from '../engine/urlBuilder';
+import {
+  altKeyReservedCharColumns,
+  altKeyUnknownTypeColumns,
+  buildUpsert,
+  buildUpsertBody,
+} from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
 import {
   defaultBypassOptions,
@@ -289,9 +294,30 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
 
       const key = state.key;
       const def = tbl?.alternateKeys?.find((d) => d.name === key.keyName);
-      const reserved = def
-        ? altKeyReservedCharColumns(state.table, def.columns, key.keyValues)
-        : [];
+      const reserved = def ? altKeyReservedCharColumns(state.table, def, key.keyValues) : [];
+      const unknownType = def ? altKeyUnknownTypeColumns(state.table, def) : [];
+      if (unknownType.length > 0) {
+        out.push({
+          id: 'ups-altkey-unknown-type',
+          severity: 'info',
+          source: 'validation',
+          focusNode: 'key',
+          title: 'Key column type unknown — quoted as string',
+          body: (
+            <>
+              {unknownType.map((c, i) => (
+                <span key={c}>
+                  {i > 0 && ', '}
+                  <code>{c}</code>
+                </span>
+              ))}{' '}
+              couldn&apos;t be found in the table metadata, so its value is quoted as a string
+              literal. If the column is numeric, a choice, a date or a GUID, remove the quotes from
+              the key segment before running the request.
+            </>
+          ),
+        });
+      }
       if (reserved.length > 0) {
         out.push({
           id: 'ups-altkey-reserved-chars',

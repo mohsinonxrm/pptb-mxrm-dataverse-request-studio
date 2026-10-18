@@ -2,7 +2,15 @@
 // rendered relative URL plus an estimated byte length for validation.
 
 import { ENV } from '../mock/environment';
-import { findTable, findColumn, isLookupLike, type TableMeta } from '../mock/metadata';
+import {
+  altKeyColumnType,
+  findTable,
+  findColumn,
+  isLookupLike,
+  type AlternateKeyDef,
+  type AttributeTypeCode,
+  type TableMeta,
+} from '../mock/metadata';
 import { groupToOData } from '../editors/filter/filterTree';
 import { attrRefByName } from './odataAttr';
 import { orderbyToOData } from '../editors/OrderbyEditor';
@@ -485,9 +493,10 @@ const ALT_KEY_RESERVED_CHARS = /[/<>*%&:\\?+#]/;
 
 const quoteKeyString = (value: string) => `'${encodeURIComponent(value.replace(/'/g, "''"))}'`;
 
-function odataLiteral(value: string, col: ReturnType<typeof findColumn>): string {
-  if (!col) return quoteKeyString(value);
-  switch (col.attributeType) {
+function odataLiteral(value: string, type: AttributeTypeCode | undefined): string {
+  // Unknown type → quoted as a string (the Upsert UI flags it, #64).
+  if (!type) return quoteKeyString(value);
+  switch (type) {
     case 'Integer':
     case 'BigInt':
     case 'Decimal':
@@ -522,33 +531,47 @@ function odataLiteral(value: string, col: ReturnType<typeof findColumn>): string
 
 function altKeySegment(
   table: string,
-  keyColumns: string[],
+  def: AlternateKeyDef,
   keyValues: Record<string, string>,
 ): string {
   const tbl = findTable(table);
-  const parts = keyColumns.map((col) => {
-    const c = tbl ? findColumn(tbl, col) : undefined;
+  const parts = def.columns.map((col) => {
+    const type = altKeyColumnType(tbl, def, col);
     const raw = keyValues[col] ?? '';
-    return `${attrRefByName(tbl, col)}=${odataLiteral(raw, c)}`;
+    // A lookup key column missing from the loaded columns still needs the
+    // `_<name>_value` property name.
+    const loaded = tbl?.columns.some((c) => c.logicalName === col);
+    const name =
+      !loaded && (type === 'Lookup' || type === 'Customer' || type === 'Owner')
+        ? `_${col}_value`
+        : attrRefByName(tbl, col);
+    return `${name}=${odataLiteral(raw, type)}`;
   });
   return `(${parts.join(',')})`;
 }
 
+/** Key columns whose AttributeType is unknown — quoted as strings (#64). */
+export function altKeyUnknownTypeColumns(table: string, def: AlternateKeyDef): string[] {
+  const tbl = findTable(table);
+  return def.columns.filter((col) => !altKeyColumnType(tbl, def, col));
+}
+
 /**
- * Key columns whose (string) value contains a character Dataverse rejects in
+ * Key columns whose string value contains a character Dataverse rejects in
  * an alternate-key URL even when encoded. Drives the Upsert advisory that
- * points at the `$filter` workaround. Non-string parts are skipped — the `:`
- * in a date-time literal is syntax, not data.
+ * points at the `$filter` workaround. Only parts emitted as quoted strings
+ * are checked (String / Memo, or unknown type, which is quoted as a string)
+ * — the `:` in a date-time literal is syntax, not data.
  */
 export function altKeyReservedCharColumns(
   table: string,
-  keyColumns: string[],
+  def: AlternateKeyDef,
   keyValues: Record<string, string>,
 ): string[] {
   const tbl = findTable(table);
-  return keyColumns.filter((col) => {
-    const c = tbl ? findColumn(tbl, col) : undefined;
-    if (c && c.attributeType !== 'String' && c.attributeType !== 'Memo') return false;
+  return def.columns.filter((col) => {
+    const type = altKeyColumnType(tbl, def, col);
+    if (type && type !== 'String' && type !== 'Memo') return false;
     return ALT_KEY_RESERVED_CHARS.test(keyValues[col] ?? '');
   });
 }
@@ -576,7 +599,7 @@ export function buildUpsert(s: UpsertState): BuiltRequest {
   } else {
     const def = tbl.alternateKeys?.find((k) => k.name === key.keyName);
     if (def) {
-      idSegment = altKeySegment(s.table, def.columns, key.keyValues);
+      idSegment = altKeySegment(s.table, def, key.keyValues);
     }
   }
 
