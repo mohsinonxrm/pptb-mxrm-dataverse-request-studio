@@ -296,6 +296,7 @@ export function SettingsDrawer({
                 )}
               </div>
               <Switch
+                aria-label="Advanced Find Only"
                 checked={settings.advancedFindOnly}
                 onChange={(_e, data) => handleAdvancedFindOnlyChange(data.checked)}
               />
@@ -318,6 +319,7 @@ export function SettingsDrawer({
                 </Text>
               </div>
               <Switch
+                aria-label="Use Logical Names"
                 checked={settings.useLogicalNames}
                 onChange={(_e, data) => handleLogicalNamesChange(data.checked)}
               />
@@ -330,6 +332,7 @@ export function SettingsDrawer({
               How to display cell values in the results grid
             </Text>
             <Dropdown
+              aria-label="Value Display Mode"
               className={styles.dropdown}
               value={
                 settings.valueDisplayMode === 'formatted'

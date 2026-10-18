@@ -232,6 +232,8 @@ export function BypassEditor({ value, onChange, group = 'write' }: BypassEditorP
                         icon={<Delete20Regular />}
                         appearance="subtle"
                         size="small"
+                        aria-label={`Remove step ${id}`}
+                        title="Remove step"
                         onClick={() => removeStepId(i)}
                       />
                     </div>

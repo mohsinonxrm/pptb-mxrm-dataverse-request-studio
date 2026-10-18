@@ -353,6 +353,7 @@ function OrderbyColumnCombo({
           setQuery('');
         }
       }}
+      aria-label="Sort column"
       placeholder="Search columns…"
       listbox={{ style: { maxHeight: 320 } }}
     >

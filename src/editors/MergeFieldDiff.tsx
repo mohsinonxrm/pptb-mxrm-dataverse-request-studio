@@ -220,6 +220,7 @@ export function MergeFieldDiff(props: MergeFieldDiffProps) {
       >
         <Input
           contentBefore={<Search20Regular />}
+          aria-label="Filter fields"
           placeholder="Filter fields…"
           value={search}
           onChange={(_, d) => setSearch(d.value)}

@@ -337,6 +337,7 @@ export function SelectEditor({
       >
         <Input
           contentBefore={<Search20Regular />}
+          aria-label="Filter columns"
           placeholder="Filter columns…"
           value={search}
           onChange={(_, d) => setSearch(d.value)}

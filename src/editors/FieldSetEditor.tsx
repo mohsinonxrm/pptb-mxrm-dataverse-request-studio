@@ -399,6 +399,7 @@ export function FieldSetEditor({
         {bodyMode === 'form' && (
           <Input
             contentBefore={<Search20Regular />}
+            aria-label="Filter fields"
             placeholder="Filter fields…"
             value={search}
             onChange={(_, d) => setSearch(d.value)}

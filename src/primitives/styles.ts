@@ -284,7 +284,7 @@ export const useStudioStyles = makeStyles({
     fontSize: '11px',
     fontWeight: 700,
     letterSpacing: '0.04em',
-    color: '#fff',
+    color: 'var(--color-method-fg, #fff)',
     flexShrink: 0,
     minWidth: '52px',
     textAlign: 'center',

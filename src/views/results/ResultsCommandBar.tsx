@@ -224,6 +224,7 @@ export function ResultsCommandBar({
         <Input
           size="small"
           appearance="filled-lighter"
+          aria-label="Search rows"
           placeholder="Search rows…"
           contentBefore={<Search20Regular />}
           value={searchQuery}

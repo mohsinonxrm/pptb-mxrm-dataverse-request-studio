@@ -1797,6 +1797,7 @@ function FilterableColumnCombo({
           setQuery('');
         }
       }}
+      aria-label="Column"
       placeholder={placeholder}
       style={style}
       listbox={{ style: { maxHeight: 320 } }}
