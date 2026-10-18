@@ -190,7 +190,7 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   // ── Execute ──
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.create(state);
+    const res = await runtime.create(state, headerItemsToObject(headers, null));
     setResult(res);
     setLoading(false);
     setTab('results');
