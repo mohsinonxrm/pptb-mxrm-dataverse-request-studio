@@ -29,6 +29,7 @@ import type {
 } from './executeState';
 import type { ManageFileState, ManageImageState, ManageAttachmentState } from './binaryState';
 import { getEnv } from '../mock/environment';
+import { autoSuggestBatch, type SerializedBatchState } from '../engine/batch/batchModel';
 
 // ── Storage shape ─────────────────────────────────────────────────────
 //
@@ -95,7 +96,9 @@ export type SavedModeId =
   // be loaded into manage-image and vice versa (different state shapes).
   | 'manage-file'
   | 'manage-image'
-  | 'manage-attachment';
+  | 'manage-attachment'
+  // $batch composer (#9) — a list of raw requests grouped into change sets.
+  | 'batch';
 
 export interface SavedRequest {
   /** Stable random id — never reused across renames; survives content edits. */
@@ -465,6 +468,8 @@ export function autoSuggestName(modeId: SavedModeId, state: unknown): string {
       return autoSuggestManageImage(state as SerializedManageImageState);
     case 'manage-attachment':
       return autoSuggestManageAttachment(state as SerializedManageAttachmentState);
+    case 'batch':
+      return autoSuggestBatch(state as SerializedBatchState);
   }
 }
 

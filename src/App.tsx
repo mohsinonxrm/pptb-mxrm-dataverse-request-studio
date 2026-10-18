@@ -6,6 +6,7 @@ import { FrameHeader } from './shell/FrameHeader';
 import { SaveContextRoot, type SaveContextValue } from './state/SaveContext';
 import { findRequestType } from './registry/requestTypes';
 import { RetrieveMultipleMode } from './modes/RetrieveMultipleMode';
+import { BatchMode } from './modes/lazyBatchModes';
 import { RetrieveSingleMode } from './modes/RetrieveSingleMode';
 import { RetrieveNextLinkMode } from './modes/RetrieveNextLinkMode';
 import { PredefinedQueryMode } from './modes/PredefinedQueryMode';
@@ -163,6 +164,8 @@ function ModeRouter({
       return <ManageImageMode themeMode={themeMode} />;
     case 'manage-attachment':
       return <ManageAttachmentMode themeMode={themeMode} />;
+    case 'batch':
+      return <BatchMode themeMode={themeMode} />;
     default:
       return <StubMode requestId={modeId} onPick={setActiveId} />;
   }

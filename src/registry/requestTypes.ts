@@ -12,10 +12,11 @@ import {
   Flowchart20Regular,
   Image20Regular,
   Attach20Regular,
+  Stack20Regular,
 } from '@fluentui/react-icons';
 import type { FC } from 'react';
 
-export type RequestGroup = 'read' | 'write' | 'relate' | 'execute' | 'binary';
+export type RequestGroup = 'read' | 'write' | 'relate' | 'execute' | 'binary' | 'batch';
 export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE' | 'BATCH';
 
 export interface RequestType {
@@ -255,6 +256,18 @@ export const REQ_TYPES: RequestType[] = [
     implemented: true,
     executeVerb: 'Run',
   },
+
+  // Batch
+  {
+    id: 'batch',
+    name: '$batch Request',
+    method: 'BATCH',
+    group: 'batch',
+    icon: Stack20Regular,
+    sub: 'Change sets & multiple requests',
+    implemented: true,
+    executeVerb: 'Send',
+  },
 ];
 
 export const GROUPS: { id: RequestGroup; label: string }[] = [
@@ -263,6 +276,7 @@ export const GROUPS: { id: RequestGroup; label: string }[] = [
   { id: 'relate', label: 'Relate' },
   { id: 'execute', label: 'Execute' },
   { id: 'binary', label: 'Binary' },
+  { id: 'batch', label: 'Batch' },
 ];
 
 export const findRequestType = (id: string): RequestType =>
