@@ -24,7 +24,6 @@
         --color-request-relate: #8764b8;
         --color-request-execute: #ca5010;
         --color-request-binary: #9d432c;
-        --color-request-batch: #00756a; /* 5.4:1 with white */
 
         --color-method-get: #005a9e;
         --color-method-post: #107c10;
@@ -41,7 +40,6 @@
         --color-request-relate: #b4a0ff;
         --color-request-execute: #f7894a;
         --color-request-binary: #d69c8b;
-        --color-request-batch: #5cc6b8;
 
         --color-method-get: #62b1f8;
         --color-method-post: #6ccb5f;
@@ -78,22 +76,6 @@
          IS blue, so we only override for non-read groups. This avoids
          a no-op cascade for the most common mode group.
          ───────────────────────────────────────────────────────────── */
-      [data-mode-group='batch'] {
-        --colorBrandBackground: var(--color-request-batch);
-        --colorBrandBackgroundHover: var(--color-request-batch);
-        --colorBrandBackgroundPressed: var(--color-request-batch);
-        --colorBrandBackgroundSelected: var(--color-request-batch);
-        --colorBrandStroke1: var(--color-request-batch);
-        --colorBrandStroke2: var(--color-request-batch);
-        --colorBrandForeground1: var(--color-request-batch);
-        --colorBrandForeground2: var(--color-request-batch);
-        --colorCompoundBrandBackground: var(--color-request-batch);
-        --colorCompoundBrandStroke: var(--color-request-batch);
-      }
-      /* The dark batch tint is light: dark text on it (WCAG 1.4.3). */
-      :root[data-theme='dark'] [data-mode-group='batch'] {
-        --colorNeutralForegroundOnBrand: #000000;
-      }
       [data-mode-group='write'] {
         --colorBrandBackground: var(--color-request-write);
         --colorBrandBackgroundHover: var(--color-request-write);
@@ -249,6 +231,32 @@
         to {
           transform: rotate(360deg);
         }
+      }
+      /* ─────────────────────────────────────────────────────────────
+         Batch group ($batch Request, ExecuteMultiple — #9, #11): berry,
+         distinct from Bulk's teal. Light #9b2b8f is 6.4:1 with white;
+         the dark tint is light, so on-brand text goes dark there.
+         ───────────────────────────────────────────────────────────── */
+      :root[data-theme='light'] {
+        --color-request-batch: #9b2b8f;
+      }
+      :root[data-theme='dark'] {
+        --color-request-batch: #e48ad9;
+      }
+      [data-mode-group='batch'] {
+        --colorBrandBackground: var(--color-request-batch);
+        --colorBrandBackgroundHover: var(--color-request-batch);
+        --colorBrandBackgroundPressed: var(--color-request-batch);
+        --colorBrandBackgroundSelected: var(--color-request-batch);
+        --colorBrandStroke1: var(--color-request-batch);
+        --colorBrandStroke2: var(--color-request-batch);
+        --colorBrandForeground1: var(--color-request-batch);
+        --colorBrandForeground2: var(--color-request-batch);
+        --colorCompoundBrandBackground: var(--color-request-batch);
+        --colorCompoundBrandStroke: var(--color-request-batch);
+      }
+      :root[data-theme='dark'] [data-mode-group='batch'] {
+        --colorNeutralForegroundOnBrand: #000000;
       }
     </style>
   </head>

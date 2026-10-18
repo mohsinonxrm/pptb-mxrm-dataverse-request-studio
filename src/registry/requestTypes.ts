@@ -275,8 +275,8 @@ export const GROUPS: { id: RequestGroup; label: string }[] = [
   { id: 'write', label: 'Write' },
   { id: 'relate', label: 'Relate' },
   { id: 'execute', label: 'Execute' },
-  { id: 'binary', label: 'Binary' },
   { id: 'batch', label: 'Batch' },
+  { id: 'binary', label: 'Binary' },
 ];
 
 export const findRequestType = (id: string): RequestType =>

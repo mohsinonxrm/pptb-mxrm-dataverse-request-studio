@@ -6,12 +6,12 @@ import { FrameHeader } from './shell/FrameHeader';
 import { SaveContextRoot, type SaveContextValue } from './state/SaveContext';
 import { findRequestType } from './registry/requestTypes';
 import { RetrieveMultipleMode } from './modes/RetrieveMultipleMode';
-import { BatchMode } from './modes/lazyBatchModes';
 import { RetrieveSingleMode } from './modes/RetrieveSingleMode';
 import { RetrieveNextLinkMode } from './modes/RetrieveNextLinkMode';
 import { PredefinedQueryMode } from './modes/PredefinedQueryMode';
 import { CreateMode } from './modes/CreateMode';
 import { UpdateMode } from './modes/UpdateMode';
+import { BatchMode } from './modes/lazyBatchModes';
 import { UpsertMode } from './modes/UpsertMode';
 import { DeleteMode } from './modes/DeleteMode';
 import { MergeMode } from './modes/MergeMode';
@@ -138,6 +138,8 @@ function ModeRouter({
       return <CreateMode themeMode={themeMode} />;
     case 'update':
       return <UpdateMode themeMode={themeMode} />;
+    case 'batch':
+      return <BatchMode themeMode={themeMode} />;
     case 'upsert':
       return <UpsertMode themeMode={themeMode} />;
     case 'delete':
@@ -164,8 +166,6 @@ function ModeRouter({
       return <ManageImageMode themeMode={themeMode} />;
     case 'manage-attachment':
       return <ManageAttachmentMode themeMode={themeMode} />;
-    case 'batch':
-      return <BatchMode themeMode={themeMode} />;
     default:
       return <StubMode requestId={modeId} onPick={setActiveId} />;
   }
