@@ -34,7 +34,11 @@ import { StatusPill } from '../../primitives/StatusPill';
 import { RecordDetailCard } from '../detail/RecordDetailCard';
 import { ENV } from '../../mock/environment';
 import { findTable } from '../../mock/metadata';
-import { HEADER_CONSENT_DECLINED_CODE, type ExecResult } from '../../engine/dataverseExecutor';
+import {
+  HEADER_CONSENT_DECLINED_CODE,
+  HEADER_REJECTED_CODE,
+  type ExecResult,
+} from '../../engine/dataverseExecutor';
 
 export type WriteOperation =
   | 'create'
@@ -195,7 +199,7 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
               status={
                 family === 'success' ? 'success' : family === 'warning' ? 'warning' : 'danger'
               }
-              code={result.status}
+              code={result.status || 'Error'}
               ms={result.ms}
             />
             <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
@@ -314,11 +318,19 @@ function buildNarrative(
 
   // ── Failure framings — common error codes get specific copy ──
   if (!ok) {
-    const errCode = (result.body as { error?: { code?: string } } | null)?.error?.code;
+    const err = (result.body as { error?: { code?: string; message?: string } } | null)?.error;
+    const errCode = err?.code;
     if (errCode === HEADER_CONSENT_DECLINED_CODE) {
       return {
         title: 'Not sent — headers not approved',
         body: "Power Platform ToolBox didn't send the request because its headers weren't approved, so nothing changed in Dataverse. Execute again and approve the headers when ToolBox asks.",
+      };
+    }
+    if (errCode === HEADER_REJECTED_CODE) {
+      // Never sent: the host refused a header before calling Dataverse.
+      return {
+        title: 'Not sent — header rejected',
+        body: err?.message ?? 'Power Platform ToolBox rejected a request header.',
       };
     }
     if (result.status === 412) {
@@ -351,6 +363,14 @@ function buildNarrative(
     if (result.status === 403) {
       return { title: 'Forbidden', body: 'The calling user lacks the required privilege.' };
     }
+    if (result.status === 501) {
+      // Never sent: running standalone (no PPTB host), or an operation the
+      // host can't run. The executor's message says which.
+      return {
+        title: 'Not executed',
+        body: err?.message ?? 'The PPTB host could not run this request.',
+      };
+    }
     if (result.status >= 500) {
       return {
         title: 'Server error',
@@ -358,8 +378,8 @@ function buildNarrative(
       };
     }
     return {
-      title: `Failed · ${result.status} ${result.statusText}`,
-      body: 'See the JSON / Headers tabs for details.',
+      title: result.status ? `Failed · ${result.status} ${result.statusText}` : 'Failed',
+      body: 'See the JSON tab for details.',
     };
   }
 

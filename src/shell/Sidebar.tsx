@@ -102,7 +102,8 @@ export function Sidebar({
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {timeAgo(r.ts)} · {r.status} · {r.rowCount ?? '—'} rows
+                    {/* status 0 = the host failed the call without an HTTP status */}
+                    {timeAgo(r.ts)} · {r.status || 'error'} · {r.rowCount ?? '—'} rows
                   </span>
                 </div>
               ))}
