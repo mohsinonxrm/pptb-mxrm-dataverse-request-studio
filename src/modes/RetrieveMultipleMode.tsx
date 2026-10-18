@@ -66,6 +66,7 @@ import type { ThemeMode } from '../theme/theme';
 // re-render when columns + relationships land from Dataverse.
 import { useLiveTable, useWarmReferencedTables } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
+import { topLevelRowCount } from '../views/results/flattenExpansions';
 
 // Empty initial state — the studio is a request *builder*; seeding it with
 // mock data confused users in PPTB ("why are there pre-filled rules against
@@ -300,7 +301,6 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    const rows = (res.body as { value?: unknown[] } | null)?.value;
     setRecents((rs) =>
       [
         {
@@ -311,7 +311,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
           ts: Date.now(),
           status: res.status,
           ms: res.ms,
-          rowCount: Array.isArray(rows) ? rows.length : undefined,
+          rowCount: topLevelRowCount(res.body),
         },
         ...rs,
       ].slice(0, 8),

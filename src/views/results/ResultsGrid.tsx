@@ -64,7 +64,7 @@ import {
   getLookupTargetEntity,
 } from './FormattedValueUtils';
 import { resolveColumnDisplay, type ColumnDisplayInfo } from './columnDisplayMap';
-import { flattenRows, ROW_KEY } from './flattenExpansions';
+import { flattenRows, ROW_KEY, topLevelRowCount } from './flattenExpansions';
 import { getCellRenderer } from './DataGridCellRenderers';
 
 const ROW_HEIGHT_COZY = 44;
@@ -231,6 +231,10 @@ export function ResultsGrid({
     const raw = (body as { value?: Record<string, unknown>[] } | null)?.value ?? [];
     return flattenRows(raw);
   }, [body]);
+  // The run's row count is its top-level records — the same number Recent
+  // runs shows. A collection-valued $expand fans each record out into one
+  // grid line per child, so the line count is shown separately (#122).
+  const recordCount = topLevelRowCount(body) ?? 0;
 
   // ── Client-side search (raw + formatted values) ──
   const rows = useMemo(() => {
@@ -768,11 +772,18 @@ export function ResultsGrid({
               </span>
             )}
             <span>
-              <strong>{rows.length.toLocaleString()}</strong> row{rows.length === 1 ? '' : 's'}
+              <strong>{recordCount.toLocaleString()}</strong> row{recordCount === 1 ? '' : 's'}
+              {allRows.length !== recordCount && (
+                <>
+                  {' '}
+                  · <strong>{allRows.length.toLocaleString()}</strong> grid lines with expanded
+                  records
+                </>
+              )}
               {searchQuery && rows.length !== allRows.length && (
                 <>
                   {' '}
-                  of <strong>{allRows.length.toLocaleString()}</strong>
+                  · <strong>{rows.length.toLocaleString()}</strong> shown
                 </>
               )}
               {serverTotal != null && serverTotal >= 0 && (
