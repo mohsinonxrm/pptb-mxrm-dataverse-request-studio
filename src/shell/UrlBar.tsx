@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useStudioStyles } from '../primitives/styles';
 import { MethodPill } from '../primitives/MethodPill';
 import { AdvisoryDrawer } from '../primitives/AdvisoryDrawer';
+import { announce } from '../primitives/announce';
 import type { Advisory } from '../primitives/advisories';
 import { ENV } from '../mock/environment';
 import { UrlTokens } from './UrlTokens';
@@ -86,6 +87,12 @@ export function UrlBar({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [execute]);
+
+  // Screen-reader feedback that Execute started; ResultsView announces the
+  // outcome (#20).
+  useEffect(() => {
+    if (loading) announce('Running request…');
+  }, [loading]);
 
   return (
     <footer className={s.footer}>

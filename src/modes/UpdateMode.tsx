@@ -1039,6 +1039,7 @@ function MethodCard({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={selected}
       style={{
         textAlign: 'left',
         padding: 14,
@@ -1046,7 +1047,7 @@ function MethodCard({
         background: selected ? tokens.colorBrandBackground2 : tokens.colorNeutralBackground1,
         border: `1px solid ${selected ? tokens.colorBrandStroke1 : tokens.colorNeutralStroke2}`,
         borderRadius: tokens.borderRadiusMedium,
-        outline: 'none',
+        // No `outline: none` — keyboard users need the focus ring (#20).
         display: 'flex',
         flexDirection: 'column',
         gap: 8,

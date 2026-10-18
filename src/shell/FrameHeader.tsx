@@ -151,7 +151,12 @@ export function FrameHeader({
       )}
       <Menu>
         <MenuTrigger disableButtonEnhancement>
-          <Button icon={<MoreHorizontal20Regular />} appearance="subtle" />
+          <Button
+            icon={<MoreHorizontal20Regular />}
+            appearance="subtle"
+            aria-label="More actions"
+            title="More actions"
+          />
         </MenuTrigger>
         <MenuPopover>
           <MenuList>

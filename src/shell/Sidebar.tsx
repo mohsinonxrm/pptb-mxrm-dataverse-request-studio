@@ -92,7 +92,19 @@ export function Sidebar({
             </SectionHeader>
             <div style={{ padding: '4px 0' }}>
               {recents.map((r) => (
-                <div key={r.id} className={s.recentRow} onClick={() => onRecentClick?.(r)}>
+                <div
+                  key={r.id}
+                  className={s.recentRow}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onRecentClick?.(r)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onRecentClick?.(r);
+                    }
+                  }}
+                >
                   <MethodPill method={r.method as never} size="sm" />
                   <span
                     style={{

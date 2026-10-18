@@ -19,6 +19,7 @@ import {
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import { StatusPill } from '../primitives/StatusPill';
+import { useAnnounceResult } from '../primitives/announce';
 import type { ExecResult } from '../engine/dataverseExecutor';
 import { ResultsGrid } from './results/ResultsGrid';
 import { ResultsCommandBar } from './results/ResultsCommandBar';
@@ -86,6 +87,7 @@ export function ResultsView({
   const [searchQuery, setSearchQuery] = useState('');
   const [density, setDensity] = useState<'cozy' | 'compact'>('cozy');
   const s = useStudioStyles();
+  useAnnounceResult(result);
 
   if (!result) {
     return (
