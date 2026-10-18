@@ -231,6 +231,7 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
               current entity, select, and filter counts.
             </Caption1>
             <Input
+              aria-label="Request name"
               value={name}
               onChange={(_, d) => {
                 setName(d.value);
@@ -407,6 +408,7 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
                   <div style={{ minWidth: 0 }}>
                     {isRenaming ? (
                       <Input
+                        aria-label={`New name for ${entry.name}`}
                         value={renameDraft}
                         onChange={(_, d) => setRenameDraft(d.value)}
                         size="small"

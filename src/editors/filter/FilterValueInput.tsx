@@ -35,7 +35,7 @@ import {
   useTagPickerFilter,
   Tag,
 } from '@fluentui/react-components';
-import { useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { DatePicker } from '@fluentui/react-datepicker-compat';
 import { TimePicker } from '@fluentui/react-timepicker-compat';
 import { Add20Regular, Delete20Regular, Database20Regular } from '@fluentui/react-icons';
@@ -80,7 +80,20 @@ export interface ValueInputProps {
 // ============================================================
 // Entry point — dispatches by arity, then by AttributeTypeCode
 // ============================================================
+// Accessible name for the value controls below — they have only a
+// placeholder otherwise (WCAG 1.3.1 / 3.3.2, #120). "<Column> value".
+const ValueLabelContext = createContext('Filter value');
+
 export function FilterValueInput(props: ValueInputProps): JSX.Element {
+  const name = props.col ? props.col.displayName || props.col.logicalName : 'Filter';
+  return (
+    <ValueLabelContext.Provider value={`${name} value`}>
+      <FilterValueInputBody {...props} />
+    </ValueLabelContext.Provider>
+  );
+}
+
+function FilterValueInputBody(props: ValueInputProps): JSX.Element {
   const { rule, op, col, parentTable } = props;
 
   // Lazy enrichment — fires the right $expand=OptionSet or detailed-metadata
@@ -123,6 +136,7 @@ export function FilterValueInput(props: ValueInputProps): JSX.Element {
 // We therefore handle operator-typed cases FIRST and only fall back to the
 // column-type-based dispatch for plain comparisons and OData string functions.
 function SingleLiteralInput({ rule, op, col, onChange }: ValueInputProps): JSX.Element {
+  const valueLabel = useContext(ValueLabelContext);
   // ── Operator-typed overrides ──────────────────────────────
   // Integer-valued Dataverse query functions (LastXDays, LastXFiscalYears,
   // InFiscalPeriod, …). The column may be DateTime/Integer/whatever — the
@@ -141,6 +155,7 @@ function SingleLiteralInput({ rule, op, col, onChange }: ValueInputProps): JSX.E
   if (!col) {
     return (
       <Input
+        aria-label={valueLabel}
         size="small"
         value={rule.val ?? ''}
         onChange={(_, d) => onChange({ val: d.value })}
@@ -230,6 +245,7 @@ function SingleLiteralInput({ rule, op, col, onChange }: ValueInputProps): JSX.E
     default:
       return (
         <Input
+          aria-label={valueLabel}
           size="small"
           value={rule.val ?? ''}
           onChange={(_, d) => onChange({ val: d.value })}
@@ -251,10 +267,12 @@ function StringInputCtl({
   val: string;
   onChange: (v: string) => void;
 }) {
+  const valueLabel = useContext(ValueLabelContext);
   const isLong = col.format === 'TextArea';
   if (isLong) {
     return (
       <Textarea
+        aria-label={valueLabel}
         rows={2}
         value={val}
         maxLength={col.maxLength}
@@ -273,6 +291,7 @@ function StringInputCtl({
           : 'text';
   return (
     <Input
+      aria-label={valueLabel}
       size="small"
       type={inputType}
       value={val}
@@ -302,6 +321,7 @@ function MemoInputCtl({
   val: string;
   onChange: (v: string) => void;
 }) {
+  const valueLabel = useContext(ValueLabelContext);
   const [focused, setFocused] = useState(false);
   // Compact-by-default: matches the height of a regular `<Input>` when
   // blurred so the filter row's visual baseline stays uniform across all
@@ -315,6 +335,7 @@ function MemoInputCtl({
   // visible line at the narrower height.
   return (
     <Textarea
+      aria-label={valueLabel}
       rows={focused ? 3 : 1}
       value={val}
       maxLength={col.maxLength}
@@ -346,6 +367,7 @@ function DateTimeInputCtl({
   val: string;
   onChange: (v: string) => void;
 }) {
+  const valueLabel = useContext(ValueLabelContext);
   // DateOnly behavior or format → DatePicker alone; DateAndTime → DatePicker + TimePicker
   const isDateOnly = col.format === 'DateOnly' || col.dateTimeBehavior === 'DateOnly';
   const behaviorHint =
@@ -394,6 +416,7 @@ function DateTimeInputCtl({
         relationship="description"
       >
         <DatePicker
+          aria-label={valueLabel}
           size="small"
           value={dateOnly}
           onSelectDate={writeDate}
@@ -411,6 +434,7 @@ function DateTimeInputCtl({
     >
       <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <DatePicker
+          aria-label={`${valueLabel} (date)`}
           size="small"
           value={dateOnly}
           onSelectDate={writeDate}
@@ -420,6 +444,7 @@ function DateTimeInputCtl({
           allowTextInput
         />
         <TimePicker
+          aria-label={`${valueLabel} (time)`}
           size="small"
           freeform
           selectedTime={dateOnly}
@@ -443,12 +468,14 @@ function IntegerInputCtl({
   val: string;
   onChange: (v: string) => void;
 }) {
+  const valueLabel = useContext(ValueLabelContext);
   // Format-driven: Duration → minute presets; Language/Locale/TimeZone → combobox stubs
   if (col.format === 'Duration') {
     const presets = [1, 15, 30, 60, 240, 480, 1440, 10080]; // 1m..1w in minutes
     return (
       <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
         <SpinButton
+          aria-label={valueLabel}
           size="small"
           value={Number(val || 0)}
           min={col.minValue ?? 0}
@@ -481,6 +508,7 @@ function IntegerInputCtl({
   if (col.format === 'Language' || col.format === 'Locale') {
     return (
       <Combobox
+        aria-label={valueLabel}
         size="small"
         value={val}
         selectedOptions={val ? [val] : []}
@@ -508,6 +536,7 @@ function IntegerInputCtl({
   if (col.format === 'TimeZone') {
     return (
       <Combobox
+        aria-label={valueLabel}
         size="small"
         value={val}
         selectedOptions={val ? [val] : []}
@@ -556,8 +585,10 @@ function NumericInputCtl({
   step?: number;
   integer?: boolean;
 }) {
+  const valueLabel = useContext(ValueLabelContext);
   return (
     <SpinButton
+      aria-label={valueLabel}
       size="small"
       value={Number(val || 0)}
       min={min}
@@ -635,10 +666,12 @@ function ChoiceComboInput({
   val?: string;
   onChange: (v: string) => void;
 }) {
+  const valueLabel = useContext(ValueLabelContext);
   const options = columnOptions(col) ?? [];
   const cur = options.find((o) => String(o.value) === val);
   return (
     <Combobox
+      aria-label={valueLabel}
       size="small"
       value={cur?.label ?? val ?? ''}
       selectedOptions={val ? [val] : []}
@@ -675,6 +708,7 @@ function LookupTypeaheadCtl({
   val: string;
   onChange: (v: string) => void;
 }) {
+  const valueLabel = useContext(ValueLabelContext);
   // Polymorphic-aware typeahead.
   //
   // Single-target lookups (`primarycontactid` → contact) just need a record
@@ -707,6 +741,7 @@ function LookupTypeaheadCtl({
     // to a free-form GUID input so the user can paste one manually.
     return (
       <Input
+        aria-label={valueLabel}
         size="small"
         value={val}
         placeholder="enter target GUID…"
@@ -740,6 +775,7 @@ function LookupTypeaheadCtl({
         // search second. Switching target doesn't auto-clear val because
         // the user may have pasted a GUID they want to keep.
         <Combobox
+          aria-label={`${valueLabel} (target table)`}
           size="small"
           value={tbl?.displayName ?? target}
           selectedOptions={[target]}
@@ -773,6 +809,7 @@ function LookupTypeaheadCtl({
         </span>
       )}
       <Combobox
+        aria-label={valueLabel}
         size="small"
         value={selected?.name ?? query}
         selectedOptions={val ? [val] : []}
@@ -816,9 +853,11 @@ function LookupTypeaheadCtl({
 }
 
 function GuidInputCtl({ val, onChange }: { val: string; onChange: (v: string) => void }) {
+  const valueLabel = useContext(ValueLabelContext);
   const valid = !val || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
   return (
     <Input
+      aria-label={valueLabel}
       size="small"
       value={val}
       placeholder="00000000-0000-0000-0000-000000000000"
@@ -839,6 +878,7 @@ function GuidInputCtl({ val, onChange }: { val: string; onChange: (v: string) =>
 // Two-value range input (Between / NotBetween / InFiscalPeriodAndYear)
 // ============================================================
 function TwoValueInput({ rule, op, col, onChange }: ValueInputProps): JSX.Element {
+  const valueLabel = useContext(ValueLabelContext);
   const [a, b] = rule.vals ?? ['', ''];
   const placeholderA = op.id.startsWith('InFiscal') ? 'period' : 'low';
   const placeholderB = op.id.startsWith('InFiscal') ? 'year' : 'high';
@@ -853,6 +893,7 @@ function TwoValueInput({ rule, op, col, onChange }: ValueInputProps): JSX.Elemen
     return (
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <SpinButton
+          aria-label={`${valueLabel} (from)`}
           size="small"
           value={Number(a || 0)}
           min={0}
@@ -861,6 +902,7 @@ function TwoValueInput({ rule, op, col, onChange }: ValueInputProps): JSX.Elemen
         />
         <span style={{ fontSize: 11, color: tokens.colorNeutralForeground3 }}>and</span>
         <SpinButton
+          aria-label={`${valueLabel} (to)`}
           size="small"
           value={Number(b || 0)}
           min={0}
@@ -889,6 +931,7 @@ function TwoValueInput({ rule, op, col, onChange }: ValueInputProps): JSX.Elemen
     return (
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <DatePicker
+          aria-label={`${valueLabel} (from)`}
           size="small"
           value={parse(a)}
           onSelectDate={(d) => onChange({ vals: [writeISO(d), b] })}
@@ -898,6 +941,7 @@ function TwoValueInput({ rule, op, col, onChange }: ValueInputProps): JSX.Elemen
         />
         <span style={{ fontSize: 11, color: tokens.colorNeutralForeground3 }}>and</span>
         <DatePicker
+          aria-label={`${valueLabel} (to)`}
           size="small"
           value={parse(b)}
           onSelectDate={(d) => onChange({ vals: [a, writeISO(d)] })}
@@ -914,12 +958,14 @@ function TwoValueInput({ rule, op, col, onChange }: ValueInputProps): JSX.Elemen
     return (
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <SpinButton
+          aria-label={`${valueLabel} (from)`}
           size="small"
           value={Number(a || 0)}
           onChange={(_, d) => onChange({ vals: [String(d.value ?? d.displayValue ?? a), b] })}
         />
         <span style={{ fontSize: 11, color: tokens.colorNeutralForeground3 }}>and</span>
         <SpinButton
+          aria-label={`${valueLabel} (to)`}
           size="small"
           value={Number(b || 0)}
           onChange={(_, d) => onChange({ vals: [a, String(d.value ?? d.displayValue ?? b)] })}
@@ -932,6 +978,7 @@ function TwoValueInput({ rule, op, col, onChange }: ValueInputProps): JSX.Elemen
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
       <Input
+        aria-label={`${valueLabel} (from)`}
         size="small"
         value={a}
         placeholder={placeholderA}
@@ -939,6 +986,7 @@ function TwoValueInput({ rule, op, col, onChange }: ValueInputProps): JSX.Elemen
       />
       <span style={{ fontSize: 11, color: tokens.colorNeutralForeground3 }}>and</span>
       <Input
+        aria-label={`${valueLabel} (to)`}
         size="small"
         value={b}
         placeholder={placeholderB}
@@ -1002,9 +1050,11 @@ function ArrayValueInput({ rule, op, col, onChange }: ValueInputProps): JSX.Elem
 }
 
 function ArrayAddInput({ onAdd, intValue }: { onAdd: (v: string) => void; intValue: boolean }) {
+  const valueLabel = useContext(ValueLabelContext);
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
       <Input
+        aria-label={`${valueLabel} to add`}
         size="small"
         type={intValue ? 'number' : 'text'}
         placeholder="+ add"
@@ -1124,9 +1174,11 @@ function ChoiceTagPicker({
 // Column-mode RHS picker — same-type columns of the same entity
 // ============================================================
 function ColumnRhsPicker({ rule, col, parentTable, onChange }: ValueInputProps): JSX.Element {
+  const valueLabel = useContext(ValueLabelContext);
   if (!parentTable || !col) {
     return (
       <Input
+        aria-label={valueLabel}
         size="small"
         value={rule.val ?? ''}
         disabled
@@ -1163,6 +1215,7 @@ function ColumnRhsPicker({ rule, col, parentTable, onChange }: ValueInputProps):
         same-row
       </span>
       <Combobox
+        aria-label={`${valueLabel} (column)`}
         size="small"
         value={cur?.displayName ?? rule.val ?? ''}
         selectedOptions={rule.val ? [rule.val] : []}
