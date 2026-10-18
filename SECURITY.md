@@ -30,16 +30,18 @@ in a browser. Vulnerability reports of interest:
   triggers code execution on load, exfiltrates localStorage from another
   org scope, or escapes the per-org scoping bucket.
 - **Dependency vulnerabilities** — known CVEs in production dependencies
-  (`@fluentui/*`, `monaco-editor`, `@pptb/types`, etc.) that affect the
-  shipped bundle.
+  (`@fluentui/*`, `monaco-editor`, `@monaco-editor/react`, `@dnd-kit/*`,
+  `react`, etc.) that affect the shipped bundle. Dev-only tooling
+  (`@pptb/types`, Vite, TypeScript, Prettier) isn't shipped.
 
 ## Out of scope
 
 - **Mistakes the user makes against their own environment** — DRS lets you
   Delete, Update, and Merge records. Destructive operations require typed
   confirmation; beyond that, the user is responsible for what they send.
-- **Standalone-mode network errors** — the standalone build (`npm run dev`)
-  has no host bridge; Execute returns 501. This is by design, not a bug.
+- **Standalone-mode Execute errors** — the standalone build (`npm run dev`)
+  has no host bridge, so Execute returns an error result (HTTP 500, "PPTB
+  host method … is not available"). This is by design, not a bug.
 - **Antipattern advisories** — the studio surfaces guidance per the
   Microsoft query-antipatterns doc, but it's advisory only; the request
   still goes through if the user proceeds.

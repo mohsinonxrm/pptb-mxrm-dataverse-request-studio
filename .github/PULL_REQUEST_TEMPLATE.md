@@ -18,7 +18,7 @@ where to focus regression testing:
 - [ ] Retrieve Multiple / Single / NextLink / Predefined Query
 - [ ] Create / Update / Upsert / Delete / Merge
 - [ ] Associate / Disassociate
-- [ ] Execute Action / Function / Workflow
+- [ ] Execute Action / Custom API / Custom Action / Function / Workflow
 - [ ] Manage File / Image / Attachment
 - [ ] Cross-cutting (shell, settings, theme, etc.)
 - [ ] Not mode-specific
