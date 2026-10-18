@@ -5,6 +5,7 @@ import {
   ChevronRight20Regular,
   Edit20Regular,
   Delete20Regular,
+  DeleteLines20Regular,
   BranchFork20Regular,
   Link20Regular,
   Flash20Regular,
@@ -15,7 +16,7 @@ import {
 } from '@fluentui/react-icons';
 import type { FC } from 'react';
 
-export type RequestGroup = 'read' | 'write' | 'relate' | 'execute' | 'binary';
+export type RequestGroup = 'read' | 'write' | 'relate' | 'execute' | 'binary' | 'bulk';
 export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE' | 'BATCH';
 
 export interface RequestType {
@@ -129,6 +130,17 @@ export const REQ_TYPES: RequestType[] = [
     group: 'write',
     icon: Delete20Regular,
     sub: 'Remove one',
+    implemented: true,
+    executeVerb: 'Send',
+  },
+  // Bulk — BulkDelete asynchronous system job from a query (#10).
+  {
+    id: 'bulk-delete',
+    name: 'Bulk Delete Job',
+    method: 'POST',
+    group: 'bulk',
+    icon: DeleteLines20Regular,
+    sub: 'Async BulkDelete from a query',
     implemented: true,
     executeVerb: 'Send',
   },
@@ -263,6 +275,7 @@ export const GROUPS: { id: RequestGroup; label: string }[] = [
   { id: 'relate', label: 'Relate' },
   { id: 'execute', label: 'Execute' },
   { id: 'binary', label: 'Binary' },
+  { id: 'bulk', label: 'Bulk' },
 ];
 
 export const findRequestType = (id: string): RequestType =>

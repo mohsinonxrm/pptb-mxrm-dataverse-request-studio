@@ -5,6 +5,8 @@ import { studioLight, studioDark, applyThemeAttr, type ThemeMode } from './theme
 import { FrameHeader } from './shell/FrameHeader';
 import { SaveContextRoot, type SaveContextValue } from './state/SaveContext';
 import { findRequestType } from './registry/requestTypes';
+// Bulk Delete Job loads on first use (#10, #22).
+import { BulkDeleteMode } from './modes/BulkDeleteMode.lazy';
 import { RetrieveMultipleMode } from './modes/RetrieveMultipleMode';
 import { RetrieveSingleMode } from './modes/RetrieveSingleMode';
 import { RetrieveNextLinkMode } from './modes/RetrieveNextLinkMode';
@@ -141,6 +143,8 @@ function ModeRouter({
       return <UpsertMode themeMode={themeMode} />;
     case 'delete':
       return <DeleteMode themeMode={themeMode} />;
+    case 'bulk-delete':
+      return <BulkDeleteMode themeMode={themeMode} />;
     case 'merge':
       return <MergeMode themeMode={themeMode} />;
     case 'associate':
