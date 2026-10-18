@@ -1748,16 +1748,22 @@ export function defaultValueFor(col: ColumnMeta): CreateFieldValue {
       return col.defaultValue ?? false;
     case 'DateTime':
       return '';
-    case 'Picklist':
-      return col.defaultFormValue ?? col.options[0]?.value ?? 0;
+    case 'Picklist': {
+      // No default (-1 / missing) leaves the choice unset — not sent until
+      // the user picks one. Never invent 0 or the first option (#203).
+      const d = validDefaultOption(col);
+      return d ?? null;
+    }
     case 'State':
       return col.options[0]?.value ?? 0;
     case 'Status':
       return col.options[0]?.value ?? 1;
     case 'EntityName':
       return col.options[0]?.value ?? 0;
-    case 'MultiSelectPicklist':
-      return [];
+    case 'MultiSelectPicklist': {
+      const d = validDefaultOption(col);
+      return d != null ? [d] : [];
+    }
     case 'Lookup':
     case 'Customer':
     case 'Owner':
@@ -1767,6 +1773,21 @@ export function defaultValueFor(col: ColumnMeta): CreateFieldValue {
     default:
       return '';
   }
+}
+
+/**
+ * The column's metadata default (`DefaultFormValue`) when it names one of
+ * its options. -1 means "no default"; a value the option list doesn't
+ * contain is ignored too. Undefined when there's nothing valid to pre-fill.
+ */
+function validDefaultOption(col: {
+  defaultFormValue?: number;
+  options: { value: number }[];
+}): number | undefined {
+  const d = col.defaultFormValue;
+  if (typeof d !== 'number' || d === -1) return undefined;
+  if (col.options.length > 0 && !col.options.some((o) => o.value === d)) return undefined;
+  return d;
 }
 
 // ──────────────────────────────────────────────────────────────
