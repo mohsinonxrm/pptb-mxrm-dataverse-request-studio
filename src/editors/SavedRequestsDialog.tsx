@@ -34,6 +34,8 @@ import {
   MessageBar,
   MessageBarBody,
   MessageBarTitle,
+  MessageBarActions,
+  Switch,
   mergeClasses,
   makeStyles,
 } from '@fluentui/react-components';
@@ -164,6 +166,12 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
   // Library at MAX_SAVED and this save would add an entry: ask which one
   // to drop instead of evicting one silently (#100).
   const [confirmReplace, setConfirmReplace] = useState(false);
+  // The typed name belongs to a saved request of ANOTHER mode (names are
+  // unique across modes, the library is per mode). We suggest a new name
+  // instead of overwriting it; overwriting stays an explicit choice (#125).
+  const [crossMode, setCrossMode] = useState<{ existing: SavedRequest; typed: string } | null>(
+    null,
+  );
   const { save, capacity, findById, findByName, error } = useSavedRequests();
 
   // The remembered entry only counts while it targets the same table /
@@ -185,10 +193,11 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
       setName(autoSuggestName(modeId, state));
     }
     setConfirmOverwrite(false);
+    setCrossMode(null);
   }, [open, state, modeId, ownSavedId, findById]);
 
-  const doSave = (overwriteId?: string, replaceId?: string) => {
-    const trimmed = name.trim();
+  const doSave = (overwriteId?: string, replaceId?: string, nameOverride?: string) => {
+    const trimmed = (nameOverride ?? name).trim();
     if (!trimmed) return;
     const id = overwriteId ?? newSavedId();
     const entry: SavedRequest = {
@@ -219,6 +228,13 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
       return;
     }
     const byName = findByName(trimmed);
+    if (byName && byName.modeId !== modeId) {
+      // Collision with another mode's entry (not in this mode's Saved
+      // list) → suggest a free name; overwriting is the explicit option.
+      setCrossMode({ existing: byName, typed: trimmed });
+      setName(freeName(trimmed, findByName));
+      return;
+    }
     if (byName) {
       // Collision with a DIFFERENT entry → confirm overwrite or rename.
       setConfirmOverwrite(true);
@@ -283,6 +299,7 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
                 setName(d.value);
                 setConfirmOverwrite(false);
                 setConfirmReplace(false);
+                setCrossMode(null);
               }}
               placeholder="Untitled request"
               style={{ width: '100%' }}
@@ -297,10 +314,28 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
             {confirmOverwrite && (
               <MessageBar layout="multiline" intent="warning" style={{ marginTop: 12 }}>
                 <MessageBarBody>
-                  <MessageBarTitle>Name in use</MessageBarTitle>A saved request already uses{' '}
-                  <code>{name.trim()}</code>. Save again to overwrite it, or change the name above
-                  and Save.
+                  <MessageBarTitle>Name in use</MessageBarTitle>A saved request in this mode already
+                  uses <code>{name.trim()}</code>. Save again to overwrite it, or change the name
+                  above and Save.
                 </MessageBarBody>
+              </MessageBar>
+            )}
+            {crossMode && (
+              <MessageBar layout="multiline" intent="warning" style={{ marginTop: 12 }}>
+                <MessageBarBody>
+                  <MessageBarTitle>Name in use in another mode</MessageBarTitle>A saved{' '}
+                  <strong>{modeIdShort(crossMode.existing.modeId)}</strong> request already uses{' '}
+                  <code>{crossMode.existing.name}</code> (names are shared across modes). The name
+                  above was changed to a free one — Save to keep both.
+                </MessageBarBody>
+                <MessageBarActions>
+                  <Button
+                    size="small"
+                    onClick={() => doSave(crossMode.existing.id, undefined, crossMode.typed)}
+                  >
+                    Overwrite the {modeIdShort(crossMode.existing.modeId)} request
+                  </Button>
+                </MessageBarActions>
               </MessageBar>
             )}
             {confirmReplace && (
@@ -384,12 +419,20 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
   // Future modes get their own routing automatically: entries are tagged
   // with modeId at save time.
   const scope = getOrgScope();
+  // "All modes" shows every mode's entries (names are unique across modes,
+  // so a "Name in use" can point at one of them). Other modes' entries can
+  // be renamed / deleted here but load only from their own mode (#125).
+  const [allModes, setAllModes] = useState(false);
+  const modeCount = useMemo(
+    () => saved.filter((e) => e.modeId === modeId && (!e.orgScope || e.orgScope === scope)).length,
+    [saved, modeId, scope],
+  );
   const list = useMemo(
     () =>
       saved
-        .filter((e) => e.modeId === modeId && (!e.orgScope || e.orgScope === scope))
+        .filter((e) => (allModes || e.modeId === modeId) && (!e.orgScope || e.orgScope === scope))
         .sort((a, b) => b.savedAt - a.savedAt),
-    [saved, modeId, scope],
+    [saved, modeId, scope, allModes],
   );
 
   const onCommitRename = () => {
@@ -415,22 +458,29 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
             aria-label="Open saved requests"
           >
             Saved
-            {list.length > 0 && (
+            {modeCount > 0 && (
               <Badge appearance="tint" size="small" style={{ marginLeft: 6 }}>
-                {list.length}
+                {modeCount}
               </Badge>
             )}
           </Button>
         </Tooltip>
       </PopoverTrigger>
       <PopoverSurface style={{ padding: 8 }}>
-        <Caption1
-          style={{ display: 'block', padding: '6px 10px', color: tokens.colorNeutralForeground3 }}
-        >
-          {list.length === 0
-            ? 'No saved requests yet — click Save to create one.'
-            : `${list.length} saved · click to load, hover for rename/delete`}
-        </Caption1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Caption1
+            style={{ display: 'block', padding: '6px 10px', color: tokens.colorNeutralForeground3 }}
+          >
+            {list.length === 0
+              ? 'No saved requests yet — click Save to create one.'
+              : `${list.length} saved · click to load, hover for rename/delete`}
+          </Caption1>
+          <Switch
+            label="All modes"
+            checked={allModes}
+            onChange={(_, d) => setAllModes(d.checked)}
+          />
+        </div>
         {list.length === 0 ? (
           <div className={s.libraryEmpty}>
             <BookmarkMultiple20Regular style={{ width: 32, height: 32, opacity: 0.4 }} />
@@ -441,6 +491,7 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
             {list.map((entry) => {
               const isCurrent = entry.id === currentId;
               const isRenaming = entry.id === renameId;
+              const otherMode = entry.modeId !== modeId;
               return (
                 <div
                   key={entry.id}
@@ -451,10 +502,12 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
                           borderColor: tokens.colorBrandStroke1,
                           backgroundColor: tokens.colorBrandBackground2,
                         }
-                      : undefined
+                      : otherMode
+                        ? { cursor: 'default' }
+                        : undefined
                   }
                   onClick={() => {
-                    if (isRenaming) return;
+                    if (isRenaming || otherMode) return;
                     onLoad(entry);
                     setOpen(false);
                   }}
@@ -504,6 +557,7 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
                         </div>
                         <div className={s.libraryRowMeta}>
                           {tableNameFromState(entry.state)} · saved {timeAgo(entry.savedAt)}
+                          {otherMode && ` · open ${modeIdShort(entry.modeId)} to load`}
                         </div>
                       </>
                     )}
@@ -710,6 +764,15 @@ function SavedLibraryTransfer() {
  *  prefix for compact display, and falls back to the raw id for unknown modes. */
 function modeIdShort(modeId: string): string {
   return modeId.replace(/^(retrieve|execute|manage)-/, '');
+}
+
+/** First of `name (2)`, `name (3)`, … that no saved request uses (#125). */
+function freeName(name: string, findByName: (n: string) => SavedRequest | undefined): string {
+  const base = name.replace(/\s*\(\d+\)$/, '');
+  for (let n = 2; ; n++) {
+    const candidate = `${base} (${n})`;
+    if (!findByName(candidate)) return candidate;
+  }
 }
 
 function timeAgo(epochMs: number): string {
