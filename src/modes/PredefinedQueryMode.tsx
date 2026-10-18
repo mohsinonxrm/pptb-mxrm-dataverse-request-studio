@@ -49,6 +49,7 @@ import {
   Body1,
   Badge,
   Tooltip,
+  ToggleButton,
 } from '@fluentui/react-components';
 import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
@@ -56,6 +57,8 @@ import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
 import { PaneHead } from '../editors/PaneHead';
 import { TargetEditor } from '../editors/TargetEditor';
+import { RelatedCollectionTarget } from '../editors/RelatedCollectionTarget';
+import { SegmentedToggle } from '../primitives/SegmentedToggle';
 import { TopEditor } from '../editors/TopCountEditors';
 import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/PreferEditor';
 import { HeadersEditor, defaultReadHeaders, headerItemsToObject } from '../editors/HeadersEditor';
@@ -65,7 +68,7 @@ import { findRequestType } from '../registry/requestTypes';
 import { findTable } from '../mock/metadata';
 import { buildPredefinedQuery } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
-import type { PredefinedQueryState, RecentRun } from '../state/readState';
+import type { PredefinedQueryState, PredefinedRelatedTarget, RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
@@ -94,6 +97,13 @@ const initialState = (): PredefinedQueryState => ({
 });
 
 type ClauseId = 'target' | 'conditions' | 'top' | 'prefer' | 'headers';
+
+const EMPTY_RELATED: PredefinedRelatedTarget = {
+  sourceTable: '',
+  relationshipName: '',
+  navProperty: '',
+  recordId: null,
+};
 
 // ── Live query shapes ──────────────────────────────────────────────────
 //
@@ -253,7 +263,10 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   // selection.
   const [comboInput, setComboInput] = useState<string>('');
 
-  const built = useMemo(() => buildPredefinedQuery(state), [state, liveTable]);
+  // Related-collection target (#5): the source table's entity set is part of
+  // the URL, so its metadata landing must rebuild it too.
+  const { table: liveSource } = useLiveTable(state.related?.sourceTable || null);
+  const built = useMemo(() => buildPredefinedQuery(state), [state, liveTable, liveSource]);
   const tbl = findTable(state.table);
   const selectedQuery = queries.find((q) => q.id === state.queryId) ?? null;
 
@@ -456,7 +469,9 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
     ? 'Pick a table first.'
     : !state.queryId
       ? 'Pick a saved query or user view.'
-      : null;
+      : state.related && !(state.related.navProperty && state.related.recordId)
+        ? 'Pick the relationship and the row whose related records to query.'
+        : null;
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializePredefinedQuery(state), [state]);
@@ -592,13 +607,51 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <TargetEditor
             table={state.table}
-            onTableChange={onTableChange}
+            onTableChange={(logical) => {
+              onTableChange(logical);
+              // A related target belongs to the old table's relationships.
+              if (state.related) set('related', EMPTY_RELATED);
+            }}
             group="read"
             sub="Pick the table whose saved queries (system views) or user queries (personal views) you want to execute."
           />
 
           {state.table && (
             <div style={{ maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <Field
+                label="Run against"
+                hint={
+                  state.related
+                    ? 'The query runs over one row’s related records: /<set>(<id>)/<nav>?savedQuery=…'
+                    : 'The query runs over the whole table: /<set>?savedQuery=…'
+                }
+              >
+                <SegmentedToggle ariaLabel="Run the query against">
+                  <ToggleButton
+                    checked={!state.related}
+                    onClick={() => {
+                      if (state.related) set('related', null, 'target');
+                    }}
+                  >
+                    Table
+                  </ToggleButton>
+                  <ToggleButton
+                    checked={!!state.related}
+                    onClick={() => {
+                      if (!state.related) set('related', EMPTY_RELATED, 'target');
+                    }}
+                  >
+                    Related records of a row
+                  </ToggleButton>
+                </SegmentedToggle>
+              </Field>
+              {state.related && tbl && (
+                <RelatedCollectionTarget
+                  table={tbl}
+                  value={state.related}
+                  onChange={(next) => set('related', next, 'target')}
+                />
+              )}
               {/* One picker, two OptionGroups. Drops the tabs entirely — the
                 group headers ("System views" / "Personal views") communicate
                 kind without needing a second navigation level. Per the
