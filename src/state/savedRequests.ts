@@ -451,6 +451,79 @@ export function persistSaved(list: SavedRequest[]): void {
   }
 }
 
+// ── Other connections' libraries (#6) ─────────────────────────────────
+//
+// Every connection this browser profile has saved requests for has its own
+// `drs:saved-requests:v1:<host>` key. These read / write those buckets
+// directly so the library can list another connection's entries and copy or
+// move them into the current one.
+
+/** One other connection's saved-request library. */
+export interface OrgLibrary {
+  /** Org scope (the Dataverse host, or `default` outside PPTB). */
+  scope: string;
+  entries: SavedRequest[];
+}
+
+function readBucket(key: string, scope: string): SavedRequest[] {
+  try {
+    const raw = window.localStorage.getItem(key);
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(isSavedRequestShape)
+      .filter((e) => SAVED_MODE_IDS.has(e.modeId) && (e.schemaVersion ?? 1) <= SAVED_SCHEMA_VERSION)
+      .map((e) => ({ ...e, orgScope: e.orgScope || scope, schemaVersion: e.schemaVersion ?? 1 }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Libraries of every connection except the current one that hold at least
+ * one valid entry, largest first. Never throws.
+ */
+export function listOtherOrgLibraries(): OrgLibrary[] {
+  if (typeof window === 'undefined') return [];
+  const current = getSavedRequestsKey();
+  const prefix = `${SAVED_REQUESTS_KEY_PREFIX}:`;
+  const out: OrgLibrary[] = [];
+  try {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (!key || !key.startsWith(prefix) || key === current) continue;
+      const scope = key.slice(prefix.length);
+      const entries = readBucket(key, scope);
+      if (entries.length) out.push({ scope, entries });
+    }
+  } catch {
+    return out;
+  }
+  return out.sort((a, b) => b.entries.length - a.entries.length || a.scope.localeCompare(b.scope));
+}
+
+/**
+ * Drop entries from another connection's library (the second half of a
+ * move). Throws when storage can't be written, like `persistSaved`.
+ */
+export function removeFromOrgLibrary(scope: string, ids: ReadonlySet<string>): void {
+  const key = `${SAVED_REQUESTS_KEY_PREFIX}:${scope}`;
+  if (key === getSavedRequestsKey()) return;
+  try {
+    const raw = window.localStorage.getItem(key);
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    if (!Array.isArray(parsed)) return;
+    // Filter the raw array so entries this build can't read are kept as-is.
+    const kept = parsed.filter(
+      (e) => !(e && typeof e === 'object' && ids.has((e as { id?: unknown }).id as string)),
+    );
+    if (kept.length) window.localStorage.setItem(key, JSON.stringify(kept));
+    else window.localStorage.removeItem(key);
+  } catch {
+    throw new Error('localStorage write failed (quota or privacy mode).');
+  }
+}
+
 // ── Export / Import file ──────────────────────────────────────────────
 //
 // A self-describing JSON envelope. Import also accepts a bare array (a raw

@@ -14,6 +14,8 @@
 // the SavedRequest; the mode decides what to do with `state`.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Globe20Regular } from '@fluentui/react-icons';
+import { CrossOrgSavedDialog } from './CrossOrgSavedDialog';
 import {
   Dialog,
   DialogTrigger,
@@ -423,6 +425,8 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
   // so a "Name in use" can point at one of them). Other modes' entries can
   // be renamed / deleted here but load only from their own mode (#125).
   const [allModes, setAllModes] = useState(false);
+  // Other connections' libraries (#6).
+  const [crossOrgOpen, setCrossOrgOpen] = useState(false);
   const modeCount = useMemo(
     () => saved.filter((e) => e.modeId === modeId && (!e.orgScope || e.orgScope === scope)).length,
     [saved, modeId, scope],
@@ -467,6 +471,8 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
         </Tooltip>
       </PopoverTrigger>
       <PopoverSurface style={{ padding: 8 }}>
+        {/* Rendered inside the surface: its portal counts as inside the popover. */}
+        <CrossOrgSavedDialog open={crossOrgOpen} onOpenChange={setCrossOrgOpen} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Caption1
             style={{ display: 'block', padding: '6px 10px', color: tokens.colorNeutralForeground3 }}
@@ -475,11 +481,22 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
               ? 'No saved requests yet — click Save to create one.'
               : `${list.length} saved · click to load, hover for rename/delete`}
           </Caption1>
-          <Switch
-            label="All modes"
-            checked={allModes}
-            onChange={(_, d) => setAllModes(d.checked)}
-          />
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <Switch
+              label="All modes"
+              checked={allModes}
+              onChange={(_, d) => setAllModes(d.checked)}
+            />
+            <Tooltip content="Saved requests on other connections" relationship="label">
+              <Button
+                appearance="subtle"
+                size="small"
+                icon={<Globe20Regular />}
+                aria-label="Saved requests on other connections"
+                onClick={() => setCrossOrgOpen(true)}
+              />
+            </Tooltip>
+          </div>
         </div>
         {list.length === 0 ? (
           <div className={s.libraryEmpty}>
