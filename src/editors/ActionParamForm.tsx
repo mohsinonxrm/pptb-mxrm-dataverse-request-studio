@@ -57,6 +57,7 @@ import {
   FormNew20Filled,
   Code20Regular,
   Open20Regular,
+  Link20Regular,
 } from '@fluentui/react-icons';
 import Editor from '@monaco-editor/react';
 import { SegmentedToggle } from '../primitives/SegmentedToggle';
@@ -70,6 +71,7 @@ import { RecordPicker } from '../primitives/RecordPicker';
 import { useScopedEntities } from '../host/useScopedEntities';
 import type { ActionParam, CsdlAction } from '../mock/actionsCsdl';
 import type { ExecParamValue } from '../state/executeState';
+import { defaultEntitySpecificMode, isEntitySpecificRef } from '../engine/executeBuilders';
 import type { RequestGroup } from '../registry/requestTypes';
 // Live-metadata warmer — kicks off the fetch for the entity's
 // AttributeMetadata so findTable() returns a populated TableMeta on the
@@ -576,15 +578,10 @@ function ParamInput({
         />
       );
     case 'EntitySpecific':
-      // EntitySpecific → NEW entity instance constructed inline. Renders a
-      // metadata-driven entity form (e.g. WinOpportunity.OpportunityClose).
-      return (
-        <EntitySpecificInput
-          param={param}
-          value={value as Record<string, unknown> | undefined}
-          onChange={onChange}
-        />
-      );
+      // EntitySpecific → either an existing record (reference) or a NEW
+      // entity instance built inline (e.g. WinOpportunity.OpportunityClose).
+      // The user picks which (#1).
+      return <EntitySpecificParamInput param={param} value={value} onChange={onChange} />;
     case 'EntityCollection':
       return (
         <EntityCollectionInput
@@ -947,6 +944,79 @@ function EntityCollectionInput({
         placeholder={`Add ${tbl?.displayName ?? entityType} record…`}
       />
     </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────
+// EntitySpecific — existing record vs new instance (#1).
+//
+// The CSDL types the parameter as `mscrm.<entity>` without saying whether
+// the action wants a reference to an existing row (AddToQueue.Target,
+// AssignUser.Target) or a new instance (WinOpportunity.OpportunityClose).
+// A segmented toggle lets the user choose; params named like Target /
+// Source / Subject / Owner default to "Existing record". The choice is
+// read from the value's shape (`{ '@ref': id }` vs a field map); with
+// nothing entered yet it lives in local state. Switching clears the value
+// since the two shapes don't convert.
+// ──────────────────────────────────────────────────────────────
+function EntitySpecificParamInput({
+  param,
+  value,
+  onChange,
+}: {
+  param: ActionParam;
+  value: ExecParamValue;
+  onChange: (v: ExecParamValue) => void;
+}) {
+  const [pickedMode, setPickedMode] = useState<'reference' | 'instance' | null>(null);
+  const mode: 'reference' | 'instance' = isEntitySpecificRef(value)
+    ? 'reference'
+    : value != null && typeof value === 'object' && Object.keys(value).length > 0
+      ? 'instance'
+      : (pickedMode ?? defaultEntitySpecificMode(param));
+  const switchTo = (next: 'reference' | 'instance') => {
+    if (next === mode) return;
+    setPickedMode(next);
+    onChange(undefined);
+  };
+  const entityType = param.entityType ?? '';
+  const refId = isEntitySpecificRef(value) ? value['@ref'] : '';
+
+  return (
+    <span style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+      <SegmentedToggle ariaLabel={`${param.name}: existing record or new instance`}>
+        <ToggleButton
+          size="small"
+          checked={mode === 'reference'}
+          icon={<Link20Regular />}
+          onClick={() => switchTo('reference')}
+        >
+          Existing record
+        </ToggleButton>
+        <ToggleButton
+          size="small"
+          checked={mode === 'instance'}
+          icon={<FormNew20Regular />}
+          onClick={() => switchTo('instance')}
+        >
+          New instance
+        </ToggleButton>
+      </SegmentedToggle>
+      {mode === 'reference' ? (
+        <EntityReferenceInput
+          value={entityType ? { id: refId, entityType } : undefined}
+          onChange={(r) => onChange(r?.id ? { '@ref': r.id } : undefined)}
+          param={param}
+          polymorphic={false}
+        />
+      ) : (
+        <EntitySpecificInput
+          param={param}
+          value={value as Record<string, unknown> | undefined}
+          onChange={onChange}
+        />
+      )}
+    </span>
   );
 }
 

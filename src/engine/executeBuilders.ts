@@ -323,6 +323,45 @@ function buildActionUrlSegment(
  *   • ComplexType      → nested object — recursively encoded
  *   • OptionSetValue   → integer
  */
+// ── EntitySpecific: existing record vs new instance (#1) ──────────
+//
+// An EntitySpecific parameter (`mscrm.<entity>`) takes either a reference to
+// an existing row or a new entity instance built inline; the CSDL doesn't say
+// which. Instance mode stores a field-value map keyed by column logical names
+// (never starting with '@'); reference mode stores `{ '@ref': '<guid>' }`, so
+// the two shapes can't collide. On the wire a reference is the same
+// `@odata.type` + primary-key object Dataverse documents for action entity
+// parameters (AddToQueue, Merge), and `{'@odata.id':'<set>(<id>)'}` in a
+// function URL.
+
+export interface EntitySpecificRef {
+  '@ref': string;
+}
+
+export function isEntitySpecificRef(v: unknown): v is EntitySpecificRef {
+  return (
+    !!v &&
+    typeof v === 'object' &&
+    !Array.isArray(v) &&
+    typeof (v as Record<string, unknown>)['@ref'] === 'string'
+  );
+}
+
+/** Parameter names that almost always point at an existing row. */
+const REFERENCE_PARAM_RE =
+  /^(target|source|subject|owner|assignee|subordinate|record|parent|queue|destination|principal|user|team)/i;
+
+/** Default mode for an EntitySpecific param the user hasn't touched yet. */
+export function defaultEntitySpecificMode(param: ActionParam): 'reference' | 'instance' {
+  return REFERENCE_PARAM_RE.test(param.name) ? 'reference' : 'instance';
+}
+
+function entityRefBody(entityType: string, id: string): Record<string, unknown> {
+  const tbl = findTable(entityType);
+  const pk = tbl?.primaryKey ?? `${entityType}id`;
+  return { '@odata.type': `Microsoft.Dynamics.CRM.${entityType}`, [pk]: id };
+}
+
 export function encodeParamForBody(param: ActionParam, value: unknown): unknown {
   if (value === null || value === undefined) return null;
   switch (param.type) {
@@ -359,6 +398,12 @@ export function encodeParamForBody(param: ActionParam, value: unknown): unknown 
       };
     }
     case 'EntitySpecific': {
+      // Reference mode (#1) — an existing row of the declared type.
+      if (isEntitySpecificRef(value)) {
+        const id = value['@ref'].trim();
+        if (!id || !param.entityType) return null;
+        return entityRefBody(param.entityType, id);
+      }
       // EntitySpecific is a NEW entity instance constructed inline (e.g.
       // OpportunityClose passed to WinOpportunity). The user has filled in
       // a CreateState-like fieldValues map for the target entity; we encode
@@ -490,6 +535,13 @@ export function encodeParamForUrl(param: ActionParam, value: unknown, aliased: b
       const set = tbl?.entitySetName ?? `${ref.entityType}s`;
       void aliased; // both forms use the same record-ref shape
       return `{'@odata.id':'${set}(${ref.id})'}`;
+    }
+    case 'EntitySpecific': {
+      // Only the reference form (#1) has a URL encoding.
+      if (!isEntitySpecificRef(value) || !value['@ref'].trim() || !param.entityType) return 'null';
+      const tbl = findTable(param.entityType);
+      const set = tbl?.entitySetName ?? `${param.entityType}s`;
+      return `{'@odata.id':'${set}(${value['@ref'].trim()})'}`;
     }
     default:
       return String(value);
