@@ -63,6 +63,7 @@ import { ResultsView } from '../views/ResultsView';
 import { findTable, type ImageColumnMeta } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildManageImage, manageImagePipeline } from '../engine/urlBuilder';
+import { pipelineCodegen } from '../engine/binaryBuilders';
 import { runtime, type ExecResult } from '../engine/runtime';
 import { checkUploadSize, type ManageImageState, type FileOperation } from '../state/binaryState';
 
@@ -586,11 +587,8 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
   const codeInputs = {
     method: firstStepMethod,
     built,
-    headers: headersMap,
-    body:
-      pipeline[0] && typeof pipeline[0].body === 'object'
-        ? (pipeline[0].body as Record<string, unknown>)
-        : undefined,
+    // Per-step headers + bodies (#60) — e.g. If-Match: * on image upload.
+    ...pipelineCodegen(pipeline, headersMap),
     entityLogical: built.entityLogical,
   };
 

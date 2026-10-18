@@ -70,6 +70,7 @@ import {
   manageAttachmentPipeline,
   attachmentTargetLabel,
   formatSize,
+  pipelineCodegen,
 } from '../engine/binaryBuilders';
 import { runtime, type ExecResult } from '../engine/runtime';
 import {
@@ -525,19 +526,9 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
   const codeInputs = {
     method: firstStepMethod,
     built,
-    headers: headersMap,
+    // Per-step headers + bodies (#60).
+    ...pipelineCodegen(pipeline, headersMap),
     entityLogical: built.entityLogical,
-    multiRequests:
-      pipeline.length > 1
-        ? pipeline.map((step) => ({
-            method: step.method,
-            relativeUrl: step.relativeUrl.startsWith('<')
-              ? step.relativeUrl
-              : step.relativeUrl.replace(/^https?:\/\/[^/]+/, ''),
-            body: typeof step.body === 'object' ? step.body : undefined,
-            description: step.title,
-          }))
-        : undefined,
   };
 
   return (
