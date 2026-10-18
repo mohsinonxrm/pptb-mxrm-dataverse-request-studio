@@ -36,8 +36,10 @@ import {
   Play20Filled,
   Code20Filled,
   Edit20Filled,
+  ArrowDownload20Regular,
 } from '@fluentui/react-icons';
 import { PaneHead } from '../editors/PaneHead';
+import { saveFileSafe } from '../host/pptbBridge';
 import {
   generateCode,
   FORMAT_LABELS,
@@ -65,9 +67,13 @@ const FORMATS: CodeFormat[] = [
   'powershell',
   'curl',
   'json',
+  'openapi',
 ];
 // Power Automate is a field-list form, not source code — skip it in the Editor tab.
-const EDITOR_FORMATS: CodeFormat[] = FORMATS.filter((f) => f !== 'powerautomate');
+// OpenAPI is a document, not runnable code — skip it there too.
+const EDITOR_FORMATS: CodeFormat[] = FORMATS.filter(
+  (f) => f !== 'powerautomate' && f !== 'openapi',
+);
 
 // Bundle Monaco locally — PPTB's CSP forbids fetching from cdn.jsdelivr.net
 // ("script-src 'self' 'unsafe-inline' pptb-webview:"). `loader.config({ monaco })`
@@ -271,6 +277,22 @@ function CodePane({
                 Copy
               </Button>
             </Tooltip>
+            {fmt === 'openapi' && (
+              <Tooltip content="Save the OpenAPI document as a JSON file" relationship="label">
+                <Button
+                  icon={<ArrowDownload20Regular />}
+                  appearance="subtle"
+                  size="small"
+                  onClick={() =>
+                    void saveFileSafe(`${inputs.built.entitySet || 'request'}.openapi.json`, code, [
+                      { name: 'OpenAPI (JSON)', extensions: ['json'] },
+                    ]).catch(() => undefined)
+                  }
+                >
+                  Save
+                </Button>
+              </Tooltip>
+            )}
           </>
         )}
       </div>
