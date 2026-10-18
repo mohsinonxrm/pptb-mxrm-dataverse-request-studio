@@ -8,20 +8,23 @@ import { SaveContextRoot, type SaveContextValue } from './state/SaveContext';
 import { findRequestType } from './registry/requestTypes';
 import { RetrieveMultipleMode } from './modes/RetrieveMultipleMode';
 import { RetrieveSingleMode } from './modes/RetrieveSingleMode';
-import { RetrieveNextLinkMode } from './modes/RetrieveNextLinkMode';
-import { PredefinedQueryMode } from './modes/PredefinedQueryMode';
+// Less-used modes load on first use (#22).
+import {
+  RetrieveNextLinkMode,
+  PredefinedQueryMode,
+  MergeMode,
+  AssociateMode,
+  DisassociateMode,
+  ExecuteWorkflowMode,
+  ManageFileMode,
+  ManageImageMode,
+} from './modes/lazyModes';
 import { CreateMode } from './modes/CreateMode';
 import { UpdateMode } from './modes/UpdateMode';
 import { UpsertMode } from './modes/UpsertMode';
 import { DeleteMode } from './modes/DeleteMode';
-import { MergeMode } from './modes/MergeMode';
-import { AssociateMode } from './modes/AssociateMode';
-import { DisassociateMode } from './modes/DisassociateMode';
 import { ExecuteActionMode } from './modes/ExecuteActionMode';
 import { ExecuteFunctionMode } from './modes/ExecuteFunctionMode';
-import { ExecuteWorkflowMode } from './modes/ExecuteWorkflowMode';
-import { ManageFileMode } from './modes/ManageFileMode';
-import { ManageImageMode } from './modes/ManageImageMode';
 import { ManageAttachmentMode } from './modes/ManageAttachmentMode';
 import { StubMode } from './modes/StubMode';
 import { findTable } from './mock/metadata';

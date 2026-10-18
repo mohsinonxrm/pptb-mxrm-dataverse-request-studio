@@ -95,9 +95,9 @@ import {
 import { useLookupRecords } from '../host/useLookupRecords';
 import { useColumnDetail } from '../host/useColumnDetail';
 // Monaco — same instance + worker setup as CodeView. The `loader.config`
-// side-effect runs when CodeView is first imported (every mode file
-// imports it), so by the time FieldSetEditor renders, Monaco is ready.
-import Editor from '@monaco-editor/react';
+// side-effect lives in src/monaco/monacoSetup.ts, which the MonacoEditor
+// wrapper lazy-loads on the first editor render (#22).
+import Editor from '../monaco/MonacoEditor';
 import type { ThemeMode } from '../theme/theme';
 import type { CreateFieldValue, LookupFieldValue } from '../state/writeState';
 import type { RequestGroup } from '../registry/requestTypes';
@@ -1821,9 +1821,8 @@ function JsonEditPane({
       <div style={{ position: 'relative' }}>
         {/* Monaco editor with `json` language — gives us syntax coloring,
             bracket matching, line numbers, and inline schema-style error
-            squiggles for free. Same instance + worker setup as CodeView
-            (the side-effect `loader.config({monaco})` there pre-loads
-            the workers globally). Height is fixed at 360 so the surrounding
+            squiggles for free. Same lazily loaded instance + worker setup
+            as CodeView (src/monaco/monacoSetup.ts). Height is fixed at 360 so the surrounding
             "Form / JSON" toggle + info bar don't get pushed off-screen on
             small viewports; the editor's internal scrollbar handles tall
             bodies. */}
