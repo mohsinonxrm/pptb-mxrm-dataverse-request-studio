@@ -9,6 +9,7 @@ import {
 } from '@fluentui/react-components';
 import { ArrowClockwise20Regular, Checkmark20Regular, Copy20Regular } from '@fluentui/react-icons';
 import { copyToClipboardSafe } from '../host/pptbBridge';
+import { isChunkLoadError, STALE_BUILD_MESSAGE } from './chunkLoadError';
 
 // ── Error boundaries (#19) ────────────────────────────────────────────
 //
@@ -120,6 +121,9 @@ function ErrorFallback({
     }
   };
   const isMode = scope === 'mode';
+  // A missing code-split chunk means DRS was updated under this tab (#187):
+  // reloading the pane can't fetch a file that no longer exists.
+  const stale = isChunkLoadError(error);
 
   return (
     <div
@@ -137,12 +141,18 @@ function ErrorFallback({
       <MessageBar layout="multiline" intent="error" style={{ maxWidth: 820 }}>
         <MessageBarBody>
           <MessageBarTitle>
-            {isMode ? `The ${label} mode hit an error` : `The ${label} pane hit an error`}
+            {stale
+              ? `The ${label} ${isMode ? 'mode' : 'pane'} couldn't load`
+              : isMode
+                ? `The ${label} mode hit an error`
+                : `The ${label} pane hit an error`}
           </MessageBarTitle>
           <div>
-            {isMode
-              ? 'The rest of DRS still works — reload this mode or pick another request type from the header.'
-              : 'The rest of this mode still works — reload this pane or switch to another tab.'}
+            {stale
+              ? STALE_BUILD_MESSAGE
+              : isMode
+                ? 'The rest of DRS still works — reload this mode or pick another request type from the header.'
+                : 'The rest of this mode still works — reload this pane or switch to another tab.'}
           </div>
           <code
             style={{
@@ -163,9 +173,11 @@ function ErrorFallback({
           )}
         </MessageBarBody>
         <MessageBarActions>
-          <Button appearance="primary" icon={<ArrowClockwise20Regular />} onClick={onReload}>
-            {isMode ? 'Reload this mode' : 'Reload this pane'}
-          </Button>
+          {!stale && (
+            <Button appearance="primary" icon={<ArrowClockwise20Regular />} onClick={onReload}>
+              {isMode ? 'Reload this mode' : 'Reload this pane'}
+            </Button>
+          )}
           <Button
             icon={copy === 'copied' ? <Checkmark20Regular /> : <Copy20Regular />}
             onClick={onCopy}
