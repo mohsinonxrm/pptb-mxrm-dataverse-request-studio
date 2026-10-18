@@ -99,6 +99,7 @@ export function ResultsView({
   // Grid-local UI state. We hoist it here (not inside ResultsGrid) so the
   // command bar can drive it without prop-drilling through the grid.
   const [searchQuery, setSearchQuery] = useState('');
+  const [showFilterRow, setShowFilterRow] = useState(false);
   const [density, setDensity] = useState<'cozy' | 'compact'>('cozy');
   const s = useStudioStyles();
 
@@ -209,6 +210,8 @@ export function ResultsView({
           onStopLoadingMore={onStopLoadingMore}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
+          showFilterRow={showFilterRow}
+          onShowFilterRowChange={setShowFilterRow}
           density={density}
           onDensityChange={setDensity}
         />
@@ -261,6 +264,8 @@ export function ResultsView({
               isLoadingMore={isLoadingMore}
               onLoadMore={onLoadMore}
               searchQuery={searchQuery}
+              onClearSearch={() => setSearchQuery('')}
+              showFilterRow={showFilterRow}
               density={density}
               status={{ code: result.status, ms: result.ms, bytes: result.bytes }}
               serverTotal={serverTotal}

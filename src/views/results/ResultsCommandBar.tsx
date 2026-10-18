@@ -11,9 +11,9 @@
 //   • Copy JSON    — copy the OData envelope
 //   • Selection count + row count
 //
-// Search is intentionally NOT here — it's a column-list operation handled
-// inside ResultsGrid. The command bar is for *actions on the result set*,
-// not for filtering it.
+// The search box and the Filter row toggle only drive ResultsGrid's
+// client-side filtering of the loaded rows (#17); they never change the
+// request.
 
 import {
   Toolbar,
@@ -42,6 +42,7 @@ import {
   Search20Regular,
   TextDensity20Regular,
   TextAlignDistributed20Regular,
+  Filter20Regular,
 } from '@fluentui/react-icons';
 import { SegmentedToggle } from '../../primitives/SegmentedToggle';
 import { useHostSession } from '../../host/HostContext';
@@ -82,6 +83,9 @@ export interface ResultsCommandBarProps {
   /** Row-search query (passed through to the grid). */
   searchQuery: string;
   onSearchChange: (q: string) => void;
+  /** Per-column filter row under the grid header (#17). */
+  showFilterRow: boolean;
+  onShowFilterRowChange: (show: boolean) => void;
   /** Row density. */
   density: 'cozy' | 'compact';
   onDensityChange: (d: 'cozy' | 'compact') => void;
@@ -98,6 +102,8 @@ export function ResultsCommandBar({
   onStopLoadingMore,
   searchQuery,
   onSearchChange,
+  showFilterRow,
+  onShowFilterRowChange,
   density,
   onDensityChange,
 }: ResultsCommandBarProps) {
@@ -230,6 +236,21 @@ export function ResultsCommandBar({
           onChange={(_, d) => onSearchChange(d.value)}
           style={{ minWidth: 220 }}
         />
+
+        <Tooltip
+          content="Filter each column of the loaded rows (doesn't change the request)"
+          relationship="description"
+        >
+          <ToggleButton
+            appearance="subtle"
+            size="small"
+            icon={<Filter20Regular />}
+            checked={showFilterRow}
+            onClick={() => onShowFilterRowChange(!showFilterRow)}
+          >
+            Filter row
+          </ToggleButton>
+        </Tooltip>
 
         <SegmentedToggle ariaLabel="Row density">
           <ToggleButton
