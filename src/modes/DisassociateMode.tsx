@@ -41,6 +41,7 @@ import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from '../editors/PaneHead';
 import { NavPropertyPicker } from '../editors/NavPropertyPicker';
@@ -66,6 +67,7 @@ import {
   type SavedRequest,
   type SerializedDisassociateState,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 // Empty initial state — same pattern as MergeMode/AssociateMode. User picks
@@ -92,7 +94,8 @@ interface CurrentLookup {
 
 export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('disassociate');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('disassociate', deserializeDisassociate, initialState);
+  const [state, setState] = useState(draft.state);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
   // The live table is a memo dependency below: build*() reads metadata via
   // findTable(), which is empty until the fetch lands — keying on `state`
@@ -106,8 +109,8 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
   // Save / Load tracking
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
 
   // Source-record primary-name cache — populated when the user picks via
   // TargetEditor. Used for the WriteResultCard narrative + sidebar label.
@@ -261,6 +264,7 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeDisassociate(state), [state]);
+  useStashModeDraft('disassociate', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 
@@ -273,7 +277,7 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
     if (entry.modeId !== 'disassociate') return;
     const snap = entry.state as SerializedDisassociateState;
     if (entities.length > 0 && !entities.some((e) => e.logicalName === snap.table)) {
-      window.alert(
+      notify(
         `Can't load "${entry.name}": entity \`${snap.table}\` ` +
           `isn't available in this environment. The solution may have been ` +
           `removed or you may be connected to a different org.`,
@@ -409,6 +413,10 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
             setSourceName('');
             setCurrentLookup(null);
             setResult(null);
+            // New table → fresh draft. Forget the last save so Save can't
+            // overwrite an entry that belongs to the old table (#58).
+            setLastSavedId(undefined);
+            setLastSavedHash(null);
           }}
           recordId={state.sourceId}
           onRecordChange={(id, primary) => {

@@ -21,7 +21,7 @@
 // access control at the request boundary.
 
 import { useEffect, useMemo, useState } from 'react';
-import Editor from '@monaco-editor/react';
+import Editor from '../monaco/MonacoEditor';
 import {
   Filter20Regular,
   Filter20Filled,
@@ -54,6 +54,7 @@ import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { PaneHead } from '../editors/PaneHead';
 import { TargetEditor } from '../editors/TargetEditor';
 import { TopEditor } from '../editors/TopCountEditors';
@@ -61,6 +62,7 @@ import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/Pref
 import { HeadersEditor, defaultReadHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
+import { topLevelRowCount } from '../views/results/flattenExpansions';
 import { findRequestType } from '../registry/requestTypes';
 import { findTable } from '../mock/metadata';
 import { buildPredefinedQuery } from '../engine/urlBuilder';
@@ -77,6 +79,7 @@ import {
   type SavedRequest,
   type SerializedPredefinedQueryState,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 // Empty initial state — the studio is a request *builder*. Pre-seeding a
@@ -223,7 +226,8 @@ function queryTypeLabel(qt: number): string {
 export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('predefined-query');
   const s = useStudioStyles();
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('predefined-query', deserializePredefinedQuery, initialState);
+  const [state, setState] = useState(draft.state);
   // Live-metadata subscription so the entity-set name resolves once the
   // table cache lands.
   // The live table is a memo dependency below: build*() reads metadata via
@@ -238,8 +242,8 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
   // Save / Load
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
 
   // Live-fetched queries scoped to the chosen table.
   const [queries, setQueries] = useState<QueryRow[]>([]);
@@ -426,6 +430,10 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   const onTableChange = (logical: string) => {
     setState((ss) => ({ ...ss, table: logical, queryId: null }));
     markDirty('target');
+    // New table → fresh draft. Forget the last save so Save can't
+    // overwrite an entry that belongs to the old table (#58).
+    setLastSavedId(undefined);
+    setLastSavedHash(null);
   };
 
   const onExecute = async () => {
@@ -444,7 +452,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
           ts: Date.now(),
           status: res.status,
           ms: res.ms,
-          rowCount: (res.body as { value?: unknown[] } | null)?.value?.length ?? 0,
+          rowCount: topLevelRowCount(res.body) ?? 0,
         },
         ...rs,
       ].slice(0, 8),
@@ -460,6 +468,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializePredefinedQuery(state), [state]);
+  useStashModeDraft('predefined-query', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 
@@ -472,7 +481,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
     if (entry.modeId !== 'predefined-query') return;
     const snap = entry.state as SerializedPredefinedQueryState;
     if (entities.length > 0 && !entities.some((e) => e.logicalName === snap.table)) {
-      window.alert(
+      notify(
         `Can't load "${entry.name}": entity \`${snap.table}\` ` +
           `isn't available in this environment. The solution may have been ` +
           `removed or you may be connected to a different org.`,

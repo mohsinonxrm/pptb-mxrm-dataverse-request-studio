@@ -26,7 +26,7 @@ body:
   - type: input
     attributes:
       label: Tool version
-      placeholder: 'e.g., v1.0.0 or commit SHA'
+      placeholder: 'e.g., v1.1.4 or commit SHA'
     validations:
       required: true
 
@@ -68,6 +68,8 @@ body:
         - Disassociate
         - Execute Action
         - Execute Function
+        - Execute Custom API
+        - Execute Custom Action
         - Execute Workflow
         - Manage File
         - Manage Image
@@ -81,7 +83,7 @@ body:
       options:
         - URL shape (path / query string)
         - Request body (JSON shape, headers)
-        - Code generator output (xrm / xrm-batch / fetch / curl / PowerShell)
+        - Code generator output (fetch / Xrm.WebApi / executeMultiple / XHR / Power Automate / C# / PowerShell / cURL / JSON)
         - Metadata loading (tables / columns / relationships / OptionSets)
         - Execute / response handling
         - Results grid rendering

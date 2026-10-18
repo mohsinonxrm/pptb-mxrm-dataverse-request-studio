@@ -52,6 +52,7 @@ import {
   TagPickerOption,
   useTagPickerFilter,
   Tag,
+  makeStyles,
 } from '@fluentui/react-components';
 import { DatePicker } from '@fluentui/react-datepicker-compat';
 import { TimePicker } from '@fluentui/react-timepicker-compat';
@@ -94,10 +95,19 @@ import {
 } from '../mock/metadata';
 import { useLookupRecords } from '../host/useLookupRecords';
 import { useColumnDetail } from '../host/useColumnDetail';
+import {
+  behaviorHint,
+  behaviorOf,
+  combineDateAndTime,
+  isDateOnlyColumn,
+  localZoneLabel,
+  parseDateTimeValue,
+  serializeDateTimeValue,
+} from './dateTimeValue';
 // Monaco — same instance + worker setup as CodeView. The `loader.config`
-// side-effect runs when CodeView is first imported (every mode file
-// imports it), so by the time FieldSetEditor renders, Monaco is ready.
-import Editor from '@monaco-editor/react';
+// side-effect lives in src/monaco/monacoSetup.ts, which the MonacoEditor
+// wrapper lazy-loads on the first editor render (#22).
+import Editor from '../monaco/MonacoEditor';
 import type { ThemeMode } from '../theme/theme';
 import type { CreateFieldValue, LookupFieldValue } from '../state/writeState';
 import type { RequestGroup } from '../registry/requestTypes';
@@ -585,6 +595,40 @@ export function FieldSetEditor({
   );
 }
 
+// Row layout has to hold at PPTB's default tool width (~840 px), where the
+// value cell is only ~250 px wide (#112). The label column gives up width
+// first (35 % of the row, 120–220 px), the value input keeps a 160 px floor,
+// and the "Send as null" switch wraps onto its own line below the input
+// instead of overlapping it. Fluent's Combobox / Dropdown / DatePicker carry
+// intrinsic min-widths (250 px and up) that would otherwise push past the
+// cell, so they're released to the cell width here.
+const useFieldRowStyles = makeStyles({
+  valueLine: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: '8px',
+    rowGap: '4px',
+    minWidth: 0,
+  },
+  valueInput: {
+    flex: '1 1 160px',
+    minWidth: 0,
+    '& .fui-Input, & .fui-Combobox, & .fui-Dropdown, & .fui-SpinButton, & .fui-Textarea, & .fui-TagPickerControl':
+      {
+        minWidth: 0,
+        maxWidth: '100%',
+      },
+    // The lookup search box sets an inline 240 px min-width.
+    '& .fui-Combobox': {
+      minWidth: '0 !important',
+    },
+  },
+  nullSwitch: {
+    flexShrink: 0,
+  },
+});
+
 // ──────────────────────────────────────────────────────────────
 // FieldRow — one column's label + value + remove
 // ──────────────────────────────────────────────────────────────
@@ -618,13 +662,14 @@ function FieldRow({
   const s = useStudioStyles();
   const isMissing = col.required && !populated;
 
+  const rs = useFieldRowStyles();
   return (
     <div
       className={mergeClasses(s.inlineCard)}
       style={{
         padding: '10px 12px',
         display: 'grid',
-        gridTemplateColumns: '220px 1fr 30px',
+        gridTemplateColumns: 'minmax(120px, min(220px, 35%)) minmax(0, 1fr) 30px',
         gap: 12,
         alignItems: 'start',
         borderColor: isMissing ? tokens.colorPaletteRedBorder2 : undefined,
@@ -687,8 +732,8 @@ function FieldRow({
           fragment preview but the switch stays in the same position so
           the layout doesn't shift. Description (if any) renders below. */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
+        <div className={rs.valueLine}>
+          <div className={rs.valueInput}>
             {isNull ? (
               // Null-mode preview. Same row footprint as the input, so the
               // Switch's position doesn't jump when the user toggles. Shows
@@ -742,6 +787,7 @@ function FieldRow({
             // gesture feels like "enable this modifier" rather than
             // "this is the primary affordance".
             <Switch
+              className={rs.nullSwitch}
               checked={isNull}
               onChange={(_, d) => {
                 if (d.checked) onSetNull();
@@ -1137,84 +1183,79 @@ function DateTimeFieldInput({
   value: string | undefined;
   onChange: (v: string) => void;
 }) {
-  const isDateOnly = col.format === 'DateOnly' || col.dateTimeBehavior === 'DateOnly';
-  const behaviorHint =
-    col.dateTimeBehavior === 'UserLocal'
-      ? 'stored as UTC, displayed in user TZ'
-      : col.dateTimeBehavior === 'DateOnly'
-        ? 'midnight UTC, no TZ conversion'
-        : 'wall-clock as UTC (no TZ math)';
-
-  const parsed = value ? new Date(value) : null;
-  const dateOnly = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+  // Parsing / serializing is per behavior — see editors/dateTimeValue.ts.
+  // `current`'s LOCAL fields are what the pickers show.
+  const isDateOnly = isDateOnlyColumn(col);
+  const current = parseDateTimeValue(value, col);
+  const hint = behaviorHint(col, current);
 
   const writeDate = (d: Date | null | undefined) => {
     if (!d) {
       onChange('');
       return;
     }
-    if (isDateOnly) {
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
-      onChange(`${yyyy}-${mm}-${dd}`);
-    } else {
-      const prior = parsed && !Number.isNaN(parsed.getTime()) ? parsed : new Date(d);
-      const next = new Date(d);
-      next.setHours(prior.getHours(), prior.getMinutes(), 0, 0);
-      onChange(next.toISOString());
-    }
+    // Keep the time already picked when the date changes.
+    onChange(serializeDateTimeValue(combineDateAndTime(d, isDateOnly ? null : current), col));
   };
   const writeTime = (d: Date | null | undefined) => {
-    if (!d || !dateOnly) return;
-    const next = new Date(dateOnly);
-    next.setHours(d.getHours(), d.getMinutes(), 0, 0);
-    onChange(next.toISOString());
+    if (!d || !current) return;
+    onChange(serializeDateTimeValue(combineDateAndTime(current, d), col));
   };
+
+  // What's on the wire — shown under the pickers so the zone is never a
+  // guess (#92).
+  const sent = value ? (
+    <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
+      Sends <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{value}</code>
+      {behaviorOf(col) === 'UserLocal' && (
+        <> (UTC) · shown in {localZoneLabel(current ?? undefined)}</>
+      )}
+    </Caption1>
+  ) : null;
 
   if (isDateOnly) {
     return (
-      <Tooltip
-        content={`Behavior: ${col.dateTimeBehavior} — ${behaviorHint}`}
-        relationship="description"
-      >
-        <DatePicker
-          size="small"
-          value={dateOnly}
-          onSelectDate={writeDate}
-          placeholder="Pick a date…"
-          formatDate={(d) => (d ? d.toLocaleDateString() : '')}
-          allowTextInput
-        />
-      </Tooltip>
+      <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+        <Tooltip content={`Behavior: ${behaviorOf(col)} — ${hint}`} relationship="description">
+          <DatePicker
+            size="small"
+            value={current}
+            onSelectDate={writeDate}
+            placeholder="Pick a date…"
+            formatDate={(d) => (d ? d.toLocaleDateString() : '')}
+            allowTextInput
+          />
+        </Tooltip>
+        {sent}
+      </span>
     );
   }
   return (
-    <Tooltip
-      content={`Behavior: ${col.dateTimeBehavior} — ${behaviorHint}`}
-      relationship="description"
-    >
-      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-        <DatePicker
-          size="small"
-          value={dateOnly}
-          onSelectDate={writeDate}
-          placeholder="Date…"
-          formatDate={(d) => (d ? d.toLocaleDateString() : '')}
-          style={{ minWidth: 130 }}
-          allowTextInput
-        />
-        <TimePicker
-          size="small"
-          freeform
-          selectedTime={dateOnly}
-          onTimeChange={(_, d) => writeTime(d.selectedTime)}
-          placeholder="Time…"
-          style={{ minWidth: 100 }}
-          hourCycle="h23"
-        />
-      </span>
-    </Tooltip>
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+      <Tooltip content={`Behavior: ${behaviorOf(col)} — ${hint}`} relationship="description">
+        <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <DatePicker
+            size="small"
+            value={current}
+            onSelectDate={writeDate}
+            placeholder="Date…"
+            formatDate={(d) => (d ? d.toLocaleDateString() : '')}
+            style={{ minWidth: 130 }}
+            allowTextInput
+          />
+          <TimePicker
+            size="small"
+            freeform
+            selectedTime={current}
+            onTimeChange={(_, d) => writeTime(d.selectedTime)}
+            placeholder="Time…"
+            style={{ minWidth: 100 }}
+            hourCycle="h23"
+          />
+        </span>
+      </Tooltip>
+      {sent}
+    </span>
   );
 }
 
@@ -1821,9 +1862,8 @@ function JsonEditPane({
       <div style={{ position: 'relative' }}>
         {/* Monaco editor with `json` language — gives us syntax coloring,
             bracket matching, line numbers, and inline schema-style error
-            squiggles for free. Same instance + worker setup as CodeView
-            (the side-effect `loader.config({monaco})` there pre-loads
-            the workers globally). Height is fixed at 360 so the surrounding
+            squiggles for free. Same lazily loaded instance + worker setup
+            as CodeView (src/monaco/monacoSetup.ts). Height is fixed at 360 so the surrounding
             "Form / JSON" toggle + info bar don't get pushed off-screen on
             small viewports; the editor's internal scrollbar handles tall
             bodies. */}

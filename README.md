@@ -19,19 +19,19 @@ React 18, Fluent UI v9, TypeScript, and live Dataverse metadata integration.
 
 ## ✨ Features
 
-DRS ships with **17 request modes** organized into 5 functional groups. Every
+DRS ships with **19 request modes** organized into 5 functional groups. Every
 mode is metadata-driven, generates the correct OData / Web API shape, and
-emits ready-to-copy code in five languages (xrm.WebApi single + batch, fetch,
-curl, PowerShell).
+emits ready-to-copy code in nine formats: `fetch`, `Xrm.WebApi`,
+`Xrm.WebApi.executeMultiple`, `XMLHttpRequest`, Power Automate, C#, PowerShell,
+cURL, and JSON.
 
 ### 📖 Read group
 
 - **Retrieve Multiple** — full OData query composer with `$select`, `$filter`,
-  `$orderby`, `$expand`, `$top`, `$skip`, `$count`, `$apply` (groupby /
-  aggregate), and a virtualized results grid with infinite scroll via
-  `@odata.nextLink`.
-- **Retrieve Single** — by primary key OR by alternate key (composite
-  alternate keys supported).
+  `$orderby`, `$expand`, `$top`, `$count`, `$apply` (groupby / aggregate), and
+  a virtualized results grid with infinite scroll via `@odata.nextLink`.
+- **Retrieve Single** — one record by primary key (GUID), with `$select` /
+  `$expand`.
 - **Retrieve NextLink** — paste a `@odata.nextLink` URL to continue paging
   any query.
 - **Predefined Query** — execute saved-query (`?savedQuery=<id>`) and
@@ -67,11 +67,15 @@ curl, PowerShell).
 
 ### ⚡ Execute group
 
-- **Execute Action** — OOB / Custom API / Custom Action invocation via
-  bound `POST /<set>(<id>)/Microsoft.Dynamics.CRM.<Action>` OR unbound
+- **Execute Action** — OOB action invocation via bound
+  `POST /<set>(<id>)/Microsoft.Dynamics.CRM.<Action>` OR unbound
   `POST /<Action>`. CSDL-driven parameter form with type-aware controls:
   required-first UX, Form ↔ JSON toggle, EntityReference / EntityCollection
   / Edm primitives / Enum / Status-code OptionSet enrichment.
+- **Execute Custom API** / **Execute Custom Action** — the same composer,
+  with the picker filtered by message source. The source is currently
+  inferred from the message name (a publisher prefix such as `new_` reads as
+  custom), so custom messages are listed under Custom API.
 - **Execute Function** — OData function calls with parameter aliasing
   (`?@p1=...`) vs inline literal toggle. CSDL-driven param form with the
   same type-aware controls as actions.
@@ -98,6 +102,11 @@ curl, PowerShell).
   GET `/$value` OR `Initialize{...}BlocksDownload` / `DownloadBlock` for
   download.
 
+> The binary modes compose the request pipeline and its code, but the PPTB
+> Dataverse API doesn't expose these chunked operations, so **Execute returns
+> `501 Not Implemented`** in this group. Run the generated code from the Code
+> tab instead.
+
 ### 🔍 Cross-cutting capabilities
 
 - **Live metadata** — Tables, columns, relationships, alternate keys, action
@@ -113,17 +122,21 @@ curl, PowerShell).
 - **Polymorphic lookup support** — Customer, Owner, and multi-target lookups
   (`regardingobjectid`) emit the correct target-disambiguated
   `<navName>@odata.bind` binding shape automatically.
-- **Code generators** — Every mode emits the same request as
-  `Xrm.WebApi.online.execute` (single + `executeMultiple` batch),
-  `fetch`, `curl`, and PowerShell `Invoke-RestMethod` snippets. Multi-request
+- **Code generators** — Every mode emits the same request as `fetch`,
+  `Xrm.WebApi` (CRUD helpers or `Xrm.WebApi.online.execute`),
+  `Xrm.WebApi.online.executeMultiple`, `XMLHttpRequest`, C# `HttpClient`,
+  PowerShell `Invoke-RestMethod`, cURL, and a JSON description, plus a
+  field-by-field Power Automate (Dataverse connector) sheet. Multi-request
   pipelines (chunked uploads, message-based binary ops) render as full
   ordered sequences.
 - **Saved-request library** — Per-org localStorage persistence with
   auto-suggested names (`account · 3 sel · 2 flt · 2026-05-23`),
   rename / delete / overwrite, dirty-state detection, and cross-tab sync.
 - **PPTB host integration** — `isEmbedded()`-aware UI: theme sync,
-  environment-aware URLs, header pass-through, host-stripped header
-  advisories. Header / theme controls hide when the host owns them.
+  environment-aware URLs, and host-stripped header advisories. PPTB's
+  Dataverse API doesn't send custom request headers, so Execute is blocked
+  when a request depends on a precondition (`If-Match` / `If-None-Match`) or
+  `MSCRM.*` bypass header — copy it from the Code tab to run it elsewhere.
 
 ---
 
@@ -162,9 +175,10 @@ curl, PowerShell).
 
 ### Prerequisites
 
-- [Power Platform ToolBox](https://www.powerplatformtoolbox.com/) (for embedded use)
+- [Power Platform ToolBox](https://www.powerplatformtoolbox.com/) **1.2.0 or
+  later** (the tool declares `minAPI: 1.2.0`)
 - A connection to a Dataverse environment
-- For local development: **Node.js ≥ 20.19** and **npm**
+- For local development: **Node.js 20.19+ or 22.12+** (Vite 7) and **npm**
 
 ### Installation
 
@@ -210,9 +224,9 @@ npm run finalize-package
 DRS runs in two modes:
 
 - **Standalone** (`npm run dev`) — opens in a regular browser tab. Useful
-  for UI iteration. Execute will return `501 Not Implemented` for any
-  operation because the host bridge isn't present; you can still build
-  requests, preview URLs, and use the Code tab.
+  for UI iteration only: without the host bridge no live metadata loads, and
+  Execute returns an error result (HTTP 500, "PPTB host method … is not
+  available — running standalone").
 - **Embedded in PPTB** — loads inside the PPTB iframe. The host injects
   `window.dataverseAPI` (typed) and `window.toolboxAPI`. Execute runs
   against the active Dataverse connection.
@@ -244,7 +258,7 @@ src/
   App.tsx                    — root, ThemedApp, Frame, mode router
   main.tsx                   — Vite entry point
 
-  modes/                     — one file per request mode (17 modes)
+  modes/                     — request-mode components (19 modes)
     RetrieveMultipleMode.tsx
     RetrieveSingleMode.tsx
     RetrieveNextLinkMode.tsx
@@ -252,27 +266,33 @@ src/
     CreateMode.tsx / UpdateMode.tsx / UpsertMode.tsx / DeleteMode.tsx
     MergeMode.tsx
     AssociateMode.tsx / DisassociateMode.tsx
-    ExecuteActionMode.tsx / ExecuteFunctionMode.tsx / ExecuteWorkflowMode.tsx
+    ExecuteActionMode.tsx    — Execute Action / Custom API / Custom Action
+    ExecuteFunctionMode.tsx / ExecuteWorkflowMode.tsx
     ManageFileMode.tsx / ManageImageMode.tsx / ManageAttachmentMode.tsx
+    StubMode.tsx             — fallback for an unknown mode id
 
   editors/                   — clause editors shared across modes
     filter/                  — FilterEditor + value inputs + operator catalog
+    expand/                  — $expand tree navigation
     FieldSetEditor.tsx       — metadata-driven write-side form
     SelectEditor.tsx, OrderbyEditor.tsx, ExpandEditor.tsx, ApplyEditor.tsx
     ActionParamForm.tsx      — CSDL-driven action / function params
     BinarySourceCard.tsx, BinaryPipelineCard.tsx, BinaryColumnPickers.tsx
-    HeadersEditor.tsx, BypassEditor.tsx
-    ActionPicker.tsx, RecordPicker.tsx, EntityListPicker.tsx
+    HeadersEditor.tsx, BypassEditor.tsx, PreconditionEditor.tsx
+    ActionPicker.tsx, NavPropertyPicker.tsx, PasteODataDialog.tsx
     ...
 
   engine/                    — URL / body construction + code generation
     urlBuilder.ts            — central URL builder for every mode
     executeBuilders.ts       — action / function / workflow body builders
     binaryBuilders.ts        — file / image / attachment pipelines
-    codeGenerators.ts        — xrm, xrm-batch, fetch, curl, PowerShell
+    codeGenerators.ts        — fetch, Xrm.WebApi (+ executeMultiple), XHR,
+                               Power Automate, C#, PowerShell, cURL, JSON
     runtime.ts               — single dispatch point for execute
     dataverseExecutor.ts     — live executor over the host's dataverseAPI
     odataParser.ts           — round-trips OData URL strings ↔ state
+    antipatterns.tsx, bypassAdvisories.tsx, hostHeaderAdvisories.tsx
+                             — advisory detectors
 
   host/                      — PPTB bridge + metadata loaders
     pptbBridge.ts            — typed wrapper over window.dataverseAPI
@@ -282,26 +302,28 @@ src/
     useLiveMetadata.ts, useColumnDetail.ts, useScopedEntities.ts, …
 
   primitives/                — small reusable UI bits
-    Sidebar.tsx, ClauseTreeItem.tsx, SectionHeader.tsx, ModeCard.tsx
+    ClauseTreeItem.tsx, SectionHeader.tsx, ModeCard.tsx, RequestTypePicker.tsx
     StatusPill.tsx, MethodPill.tsx, AdvisoryDrawer.tsx, advisories.ts
     NavPathColumnPicker.tsx  — N:1 drill-down column picker for filter / apply
-    KvGrid.tsx, Sortable.tsx, SegmentedToggle.tsx, …
+    RecordPicker.tsx, KvGrid.tsx, Sortable.tsx, SegmentedToggle.tsx, …
 
-  shell/                     — frame / header / URL bar / tabs / drawers
-    Frame.tsx, FrameHeader.tsx, ModeShell.tsx
-    UrlBar.tsx, MainTabs.tsx, SettingsDrawer.tsx
+  shell/                     — header / sidebar / URL bar / tabs / drawers
+    FrameHeader.tsx, ModeShell.tsx, Sidebar.tsx
+    UrlBar.tsx, UrlTokens.tsx, MainTabs.tsx, SettingsDrawer.tsx
 
   state/                     — per-mode state shapes + persistence
     readState.ts, writeState.ts, relateState.ts, executeState.ts, binaryState.ts
     savedRequests.ts         — localStorage persistence (per-org scope)
     SaveContext.tsx          — cross-mode save/load context
+    validateRequest.tsx      — pre-execute request validation
     displaySettings.ts       — display preferences
 
   registry/                  — request-type catalogue
-    requestTypes.ts          — 17 request types grouped into 5 groups
+    requestTypes.ts          — 19 request types grouped into 5 groups
 
   views/                     — output panes
-    CodeView.tsx             — Code tab: xrm/xrm-batch/fetch/curl/powershell
+    CodeView.tsx             — Code tab: one sub-tab per code format
+    PowerAutomatePane.tsx    — Power Automate field-by-field sheet
     ResultsView.tsx          — tabs (Detail/Grid/JSON/Headers) + error state
     results/                 — grid + cell renderers + flattening
     detail/                  — record detail card
@@ -313,10 +335,13 @@ src/
 
 ## 📋 Web API coverage
 
+✅ = compose + Execute in PPTB · 📝 = compose + Code tab only (Execute is
+blocked or not available through the PPTB Dataverse API)
+
 | Operation | Status |
 |---|---|
 | Retrieve Multiple (full OData) | ✅ |
-| Retrieve Single (by GUID / alt key) | ✅ |
+| Retrieve Single (by GUID) | ✅ |
 | `@odata.nextLink` paging | ✅ |
 | Predefined / user queries | ✅ |
 | `$apply` (groupby / aggregate) | ✅ |
@@ -325,8 +350,8 @@ src/
 | Polymorphic lookups (Customer, Owner, regardingobjectid) | ✅ |
 | Create / Update / Upsert / Delete | ✅ |
 | `Prefer: return=representation` | ✅ |
-| Optimistic concurrency (`If-Match` ETag) | ✅ |
-| `MSCRM.*` bypass family (custom plug-ins, flows, async) | ✅ |
+| Optimistic concurrency (`If-Match` ETag) | 📝 |
+| `MSCRM.*` bypass family (custom plug-ins, flows, async) | 📝 |
 | Single-property PUT / DELETE | ✅ |
 | Alternate-key upsert | ✅ |
 | Associate / Disassociate (collection + single-valued) | ✅ |
@@ -334,9 +359,9 @@ src/
 | Execute Action (OOB / Custom API / Custom Action) | ✅ |
 | Execute Function | ✅ |
 | Execute Workflow | ✅ |
-| File column (upload / download / delete) | ✅ |
-| Image column (thumbnail / full-size) | ✅ |
-| Attachment / Note (inline + message-based) | ✅ |
+| File column (upload / download / delete) | 📝 |
+| Image column (thumbnail / full-size) | 📝 |
+| Attachment / Note (inline + message-based) | 📝 |
 | `$batch` envelope composer | ⏳ (see roadmap) |
 | `CreateMultiple` / `UpdateMultiple` / `DeleteMultiple` | ⏳ |
 | `BulkDelete` async job | ⏳ |

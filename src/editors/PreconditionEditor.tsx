@@ -10,7 +10,7 @@
 // `If-Match` / `If-None-Match` "preconditions". The four kinds:
 //
 //   • none         → no header emitted; server proceeds regardless
-//   • update-only  → If-Match: *           → 412 if record doesn't exist
+//   • update-only  → If-Match: *           → 404 if record doesn't exist (not 412)
 //   • create-only  → If-None-Match: *      → 412 if record exists (Upsert-only)
 //   • etag         → If-Match: "<etag>"    → 412 unless current version matches
 //
@@ -77,7 +77,7 @@ const KIND_META: Record<PreconditionKind, { title: string; header: string; body:
   'update-only': {
     title: 'Require existing record',
     header: 'If-Match: *',
-    body: "Fail with 412 Precondition Failed if no record matches the addressed key. Use to guarantee you're updating an existing row.",
+    body: "Fail with 404 Not Found if no record matches the addressed key, instead of creating one. Use to guarantee you're updating an existing row.",
   },
   'create-only': {
     title: 'Require absent record',

@@ -133,7 +133,8 @@ export function buildRetrieveMultiple(s: RetrieveMultipleState): BuiltRequest {
     }
     if (s.expand.length)
       parts.push({ key: '$expand', value: enc(expandToOData(s.expand, s.table)) });
-    if (s.orderby.length) parts.push({ key: '$orderby', value: enc(orderbyToOData(s.orderby)) });
+    if (s.orderby.length)
+      parts.push({ key: '$orderby', value: enc(orderbyToOData(s.orderby, tbl)) });
   }
   if (s.top != null && s.top > 0 && (s.prefer.maxpagesize == null || s.prefer.maxpagesize === 0)) {
     parts.push({ key: '$top', value: String(s.top) });

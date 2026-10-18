@@ -50,6 +50,7 @@ import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from '../editors/PaneHead';
 import { TargetEditor } from '../editors/TargetEditor';
@@ -88,6 +89,7 @@ import {
   type SavedRequest,
   type SerializedManageImageState,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 const initialState = (): ManageImageState => ({
@@ -118,7 +120,8 @@ type RootClauseId =
 
 export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('manage-image');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('manage-image', deserializeManageImage, initialState);
+  const [state, setState] = useState(draft.state);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
   // The live table is a memo dependency below: build*() reads metadata via
   // findTable(), which is empty until the fetch lands — keying on `state`
@@ -204,9 +207,10 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const { entities } = useScopedEntities();
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const currentSerialized = useMemo(() => serializeManageImage(state), [state]);
+  useStashModeDraft('manage-image', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
   const onSaved = (saved: SavedRequest) => {
@@ -217,7 +221,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
     if (entry.modeId !== 'manage-image') return;
     const snap = entry.state as SerializedManageImageState;
     if (entities.length > 0 && snap.table && !entities.some((e) => e.logicalName === snap.table)) {
-      window.alert(
+      notify(
         `Can't load "${entry.name}": entity \`${snap.table}\` ` +
           `isn't available in this environment.`,
       );
@@ -468,6 +472,10 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
               dirty: new Set(['target', 'column']),
             }));
             setResult(null);
+            // New table → fresh draft. Forget the last save so Save can't
+            // overwrite an entry that belongs to the old table (#58).
+            setLastSavedId(undefined);
+            setLastSavedHash(null);
           }}
           recordId={state.recordId}
           onRecordChange={(id, primary) => {

@@ -51,6 +51,7 @@ import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { PaneHead } from '../editors/PaneHead';
 import { TargetEditor } from '../editors/TargetEditor';
 import { SelectEditor } from '../editors/SelectEditor';
@@ -87,7 +88,9 @@ import {
   type SavedRequest,
   type SerializedUpdateState,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { isRecordGuid } from '../primitives/guid';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -110,9 +113,7 @@ const initialState = (): UpdateState => ({
 // GUID shape — match what RecordPicker accepts. Invalid GUIDs short-circuit
 // the live fetch (no point sending a malformed id over the wire) and
 // surface an advisory instead.
-const GUID_RE =
-  /^[{(]?[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}[)}]?$/;
-const isValidGuid = (s: string | null | undefined): boolean => !!s && GUID_RE.test(s.trim());
+const isValidGuid = isRecordGuid;
 
 type RootClauseId =
   | 'target'
@@ -127,7 +128,8 @@ type RootClauseId =
 
 export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('update');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('update', deserializeUpdate, initialState);
+  const [state, setState] = useState(draft.state);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
   // We also need the loading flag so the Diff pane doesn't flash "Couldn't load"
   // during the brief window between (a) picker firing → recordId set, and
@@ -146,8 +148,8 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
   // Last-saved tracking → Save button dirty/clean state, library checkmark.
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   // Primary name from the RecordPicker — used as a fallback label until
   // the live row fetch completes (Search-mode picks deliver this for free).
   // Keyed by the record it was picked for: any other path that changes
@@ -274,6 +276,7 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeUpdate(state), [state]);
+  useStashModeDraft('update', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 
@@ -286,7 +289,7 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
     if (entry.modeId !== 'update') return;
     const snap = entry.state as SerializedUpdateState;
     if (entities.length > 0 && !entities.some((e) => e.logicalName === snap.table)) {
-      window.alert(
+      notify(
         `Can't load "${entry.name}": entity \`${snap.table}\` ` +
           `isn't available in this environment. The solution may have been ` +
           `removed or you may be connected to a different org.`,
@@ -661,6 +664,10 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
             }));
             setResult(null);
             setPickerPick(null);
+            // New table → fresh draft. Forget the last save so Save can't
+            // overwrite an entry that belongs to the old table (#58).
+            setLastSavedId(undefined);
+            setLastSavedHash(null);
           }}
           recordId={state.recordId}
           onRecordChange={(id, primary) => {

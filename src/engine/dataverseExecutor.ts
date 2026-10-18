@@ -33,6 +33,7 @@
 
 import { dvHost, HostNotAvailableError, hostSupportsAdditionalHeaders } from '../host/pptbBridge';
 import { metadata } from '../host/metadataProvider';
+import { cleanHostMessage } from './hostErrorText';
 import {
   buildRetrieveMultiple,
   buildRetrieveSingle,
@@ -188,13 +189,15 @@ function statusFromMessage(message: string): number | undefined {
 }
 
 /** The one shape every failed ExecResult takes. `statusText` defaults from
- *  the status; status `0` means the host didn't report one. */
+ *  the status; status `0` means the host didn't report one. `rawMessage`
+ *  keeps the host's unedited text (IPC wrapper included) for the JSON view. */
 function failure(
   status: number,
-  error: { code?: string; message: string },
+  error: { code?: string; message: string; rawMessage?: string },
   ms: number,
   statusText?: string,
 ): ExecResult {
+  const { code: _code, ...withoutCode } = error;
   return {
     status,
     statusText:
@@ -203,7 +206,7 @@ function failure(
     bytes: 0,
     ok: false,
     outcome: outcomeFor(status),
-    body: { error: error.code ? error : { message: error.message } },
+    body: { error: error.code ? error : withoutCode },
     headers: {},
   };
 }
@@ -229,7 +232,11 @@ function mapError(err: unknown, ms: number, sentHeaders?: Record<string, string>
     );
   }
   const e: HostError = isHostError(err) ? err : {};
-  const message = e.message ?? e.innererror?.message ?? String(err);
+  const rawMessage = e.message ?? e.innererror?.message ?? String(err);
+  // Drop Electron's "Error invoking remote method '…': Error: " (#188); the
+  // raw text stays on the result body when it differs.
+  const message = cleanHostMessage(rawMessage);
+  const raw = rawMessage !== message ? { rawMessage } : {};
   if (sentHeaders && CONSENT_DECLINED_RE.test(message)) {
     return failure(
       403,
@@ -239,6 +246,7 @@ function mapError(err: unknown, ms: number, sentHeaders?: Record<string, string>
           `Power Platform ToolBox didn't send this request because its headers ` +
           `(${Object.keys(sentHeaders).join(', ')}) weren't approved, so nothing reached Dataverse. ` +
           `Execute again and allow the headers when ToolBox asks. Host message: ${message}`,
+        ...raw,
       },
       ms,
       'Headers not approved',
@@ -252,6 +260,7 @@ function mapError(err: unknown, ms: number, sentHeaders?: Record<string, string>
         message:
           `Power Platform ToolBox rejected a request header, so nothing was sent to Dataverse. ` +
           `Fix the header in the Headers pane. Host message: ${message}`,
+        ...raw,
       },
       ms,
     );
@@ -260,7 +269,7 @@ function mapError(err: unknown, ms: number, sentHeaders?: Record<string, string>
   // a 400-class rejection.
   const status = e.statusCode ?? e.status ?? statusFromMessage(message) ?? 0;
   const code = e.code ?? dataverseCodeIn(message);
-  return failure(status, { code, message }, ms);
+  return failure(status, { code, message, ...raw }, ms);
 }
 
 function ok(status: number, body: unknown, ms: number): ExecResult {
@@ -719,6 +728,18 @@ export async function executeManageImage(_s: ManageImageState): Promise<ExecResu
 
 export async function executeManageAttachment(_s: ManageAttachmentState): Promise<ExecResult> {
   return hostNotSupported('Manage Attachment/Annotation (chunked upload/download)', 0);
+}
+
+// ── Unexpected failures ──────────────────────────────────────────────────
+
+/**
+ * Result for an exception thrown while running a request (outside `timed`,
+ * e.g. a `$metadata` fetch failing inside `actions.find`). `runtime` routes
+ * every throw through this so a mode's Execute always gets a result back
+ * and its spinner clears (#102).
+ */
+export function execFailure(err: unknown, ms: number): ExecResult {
+  return mapError(err, ms);
 }
 
 // ── Bridge connectivity check (used by an "are we online" indicator) ─────

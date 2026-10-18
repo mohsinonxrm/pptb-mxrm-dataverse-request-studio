@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Table20Regular,
   Table20Filled,
@@ -30,6 +30,7 @@ import { collectStrippedWildcards } from '../editors/filter/filterTree';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { validateRequest } from '../state/validateRequest';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { TargetEditor } from '../editors/TargetEditor';
 import { SelectEditor } from '../editors/SelectEditor';
 import { FilterEditor } from '../editors/filter/FilterEditor';
@@ -39,13 +40,17 @@ import { ApplyEditor, emptyApply } from '../editors/ApplyEditor';
 import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/PreferEditor';
 import { HeadersEditor, defaultReadHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { ExpandRouter } from '../editors/expand/ExpandRouter';
-import { hasCollectionInvolvedNestedExpand } from '../editors/expand/expandTree';
+import {
+  hasCollectionExpandWithNestedExpand,
+  hasCollectionInvolvedNestedExpand,
+} from '../editors/expand/expandTree';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { countRules, newId } from '../editors/filter/filterTree';
 import { findTable } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildRetrieveMultiple } from '../engine/urlBuilder';
+import { relatedMetadataAdvisories } from '../engine/navPath';
 // Phase 1 wiring: routes through `runtime.retrieveMultiple` which auto-picks
 // the live (dvHost.queryData) or mock executor based on `isEmbedded()`. The
 // mode doesn't need to know which.
@@ -59,6 +64,7 @@ import {
   type SavedRequest,
   type SerializedRetrieveMultipleState,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import type { ThemeMode } from '../theme/theme';
 // Live-metadata hook: subscribes to the registry so child editors
@@ -66,6 +72,7 @@ import type { ThemeMode } from '../theme/theme';
 // re-render when columns + relationships land from Dataverse.
 import { useLiveTable, useWarmReferencedTables } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
+import { topLevelRowCount } from '../views/results/flattenExpansions';
 
 // Empty initial state — the studio is a request *builder*; seeding it with
 // mock data confused users in PPTB ("why are there pre-filled rules against
@@ -112,7 +119,8 @@ type RootClauseId =
 
 export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('retrieve-multiple');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('retrieve-multiple', deserializeRetrieveMultiple, initialState);
+  const [state, setState] = useState(draft.state);
   // Default the active sidebar to 'target' so the user lands on the table
   // picker. Previously this opened on '$filter', which made no sense when
   // the initial state is empty (you can't filter against a table you haven't
@@ -144,7 +152,9 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // against the correct entity (issue #33) — even on saved-request reload,
   // pasted-URL apply, or a direct Execute where no editor was opened to
   // lazily trigger the loads.
-  useWarmReferencedTables(state.table || null, {
+  // `relatedVersion` bumps when a related table lands so `built` re-encodes
+  // (#63); `pending` / `failed` drive the metadata advisory.
+  const related = useWarmReferencedTables(state.table || null, {
     filter: state.filter,
     expand: state.expand,
     apply: state.apply,
@@ -165,9 +175,10 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // Reset id on entity change (saved entries are scoped to one entity
   // at a time semantically — switching entities effectively starts a
   // fresh draft that can be saved separately).
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const currentSerialized = useMemo(() => serializeRetrieveMultiple(state), [state]);
+  useStashModeDraft('retrieve-multiple', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   // Dirty when: never saved (no hash baseline) AND state has any meaningful
   // content (table picked), OR saved but the current hash diverges.
@@ -177,7 +188,11 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     return currentHash !== lastSavedHash;
   }, [state.table, lastSavedHash, currentHash]);
 
-  const built = useMemo(() => buildRetrieveMultiple(state), [state, liveTable]);
+  const built = useMemo(
+    () => buildRetrieveMultiple(state),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state, liveTable, related.version],
+  );
   const tbl = findTable(state.table);
   const filterCount = useMemo(() => countRules(state.filter), [state.filter]);
 
@@ -225,7 +240,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     if (entitiesLoaded) {
       const known = entities.some((e) => e.logicalName === snap.table);
       if (!known) {
-        window.alert(
+        notify(
           `Can't load "${entry.name}": entity \`${snap.table}\` ` +
             `isn't available in this environment. The solution may have been ` +
             `removed or you may be connected to a different org.`,
@@ -238,7 +253,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     setState(deserializeRetrieveMultiple(snap));
     setLastSavedId(entry.id);
     setLastSavedHash(hashState(snap));
-    setResult(null);
+    clearResult();
     setActivePath('target');
   };
 
@@ -262,13 +277,44 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     ),
   );
 
+  // ── Run identity ──
+  // Every Execute (and every reset that clears the results) starts a new
+  // "run". Paging handlers capture the run id when they start and drop
+  // their merge if it changed while they were awaiting — otherwise a long
+  // Retrieve All for the previous query overwrote the newer query's
+  // results when it finished (#98). Executing therefore also cancels any
+  // in-flight paging.
+  const runIdRef = useRef(0);
+  // Bumped by Stop to end a Retrieve All, keeping the rows already merged.
+  const pagingIdRef = useRef(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  // Last next-page failure, shown above the grid. Auto-load on scroll is
+  // paused while it's set so a failing page isn't retried on every scroll.
+  const [pageError, setPageError] = useState<string | null>(null);
+
+  const startRun = () => {
+    runIdRef.current += 1;
+    setIsLoadingMore(false);
+    setPageError(null);
+    return runIdRef.current;
+  };
+  const clearResult = () => {
+    // Also drops an in-flight Execute's response (it belonged to the
+    // request being reset), so its spinner must stop here.
+    startRun();
+    setLoading(false);
+    setResult(null);
+  };
+
   const onExecute = async () => {
+    const run = startRun();
     setLoading(true);
     const res = await runtime.retrieveMultiple(state);
+    // A newer Execute (e.g. Refresh clicked mid-flight) owns the results now.
+    if (runIdRef.current !== run) return;
     setResult(res);
     setLoading(false);
     setTab('results');
-    const rows = (res.body as { value?: unknown[] } | null)?.value;
     setRecents((rs) =>
       [
         {
@@ -279,7 +325,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
           ts: Date.now(),
           status: res.status,
           ms: res.ms,
-          rowCount: Array.isArray(rows) ? rows.length : undefined,
+          rowCount: topLevelRowCount(res.body),
         },
         ...rs,
       ].slice(0, 8),
@@ -292,64 +338,96 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // for the next page sits on the response envelope). We append next-page
   // rows onto the existing body so the grid keeps everything in one
   // virtualized list — no client-side paging needed.
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-
-  const fetchOneMorePage = async () => {
-    const nextLink = (result?.body as { '@odata.nextLink'?: string } | null)?.['@odata.nextLink'];
-    if (!nextLink || isLoadingMore) return;
-    setIsLoadingMore(true);
-    try {
-      const more = await runtime.absoluteUrl(nextLink);
-      if (!more.ok) {
-        setIsLoadingMore(false);
-        return;
-      }
-      const prevRows = (result?.body as { value?: Record<string, unknown>[] } | null)?.value ?? [];
-      const moreRows = (more.body as { value?: Record<string, unknown>[] } | null)?.value ?? [];
-      const moreNext = (more.body as { '@odata.nextLink'?: string } | null)?.['@odata.nextLink'];
+  //
+  // Each page is merged into the CURRENT result (functional update), and
+  // only while the run that requested it is still current. A failed page
+  // keeps the rows + nextLink already loaded, so the user can retry.
+  const appendPage = (more: ExecResult) => {
+    const moreRows = (more.body as { value?: Record<string, unknown>[] } | null)?.value ?? [];
+    const moreNext = (more.body as { '@odata.nextLink'?: string } | null)?.['@odata.nextLink'];
+    setResult((r) => {
+      if (!r) return r;
+      const prevBody = (r.body as Record<string, unknown> | null) ?? {};
+      const prevRows = (prevBody as { value?: Record<string, unknown>[] }).value ?? [];
       // Merge: keep existing envelope, replace `value` + carry the new nextLink (or drop it if exhausted).
       const mergedBody: Record<string, unknown> = {
-        ...((result?.body as Record<string, unknown> | null) ?? {}),
+        ...prevBody,
         value: [...prevRows, ...moreRows],
       };
       if (moreNext) mergedBody['@odata.nextLink'] = moreNext;
       else delete mergedBody['@odata.nextLink'];
-      setResult((r) =>
-        r ? { ...r, body: mergedBody, bytes: JSON.stringify(mergedBody).length } : r,
-      );
+      return { ...r, body: mergedBody, bytes: JSON.stringify(mergedBody).length };
+    });
+    return moreNext;
+  };
+
+  const describePageError = (more: ExecResult) => {
+    const msg = (more.body as { error?: { message?: string } } | null)?.error?.message;
+    // Status 0 means the host didn't report one (#59): show the status text
+    // (or a generic label) rather than a misleading "HTTP 0".
+    const status = more.status ? `HTTP ${more.status}` : more.statusText || 'Request failed';
+    return `${status}${msg ? ` — ${msg}` : ''}`;
+  };
+
+  // Shared start-up for both paging handlers: claims a paging id under the
+  // current run and returns a check for "still allowed to merge".
+  const beginPaging = () => {
+    const run = runIdRef.current;
+    const paging = ++pagingIdRef.current;
+    setIsLoadingMore(true);
+    setPageError(null);
+    return () => runIdRef.current === run && pagingIdRef.current === paging;
+  };
+
+  const fetchOneMorePage = async () => {
+    const nextLink = (result?.body as { '@odata.nextLink'?: string } | null)?.['@odata.nextLink'];
+    if (!nextLink || isLoadingMore) return;
+    const isCurrent = beginPaging();
+    try {
+      const more = await runtime.absoluteUrl(nextLink);
+      if (!isCurrent()) return;
+      if (!more.ok) {
+        setPageError(`Couldn't load the next page: ${describePageError(more)}`);
+        return;
+      }
+      appendPage(more);
     } finally {
-      setIsLoadingMore(false);
+      if (isCurrent()) setIsLoadingMore(false);
     }
   };
 
   const retrieveAllPages = async () => {
-    if (isLoadingMore) return;
-    setIsLoadingMore(true);
+    let nextLink = (result?.body as { '@odata.nextLink'?: string } | null)?.['@odata.nextLink'];
+    if (!nextLink || isLoadingMore) return;
+    const isCurrent = beginPaging();
     try {
-      // Walk the envelope chain; mergedBody mutates in place inside the loop.
-      let mergedBody = result?.body as Record<string, unknown> | null;
-      let nextLink = (mergedBody as { '@odata.nextLink'?: string } | null)?.['@odata.nextLink'];
-      const allRows = (
-        (mergedBody as { value?: Record<string, unknown>[] } | null)?.value ?? []
-      ).slice();
       let guard = 0;
       while (nextLink && guard++ < 200) {
         // hard safety cap
         const more = await runtime.absoluteUrl(nextLink);
-        if (!more.ok) break;
-        const moreRows = (more.body as { value?: Record<string, unknown>[] } | null)?.value ?? [];
-        allRows.push(...moreRows);
-        nextLink = (more.body as { '@odata.nextLink'?: string } | null)?.['@odata.nextLink'];
+        // Superseded by a newer Execute / reset, or stopped by the user.
+        if (!isCurrent()) return;
+        if (!more.ok) {
+          setPageError(`Retrieve all stopped at a failed page: ${describePageError(more)}`);
+          return;
+        }
+        nextLink = appendPage(more);
       }
-      mergedBody = { ...(mergedBody ?? {}), value: allRows };
-      if (nextLink) (mergedBody as Record<string, unknown>)['@odata.nextLink'] = nextLink;
-      else delete (mergedBody as Record<string, unknown>)['@odata.nextLink'];
-      setResult((r) =>
-        r ? { ...r, body: mergedBody, bytes: JSON.stringify(mergedBody).length } : r,
-      );
     } finally {
-      setIsLoadingMore(false);
+      if (isCurrent()) setIsLoadingMore(false);
     }
+  };
+
+  // Stop keeps every page merged so far; the remaining nextLink stays on
+  // the envelope so scrolling / Retrieve all can resume.
+  const stopLoadingMore = () => {
+    pagingIdRef.current += 1;
+    setIsLoadingMore(false);
+  };
+
+  const retryLoadMore = () => {
+    setPageError(null);
+    void fetchOneMorePage();
   };
 
   // ── Advisories — query antipatterns + stripped wildcards ────────────
@@ -387,43 +465,58 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
       apply: state.apply,
     });
 
-    // Dataverse rule (empirically confirmed against the docs):
-    //   When the query contains a nested $expand AND ANY expand in the
-    //   tree targets a collection-valued nav (1:N or N:N), the top-level
-    //   $top and $orderby are forbidden. Server returns:
-    //     0x80060888 "Only $select, $filter and $orderby clauses can be
-    //                provided at top level while doing $expand on nested
-    //                one-to-many relationship."
-    //   (yes — the error names $orderby as both allowed and forbidden;
-    //    empirically $orderby is also rejected when $top is also set,
-    //    so we treat both as blockers.)
-    //
-    // Workaround: drop $top (and any non-empty $orderby) and use
-    // `Prefer: odata.maxpagesize=N` instead. The mode's PreferEditor
-    // already has the slot.
+    // Dataverse rule (#126, confirmed live): when a collection-valued
+    // $expand (1:N / N:N) itself has a nested $expand, top-level $top is
+    // rejected with 400 0x80060888 "Only $select, $filter and $orderby
+    // clauses can be provided at top level while doing $expand on nested
+    // one-to-many relationship." — a blocker. Workaround: drop $top and use
+    // `Prefer: odata.maxpagesize` (the PreferEditor has the slot).
+    // Other nested shapes that merely involve a collection (e.g. N:1 → 1:N)
+    // keep a non-blocking warning; the server is the arbiter there.
     const collectionNested =
       state.table && hasCollectionInvolvedNestedExpand(state.expand, state.table);
+    const collectionWithNested =
+      !!state.table && hasCollectionExpandWithNestedExpand(state.expand, state.table);
     const nestingAdvisories: Advisory[] = [];
-    if (collectionNested && state.top != null) {
+    if (collectionWithNested && state.top != null) {
       nestingAdvisories.push({
         id: 'nested-collection-top',
         severity: 'error',
         source: 'validation',
         focusNode: 'top',
-        title: '$top is forbidden with a nested $expand on a collection',
+        title: '$top is forbidden when a collection $expand has a nested $expand',
         body: (
           <>
-            Your query has a nested <code>$expand</code> involving a 1:N or N:N relationship.
-            Dataverse rejects top-level <code>$top</code> in this shape:{' '}
+            A 1:N or N:N <code>$expand</code> in your query has its own nested <code>$expand</code>.
+            Dataverse rejects top-level <code>$top</code> in this shape (<code>0x80060888</code>):{' '}
             <em>
               "Only $select, $filter and $orderby clauses can be provided at top level while doing
               $expand on nested one-to-many relationship."
             </em>
             <br />
             Drop <code>$top</code> and use <code>Prefer: odata.maxpagesize</code> in the Prefer pane
-            instead — paging will then apply correctly to each expanded collection.
+            instead.
           </>
         ),
+        learnMoreUrl:
+          'https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/query/join-tables#nested-expand-on-collection-valued-navigation-properties',
+      });
+    } else if (collectionNested && state.top != null) {
+      nestingAdvisories.push({
+        id: 'nested-collection-top',
+        severity: 'warning',
+        source: 'validation',
+        focusNode: 'top',
+        title: '$top with a nested $expand involving a collection',
+        body: (
+          <>
+            Your query has a nested <code>$expand</code> involving a 1:N or N:N relationship. If
+            Dataverse rejects <code>$top</code> (<code>0x80060888</code>), drop it and use{' '}
+            <code>Prefer: odata.maxpagesize</code> in the Prefer pane instead.
+          </>
+        ),
+        learnMoreUrl:
+          'https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/query/join-tables#nested-expand-on-collection-valued-navigation-properties',
       });
     }
     if (collectionNested && state.orderby.length > 0) {
@@ -435,15 +528,20 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
         title: '$orderby is forbidden with a nested $expand on a collection',
         body: (
           <>
-            Same Dataverse rule as the <code>$top</code> case — top-level <code>$orderby</code>{' '}
-            isn't allowed when a nested <code>$expand</code> involves a 1:N or N:N. Either clear{' '}
-            <code>$orderby</code>, or sort client-side after the request returns.
+            Top-level <code>$orderby</code> isn't allowed when a nested <code>$expand</code>{' '}
+            involves a 1:N or N:N. Either clear <code>$orderby</code>, or sort client-side after the
+            request returns.
           </>
         ),
       });
     }
 
-    return [...antipatterns, ...validations, ...nestingAdvisories];
+    return [
+      ...antipatterns,
+      ...validations,
+      ...nestingAdvisories,
+      ...relatedMetadataAdvisories(related.pending, related.failed),
+    ];
   }, [
     state.table,
     state.select,
@@ -452,6 +550,8 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     state.expand,
     state.apply,
     state.top,
+    related.pending.join(','),
+    related.failed.join(','),
   ]);
 
   const blockerReason = disabledReasonFromAdvisories(advisories);
@@ -737,7 +837,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
                 apply: emptyApply(),
                 dirty: new Set(['target']),
               }));
-              setResult(null);
+              clearResult();
               // Entity change → effectively a fresh draft. Clear the
               // "last saved" reference so the Save button doesn't try to
               // overwrite a save belonging to a different entity.
@@ -759,7 +859,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
                 apply: emptyApply(),
                 dirty: new Set(['target']),
               }));
-              setResult(null);
+              clearResult();
             }}
             onApplyParsed={(parsed) => {
               // Apply a parsed OData URL. If the parser resolved the entity
@@ -777,7 +877,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
                 apply: parsed.apply ?? emptyApply(),
                 dirty: new Set(['target']),
               }));
-              setResult(null);
+              clearResult();
               // Bring the user to the filter pane if there's a filter; else
               // to select; else stay on target so they see what landed.
               if (parsed.filter.rules.length > 0) setActivePath('filter');
@@ -903,8 +1003,12 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
             requestUrl={built.relativeUrl}
             isLoadingMore={isLoadingMore}
             onRefresh={onExecute}
-            onLoadMore={fetchOneMorePage}
+            onLoadMore={pageError ? undefined : fetchOneMorePage}
             onRetrieveAll={retrieveAllPages}
+            onStopLoadingMore={stopLoadingMore}
+            loadMoreError={pageError}
+            onRetryLoadMore={retryLoadMore}
+            onDismissLoadMoreError={() => setPageError(null)}
           />
         )}
       </MainTabs>

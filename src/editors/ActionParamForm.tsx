@@ -58,7 +58,7 @@ import {
   Code20Regular,
   Open20Regular,
 } from '@fluentui/react-icons';
-import Editor from '@monaco-editor/react';
+import Editor from '../monaco/MonacoEditor';
 import { SegmentedToggle } from '../primitives/SegmentedToggle';
 import type { ThemeMode } from '../theme/theme';
 import { FieldSetEditor } from './FieldSetEditor';
