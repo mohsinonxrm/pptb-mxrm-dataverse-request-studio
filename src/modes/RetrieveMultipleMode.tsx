@@ -58,6 +58,7 @@ import {
   deserializeRetrieveMultiple,
   type SavedRequest,
   type SerializedRetrieveMultipleState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
 import type { ThemeMode } from '../theme/theme';
@@ -242,6 +243,19 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     setActivePath('target');
   };
 
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'retrieve-multiple');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
+  };
+
   // Publish our save context to the top-right Save / Saved-library
   // buttons in FrameHeader. Each render re-publishes the current values;
   // the hook clears on unmount so a stale mode doesn't bleed across
@@ -273,6 +287,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: 'retrieve-multiple',
           url: built.relativeUrl,
           method: 'GET',
@@ -874,6 +889,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={

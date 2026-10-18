@@ -64,6 +64,7 @@ import {
   hashState,
   type SavedRequest,
   type SerializedAssociateState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
 
@@ -155,6 +156,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: 'associate',
           url: built.relativeUrl,
           method,
@@ -196,6 +198,19 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(null);
     setSourceName('');
     setActivePath('source');
+  };
+
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'associate');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
   };
 
   usePublishSaveContext(
@@ -431,6 +446,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={

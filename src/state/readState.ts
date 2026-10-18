@@ -58,4 +58,10 @@ export interface RecentRun {
   status: number;
   ms: number;
   rowCount?: number;
+  /**
+   * Serialized mode state at execute time (same shape the Saved library
+   * stores). Lets the sidebar restore the run on click (#2). Absent for
+   * modes without a serializer (e.g. Retrieve NextLink).
+   */
+  snapshot?: unknown;
 }

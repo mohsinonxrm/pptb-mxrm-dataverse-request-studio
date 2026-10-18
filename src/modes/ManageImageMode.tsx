@@ -87,6 +87,7 @@ import {
   hashState,
   type SavedRequest,
   type SerializedManageImageState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
 
@@ -188,6 +189,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: 'manage-image',
           url: built.relativeUrl,
           method: firstStepMethod,
@@ -229,6 +231,19 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(null);
     setRecordName('');
     setActivePath('preview');
+  };
+
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'manage-image');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
   };
   usePublishSaveContext(
     useMemo(() => {
@@ -599,6 +614,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={

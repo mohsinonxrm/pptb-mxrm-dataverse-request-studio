@@ -58,6 +58,9 @@ export function Sidebar({
   onRecentClick,
 }: SidebarProps) {
   const s = useStudioStyles();
+  // A recent-run row is a button only when it can actually restore
+  // something (#2): the mode wired a handler and the run has a snapshot.
+  const isRestorable = (r: RecentRun) => !!onRecentClick && r.snapshot !== undefined;
   return (
     <aside className={s.sidebar}>
       <ModeCard type={type} urlPreview={urlPreview} />
@@ -94,12 +97,18 @@ export function Sidebar({
               {recents.map((r) => (
                 <div
                   key={r.id}
-                  className={s.recentRow}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onRecentClick?.(r)}
+                  className={isRestorable(r) ? s.recentRow : s.recentRowStatic}
+                  role={isRestorable(r) ? 'button' : undefined}
+                  tabIndex={isRestorable(r) ? 0 : undefined}
+                  title={isRestorable(r) ? `Restore this run · ${r.url}` : r.url}
+                  aria-label={
+                    isRestorable(r)
+                      ? `Restore run: ${r.method} ${r.url}, status ${r.status || 'error'}`
+                      : undefined
+                  }
+                  onClick={() => isRestorable(r) && onRecentClick?.(r)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
+                    if (isRestorable(r) && (e.key === 'Enter' || e.key === ' ')) {
                       e.preventDefault();
                       onRecentClick?.(r);
                     }

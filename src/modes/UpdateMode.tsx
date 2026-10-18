@@ -86,6 +86,7 @@ import {
   hashState,
   type SavedRequest,
   type SerializedUpdateState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
 
@@ -300,6 +301,19 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
     setActivePath('target');
   };
 
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'update');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
+  };
+
   // Publish save context. Hidden until the user has a table picked —
   // no point persisting an empty shell.
   usePublishSaveContext(
@@ -355,6 +369,7 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: 'update',
           url: built.relativeUrl,
           method: state.method,
@@ -803,6 +818,7 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={

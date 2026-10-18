@@ -72,6 +72,7 @@ import {
   hashState,
   type SavedRequest,
   type SerializedCreateState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
 
@@ -198,6 +199,7 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: 'create',
           url: built.relativeUrl,
           method: 'POST',
@@ -259,6 +261,19 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedHash(hashState(snap));
     setResult(null);
     setActivePath('target');
+  };
+
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'create');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
   };
 
   // Publish — hidden until table picked, no point persisting empty shell.
@@ -487,6 +502,7 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={
