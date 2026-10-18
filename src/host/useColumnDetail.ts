@@ -270,7 +270,7 @@ export function useColumnDetail(
 
     const run =
       which === 'optionset'
-        ? loadAttributeWithOptionSet(entityLogical, columnLogical)
+        ? loadAttributeWithOptionSet(entityLogical, columnLogical, col.attributeType)
         : loadAttributeDetailedMetadata(entityLogical, columnLogical, col.attributeType);
 
     run

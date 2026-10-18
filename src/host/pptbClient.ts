@@ -376,22 +376,35 @@ export async function getEntityAttributes(
 export async function getAttributeWithOptionSet(
   entityLogicalName: string,
   attributeLogicalName: string,
+  /** The column's AttributeType when the caller already knows it — skips
+   *  the lookup and picks the cast directly, so a State column always reads
+   *  StateAttributeMetadata's OptionSet (#199). */
+  knownAttributeType?: string,
 ): Promise<AttributeMetadata> {
   if (!isDataverseAvailable()) throw new Error('PPTB Dataverse API not available');
 
-  // Step 1: confirm AttributeType so we know which type-cast to use.
-  const basicQuery =
-    `EntityDefinitions(LogicalName='${entityLogicalName}')/Attributes(LogicalName='${attributeLogicalName}')` +
-    `?$select=AttributeType,LogicalName,SchemaName,DisplayName,MetadataId`;
+  // Step 1: confirm AttributeType so we know which type-cast to use (skipped
+  // when the caller passes it).
+  let basicAttr: AttributeMetadata;
+  if (knownAttributeType) {
+    basicAttr = {
+      LogicalName: attributeLogicalName,
+      AttributeType: knownAttributeType,
+    } as unknown as AttributeMetadata;
+  } else {
+    const basicQuery =
+      `EntityDefinitions(LogicalName='${entityLogicalName}')/Attributes(LogicalName='${attributeLogicalName}')` +
+      `?$select=AttributeType,LogicalName,SchemaName,DisplayName,MetadataId`;
 
-  const basicResult = await throttledMetadataQuery<{ value?: unknown[] } & Record<string, unknown>>(
-    basicQuery,
-  );
-  // Single-attribute reads return the record directly OR wrapped in `value[0]`.
-  const basicAttr = (basicResult.value?.[0] || basicResult) as unknown as AttributeMetadata;
+    const basicResult = await throttledMetadataQuery<
+      { value?: unknown[] } & Record<string, unknown>
+    >(basicQuery);
+    // Single-attribute reads return the record directly OR wrapped in `value[0]`.
+    basicAttr = (basicResult.value?.[0] || basicResult) as unknown as AttributeMetadata;
 
-  if (!basicAttr || !basicAttr.LogicalName) {
-    throw new Error(`Attribute ${attributeLogicalName} not found in entity ${entityLogicalName}`);
+    if (!basicAttr || !basicAttr.LogicalName) {
+      throw new Error(`Attribute ${attributeLogicalName} not found in entity ${entityLogicalName}`);
+    }
   }
 
   let typeCast = '';
