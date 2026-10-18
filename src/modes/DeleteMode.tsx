@@ -109,6 +109,7 @@ import {
   type SerializedDeleteState,
 } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { isRecordGuid } from '../primitives/guid';
 
 const initialState = (): DeleteState => ({
   table: '',
@@ -128,9 +129,7 @@ type RootClauseId = 'target' | 'scope' | 'confirmation' | 'precondition' | 'head
 // GUID shape — Dataverse rejects malformed ids at the wire level, but we
 // surface the mismatch via an advisory so the user finds out before the
 // DELETE is sent (we don't want an irreversible round-trip on a typo).
-const GUID_RE =
-  /^[{(]?[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}[)}]?$/;
-const isValidGuid = (s: string | null | undefined): boolean => !!s && GUID_RE.test(s.trim());
+const isValidGuid = isRecordGuid;
 
 export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('delete');

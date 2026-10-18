@@ -90,6 +90,7 @@ import {
   type SerializedMergeState,
 } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { isRecordGuid } from '../primitives/guid';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -112,9 +113,7 @@ const initialState = (): MergeState => ({
   subordinateSnapshot: null,
 });
 
-const GUID_RE =
-  /^[{(]?[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}[)}]?$/;
-const isValidGuid = (s: string | null | undefined): boolean => !!s && GUID_RE.test(s.trim());
+const isValidGuid = isRecordGuid;
 
 type RootClauseId = 'target' | 'subordinate' | 'fielddiff' | 'options' | 'headers' | 'bypass';
 

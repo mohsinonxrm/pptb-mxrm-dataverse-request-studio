@@ -88,6 +88,7 @@ import {
   type SerializedUpdateState,
 } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { isRecordGuid } from '../primitives/guid';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -110,9 +111,7 @@ const initialState = (): UpdateState => ({
 // GUID shape — match what RecordPicker accepts. Invalid GUIDs short-circuit
 // the live fetch (no point sending a malformed id over the wire) and
 // surface an advisory instead.
-const GUID_RE =
-  /^[{(]?[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}[)}]?$/;
-const isValidGuid = (s: string | null | undefined): boolean => !!s && GUID_RE.test(s.trim());
+const isValidGuid = isRecordGuid;
 
 type RootClauseId =
   | 'target'

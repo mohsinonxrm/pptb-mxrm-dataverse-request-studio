@@ -45,6 +45,7 @@ import {
   Tooltip,
 } from '@fluentui/react-components';
 import { Dismiss16Regular, Warning20Filled, CheckmarkCircle16Filled } from '@fluentui/react-icons';
+import { parseGuid } from './guid';
 import { findTable } from '../mock/metadata';
 import { useLookupRecords } from '../host/useLookupRecords';
 
@@ -55,14 +56,8 @@ export interface PickedRecord {
 
 type PickerMode = 'search' | 'guid';
 
-const GUID_RE =
-  /^[{(]?[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}[)}]?$/;
-const isValidGuid = (s: string): boolean => GUID_RE.test(s.trim());
-const normalizeGuid = (s: string): string =>
-  s
-    .replace(/[{}()]/g, '')
-    .trim()
-    .toLowerCase();
+// For comparing ids from different sources (picked row vs. saved request).
+const normalizeGuid = (s: string): string => parseGuid(s) ?? s.trim().toLowerCase();
 
 export function RecordPicker({
   table,
@@ -289,9 +284,12 @@ function SearchPicker({
 
 // ── GUID mode ────────────────────────────────────────────────────────
 //
-// Plain Input. Validates inline. Emits onPick(null) when invalid OR empty.
-// No metadata queries fire — this mode is for users who already have an
-// id and just want to paste it.
+// Plain Input. Validates inline. Emits onPick(null) when invalid OR empty,
+// so the mode never keeps targeting the previously picked record while the
+// field shows a different (invalid) value (#94). Valid input is emitted in
+// the dashed 8-4-4-4-12 form the OData key needs — braces and the 32-digit
+// dash-less form are accepted and normalized. No metadata queries fire —
+// this mode is for users who already have an id and just want to paste it.
 
 function GuidPicker({
   selectedId,
@@ -300,29 +298,30 @@ function GuidPicker({
   selectedId: string | null;
   onPick: (rec: PickedRecord | null) => void;
 }) {
-  // Local string so the user can type freely; we only commit upstream
-  // when the value parses as a GUID (or clears).
+  // Local string so the user can type freely; only a parsed GUID (or
+  // null) goes upstream.
   const [raw, setRaw] = useState(selectedId ?? '');
+  // The id we last sent up. When the parent echoes it back we keep the
+  // user's text as typed — otherwise emitting null for an invalid entry
+  // would wipe the field mid-typing.
+  const lastEmittedRef = useRef<string | null>(selectedId);
   // If the parent's selectedId changes from elsewhere (mode switch,
-  // saved-request load), sync our local state.
+  // saved-request load, table switch), sync our local state.
   useEffect(() => {
+    if (selectedId === lastEmittedRef.current) return;
+    lastEmittedRef.current = selectedId;
     setRaw(selectedId ?? '');
   }, [selectedId]);
 
-  const valid = !raw || isValidGuid(raw);
-  const normalized = useMemo(() => (valid && raw ? normalizeGuid(raw) : null), [raw, valid]);
+  const normalized = useMemo(() => parseGuid(raw), [raw]);
+  const valid = !raw.trim() || normalized !== null;
 
   const onChange = (next: string) => {
     setRaw(next);
-    if (!next) {
-      onPick(null);
-      return;
-    }
-    if (isValidGuid(next)) {
-      onPick({ id: normalizeGuid(next), primary: '' });
-    }
-    // Invalid intermediate state — don't propagate yet. The mode shell
-    // surfaces an advisory via the regular validation path.
+    const id = parseGuid(next);
+    if (id === lastEmittedRef.current) return;
+    lastEmittedRef.current = id;
+    onPick(id ? { id, primary: '' } : null);
   };
 
   return (
@@ -342,7 +341,8 @@ function GuidPicker({
       />
       {raw && !valid && (
         <Caption1 style={{ color: tokens.colorPaletteRedForeground1 }}>
-          Not a valid GUID — Dataverse record ids are 36-char UUIDs (braces optional).
+          Not a valid GUID — use the 8-4-4-4-12 form (braces optional) or 32 hex digits. No record
+          is targeted until this is fixed.
         </Caption1>
       )}
       {raw && valid && normalized && (

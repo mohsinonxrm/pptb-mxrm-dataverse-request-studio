@@ -69,6 +69,7 @@ import {
 import { usePublishSaveContext } from '../state/SaveContext';
 import { takeModeHandoff } from '../state/modeHandoff';
 import type { Advisory } from '../primitives/advisories';
+import { isRecordGuid } from '../primitives/guid';
 
 const initialState = (): RetrieveSingleState => ({
   table: '',
@@ -84,10 +85,9 @@ const initialState = (): RetrieveSingleState => ({
 
 type RootClauseId = 'target' | 'select' | 'prefer' | 'headers';
 
-// GUID validator — Dataverse accepts braced, hyphenated, or hex-only forms.
-const GUID_RE =
-  /^[{(]?[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}[)}]?$/;
-const isValidGuid = (s: string | null | undefined): boolean => !!s && GUID_RE.test(s.trim());
+// GUID validator — the OData key needs the dashed 8-4-4-4-12 form (RecordPicker
+// normalizes what the user types to it).
+const isValidGuid = isRecordGuid;
 
 export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('retrieve-single');
