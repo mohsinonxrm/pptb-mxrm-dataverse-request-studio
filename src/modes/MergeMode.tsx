@@ -511,7 +511,17 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
       // record picker. Subordinate is its own section.
       pane = (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <EntityPane state={state} setState={setState} markDirty={markDirty} />
+          <EntityPane
+            state={state}
+            setState={setState}
+            markDirty={markDirty}
+            onEntityChange={() => {
+              // New table → fresh draft. Forget the last save so Save can't
+              // overwrite an entry that belongs to the old table (#58).
+              setLastSavedId(undefined);
+              setLastSavedHash(null);
+            }}
+          />
           <RecordPickPane
             title="Master record"
             sub="The record that keeps its identity. Subordinate is merged into it."
@@ -915,10 +925,13 @@ function EntityPane({
   state,
   setState,
   markDirty,
+  onEntityChange,
 }: {
   state: MergeState;
   setState: React.Dispatch<React.SetStateAction<MergeState>>;
   markDirty: (id: string) => void;
+  /** Called after the user picks a different entity. */
+  onEntityChange: () => void;
 }) {
   const tbl = findTable(state.table);
   const { entities } = useScopedEntities();
@@ -961,6 +974,7 @@ function EntityPane({
               markDirty('target');
               markDirty('subordinate');
               markDirty('fielddiff');
+              onEntityChange();
             }}
           >
             {supportedTables.map((t) => (

@@ -50,6 +50,7 @@ import {
   autoSuggestName,
   newSavedId,
   getOrgScope,
+  sameSaveTarget,
   tableNameFromState,
   type SavedRequest,
   type SavedModeId,
@@ -141,19 +142,26 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
   const [confirmOverwrite, setConfirmOverwrite] = useState(false);
   const { save, findById, findByName, error } = useSavedRequests();
 
+  // The remembered entry only counts while it targets the same table /
+  // action as the current draft. After a target switch it belongs to a
+  // different request: don't pre-fill its name or overwrite it silently.
+  // A same-name save then goes through the overwrite confirm below (#58).
+  const lastSaved = lastSavedId ? findById(lastSavedId) : undefined;
+  const ownSavedId = lastSaved && sameSaveTarget(lastSaved.state, state) ? lastSaved.id : undefined;
+
   // Auto-suggest name whenever the dialog opens. If the user previously
   // saved this request, default to the existing name so a quick re-save
   // is one click + Enter.
   useEffect(() => {
     if (!open) return;
-    if (lastSavedId) {
-      const existing = findById(lastSavedId);
+    if (ownSavedId) {
+      const existing = findById(ownSavedId);
       setName(existing?.name ?? autoSuggestName(modeId, state));
     } else {
       setName(autoSuggestName(modeId, state));
     }
     setConfirmOverwrite(false);
-  }, [open, state, modeId, lastSavedId, findById]);
+  }, [open, state, modeId, ownSavedId, findById]);
 
   const doSave = (overwriteId?: string) => {
     const trimmed = name.trim();
@@ -179,8 +187,8 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
     // Overwrite paths:
     //  • Same id (the entry we previously saved as): silent overwrite.
     //  • Same name, different id (collision): prompt confirm.
-    if (lastSavedId && findById(lastSavedId)?.name === trimmed) {
-      doSave(lastSavedId);
+    if (ownSavedId && findById(ownSavedId)?.name === trimmed) {
+      doSave(ownSavedId);
       return;
     }
     const byName = findByName(trimmed);

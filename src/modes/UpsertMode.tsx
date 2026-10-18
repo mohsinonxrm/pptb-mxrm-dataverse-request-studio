@@ -519,6 +519,10 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
               dirty: new Set(['target', 'key', 'fieldset']),
             }));
             setResult(null);
+            // New table → fresh draft. Forget the last save so Save can't
+            // overwrite an entry that belongs to the old table (#58).
+            setLastSavedId(undefined);
+            setLastSavedHash(null);
           }}
           group="write"
           sub="Pick the entity set for the upsert. Switching the target clears the key and field set."
