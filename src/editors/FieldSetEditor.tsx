@@ -72,6 +72,7 @@ import {
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import { SegmentedToggle } from '../primitives/SegmentedToggle';
+import { AddFieldPicker } from './AddFieldPicker';
 import { PaneHead } from './PaneHead';
 import {
   findTable,
@@ -587,34 +588,15 @@ export function FieldSetEditor({
             </Button>
           ) : (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <Combobox
-                size="small"
-                placeholder={`Add one of ${addable.length} fields…`}
-                style={{ minWidth: 320 }}
-                onOptionSelect={(_, d) => {
-                  if (!d.optionValue) return;
-                  const col = findColumn(tbl, d.optionValue);
+              <AddFieldPicker
+                addable={addable}
+                onPick={(logicalName) => {
+                  const col = findColumn(tbl, logicalName);
                   if (!col) return;
                   setField(col.logicalName, defaultValueFor(col));
                   setAddPickerOpen(false);
                 }}
-              >
-                {addable.map((c) => (
-                  <Option key={c.logicalName} value={c.logicalName} text={c.displayName}>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span>{c.displayName}</span>
-                      <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-                        {c.logicalName} · <code>{c.attributeType}</code>
-                        {c.required && (
-                          <span style={{ marginLeft: 6, color: tokens.colorPaletteRedForeground1 }}>
-                            required
-                          </span>
-                        )}
-                      </Caption1>
-                    </div>
-                  </Option>
-                ))}
-              </Combobox>
+              />
               <Button size="small" appearance="subtle" onClick={() => setAddPickerOpen(false)}>
                 Cancel
               </Button>

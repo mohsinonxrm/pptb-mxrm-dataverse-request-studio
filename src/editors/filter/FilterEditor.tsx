@@ -80,6 +80,7 @@ import { findOperator, OPERATORS, operatorsFor, OP_CATEGORIES } from './operator
 import { FilterValueInput } from './FilterValueInput';
 import { OperatorPicker } from './OperatorPicker';
 import { NavPathColumnPicker } from '../../primitives/NavPathColumnPicker';
+import { MoreOptionsHint, useOptionSearch } from '../../primitives/optionSearch';
 import { AntipatternIcon } from '../../primitives/AntipatternIcon';
 import { detectColumnAntipatterns } from '../../engine/antipatterns';
 
@@ -1769,13 +1770,15 @@ function FilterableColumnCombo({
   useEffect(() => {
     setQuery(currentDisplay ?? value);
   }, [currentDisplay, value]);
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q || q === (currentDisplay ?? '').toLowerCase()) return columns;
-    return columns.filter(
-      (c) => c.displayName.toLowerCase().includes(q) || c.logicalName.toLowerCase().includes(q),
-    );
-  }, [columns, query, currentDisplay]);
+  // Showing the committed column's label lists every column; capped +
+  // deferred because a table can have 800 columns (#21).
+  const effectiveQuery =
+    query.trim().toLowerCase() === (currentDisplay ?? '').toLowerCase() ? '' : query;
+  const {
+    visible: filtered,
+    matchCount,
+    hiddenCount,
+  } = useOptionSearch(columns, effectiveQuery, (c) => [c.displayName, c.logicalName]);
 
   return (
     <Combobox
@@ -1798,7 +1801,7 @@ function FilterableColumnCombo({
       style={style}
       listbox={{ style: { maxHeight: 320 } }}
     >
-      {filtered.length === 0 && (
+      {matchCount === 0 && (
         <Option value="__none" text="" disabled>
           <span style={{ color: tokens.colorNeutralForeground3, fontSize: 11 }}>
             No matches for "{query}"
@@ -1832,6 +1835,7 @@ function FilterableColumnCombo({
           </span>
         </Option>
       ))}
+      <MoreOptionsHint hiddenCount={hiddenCount} />
     </Combobox>
   );
 }
