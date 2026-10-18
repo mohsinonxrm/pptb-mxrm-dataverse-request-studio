@@ -50,6 +50,7 @@ import {
   hashState,
   type SavedRequest,
   type SerializedExecuteActionState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
@@ -207,6 +208,7 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: config.registryId,
           url: built.relativeUrl,
           method: 'POST',
@@ -257,6 +259,19 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
     setResult(null);
     setBoundRecordName('');
     setActivePath('pick');
+  };
+
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'exec-action');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
   };
 
   usePublishSaveContext(
@@ -479,6 +494,7 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={

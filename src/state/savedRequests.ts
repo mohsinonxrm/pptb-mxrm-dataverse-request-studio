@@ -19,7 +19,12 @@
 // of the request — it tracks "has the user edited since last execute".
 // We strip it on serialize and re-init it as `new Set()` on deserialize.
 
-import type { RetrieveMultipleState, RetrieveSingleState, PredefinedQueryState } from './readState';
+import type {
+  RetrieveMultipleState,
+  RetrieveSingleState,
+  PredefinedQueryState,
+  RecentRun,
+} from './readState';
 import type { DeleteState, UpdateState, CreateState, UpsertState, MergeState } from './writeState';
 import type { AssociateState, DisassociateState } from './relateState';
 import type {
@@ -705,6 +710,24 @@ export function sameSaveTarget(a: unknown, b: unknown): boolean {
 }
 
 // ── id generation ─────────────────────────────────────────────────────
+
+/**
+ * Wrap a Recent-runs snapshot as a transient SavedRequest so a mode can
+ * restore it through its existing `onLoadSaved` validator + hydrator (#2).
+ * Never persisted. Returns null when the run was recorded without a
+ * snapshot (nothing to restore).
+ */
+export function recentRunAsSavedEntry(run: RecentRun, modeId: SavedModeId): SavedRequest | null {
+  if (run.snapshot === undefined || run.snapshot === null) return null;
+  return {
+    id: run.id,
+    name: `Recent run (${run.method} · ${run.status})`,
+    modeId,
+    orgScope: getOrgScope(),
+    state: run.snapshot,
+    savedAt: run.ts,
+  };
+}
 
 export function newSavedId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {

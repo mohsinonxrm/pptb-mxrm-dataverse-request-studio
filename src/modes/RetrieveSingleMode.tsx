@@ -67,6 +67,7 @@ import {
   deserializeRetrieveSingle,
   type SavedRequest,
   type SerializedRetrieveSingleState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
@@ -185,6 +186,19 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
     setActivePath('target');
   };
 
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'retrieve-single');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
+  };
+
   // Publish our save context to the FrameHeader's Save / Saved-library
   // buttons. Hidden automatically when no table is picked (nothing useful
   // to save yet).
@@ -251,6 +265,7 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: 'retrieve-single',
           url: built.relativeUrl,
           method: 'GET',
@@ -551,6 +566,7 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={

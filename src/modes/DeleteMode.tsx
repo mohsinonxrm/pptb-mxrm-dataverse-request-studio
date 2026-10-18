@@ -108,6 +108,7 @@ import {
   hashState,
   type SavedRequest,
   type SerializedDeleteState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
@@ -308,6 +309,19 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     setActivePath('target');
   };
 
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'delete');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
+  };
+
   // Publish save context — hide when no table set (nothing meaningful
   // to save yet).
   usePublishSaveContext(
@@ -426,6 +440,7 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: 'delete',
           url: built.relativeUrl,
           method: 'DELETE',
@@ -702,6 +717,7 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={
