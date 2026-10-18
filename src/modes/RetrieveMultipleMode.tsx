@@ -39,7 +39,10 @@ import { ApplyEditor, emptyApply } from '../editors/ApplyEditor';
 import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/PreferEditor';
 import { HeadersEditor, defaultReadHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { ExpandRouter } from '../editors/expand/ExpandRouter';
-import { hasCollectionInvolvedNestedExpand } from '../editors/expand/expandTree';
+import {
+  hasCollectionExpandWithNestedExpand,
+  hasCollectionInvolvedNestedExpand,
+} from '../editors/expand/expandTree';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { countRules, newId } from '../editors/filter/filterTree';
@@ -394,31 +397,54 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
       apply: state.apply,
     });
 
-    // Nested $expand involving a collection-valued nav (1:N / N:N anywhere
-    // in the tree). The Dataverse "Join tables using OData" doc says $top /
-    // $orderby are "Not supported with nested $expand" as options INSIDE
-    // the collection $expand; it doesn't forbid $top on the outer entity
-    // set (#126). So outer $top is a non-blocking warning — the server is
-    // the arbiter — and `Prefer: odata.maxpagesize` (which also pages each
-    // expanded collection) is offered as the fallback.
+    // Dataverse rule (#126, confirmed live): when a collection-valued
+    // $expand (1:N / N:N) itself has a nested $expand, top-level $top is
+    // rejected with 400 0x80060888 "Only $select, $filter and $orderby
+    // clauses can be provided at top level while doing $expand on nested
+    // one-to-many relationship." — a blocker. Workaround: drop $top and use
+    // `Prefer: odata.maxpagesize` (the PreferEditor has the slot).
+    // Other nested shapes that merely involve a collection (e.g. N:1 → 1:N)
+    // keep a non-blocking warning; the server is the arbiter there.
     const collectionNested =
       state.table && hasCollectionInvolvedNestedExpand(state.expand, state.table);
+    const collectionWithNested =
+      !!state.table && hasCollectionExpandWithNestedExpand(state.expand, state.table);
     const nestingAdvisories: Advisory[] = [];
-    if (collectionNested && state.top != null) {
+    if (collectionWithNested && state.top != null) {
+      nestingAdvisories.push({
+        id: 'nested-collection-top',
+        severity: 'error',
+        source: 'validation',
+        focusNode: 'top',
+        title: '$top is forbidden when a collection $expand has a nested $expand',
+        body: (
+          <>
+            A 1:N or N:N <code>$expand</code> in your query has its own nested <code>$expand</code>.
+            Dataverse rejects top-level <code>$top</code> in this shape (<code>0x80060888</code>):{' '}
+            <em>
+              "Only $select, $filter and $orderby clauses can be provided at top level while doing
+              $expand on nested one-to-many relationship."
+            </em>
+            <br />
+            Drop <code>$top</code> and use <code>Prefer: odata.maxpagesize</code> in the Prefer pane
+            instead.
+          </>
+        ),
+        learnMoreUrl:
+          'https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/query/join-tables#nested-expand-on-collection-valued-navigation-properties',
+      });
+    } else if (collectionNested && state.top != null) {
       nestingAdvisories.push({
         id: 'nested-collection-top',
         severity: 'warning',
         source: 'validation',
         focusNode: 'top',
-        title: '$top with a nested $expand on a collection',
+        title: '$top with a nested $expand involving a collection',
         body: (
           <>
-            Your query has a nested <code>$expand</code> involving a 1:N or N:N relationship.
-            Microsoft documents that <code>$top</code> isn't supported inside such an{' '}
-            <code>$expand</code>; <code>$top</code> on the table itself isn't restricted. If
-            Dataverse still rejects it (<code>0x80060888</code>), drop <code>$top</code> and use{' '}
-            <code>Prefer: odata.maxpagesize</code> in the Prefer pane instead — it also pages each
-            expanded collection.
+            Your query has a nested <code>$expand</code> involving a 1:N or N:N relationship. If
+            Dataverse rejects <code>$top</code> (<code>0x80060888</code>), drop it and use{' '}
+            <code>Prefer: odata.maxpagesize</code> in the Prefer pane instead.
           </>
         ),
         learnMoreUrl:

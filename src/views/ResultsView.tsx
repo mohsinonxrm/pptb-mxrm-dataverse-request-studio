@@ -350,6 +350,15 @@ function ErrorState({ result }: { result: ExecResult }) {
       'inside each $expand, filter the expanded rows, or set Prefer: odata.maxpagesize to ' +
       'return fewer rows per page.'
     : null;
+  // #126 — 0x80060888 (a generic OData code, so match on the message):
+  // top-level $top with a collection $expand that has a nested $expand.
+  const nestedExpandTopHint = /at top level while doing \$expand on nested one-to-many/i.test(
+    err?.message ?? '',
+  )
+    ? 'Dataverse rejects top-level $top when a 1:N or N:N $expand has its own nested ' +
+      '$expand. Remove $top and set Prefer: odata.maxpagesize instead to limit the rows ' +
+      'per page.'
+    : null;
   const title =
     result.status === 401
       ? 'Unauthorized · 401'
@@ -406,6 +415,11 @@ function ErrorState({ result }: { result: ExecResult }) {
         {sizeHint && (
           <Caption1 style={{ color: tokens.colorNeutralForeground1, maxWidth: 420 }}>
             {sizeHint}
+          </Caption1>
+        )}
+        {nestedExpandTopHint && (
+          <Caption1 style={{ color: tokens.colorNeutralForeground1, maxWidth: 420 }}>
+            {nestedExpandTopHint}
           </Caption1>
         )}
         {err && (
