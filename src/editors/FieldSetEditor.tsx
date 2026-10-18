@@ -97,7 +97,9 @@ import { useLookupRecords } from '../host/useLookupRecords';
 import {
   decodeFieldBody,
   encodeFieldBody,
+  mustSupplyOnCreate,
   parseRawBody,
+  suppliedColumnTest,
   type DecodedFieldBody,
   type UnmappedBodyKey,
 } from '../engine/fieldBody';
@@ -344,7 +346,11 @@ export function FieldSetEditor({
     if (p.ok && tbl) setValues(decodeFieldBody(tbl, p.body, decodeOpts).values);
   };
 
-  const requiredFields = useMemo(() => writable.filter((c) => c.required), [writable]);
+  // Same required rule as the mode's Execute gate, in Form and JSON mode
+  // (#124): only ApplicationRequired columns count; SystemRequired ones such
+  // as ownerid are defaulted by Dataverse. They still sit at the top of the
+  // form (see `visible`) so they can be overridden.
+  const requiredFields = useMemo(() => writable.filter(mustSupplyOnCreate), [writable]);
   // "Populated" includes both columns with a value AND columns flagged as
   // explicit-null — both produce a body entry, so both count toward
   // "the user has expressed an intent for this column".
@@ -352,15 +358,24 @@ export function FieldSetEditor({
     () => writable.filter((c) => c.logicalName in values || nullFields.includes(c.logicalName)),
     [writable, values, nullFields],
   );
+  // A required column counts as set when what will be sent gives it a value:
+  // the typed body in JSON mode, a non-empty form value otherwise — the
+  // test the mode's Execute gate uses. A seeded but empty value (an Owner
+  // lookup with no record) is dropped from the body, so it isn't set (#124).
+  const isSupplied = useMemo(
+    () =>
+      tbl
+        ? suppliedColumnTest(tbl, bodyMode === 'json' ? jsonText : null, valuesProp)
+        : () => false,
+    [tbl, bodyMode, jsonText, valuesProp],
+  );
+
   // Required-field check: a column marked explicit-null still counts as
   // "missing" since the server will reject a null on a required column —
   // this matches Dataverse's runtime behavior and surfaces the issue.
   const missingRequired = useMemo(
-    () =>
-      requiredFields.filter(
-        (c) => !(c.logicalName in values) || nullFields.includes(c.logicalName),
-      ),
-    [requiredFields, values, nullFields],
+    () => requiredFields.filter((c) => !isSupplied(c) || nullFields.includes(c.logicalName)),
+    [requiredFields, isSupplied, nullFields],
   );
 
   // What to render in the form area.

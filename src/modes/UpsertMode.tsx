@@ -50,16 +50,11 @@ import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advis
 import { PreconditionEditor, preconditionToHeader } from '../editors/PreconditionEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { findTable, isLookupLike } from '../mock/metadata';
+import { findTable } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildUpsert, buildUpsertBody } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
-import {
-  defaultBypassOptions,
-  type UpsertState,
-  type CreateFieldValue,
-  type LookupFieldValue,
-} from '../state/writeState';
+import { defaultBypassOptions, type UpsertState, type CreateFieldValue } from '../state/writeState';
 import type { RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { useLiveTable } from '../host/useLiveMetadata';
@@ -72,7 +67,7 @@ import {
   type SerializedUpsertState,
 } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
-import { rawBodyBlocker, rawBodyColumns } from '../engine/fieldBody';
+import { missingRequiredColumns, rawBodyBlocker } from '../engine/fieldBody';
 
 // Empty initial state — user picks the table first, which then re-seeds
 // the key shape (GUID by default; switches to first alternate key once
@@ -166,30 +161,19 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
   //
   // ApplicationRequired only (same call as Create mode). SystemRequired
   // columns that survive the create filter are server-defaulted.
-  const rawCols = useMemo(
-    () => (tbl ? rawBodyColumns(tbl, state.rawBody) : null),
-    [tbl, state.rawBody],
-  );
+  // The rule is `missingRequiredColumns`, shared with Create and the
+  // field-set editor, run on what will be sent in either body mode (#124).
   const missingRequired = useMemo(() => {
     if (!tbl) return [] as string[];
     if (state.concurrency.kind !== 'create-only') return [];
-    return tbl.columns
-      .filter((c) => c.requiredLevel === 'ApplicationRequired' && c.isValidForCreate !== false)
-      .filter((c) => {
-        // JSON mode: the typed body is what's sent — check it instead.
-        if (rawCols) return !rawCols.has(c.logicalName);
-        const v = state.fieldValues[c.logicalName];
-        if (v == null) return true;
-        if (typeof v === 'string' && v === '') return true;
-        if (Array.isArray(v) && v.length === 0) return true;
-        if (isLookupLike(c)) {
-          const lk = v as LookupFieldValue;
-          return !lk?.id;
-        }
-        return false;
-      })
-      .map((c) => c.logicalName);
-  }, [tbl, state.concurrency.kind, state.fieldValues, rawCols]);
+    return missingRequiredColumns(
+      tbl,
+      tbl.columns,
+      state.rawBody,
+      state.fieldValues,
+      state.nullFields,
+    ).map((c) => c.logicalName);
+  }, [tbl, state.concurrency.kind, state.rawBody, state.fieldValues, state.nullFields]);
 
   const jsonBlocker = rawBodyBlocker(state.rawBody);
 
