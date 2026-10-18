@@ -63,13 +63,18 @@ export function UrlBar({
   // second execute — a duplicate write for Create and friends (#47). The ref
   // is set synchronously before `onExecute` runs and released when its
   // promise settles (every mode's onExecute is async), so it never depends
-  // on render timing and can't stay stuck.
+  // on render timing and can't stay stuck. `runtime` never rejects (#102),
+  // so a throw here is a bug in the mode's own code; log it rather than
+  // leave an unhandled rejection.
   const busyRef = useRef(false);
   const execute = useCallback(() => {
     if (busyRef.current || loading || disabledReason) return;
     busyRef.current = true;
     Promise.resolve()
       .then(onExecute)
+      .catch((e: unknown) => {
+        console.error('Execute failed', e);
+      })
       .finally(() => {
         busyRef.current = false;
       });
