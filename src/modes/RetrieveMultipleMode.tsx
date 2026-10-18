@@ -40,7 +40,10 @@ import { ApplyEditor, emptyApply } from '../editors/ApplyEditor';
 import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/PreferEditor';
 import { HeadersEditor, defaultReadHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { ExpandRouter } from '../editors/expand/ExpandRouter';
-import { hasCollectionInvolvedNestedExpand } from '../editors/expand/expandTree';
+import {
+  hasCollectionExpandWithNestedExpand,
+  hasCollectionInvolvedNestedExpand,
+} from '../editors/expand/expandTree';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { countRules, newId } from '../editors/filter/filterTree';
@@ -462,43 +465,58 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
       apply: state.apply,
     });
 
-    // Dataverse rule (empirically confirmed against the docs):
-    //   When the query contains a nested $expand AND ANY expand in the
-    //   tree targets a collection-valued nav (1:N or N:N), the top-level
-    //   $top and $orderby are forbidden. Server returns:
-    //     0x80060888 "Only $select, $filter and $orderby clauses can be
-    //                provided at top level while doing $expand on nested
-    //                one-to-many relationship."
-    //   (yes — the error names $orderby as both allowed and forbidden;
-    //    empirically $orderby is also rejected when $top is also set,
-    //    so we treat both as blockers.)
-    //
-    // Workaround: drop $top (and any non-empty $orderby) and use
-    // `Prefer: odata.maxpagesize=N` instead. The mode's PreferEditor
-    // already has the slot.
+    // Dataverse rule (#126, confirmed live): when a collection-valued
+    // $expand (1:N / N:N) itself has a nested $expand, top-level $top is
+    // rejected with 400 0x80060888 "Only $select, $filter and $orderby
+    // clauses can be provided at top level while doing $expand on nested
+    // one-to-many relationship." — a blocker. Workaround: drop $top and use
+    // `Prefer: odata.maxpagesize` (the PreferEditor has the slot).
+    // Other nested shapes that merely involve a collection (e.g. N:1 → 1:N)
+    // keep a non-blocking warning; the server is the arbiter there.
     const collectionNested =
       state.table && hasCollectionInvolvedNestedExpand(state.expand, state.table);
+    const collectionWithNested =
+      !!state.table && hasCollectionExpandWithNestedExpand(state.expand, state.table);
     const nestingAdvisories: Advisory[] = [];
-    if (collectionNested && state.top != null) {
+    if (collectionWithNested && state.top != null) {
       nestingAdvisories.push({
         id: 'nested-collection-top',
         severity: 'error',
         source: 'validation',
         focusNode: 'top',
-        title: '$top is forbidden with a nested $expand on a collection',
+        title: '$top is forbidden when a collection $expand has a nested $expand',
         body: (
           <>
-            Your query has a nested <code>$expand</code> involving a 1:N or N:N relationship.
-            Dataverse rejects top-level <code>$top</code> in this shape:{' '}
+            A 1:N or N:N <code>$expand</code> in your query has its own nested <code>$expand</code>.
+            Dataverse rejects top-level <code>$top</code> in this shape (<code>0x80060888</code>):{' '}
             <em>
               "Only $select, $filter and $orderby clauses can be provided at top level while doing
               $expand on nested one-to-many relationship."
             </em>
             <br />
             Drop <code>$top</code> and use <code>Prefer: odata.maxpagesize</code> in the Prefer pane
-            instead — paging will then apply correctly to each expanded collection.
+            instead.
           </>
         ),
+        learnMoreUrl:
+          'https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/query/join-tables#nested-expand-on-collection-valued-navigation-properties',
+      });
+    } else if (collectionNested && state.top != null) {
+      nestingAdvisories.push({
+        id: 'nested-collection-top',
+        severity: 'warning',
+        source: 'validation',
+        focusNode: 'top',
+        title: '$top with a nested $expand involving a collection',
+        body: (
+          <>
+            Your query has a nested <code>$expand</code> involving a 1:N or N:N relationship. If
+            Dataverse rejects <code>$top</code> (<code>0x80060888</code>), drop it and use{' '}
+            <code>Prefer: odata.maxpagesize</code> in the Prefer pane instead.
+          </>
+        ),
+        learnMoreUrl:
+          'https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/query/join-tables#nested-expand-on-collection-valued-navigation-properties',
       });
     }
     if (collectionNested && state.orderby.length > 0) {
@@ -510,9 +528,9 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
         title: '$orderby is forbidden with a nested $expand on a collection',
         body: (
           <>
-            Same Dataverse rule as the <code>$top</code> case — top-level <code>$orderby</code>{' '}
-            isn't allowed when a nested <code>$expand</code> involves a 1:N or N:N. Either clear{' '}
-            <code>$orderby</code>, or sort client-side after the request returns.
+            Top-level <code>$orderby</code> isn't allowed when a nested <code>$expand</code>{' '}
+            involves a 1:N or N:N. Either clear <code>$orderby</code>, or sort client-side after the
+            request returns.
           </>
         ),
       });

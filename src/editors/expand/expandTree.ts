@@ -216,8 +216,10 @@ export function hasAnyNestedExpand(items: ExpandSpec[]): boolean {
  * True iff the tree contains nesting AND at least one expand in the tree
  * targets a collection-valued navigation property (1:N or N:N).
  *
- * This is the EXACT trigger for Dataverse's runtime restriction on top-
- * level `$top` and `$orderby`. The error message is:
+ * Trigger for the RetrieveMultiple advisory on top-level `$orderby` (and the
+ * non-blocking `$top` warning when the narrower
+ * `hasCollectionExpandWithNestedExpand` doesn't apply). The error message
+ * seen was:
  *
  *   "Only $select, $filter and $orderby clauses can be provided at top
  *    level while doing $expand on nested one-to-many relationship."
@@ -256,6 +258,36 @@ function containsCollectionExpand(items: ExpandSpec[], parentEntity: string): bo
     if (!nav) continue;
     if (nav.cardinality === 'OneToMany' || nav.cardinality === 'ManyToMany') return true;
     if (it.nestedExpand && containsCollectionExpand(it.nestedExpand, nav.targetEntity)) return true;
+  }
+  return false;
+}
+
+/**
+ * True iff some collection-valued `$expand` (1:N or N:N), at any depth, itself
+ * carries a nested `$expand`. This is the exact shape for which Dataverse
+ * rejects top-level `$top` (#126, confirmed live):
+ *
+ *   accounts?$select=name&$expand=contact_customer_accounts($select=fullname;
+ *     $expand=Contact_Tasks($select=subject))&$top=3
+ *   → 400 0x80060888 "Only $select, $filter and $orderby clauses can be
+ *     provided at top level while doing $expand on nested one-to-many
+ *     relationship."
+ *
+ * Workaround: drop `$top`, use `Prefer: odata.maxpagesize`.
+ */
+export function hasCollectionExpandWithNestedExpand(
+  items: ExpandSpec[],
+  parentEntity: string,
+): boolean {
+  const parent = findTable(parentEntity);
+  if (!parent) return false;
+  for (const it of items) {
+    const nav = parent.navigationProperties.find((n) => n.name === it.nav);
+    if (!nav) continue;
+    const nested = it.nestedExpand ?? [];
+    if (nested.length === 0) continue;
+    if (nav.cardinality === 'OneToMany' || nav.cardinality === 'ManyToMany') return true;
+    if (hasCollectionExpandWithNestedExpand(nested, nav.targetEntity)) return true;
   }
   return false;
 }
