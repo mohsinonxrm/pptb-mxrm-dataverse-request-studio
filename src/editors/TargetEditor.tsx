@@ -300,6 +300,7 @@ export function TargetEditor({
               selectedId={recordId ?? null}
               onPick={(r) => onRecordChange?.(r?.id ?? null, r?.primary ?? '')}
               placeholder={`Search ${tbl.displayName} records by ${tbl.primaryName}…`}
+              memoryKey="target"
             />
           </Field>
         )}
