@@ -34,7 +34,7 @@ import {
   MessageBarBody,
   MessageBarTitle,
   mergeClasses,
-  Persona,
+  Avatar,
   Spinner,
 } from '@fluentui/react-components';
 import { Sidebar } from '../shell/Sidebar';
@@ -636,11 +636,9 @@ function TargetPane({
           ) : currentLookup ? (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Persona
-                  size="small"
-                  name={currentLookup.name ?? '(unknown)'}
-                  avatar={{ color: 'colorful' }}
-                />
+                {/* Avatar only: a Persona prints the name as well, and the
+                    name is already shown beside it (#123). */}
+                <Avatar size={28} name={currentLookup.name ?? undefined} color="colorful" />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, fontWeight: 600 }}>
                     {currentLookup.name ?? '(name not available)'}
