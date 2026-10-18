@@ -1156,6 +1156,7 @@ function SingleColumnEditor({
           group="write"
           themeMode={themeMode}
           purpose="update"
+          method="PUT"
         />
       </div>
     </div>
