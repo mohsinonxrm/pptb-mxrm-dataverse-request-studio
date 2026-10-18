@@ -495,7 +495,7 @@ export interface TableMeta {
   navigationProperties: NavProperty[];
   /** Alternate keys defined on the table (optional — used by Upsert). */
   alternateKeys?: AlternateKeyDef[];
-  /** True if this table is one of the Merge-supported types (account / contact / incident). */
+  /** True if this table is one of the Merge-supported types (account / contact / lead / incident). */
   supportsMerge?: boolean;
 }
 

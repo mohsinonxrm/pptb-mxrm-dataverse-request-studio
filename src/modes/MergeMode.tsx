@@ -5,7 +5,7 @@
 //   https://learn.microsoft.com/en-us/power-apps/user/merge-duplicate-records
 //
 // Sidebar:
-//   • Entity        — pick which table (account / contact / incident)
+//   • Entity        — pick which table (account / contact / lead / incident)
 //   • Target        — winner record (survives)
 //   • Subordinate   — loser record (deactivated, re-parented)
 //   • Field diff    — per-field choice (Keep Target / Use Subordinate / Custom)
@@ -69,7 +69,7 @@ import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advis
 import { RecordPicker } from '../primitives/RecordPicker';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { TABLES, findTable } from '../mock/metadata';
+import { findTable } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildMerge, buildMergeBody } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
@@ -97,9 +97,18 @@ import { isRecordGuid } from '../primitives/guid';
 // ──────────────────────────────────────────────────────────────
 // Initial state
 // ──────────────────────────────────────────────────────────────
-// Empty initial state. The user picks one of account / contact / incident
-// (the only entities the Merge action supports per docs), then picks both
-// records via the live RecordPicker.
+// The only tables the Merge action supports. Hardcoded because it's a
+// server-side constraint of the OOB Merge action — not configurable per
+// environment. lead needs Dynamics 365 Sales, incident needs Customer
+// Service; the entity picker hides whichever the env doesn't have.
+//   Reference: https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/merge-entity-using-web-api
+const MERGE_SUPPORTED_LOGICAL_NAMES = ['account', 'contact', 'lead', 'incident'] as const;
+const MERGE_SUPPORTED_LABEL = 'account, contact, lead, and incident';
+const isMergeSupported = (logical: string): boolean =>
+  (MERGE_SUPPORTED_LOGICAL_NAMES as readonly string[]).includes(logical);
+
+// Empty initial state. The user picks one of the Merge-supported tables
+// above, then picks both records via the live RecordPicker.
 const initialState = (): MergeState => ({
   table: '',
   targetId: null,
@@ -259,13 +268,12 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
   const targetRow = state.targetSnapshot;
   const subRow = state.subordinateSnapshot;
 
-  const supportedTables = TABLES.filter((t) => t.supportsMerge);
   const overrideCount = Object.values(state.fieldChoices).filter((c) => c !== 'target').length;
 
   const disabledReason = !tbl
     ? 'Pick a target table first.'
-    : !tbl.supportsMerge
-      ? 'Merge is only supported for account, contact, and incident.'
+    : !isMergeSupported(tbl.logicalName)
+      ? `Merge is only supported for ${MERGE_SUPPORTED_LABEL}.`
       : !state.targetId
         ? 'Pick a Target record (the winner).'
         : !isValidGuid(state.targetId)
@@ -917,13 +925,6 @@ function RecordCard({
 // ──────────────────────────────────────────────────────────────
 // Sidebar-driven panes
 // ──────────────────────────────────────────────────────────────
-// Per the docs Merge is restricted to these three entities (and lead in
-// older versions; current docs name account/contact/incident). Hardcoded
-// because it's a server-side constraint of the OOB Merge action — not
-// configurable per environment.
-//   Reference: https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/reference/merge
-const MERGE_SUPPORTED_LOGICAL_NAMES = ['account', 'contact', 'incident'] as const;
-
 function EntityPane({
   state,
   setState,
@@ -937,27 +938,40 @@ function EntityPane({
   onEntityChange: () => void;
 }) {
   const tbl = findTable(state.table);
-  const { entities } = useScopedEntities();
-  // Cross-reference the three docs-supported logical names against the
-  // live entity list — so we show the env's actual display names (which
-  // can be customized) and skip entities the env doesn't have provisioned.
+  // The UNSCOPED entity list: Merge's tables are fixed by the platform, so
+  // the user's Query Scope (default: publisher solutions, none picked yet)
+  // must not hide them — it left this dropdown empty on a fresh install (#97).
+  const { allEntities, allLoading } = useScopedEntities();
+  // Cross-reference the docs-supported logical names against the live
+  // entity list — so we show the env's actual display names (which can be
+  // customized) and skip entities the env doesn't have provisioned (lead /
+  // incident need Sales / Service).
   const supportedTables = useMemo(
     () =>
-      MERGE_SUPPORTED_LOGICAL_NAMES.map((ln) => entities.find((e) => e.logicalName === ln)).filter(
-        (e): e is NonNullable<typeof e> => !!e,
-      ),
-    [entities],
+      MERGE_SUPPORTED_LOGICAL_NAMES.map((ln) =>
+        allEntities.find((e) => e.logicalName === ln),
+      ).filter((e): e is NonNullable<typeof e> => !!e),
+    [allEntities],
   );
   return (
     <div>
       <PaneHead
         icon={Table20Filled}
         title="Merge entity type"
-        sub="Pick the table to merge. The Merge action is restricted to account, contact, and incident."
+        sub={`Pick the table to merge. The Merge action is restricted to ${MERGE_SUPPORTED_LABEL}.`}
         group="write"
       />
       <div style={{ maxWidth: 560 }}>
-        <Field label="Entity">
+        <Field
+          label="Entity"
+          hint={
+            allLoading
+              ? 'Loading tables…'
+              : supportedTables.length === 0
+                ? `No Merge-supported table (${MERGE_SUPPORTED_LOGICAL_NAMES.join(', ')}) was found in this environment.`
+                : undefined
+          }
+        >
           <Combobox
             value={tbl?.displayName ?? ''}
             selectedOptions={[state.table]}

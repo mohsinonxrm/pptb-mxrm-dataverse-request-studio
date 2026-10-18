@@ -384,7 +384,7 @@ async function buildTable(logical: string): Promise<TableMeta | undefined> {
           logical,
         ),
         alternateKeys,
-        supportsMerge: ['account', 'contact', 'incident'].includes(logical),
+        supportsMerge: ['account', 'contact', 'lead', 'incident'].includes(logical),
       };
 
       // Publish into the synchronous registry — this is what makes the
