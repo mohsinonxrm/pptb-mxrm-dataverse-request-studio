@@ -83,6 +83,7 @@ import { NavPathColumnPicker } from '../../primitives/NavPathColumnPicker';
 import { MoreOptionsHint, useOptionSearch } from '../../primitives/optionSearch';
 import { AntipatternIcon } from '../../primitives/AntipatternIcon';
 import { detectColumnAntipatterns } from '../../engine/antipatterns';
+import { AddressChips } from './AddressChips';
 
 /**
  * Resolves the leaf `ColumnMeta` for a slash-delimited nav-path PLUS the
@@ -280,6 +281,9 @@ export function FilterEditor({
       {applyActive && !compact && <ApplyOverridesBanner clause="$filter" />}
       {banner}
       {warnings}
+      {!compact && (
+        <AddressChips table={tbl} onAdd={(rule) => setTree(addChild(tree, tree.id, rule))} />
+      )}
 
       <FilterGroupCard
         group={tree}
