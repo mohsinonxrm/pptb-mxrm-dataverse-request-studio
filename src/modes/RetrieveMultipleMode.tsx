@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Table20Regular,
   Table20Filled,
@@ -238,7 +238,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     setState(deserializeRetrieveMultiple(snap));
     setLastSavedId(entry.id);
     setLastSavedHash(hashState(snap));
-    setResult(null);
+    clearResult();
     setActivePath('target');
   };
 
@@ -262,9 +262,41 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     ),
   );
 
+  // ── Run identity ──
+  // Every Execute (and every reset that clears the results) starts a new
+  // "run". Paging handlers capture the run id when they start and drop
+  // their merge if it changed while they were awaiting — otherwise a long
+  // Retrieve All for the previous query overwrote the newer query's
+  // results when it finished (#98). Executing therefore also cancels any
+  // in-flight paging.
+  const runIdRef = useRef(0);
+  // Bumped by Stop to end a Retrieve All, keeping the rows already merged.
+  const pagingIdRef = useRef(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  // Last next-page failure, shown above the grid. Auto-load on scroll is
+  // paused while it's set so a failing page isn't retried on every scroll.
+  const [pageError, setPageError] = useState<string | null>(null);
+
+  const startRun = () => {
+    runIdRef.current += 1;
+    setIsLoadingMore(false);
+    setPageError(null);
+    return runIdRef.current;
+  };
+  const clearResult = () => {
+    // Also drops an in-flight Execute's response (it belonged to the
+    // request being reset), so its spinner must stop here.
+    startRun();
+    setLoading(false);
+    setResult(null);
+  };
+
   const onExecute = async () => {
+    const run = startRun();
     setLoading(true);
     const res = await runtime.retrieveMultiple(state);
+    // A newer Execute (e.g. Refresh clicked mid-flight) owns the results now.
+    if (runIdRef.current !== run) return;
     setResult(res);
     setLoading(false);
     setTab('results');
@@ -292,64 +324,96 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // for the next page sits on the response envelope). We append next-page
   // rows onto the existing body so the grid keeps everything in one
   // virtualized list — no client-side paging needed.
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-
-  const fetchOneMorePage = async () => {
-    const nextLink = (result?.body as { '@odata.nextLink'?: string } | null)?.['@odata.nextLink'];
-    if (!nextLink || isLoadingMore) return;
-    setIsLoadingMore(true);
-    try {
-      const more = await runtime.absoluteUrl(nextLink);
-      if (!more.ok) {
-        setIsLoadingMore(false);
-        return;
-      }
-      const prevRows = (result?.body as { value?: Record<string, unknown>[] } | null)?.value ?? [];
-      const moreRows = (more.body as { value?: Record<string, unknown>[] } | null)?.value ?? [];
-      const moreNext = (more.body as { '@odata.nextLink'?: string } | null)?.['@odata.nextLink'];
+  //
+  // Each page is merged into the CURRENT result (functional update), and
+  // only while the run that requested it is still current. A failed page
+  // keeps the rows + nextLink already loaded, so the user can retry.
+  const appendPage = (more: ExecResult) => {
+    const moreRows = (more.body as { value?: Record<string, unknown>[] } | null)?.value ?? [];
+    const moreNext = (more.body as { '@odata.nextLink'?: string } | null)?.['@odata.nextLink'];
+    setResult((r) => {
+      if (!r) return r;
+      const prevBody = (r.body as Record<string, unknown> | null) ?? {};
+      const prevRows = (prevBody as { value?: Record<string, unknown>[] }).value ?? [];
       // Merge: keep existing envelope, replace `value` + carry the new nextLink (or drop it if exhausted).
       const mergedBody: Record<string, unknown> = {
-        ...((result?.body as Record<string, unknown> | null) ?? {}),
+        ...prevBody,
         value: [...prevRows, ...moreRows],
       };
       if (moreNext) mergedBody['@odata.nextLink'] = moreNext;
       else delete mergedBody['@odata.nextLink'];
-      setResult((r) =>
-        r ? { ...r, body: mergedBody, bytes: JSON.stringify(mergedBody).length } : r,
-      );
+      return { ...r, body: mergedBody, bytes: JSON.stringify(mergedBody).length };
+    });
+    return moreNext;
+  };
+
+  const describePageError = (more: ExecResult) => {
+    const msg = (more.body as { error?: { message?: string } } | null)?.error?.message;
+    // Status 0 means the host didn't report one (#59): show the status text
+    // (or a generic label) rather than a misleading "HTTP 0".
+    const status = more.status ? `HTTP ${more.status}` : more.statusText || 'Request failed';
+    return `${status}${msg ? ` — ${msg}` : ''}`;
+  };
+
+  // Shared start-up for both paging handlers: claims a paging id under the
+  // current run and returns a check for "still allowed to merge".
+  const beginPaging = () => {
+    const run = runIdRef.current;
+    const paging = ++pagingIdRef.current;
+    setIsLoadingMore(true);
+    setPageError(null);
+    return () => runIdRef.current === run && pagingIdRef.current === paging;
+  };
+
+  const fetchOneMorePage = async () => {
+    const nextLink = (result?.body as { '@odata.nextLink'?: string } | null)?.['@odata.nextLink'];
+    if (!nextLink || isLoadingMore) return;
+    const isCurrent = beginPaging();
+    try {
+      const more = await runtime.absoluteUrl(nextLink);
+      if (!isCurrent()) return;
+      if (!more.ok) {
+        setPageError(`Couldn't load the next page: ${describePageError(more)}`);
+        return;
+      }
+      appendPage(more);
     } finally {
-      setIsLoadingMore(false);
+      if (isCurrent()) setIsLoadingMore(false);
     }
   };
 
   const retrieveAllPages = async () => {
-    if (isLoadingMore) return;
-    setIsLoadingMore(true);
+    let nextLink = (result?.body as { '@odata.nextLink'?: string } | null)?.['@odata.nextLink'];
+    if (!nextLink || isLoadingMore) return;
+    const isCurrent = beginPaging();
     try {
-      // Walk the envelope chain; mergedBody mutates in place inside the loop.
-      let mergedBody = result?.body as Record<string, unknown> | null;
-      let nextLink = (mergedBody as { '@odata.nextLink'?: string } | null)?.['@odata.nextLink'];
-      const allRows = (
-        (mergedBody as { value?: Record<string, unknown>[] } | null)?.value ?? []
-      ).slice();
       let guard = 0;
       while (nextLink && guard++ < 200) {
         // hard safety cap
         const more = await runtime.absoluteUrl(nextLink);
-        if (!more.ok) break;
-        const moreRows = (more.body as { value?: Record<string, unknown>[] } | null)?.value ?? [];
-        allRows.push(...moreRows);
-        nextLink = (more.body as { '@odata.nextLink'?: string } | null)?.['@odata.nextLink'];
+        // Superseded by a newer Execute / reset, or stopped by the user.
+        if (!isCurrent()) return;
+        if (!more.ok) {
+          setPageError(`Retrieve all stopped at a failed page: ${describePageError(more)}`);
+          return;
+        }
+        nextLink = appendPage(more);
       }
-      mergedBody = { ...(mergedBody ?? {}), value: allRows };
-      if (nextLink) (mergedBody as Record<string, unknown>)['@odata.nextLink'] = nextLink;
-      else delete (mergedBody as Record<string, unknown>)['@odata.nextLink'];
-      setResult((r) =>
-        r ? { ...r, body: mergedBody, bytes: JSON.stringify(mergedBody).length } : r,
-      );
     } finally {
-      setIsLoadingMore(false);
+      if (isCurrent()) setIsLoadingMore(false);
     }
+  };
+
+  // Stop keeps every page merged so far; the remaining nextLink stays on
+  // the envelope so scrolling / Retrieve all can resume.
+  const stopLoadingMore = () => {
+    pagingIdRef.current += 1;
+    setIsLoadingMore(false);
+  };
+
+  const retryLoadMore = () => {
+    setPageError(null);
+    void fetchOneMorePage();
   };
 
   // ── Advisories — query antipatterns + stripped wildcards ────────────
@@ -737,7 +801,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
                 apply: emptyApply(),
                 dirty: new Set(['target']),
               }));
-              setResult(null);
+              clearResult();
               // Entity change → effectively a fresh draft. Clear the
               // "last saved" reference so the Save button doesn't try to
               // overwrite a save belonging to a different entity.
@@ -759,7 +823,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
                 apply: emptyApply(),
                 dirty: new Set(['target']),
               }));
-              setResult(null);
+              clearResult();
             }}
             onApplyParsed={(parsed) => {
               // Apply a parsed OData URL. If the parser resolved the entity
@@ -777,7 +841,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
                 apply: parsed.apply ?? emptyApply(),
                 dirty: new Set(['target']),
               }));
-              setResult(null);
+              clearResult();
               // Bring the user to the filter pane if there's a filter; else
               // to select; else stay on target so they see what landed.
               if (parsed.filter.rules.length > 0) setActivePath('filter');
@@ -903,8 +967,12 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
             requestUrl={built.relativeUrl}
             isLoadingMore={isLoadingMore}
             onRefresh={onExecute}
-            onLoadMore={fetchOneMorePage}
+            onLoadMore={pageError ? undefined : fetchOneMorePage}
             onRetrieveAll={retrieveAllPages}
+            onStopLoadingMore={stopLoadingMore}
+            loadMoreError={pageError}
+            onRetryLoadMore={retryLoadMore}
+            onDismissLoadMoreError={() => setPageError(null)}
           />
         )}
       </MainTabs>
