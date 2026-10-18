@@ -288,7 +288,8 @@ function genFetch(i: CodegenInputs): string {
   const hdrs = stripAuth(i.headers);
   const headerBlock = jsHeaderObject(hdrs, '      ');
   const isWrite = i.method !== 'GET';
-  const bodyLine = isWrite ? `\n      body: JSON.stringify(payload),` : '';
+  // Same depth as `method:` / `headers:` inside the fetch options (#200).
+  const bodyLine = isWrite ? `\n    body: JSON.stringify(payload),` : '';
   const payloadDecl = isWrite ? `  const payload = ${formatJsObject(i.body ?? {}, '  ')};\n\n` : '';
 
   return `// Dataverse Web API — fetch
@@ -370,8 +371,7 @@ ${headerBlock}
   for (const r of requests) {
     const res = await fetch(r.url, {
       method: r.method,
-      headers: sharedHeaders,
-      ${reqs.some((r) => r.body) ? 'body: r.body,' : ''}
+      headers: sharedHeaders,${reqs.some((r) => r.body) ? '\n      body: r.body,' : ''}
     });
     if (!res.ok) {
       const err = await res.json().catch(() => null);

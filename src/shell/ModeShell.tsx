@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useClearAnnouncementOnModeSwitch } from '../primitives/announce';
 import { useStudioStyles } from '../primitives/styles';
 
 /**
@@ -23,6 +24,8 @@ export function ModeShell({
   children: ReactNode;
   urlBar: ReactNode;
 }) {
+  // Each mode renders its own ModeShell, so this runs on every mode switch.
+  useClearAnnouncementOnModeSwitch();
   const s = useStudioStyles();
   return (
     <>

@@ -175,6 +175,21 @@ export const useStudioStyles = makeStyles({
     width: '6px',
     textAlign: 'center',
   },
+  // Sidebar status badge (#200): readable 11px text in a 16px pill; long
+  // labels truncate so the label column keeps its width.
+  ctiBadge: {
+    display: 'inline-block',
+    maxWidth: '120px',
+    height: '16px',
+    lineHeight: '16px',
+    fontSize: '11px',
+    paddingLeft: '4px',
+    paddingRight: '4px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
+  },
   ctiChev: {
     width: '14px',
     height: '14px',
