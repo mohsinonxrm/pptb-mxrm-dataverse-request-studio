@@ -6,7 +6,10 @@
 //   • Standalone in modes that pick a relationship target (Associate /
 //     Disassociate).
 //
-// Two modes, toggled by the user (and remembered locally):
+// Two modes, toggled by the user. A picker given a `memoryKey` remembers the
+// toggle and the raw GUID text in the enclosing RecordPickerMemoryScope
+// (one per mode, in ModeShell), so switching sidebar panes — which unmounts
+// the pane — doesn't reset it to Search (#189):
 //
 //   ┌── Search ──┬── By GUID ──┐
 //   ┌──────────────────────────┐
@@ -30,7 +33,15 @@
 // for lookup-column typeaheads. `contains(<primaryName>, …)`, 250 ms debounce,
 // capped at 50 rows, cached per (entity, query).
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   Combobox,
   Option,
@@ -56,6 +67,41 @@ export interface PickedRecord {
 
 type PickerMode = 'search' | 'guid';
 
+// ── Per-mode memory (#189) ───────────────────────────────────────────
+//
+// Sidebar panes unmount when the user switches between them, so local state
+// is lost. ModeShell stays mounted for the life of a mode, so it holds this
+// map; switching modes drops it, the same as the mode's own state.
+
+interface PickerMemory {
+  mode?: PickerMode;
+  /** GUID-mode text as typed (may be invalid or not yet resolved). */
+  raw?: string;
+}
+
+const PickerMemoryContext = createContext<Map<string, PickerMemory> | null>(null);
+
+export function RecordPickerMemoryScope({ children }: { children: ReactNode }) {
+  const [memory] = useState(() => new Map<string, PickerMemory>());
+  return <PickerMemoryContext.Provider value={memory}>{children}</PickerMemoryContext.Provider>;
+}
+
+/** useState that also writes through to the scope's memory when keyed. */
+function useRemembered<K extends keyof PickerMemory>(
+  memoryKey: string | undefined,
+  field: K,
+  initial: (stored: PickerMemory[K] | undefined) => NonNullable<PickerMemory[K]>,
+) {
+  const memory = useContext(PickerMemoryContext);
+  const entry = memoryKey && memory ? memory.get(memoryKey) : undefined;
+  const [value, setValue] = useState(() => initial(entry?.[field]));
+  const set = (next: NonNullable<PickerMemory[K]>) => {
+    setValue(next);
+    if (memoryKey && memory) memory.set(memoryKey, { ...memory.get(memoryKey), [field]: next });
+  };
+  return [value, set] as const;
+}
+
 // For comparing ids from different sources (picked row vs. saved request).
 const normalizeGuid = (s: string): string => parseGuid(s) ?? s.trim().toLowerCase();
 
@@ -64,18 +110,22 @@ export function RecordPicker({
   selectedId,
   onPick,
   placeholder = 'Search records by name…',
+  memoryKey,
 }: {
   table: string; // logical name
   selectedId: string | null;
   onPick: (rec: PickedRecord | null) => void;
   placeholder?: string;
+  /** Remember the Search / By GUID toggle and GUID text across pane
+   *  switches under this key (unique within the mode). */
+  memoryKey?: string;
 }) {
   const tbl = findTable(table);
 
   // The mode toggle defaults to 'search'. If a caller hydrates with just
   // a GUID (e.g. a saved request that only has the id, no name), they
   // can hit "By GUID" to see the raw value and edit it.
-  const [mode, setMode] = useState<PickerMode>('search');
+  const [mode, setMode] = useRemembered(memoryKey, 'mode', (stored) => stored ?? 'search');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -97,7 +147,7 @@ export function RecordPicker({
           placeholder={placeholder}
         />
       ) : (
-        <GuidPicker selectedId={selectedId} onPick={onPick} />
+        <GuidPicker selectedId={selectedId} onPick={onPick} memoryKey={memoryKey} />
       )}
     </div>
   );
@@ -294,13 +344,22 @@ function SearchPicker({
 function GuidPicker({
   selectedId,
   onPick,
+  memoryKey,
 }: {
   selectedId: string | null;
   onPick: (rec: PickedRecord | null) => void;
+  memoryKey?: string;
 }) {
   // Local string so the user can type freely; only a parsed GUID (or
-  // null) goes upstream.
-  const [raw, setRaw] = useState(selectedId ?? '');
+  // null) goes upstream. Remembered text is reused only while it still
+  // agrees with the selection (an invalid entry ↔ no selection); if the
+  // selection changed while the pane was closed, start from the selection.
+  const [raw, setRaw] = useRemembered(memoryKey, 'raw', (stored) =>
+    stored !== undefined &&
+    parseGuid(stored) === (selectedId ? (parseGuid(selectedId) ?? selectedId) : null)
+      ? stored
+      : (selectedId ?? ''),
+  );
   // The id we last sent up. When the parent echoes it back we keep the
   // user's text as typed — otherwise emitting null for an invalid entry
   // would wipe the field mid-typing.
