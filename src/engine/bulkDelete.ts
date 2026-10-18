@@ -365,8 +365,15 @@ export function startDateTime(
   return now.toISOString();
 }
 
+/** `yyyy-MM-dd HH:mm` in the user's local time — the job status shows local
+ *  times, so a UTC stamp in the name read hours off (#200). */
+function localStamp(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 export function defaultJobName(table: string, now: Date): string {
-  return `DRS bulk delete · ${table || 'table'} · ${now.toISOString().slice(0, 16).replace('T', ' ')}`;
+  return `DRS bulk delete · ${table || 'table'} · ${localStamp(now)}`;
 }
 
 export interface BuiltBulkDelete {

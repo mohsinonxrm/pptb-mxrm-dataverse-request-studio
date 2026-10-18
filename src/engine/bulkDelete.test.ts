@@ -5,6 +5,7 @@ import {
   buildBulkDelete,
   buildBulkDeleteBody,
   countPath,
+  defaultJobName,
   deserializeBulkDelete,
   filterToQueryExpression,
   parseRecipients,
@@ -291,5 +292,12 @@ describe('helpers', () => {
     });
     expect(back.recurrenceDays).toBe(30);
     expect(back.dirty.size).toBe(0);
+  });
+});
+
+describe('defaultJobName', () => {
+  it('stamps the local time, not UTC (#200)', () => {
+    const now = new Date(2026, 9, 17, 21, 54);
+    expect(defaultJobName('account', now)).toBe('DRS bulk delete · account · 2026-10-17 21:54');
   });
 });
