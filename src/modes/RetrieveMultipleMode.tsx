@@ -60,6 +60,7 @@ import {
   type SavedRequest,
   type SerializedRetrieveMultipleState,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import type { ThemeMode } from '../theme/theme';
 // Live-metadata hook: subscribes to the registry so child editors
@@ -114,7 +115,8 @@ type RootClauseId =
 
 export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('retrieve-multiple');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('retrieve-multiple', deserializeRetrieveMultiple, initialState);
+  const [state, setState] = useState(draft.state);
   // Default the active sidebar to 'target' so the user lands on the table
   // picker. Previously this opened on '$filter', which made no sense when
   // the initial state is empty (you can't filter against a table you haven't
@@ -167,9 +169,10 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // Reset id on entity change (saved entries are scoped to one entity
   // at a time semantically — switching entities effectively starts a
   // fresh draft that can be saved separately).
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const currentSerialized = useMemo(() => serializeRetrieveMultiple(state), [state]);
+  useStashModeDraft('retrieve-multiple', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   // Dirty when: never saved (no hash baseline) AND state has any meaningful
   // content (table picked), OR saved but the current hash diverges.

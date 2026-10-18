@@ -60,6 +60,7 @@ import {
   type SavedRequest,
   type SerializedExecuteFunctionState,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 // Empty initial state — no pre-seeded function. User picks from the live
@@ -78,7 +79,8 @@ type RootClauseId = 'pick' | 'target' | 'params' | 'options' | 'headers';
 
 export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('exec-function');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('exec-function', deserializeExecuteFunction, initialState);
+  const [state, setState] = useState(draft.state);
   const [activePath, setActivePath] = useState<string>('pick');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
@@ -105,8 +107,8 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // Save / Load
   const { entities } = useScopedEntities();
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const [boundRecordName, setBoundRecordName] = useState<string>('');
 
   const markDirty = (id: string) =>
@@ -171,6 +173,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeExecuteFunction(state), [state]);
+  useStashModeDraft('exec-function', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 

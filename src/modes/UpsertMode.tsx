@@ -72,6 +72,7 @@ import {
   type SavedRequest,
   type SerializedUpsertState,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { isRecordGuid } from '../primitives/guid';
 
@@ -108,7 +109,8 @@ type RootClauseId =
 
 export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('upsert');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('upsert', deserializeUpsert, initialState);
+  const [state, setState] = useState(draft.state);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
   // The live table is a memo dependency below: build*() reads metadata via
   // findTable(), which is empty until the fetch lands — keying on `state`
@@ -122,8 +124,8 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
   // Save / Load tracking (Save button dirty/clean, library checkmark).
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
 
   const built = useMemo(() => buildUpsert(state), [state, liveTable]);
   const body = useMemo(() => buildUpsertBody(state), [state, liveTable]);
@@ -294,6 +296,7 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeUpsert(state), [state]);
+  useStashModeDraft('upsert', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 

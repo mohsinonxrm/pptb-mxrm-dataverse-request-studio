@@ -74,6 +74,7 @@ import {
   type SavedRequest,
   type SerializedCreateState,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 // ──────────────────────────────────────────────────────────────
@@ -100,7 +101,8 @@ type RootClauseId = 'target' | 'fieldset' | 'prefer' | 'returnselect' | 'headers
 
 export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('create');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('create', deserializeCreate, initialState);
+  const [state, setState] = useState(draft.state);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
   // The live table is a memo dependency below: build*() reads metadata via
   // findTable(), which is empty until the fetch lands — keying on `state`
@@ -114,8 +116,8 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
   // ── Save / Load tracking ──
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
 
   const built = useMemo(() => buildCreate(state), [state, liveTable]);
   const body = useMemo(() => buildCreateBody(state), [state, liveTable]);
@@ -236,6 +238,7 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeCreate(state), [state]);
+  useStashModeDraft('create', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 

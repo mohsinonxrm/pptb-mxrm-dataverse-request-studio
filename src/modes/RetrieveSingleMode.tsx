@@ -67,6 +67,7 @@ import {
   type SavedRequest,
   type SerializedRetrieveSingleState,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { takeModeHandoff } from '../state/modeHandoff';
 import type { Advisory } from '../primitives/advisories';
@@ -92,7 +93,8 @@ const isValidGuid = isRecordGuid;
 
 export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('retrieve-single');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('retrieve-single', deserializeRetrieveSingle, initialState);
+  const [state, setState] = useState(draft.state);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
   // The live table is a memo dependency below: build*() reads metadata via
   // findTable(), which is empty until the fetch lands — keying on `state`
@@ -111,8 +113,8 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // Last-saved tracking — drives the Save button's primary/subtle state
   // and lights up the checkmark next to the current entry in the library.
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
 
   const built = useMemo(() => buildRetrieveSingle(state), [state, liveTable]);
   const tbl = findTable(state.table);
@@ -121,6 +123,7 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   // discipline as RetrieveMultiple: a string compare is cheap and avoids
   // stale-baseline bugs that creep in if we cache a serialized snapshot.
   const currentSerialized = useMemo(() => serializeRetrieveSingle(state), [state]);
+  useStashModeDraft('retrieve-single', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 

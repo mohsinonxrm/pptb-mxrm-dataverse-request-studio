@@ -51,6 +51,7 @@ import {
   type SavedRequest,
   type SerializedExecuteActionState,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 export type ActionCategory = 'oob' | 'custom-api' | 'custom-action';
@@ -109,7 +110,10 @@ export interface ExecuteActionModeProps {
 export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProps) {
   const config = CONFIGS[category];
   const type = findRequestType(config.registryId);
-  const [state, setState] = useState(() => initialState(category));
+  const draft = useModeDraft(`exec-action:${category}`, deserializeExecuteAction, () =>
+    initialState(category),
+  );
+  const [state, setState] = useState(draft.state);
   const [activePath, setActivePath] = useState<string>('pick');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
@@ -140,8 +144,8 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
 
   // Save / Load tracking
   const { entities } = useScopedEntities();
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   // Bound-record name cache — populated when the user picks via TargetEditor.
   const [boundRecordName, setBoundRecordName] = useState<string>('');
 
@@ -223,6 +227,7 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
   // which sub-mode they belong to). Library entries can be loaded into any
   // of the three so the loader doesn't gatekeep on category.
   const currentSerialized = useMemo(() => serializeExecuteAction(state), [state]);
+  useStashModeDraft(`exec-action:${category}`, currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 

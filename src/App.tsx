@@ -27,6 +27,7 @@ import { ExecuteActionMode } from './modes/ExecuteActionMode';
 import { ExecuteFunctionMode } from './modes/ExecuteFunctionMode';
 import { ManageAttachmentMode } from './modes/ManageAttachmentMode';
 import { ErrorBoundary } from './shell/ErrorBoundary';
+import { clearModeDrafts } from './state/modeDrafts';
 import { StubMode } from './modes/StubMode';
 import { findTable } from './mock/metadata';
 import { _setTableLookup } from './editors/filter/filterTree';
@@ -137,7 +138,12 @@ function ModeRouter({
   // resets it; switching modes (`resetKey`) clears a caught error.
   const type = findRequestType(modeId);
   return (
-    <ErrorBoundary scope="mode" label={type.id === modeId ? type.name : modeId} resetKey={modeId}>
+    <ErrorBoundary
+      scope="mode"
+      label={type.id === modeId ? type.name : modeId}
+      resetKey={modeId}
+      onReload={clearModeDrafts}
+    >
       <ModeSwitch modeId={modeId} themeMode={themeMode} setActiveId={setActiveId} />
     </ErrorBoundary>
   );

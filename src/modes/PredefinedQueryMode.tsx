@@ -79,6 +79,7 @@ import {
   type SavedRequest,
   type SerializedPredefinedQueryState,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 // Empty initial state — the studio is a request *builder*. Pre-seeding a
@@ -225,7 +226,8 @@ function queryTypeLabel(qt: number): string {
 export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('predefined-query');
   const s = useStudioStyles();
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('predefined-query', deserializePredefinedQuery, initialState);
+  const [state, setState] = useState(draft.state);
   // Live-metadata subscription so the entity-set name resolves once the
   // table cache lands.
   // The live table is a memo dependency below: build*() reads metadata via
@@ -240,8 +242,8 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
   // Save / Load
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
 
   // Live-fetched queries scoped to the chosen table.
   const [queries, setQueries] = useState<QueryRow[]>([]);
@@ -466,6 +468,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializePredefinedQuery(state), [state]);
+  useStashModeDraft('predefined-query', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 

@@ -87,6 +87,7 @@ import {
   type SavedRequest,
   type SerializedManageFileState,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 const initialState = (): ManageFileState => ({
@@ -119,7 +120,8 @@ type RootClauseId =
 
 export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('manage-file');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('manage-file', deserializeManageFile, initialState);
+  const [state, setState] = useState(draft.state);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
   // The live table is a memo dependency below: build*() reads metadata via
   // findTable(), which is empty until the fetch lands — keying on `state`
@@ -201,9 +203,10 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const { entities } = useScopedEntities();
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const currentSerialized = useMemo(() => serializeManageFile(state), [state]);
+  useStashModeDraft('manage-file', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
   const onSaved = (saved: SavedRequest) => {
