@@ -60,9 +60,10 @@ import { convertSnapshot, type RequestSnapshot } from '../engine/batch/savedToBa
 import {
   BATCH_CODE_LABELS,
   generateBatchCode,
+  toEncodableGroups,
   type BatchCodeFormat,
 } from '../engine/batch/batchCode';
-import { makeBoundary } from '../engine/batch/multipart';
+import { encodeBatch, makeBoundary } from '../engine/batch/multipart';
 import { BatchItemEditor } from './batch/BatchItemEditor';
 import { BatchGroupPane, BatchOverviewPane } from './batch/BatchPanes';
 import { BatchResultsView, type ResultRow } from './batch/BatchResultsView';
@@ -70,6 +71,9 @@ import { BatchCodeView } from './batch/BatchCodeView';
 import { AddFromSavedDialog } from './batch/AddFromSavedDialog';
 
 const CODE_FORMATS: BatchCodeFormat[] = ['http', 'fetch', 'pptb'];
+
+/** Job / composite modes "Add last request" doesn't offer (#198). */
+const NOT_BATCHABLE_MODES = new Set(['bulk-delete', 'bulk-write', 'batch', 'execute-multiple']);
 
 export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('batch');
@@ -167,7 +171,9 @@ export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
     });
 
   // ── Add from Saved / last request ──
-  const last = lastPublishedRequest();
+  // Job and composite modes can't go inside a $batch (#198).
+  const published = lastPublishedRequest();
+  const last = published && !NOT_BATCHABLE_MODES.has(published.modeId) ? published : null;
   const lastLabel = last ? findRequestType(last.modeId).name : null;
   const addSnapshots = async (snaps: RequestSnapshot[]) => {
     const added: BatchItem[] = [];
@@ -281,6 +287,13 @@ export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
       changeset: (i: number) => (boundaryRef.current.cs[i] ??= makeBoundary('changeset')),
     }),
     [],
+  );
+  // Size of the multipart body for the URL bar's byte counter (#198).
+  const bodyBytes = useMemo(
+    () =>
+      new TextEncoder().encode(encodeBatch(toEncodableGroups(compiled.items), boundaries).body)
+        .length,
+    [compiled, boundaries],
   );
   const generate = (fmt: BatchCodeFormat) =>
     generateBatchCode(fmt, {
@@ -500,6 +513,7 @@ export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
         <UrlBar
           method="BATCH"
           url={`${API_BASE}/$batch`}
+          bytes={bodyBytes}
           executeVerb={type.executeVerb}
           disabledReason={disabledReason}
           loading={loading}

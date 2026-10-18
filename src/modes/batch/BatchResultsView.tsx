@@ -93,7 +93,13 @@ function ResultRowView({ r }: { r: ResultRow }) {
         ) : (
           <StatusPill
             status={statusKind(r)}
-            code={`${r.status ?? '—'}${r.statusText && (r.status ?? 0) >= 300 ? ` ${r.statusText}` : ''}`}
+            // A numeric 2xx lets StatusPill use the status-text map
+            // ("204 No Content", #123) instead of a generic "OK" (#198).
+            code={
+              r.status !== undefined && r.status < 300
+                ? r.status
+                : `${r.status ?? '—'}${r.statusText && (r.status ?? 0) >= 300 ? ` ${r.statusText}` : ''}`
+            }
           />
         )}
         {outcomeText && r.status !== undefined && <Caption1>{outcomeText}</Caption1>}
@@ -190,6 +196,24 @@ export function BatchResultsView({
     },
     { ok: 0, failed: 0, other: 0 },
   );
+  // A failed change set answers with one error the host can't tie to a
+  // request (and a partial response the host can't parse gives no
+  // per-request results), so every request reads "rolled back" / "not run".
+  // The request that failed wasn't rolled back — count it as failed (#198).
+  if (run) {
+    const byContentId = new Map(rows.map((r) => [r.contentId, r]));
+    for (const s of run.segments) {
+      if (!s.changesetError && !s.requestFailed) continue;
+      const attributed = s.contentIds.some((id) => {
+        const r = byContentId.get(id);
+        return r?.outcome === 'done' && (r.status ?? 0) >= 400;
+      });
+      if (!attributed && counts.other > 0) {
+        counts.failed += 1;
+        counts.other -= 1;
+      }
+    }
+  }
 
   return (
     <div style={{ maxWidth: 1000 }}>

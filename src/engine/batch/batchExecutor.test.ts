@@ -87,4 +87,15 @@ describe('describeHostError', () => {
       }),
     ).toBe('Malformed Dataverse batch response: missing operation results');
   });
+  it('explains the host parser bug with continue-on-error on and strips the IPC prefix (#198)', () => {
+    const msg = describeHostError(
+      "Error invoking remote method 'dataverse.executeBatch': Error: Dataverse executeBatch failed: Malformed Dataverse batch response: invalid content ID correlation",
+      { ...ctx, continueOnError: true },
+    );
+    expect(msg).toMatch(/put requests that might fail last/);
+    expect(msg).toMatch(
+      /Host message: Dataverse executeBatch failed: Malformed Dataverse batch response/,
+    );
+    expect(msg).not.toMatch(/Error invoking remote method/);
+  });
 });
