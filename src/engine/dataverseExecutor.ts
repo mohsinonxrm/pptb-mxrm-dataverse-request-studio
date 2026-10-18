@@ -413,7 +413,21 @@ export async function executePredefined(s: PredefinedQueryState): Promise<ExecRe
   if (!tbl) return mapError({ statusCode: 404, message: `Unknown table ${s.table}` }, 0);
   const param = s.queryType === 'savedQuery' ? 'savedQuery' : 'userQuery';
   const top = s.top ? `&$top=${s.top}` : '';
-  const path = `${tbl.entitySetName}?${param}=${s.queryId}${top}`;
+  // Related collection (#5): /<sourceSet>(<id>)/<nav>?savedQuery=<id>
+  let collection = tbl.entitySetName;
+  if (s.related) {
+    const r = s.related;
+    if (!r.sourceTable || !r.navProperty || !r.recordId) {
+      return mapError(
+        { statusCode: 400, message: 'Pick the related collection and the source row.' },
+        0,
+      );
+    }
+    const src = metadata.peekTable(r.sourceTable) ?? (await metadata.getTable(r.sourceTable));
+    if (!src) return mapError({ statusCode: 404, message: `Unknown table ${r.sourceTable}` }, 0);
+    collection = `${src.entitySetName}(${r.recordId})/${r.navProperty}`;
+  }
+  const path = `${collection}?${param}=${s.queryId}${top}`;
   const res = await timed(() => dvHost.queryData(path));
   if (isExecResult(res)) return res;
   return ok(200, res.value, res.ms);

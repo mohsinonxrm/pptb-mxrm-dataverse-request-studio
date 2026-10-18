@@ -647,6 +647,10 @@ function autoSuggestPredefinedQuery(state: SerializedPredefinedQueryState): stri
   const parts: string[] = [state.queryType === 'userQuery' ? 'userQuery' : 'savedQuery'];
   parts.push(state.table || 'untitled');
   if (state.queryId) parts.push(`#${state.queryId.replace(/[{}-]/g, '').slice(0, 8)}`);
+  // Related collection (#5): name the source table + nav.
+  if (state.related?.navProperty) {
+    parts.push(`via ${state.related.sourceTable}/${state.related.navProperty}`);
+  }
   if (state.top && state.top !== 50) parts.push(`top:${state.top}`);
   parts.push(new Date().toISOString().slice(0, 10));
   return parts.join(' · ');

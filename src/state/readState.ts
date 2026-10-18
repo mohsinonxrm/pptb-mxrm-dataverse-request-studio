@@ -46,6 +46,26 @@ export interface PredefinedQueryState {
   prefer: PreferSpec;
   headers: HeaderItem[];
   dirty: Set<string>;
+  /**
+   * Apply the query to a related collection of one row instead of the
+   * table's entity set (#5): `/<sourceSet>(<id>)/<nav>?savedQuery=<id>`.
+   * Null / absent (entries saved before #5) = the entity set.
+   */
+  related?: PredefinedRelatedTarget | null;
+}
+
+/** The row + collection-valued nav a predefined query runs against (#5). */
+export interface PredefinedRelatedTarget {
+  /** Table of the source row (logical name), e.g. `account`. */
+  sourceTable: string;
+  /** Relationship schema name — identifies the pair of nav properties. */
+  relationshipName: string;
+  /** Collection-valued nav on the source table, e.g. `opportunity_parent_account`. */
+  navProperty: string;
+  /** Source row id. */
+  recordId: string | null;
+  /** Source row primary name, for display. */
+  recordName?: string;
 }
 
 // Recent runs (in-memory, optional persistence later)

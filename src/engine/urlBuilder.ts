@@ -1116,6 +1116,19 @@ export function buildDisassociateRequests(s: DisassociateState): DisassociateReq
   }));
 }
 
+/**
+ * Collection a predefined query runs against when it targets a related
+ * collection (#5): `<sourceSet>(<id>)/<nav>`. Null for the entity-set form,
+ * or while the source table / nav aren't picked or loaded yet.
+ */
+export function predefinedCollectionPath(s: PredefinedQueryState): string | null {
+  const r = s.related;
+  if (!r || !r.sourceTable || !r.navProperty) return null;
+  const src = findTable(r.sourceTable);
+  if (!src) return null;
+  return `${src.entitySetName}(${r.recordId || '<record-id>'})/${r.navProperty}`;
+}
+
 export function buildPredefinedQuery(s: PredefinedQueryState): BuiltRequest {
   const tbl = findTable(s.table);
   if (!tbl)
@@ -1132,10 +1145,11 @@ export function buildPredefinedQuery(s: PredefinedQueryState): BuiltRequest {
   if (s.top != null && s.top > 0 && (s.prefer.maxpagesize == null || s.prefer.maxpagesize === 0)) {
     parts.push({ key: '$top', value: String(s.top) });
   }
-  const path = `${ENV.apiBase}/${tbl.entitySetName}`;
+  const collection = predefinedCollectionPath(s) ?? tbl.entitySetName;
+  const path = `${ENV.apiBase}/${collection}`;
   const qs = joinQuery(parts);
   const relativeUrl = qs ? `${path}?${qs}` : path;
-  const noBase = `/${tbl.entitySetName}${qs ? `?${qs}` : ''}`;
+  const noBase = `/${collection}${qs ? `?${qs}` : ''}`;
   return {
     relativeUrl,
     relativeNoBase: noBase,
