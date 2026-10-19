@@ -18,7 +18,7 @@
 // are distinguished by `modeId: 'retrieve-single'`. The library popover
 // filters by mode so each mode sees only its own saves.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Table20Regular,
   Table20Filled,
@@ -42,6 +42,7 @@ import { Sidebar, type SidebarClauseItem } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { TargetEditor } from '../editors/TargetEditor';
 import { SelectEditor } from '../editors/SelectEditor';
 import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/PreferEditor';
@@ -53,6 +54,7 @@ import { countRules } from '../editors/filter/filterTree';
 import { findTable } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildRetrieveSingle } from '../engine/urlBuilder';
+import { relatedMetadataAdvisories } from '../engine/navPath';
 import { runtime, type ExecResult } from '../engine/runtime';
 import type { ExpandSpec } from '../editors/ExpandEditor';
 import type { RetrieveSingleState, RecentRun } from '../state/readState';
@@ -65,9 +67,13 @@ import {
   deserializeRetrieveSingle,
   type SavedRequest,
   type SerializedRetrieveSingleState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { takeModeHandoff } from '../state/modeHandoff';
 import type { Advisory } from '../primitives/advisories';
+import { isRecordGuid } from '../primitives/guid';
 
 const initialState = (): RetrieveSingleState => ({
   table: '',
@@ -83,14 +89,14 @@ const initialState = (): RetrieveSingleState => ({
 
 type RootClauseId = 'target' | 'select' | 'prefer' | 'headers';
 
-// GUID validator — Dataverse accepts braced, hyphenated, or hex-only forms.
-const GUID_RE =
-  /^[{(]?[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}[)}]?$/;
-const isValidGuid = (s: string | null | undefined): boolean => !!s && GUID_RE.test(s.trim());
+// GUID validator — the OData key needs the dashed 8-4-4-4-12 form (RecordPicker
+// normalizes what the user types to it).
+const isValidGuid = isRecordGuid;
 
 export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('retrieve-single');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('retrieve-single', deserializeRetrieveSingle, initialState);
+  const [state, setState] = useState(draft.state);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
   // The live table is a memo dependency below: build*() reads metadata via
   // findTable(), which is empty until the fetch lands — keying on `state`
@@ -99,7 +105,8 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   // Pre-warm entities referenced by nested $expand (inner $select/$filter/
   // $orderby) so encoders resolve against the right related entity — even on
   // saved-request reload / pasted URL where no expand editor was opened.
-  useWarmReferencedTables(state.table || null, { expand: state.expand });
+  // `related.version` re-encodes `built` when a related table lands (#63).
+  const related = useWarmReferencedTables(state.table || null, { expand: state.expand });
   const { entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
@@ -109,16 +116,21 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // Last-saved tracking — drives the Save button's primary/subtle state
   // and lights up the checkmark next to the current entry in the library.
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
 
-  const built = useMemo(() => buildRetrieveSingle(state), [state, liveTable]);
+  const built = useMemo(
+    () => buildRetrieveSingle(state),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state, liveTable, related.version],
+  );
   const tbl = findTable(state.table);
 
   // Hash + dirty are derived from the live state every render. Same identity
   // discipline as RetrieveMultiple: a string compare is cheap and avoids
   // stale-baseline bugs that creep in if we cache a serialized snapshot.
   const currentSerialized = useMemo(() => serializeRetrieveSingle(state), [state]);
+  useStashModeDraft('retrieve-single', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 
@@ -158,7 +170,7 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
     if (entitiesLoaded) {
       const known = entities.some((e) => e.logicalName === snap.table);
       if (!known) {
-        window.alert(
+        notify(
           `Can't load "${entry.name}": entity \`${snap.table}\` ` +
             `isn't available in this environment. The solution may have been ` +
             `removed or you may be connected to a different org.`,
@@ -172,6 +184,19 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedHash(hashState(snap));
     setResult(null);
     setActivePath('target');
+  };
+
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'retrieve-single');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
   };
 
   // Publish our save context to the FrameHeader's Save / Saved-library
@@ -218,9 +243,16 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
         body: `"${state.recordId}" doesn't look like a GUID. Dataverse record ids are 36-char UUIDs (with or without braces).`,
       });
     }
+    out.push(...relatedMetadataAdvisories(related.pending, related.failed));
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.table, state.recordId, tbl?.displayName]);
+  }, [
+    state.table,
+    state.recordId,
+    tbl?.displayName,
+    related.pending.join(','),
+    related.failed.join(','),
+  ]);
 
   // ── Execute ───────────────────────────────────────────────────────
   const onExecute = async () => {
@@ -233,6 +265,7 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: 'retrieve-single',
           url: built.relativeUrl,
           method: 'GET',
@@ -256,6 +289,30 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
         : state.headers.some((h) => h.enabled && !h.name)
           ? 'Fix empty header name.'
           : null;
+
+  // ── Handoff from another mode (#3) ────────────────────────────────
+  // WriteResultCard's "Retrieve this record" switches here with a table +
+  // record id waiting. Take it once on mount, start a fresh request for that
+  // record (not saved, so no Save baseline), and run it as soon as the
+  // table's metadata has landed — the URL needs its entity set name.
+  const [autoRunPending, setAutoRunPending] = useState(false);
+  useEffect(() => {
+    const handoff = takeModeHandoff('retrieve-single');
+    if (!handoff) return;
+    setState({ ...initialState(), table: handoff.table, recordId: handoff.recordId });
+    setLastSavedId(undefined);
+    setLastSavedHash(null);
+    setResult(null);
+    setActivePath('target');
+    setAutoRunPending(!!handoff.autoExecute);
+  }, []);
+  useEffect(() => {
+    if (!autoRunPending || loading) return;
+    if (!liveTable || !tbl?.entitySetName || disabledReason) return;
+    setAutoRunPending(false);
+    void onExecute();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRunPending, liveTable, tbl?.entitySetName, disabledReason, loading]);
 
   // ── Sidebar tree for $expand (recursive) ──────────────────────────
   // Same shape + visibility rules as Retrieve Multiple (see comment block
@@ -509,6 +566,7 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={

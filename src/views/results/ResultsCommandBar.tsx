@@ -9,11 +9,13 @@
 //   • Copy URL     — copy the resolved request URL
 //   • Copy TSV     — copy current rows as tab-separated (paste-friendly)
 //   • Copy JSON    — copy the OData envelope
+//   • Export       — save CSV (as shown / raw) or the JSON envelope to a
+//                    file via toolboxAPI.fileSystem.saveFile (#15)
 //   • Selection count + row count
 //
-// Search is intentionally NOT here — it's a column-list operation handled
-// inside ResultsGrid. The command bar is for *actions on the result set*,
-// not for filtering it.
+// The search box and the Filter row toggle only drive ResultsGrid's
+// client-side filtering of the loaded rows (#17); they never change the
+// request.
 
 import {
   Toolbar,
@@ -30,6 +32,12 @@ import {
   MenuButton,
   Spinner,
   Input,
+  MenuDivider,
+  MessageBar,
+  MessageBarBody,
+  MessageBarActions,
+  Button,
+  MenuItemRadio,
   ToggleButton,
 } from '@fluentui/react-components';
 import {
@@ -41,10 +49,15 @@ import {
   Stack20Regular,
   Search20Regular,
   TextDensity20Regular,
-  TextAlignDistributed20Regular,
+  ArrowExportUp20Regular,
+  Dismiss20Regular,
+  Filter20Regular,
 } from '@fluentui/react-icons';
-import { SegmentedToggle } from '../../primitives/SegmentedToggle';
+import type { GridDensity } from '../../state/displaySettings';
+import { useState } from 'react';
 import { useHostSession } from '../../host/HostContext';
+import { saveFileSafe } from '../../host/pptbBridge';
+import { exportFileName, toCsv, type ExportValueMode, type GridExportView } from './exportResults';
 
 const useStyles = makeStyles({
   bar: {
@@ -63,7 +76,14 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground3,
   },
   spacer: { flexGrow: 1 },
+  notice: { flexBasis: '100%' },
 });
+
+const DENSITY_LABEL: Record<GridDensity, string> = {
+  medium: 'Medium',
+  small: 'Small',
+  'extra-small': 'Extra small',
+};
 
 export interface ResultsCommandBarProps {
   hasMore: boolean;
@@ -77,12 +97,21 @@ export interface ResultsCommandBarProps {
   onRefresh: () => void;
   /** Walk every page via @odata.nextLink until the result set is fully loaded. */
   onRetrieveAll?: () => void;
+  /** Stop an in-flight page fetch; shown in place of Retrieve all while loading. */
+  onStopLoadingMore?: () => void;
   /** Row-search query (passed through to the grid). */
   searchQuery: string;
   onSearchChange: (q: string) => void;
-  /** Row density. */
-  density: 'cozy' | 'compact';
-  onDensityChange: (d: 'cozy' | 'compact') => void;
+  /** Row density (persisted in the display settings, #16). */
+  density: GridDensity;
+  onDensityChange: (d: GridDensity) => void;
+  /** Root table logical name — names the exported file. */
+  table?: string;
+  /** The columns + rows the grid lists; CSV export writes exactly these. */
+  exportView?: GridExportView | null;
+  /** Per-column filter row under the grid header (#17). */
+  showFilterRow: boolean;
+  onShowFilterRowChange: (show: boolean) => void;
 }
 
 export function ResultsCommandBar({
@@ -93,13 +122,20 @@ export function ResultsCommandBar({
   body,
   onRefresh,
   onRetrieveAll,
+  onStopLoadingMore,
   searchQuery,
   onSearchChange,
+  showFilterRow,
+  onShowFilterRowChange,
   density,
   onDensityChange,
+  table,
+  exportView,
 }: ResultsCommandBarProps) {
   const s = useStyles();
   const host = useHostSession();
+  const [exporting, setExporting] = useState(false);
+  const [notice, setNotice] = useState<{ intent: 'success' | 'error'; text: string } | null>(null);
   // PPTB strips Prefer headers, so `odata.maxpagesize` for small-page-size
   // testing doesn't apply on Execute. When the response has no nextLink AND
   // we're inside PPTB, explain WHY pagination is unavailable rather than
@@ -143,6 +179,43 @@ export function ResultsCommandBar({
     navigator.clipboard?.writeText([header, ...lines].join('\n'));
   };
 
+  const save = async (fileName: string, content: string, filter: { name: string; ext: string }) => {
+    setExporting(true);
+    setNotice(null);
+    try {
+      const path = await saveFileSafe(fileName, content, [
+        { name: filter.name, extensions: [filter.ext] },
+      ]);
+      // PPTB returns the chosen path (null/undefined when the dialog was
+      // cancelled); the standalone browser download returns null too.
+      if (path) setNotice({ intent: 'success', text: `Saved to ${path}` });
+    } catch (e) {
+      setNotice({
+        intent: 'error',
+        text: `Export failed: ${e instanceof Error ? e.message : String(e)}`,
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const exportCsv = (mode: ExportValueMode) => {
+    if (!exportView || exportView.rows.length === 0) return;
+    void save(exportFileName(table, 'csv'), toCsv(exportView.rows, exportView.columns, mode), {
+      name: 'CSV',
+      ext: 'csv',
+    });
+  };
+
+  const exportJson = () => {
+    void save(exportFileName(table, 'json'), JSON.stringify(body, null, 2), {
+      name: 'JSON',
+      ext: 'json',
+    });
+  };
+
+  const csvDisabled = exporting || !exportView || exportView.rows.length === 0;
+
   return (
     <div className={s.bar}>
       <Toolbar size="small" aria-label="Results actions">
@@ -157,17 +230,32 @@ export function ResultsCommandBar({
           </ToolbarButton>
         </Tooltip>
 
-        {onRetrieveAll && (
-          <Tooltip content={retrieveAllTooltip} relationship="description">
+        {onRetrieveAll && isLoadingMore && onStopLoadingMore ? (
+          <Tooltip
+            content="Stop fetching pages. Rows loaded so far are kept."
+            relationship="description"
+          >
             <ToolbarButton
               appearance="subtle"
-              icon={isLoadingMore ? <Spinner size="tiny" /> : <Stack20Regular />}
-              disabled={!hasMore || isLoadingMore}
-              onClick={onRetrieveAll}
+              icon={<Spinner size="tiny" />}
+              onClick={onStopLoadingMore}
             >
-              Retrieve all
+              Stop
             </ToolbarButton>
           </Tooltip>
+        ) : (
+          onRetrieveAll && (
+            <Tooltip content={retrieveAllTooltip} relationship="description">
+              <ToolbarButton
+                appearance="subtle"
+                icon={isLoadingMore ? <Spinner size="tiny" /> : <Stack20Regular />}
+                disabled={!hasMore || isLoadingMore}
+                onClick={onRetrieveAll}
+              >
+                Retrieve all
+              </ToolbarButton>
+            </Tooltip>
+          )
         )}
 
         <ToolbarDivider />
@@ -201,11 +289,39 @@ export function ResultsCommandBar({
           </MenuPopover>
         </Menu>
 
+        <Menu>
+          <MenuTrigger disableButtonEnhancement>
+            <MenuButton
+              appearance="subtle"
+              size="small"
+              icon={exporting ? <Spinner size="tiny" /> : <ArrowExportUp20Regular />}
+              disabled={exporting}
+            >
+              Export
+            </MenuButton>
+          </MenuTrigger>
+          <MenuPopover>
+            <MenuList>
+              <MenuItem disabled={csvDisabled} onClick={() => exportCsv('shown')}>
+                CSV — values as shown
+              </MenuItem>
+              <MenuItem disabled={csvDisabled} onClick={() => exportCsv('raw')}>
+                CSV — raw values (GUIDs, numbers, ISO dates)
+              </MenuItem>
+              <MenuDivider />
+              <MenuItem disabled={exporting} onClick={exportJson}>
+                JSON — OData envelope
+              </MenuItem>
+            </MenuList>
+          </MenuPopover>
+        </Menu>
+
         <ToolbarDivider />
 
         <Input
           size="small"
           appearance="filled-lighter"
+          aria-label="Search rows"
           placeholder="Search rows…"
           contentBefore={<Search20Regular />}
           value={searchQuery}
@@ -213,27 +329,64 @@ export function ResultsCommandBar({
           style={{ minWidth: 220 }}
         />
 
-        <SegmentedToggle ariaLabel="Row density">
+        <Tooltip
+          content="Filter each column of the loaded rows (doesn't change the request)"
+          relationship="description"
+        >
           <ToggleButton
-            checked={density === 'cozy'}
-            icon={<TextAlignDistributed20Regular />}
-            onClick={() => onDensityChange('cozy')}
-            title="Cozy"
+            appearance="subtle"
+            size="small"
+            icon={<Filter20Regular />}
+            checked={showFilterRow}
+            onClick={() => onShowFilterRowChange(!showFilterRow)}
           >
-            Cozy
+            Filter row
           </ToggleButton>
-          <ToggleButton
-            checked={density === 'compact'}
-            icon={<TextDensity20Regular />}
-            onClick={() => onDensityChange('compact')}
-            title="Compact"
-          >
-            Compact
-          </ToggleButton>
-        </SegmentedToggle>
+        </Tooltip>
+
+        <Menu
+          checkedValues={{ density: [density] }}
+          onCheckedValueChange={(_, d) => {
+            const next = d.checkedItems[0] as GridDensity | undefined;
+            if (next) onDensityChange(next);
+          }}
+        >
+          <MenuTrigger disableButtonEnhancement>
+            <Tooltip content="Row density" relationship="description">
+              <MenuButton appearance="subtle" size="small" icon={<TextDensity20Regular />}>
+                {DENSITY_LABEL[density] ?? DENSITY_LABEL.medium}
+              </MenuButton>
+            </Tooltip>
+          </MenuTrigger>
+          <MenuPopover>
+            <MenuList>
+              {(Object.keys(DENSITY_LABEL) as GridDensity[]).map((d) => (
+                <MenuItemRadio key={d} name="density" value={d}>
+                  {DENSITY_LABEL[d]}
+                </MenuItemRadio>
+              ))}
+            </MenuList>
+          </MenuPopover>
+        </Menu>
       </Toolbar>
 
       <span className={s.spacer} />
+
+      {notice && (
+        <MessageBar intent={notice.intent} className={s.notice}>
+          <MessageBarBody>{notice.text}</MessageBarBody>
+          <MessageBarActions
+            containerAction={
+              <Button
+                appearance="transparent"
+                aria-label="Dismiss"
+                icon={<Dismiss20Regular />}
+                onClick={() => setNotice(null)}
+              />
+            }
+          />
+        </MessageBar>
+      )}
     </div>
   );
 }

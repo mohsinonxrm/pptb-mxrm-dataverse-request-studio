@@ -35,16 +35,21 @@ export function useLiveTable(logical: string | null | undefined): {
   useEffect(() => __subscribeLiveTables(() => bump((v) => v + 1)), []);
 
   const [loading, setLoading] = useState(false);
+  const table = logical ? findTable(logical) : undefined;
+  // Keyed on presence too, so the table is refetched when it drops out of
+  // the registry (a metadata reset) instead of staying blank until the
+  // user picks another table (#53).
+  const present = !!table;
 
   useEffect(() => {
     if (!logical) return;
     // Already cached → no fetch needed.
-    if (findTable(logical)) return;
+    if (present) return;
     setLoading(true);
     void metadata.getTable(logical).finally(() => setLoading(false));
-  }, [logical]);
+  }, [logical, present]);
 
-  return { table: logical ? findTable(logical) : undefined, loading };
+  return { table, loading };
 }
 
 /**
@@ -113,15 +118,23 @@ export function useWarmTable(): (logical: string) => Promise<void> {
  * Self-healing across hops: the walk only reaches as deep as the registry is
  * currently warm. Each fetch fires a registry update, which re-runs this hook
  * and lets the walk reach one level deeper, until the whole referenced graph
- * is present. Failures are swallowed (best-effort warming; the editors still
- * render with whatever metadata is available).
+ * is present. Failures don't throw (best-effort warming; the editors still
+ * render with whatever metadata is available) but are reported back.
+ *
+ * Returns:
+ *   • `version` — bumps on every registry update. Modes put it in the deps
+ *     of their `build*()` memo so the URL bar / Code tab re-encode when a
+ *     related table lands, instead of showing the pre-metadata form (#63).
+ *   • `pending` — referenced related tables not in the registry yet.
+ *   • `failed`  — referenced related tables whose metadata fetch failed.
  */
 export function useWarmReferencedTables(
   rootTable: string | null | undefined,
   trees: ReferencedTreeInput,
-): void {
+): { version: number; pending: string[]; failed: string[] } {
   const [registryVersion, setRegistryVersion] = useState(0);
   useEffect(() => __subscribeLiveTables(() => setRegistryVersion((v) => v + 1)), []);
+  const [failedNames, setFailedNames] = useState<ReadonlySet<string>>(() => new Set());
 
   // Stable dependency key — the trees object is rebuilt by the caller each
   // render, so depend on its serialized content rather than its identity.
@@ -130,13 +143,30 @@ export function useWarmReferencedTables(
     [trees.filter, trees.expand, trees.apply, trees.orderby],
   );
 
-  useEffect(() => {
-    if (!rootTable) return;
-    for (const name of collectReferencedEntities(rootTable, trees)) {
-      if (!findTable(name)) void metadata.getTable(name).catch(() => {});
-    }
-    // `trees` is read via the stable `treeKey`; `registryVersion` re-runs the
-    // walk as deeper hops become resolvable.
+  // `trees` is read via the stable `treeKey`; `registryVersion` re-runs the
+  // walk as deeper hops become resolvable.
+  const referenced = useMemo(
+    () => (rootTable ? collectReferencedEntities(rootTable, trees) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rootTable, treeKey, registryVersion]);
+    [rootTable, treeKey, registryVersion],
+  );
+
+  useEffect(() => {
+    for (const name of referenced) {
+      if (findTable(name)) continue;
+      void metadata
+        .getTable(name)
+        .then((t) => {
+          if (!t) setFailedNames((s) => new Set(s).add(name));
+        })
+        .catch(() => setFailedNames((s) => new Set(s).add(name)));
+    }
+  }, [referenced]);
+
+  const missing = referenced.filter((name) => !findTable(name));
+  return {
+    version: registryVersion,
+    pending: missing.filter((name) => !failedNames.has(name)),
+    failed: missing.filter((name) => failedNames.has(name)),
+  };
 }

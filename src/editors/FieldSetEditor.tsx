@@ -24,7 +24,7 @@
 // they're working with raw schema names. This is the same v9 design language
 // used in SelectEditor and FilterValueInput.
 
-import { useMemo, useState, useEffect } from 'react';
+import { createContext, useContext, useMemo, useState, useEffect } from 'react';
 import {
   Input,
   Textarea,
@@ -42,6 +42,7 @@ import {
   MessageBar,
   MessageBarBody,
   MessageBarTitle,
+  MessageBarActions,
   mergeClasses,
   tokens,
   TagPicker,
@@ -52,6 +53,7 @@ import {
   TagPickerOption,
   useTagPickerFilter,
   Tag,
+  makeStyles,
 } from '@fluentui/react-components';
 import { DatePicker } from '@fluentui/react-datepicker-compat';
 import { TimePicker } from '@fluentui/react-timepicker-compat';
@@ -71,6 +73,7 @@ import {
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import { SegmentedToggle } from '../primitives/SegmentedToggle';
+import { AddFieldPicker } from './AddFieldPicker';
 import { PaneHead } from './PaneHead';
 import {
   findTable,
@@ -93,11 +96,29 @@ import {
   type OwnerColumnMeta,
 } from '../mock/metadata';
 import { useLookupRecords } from '../host/useLookupRecords';
+import {
+  decodeFieldBody,
+  encodeFieldBody,
+  mustSupplyOnCreate,
+  parseRawBody,
+  suppliedColumnTest,
+  type DecodedFieldBody,
+  type UnmappedBodyKey,
+} from '../engine/fieldBody';
 import { useColumnDetail } from '../host/useColumnDetail';
+import {
+  behaviorHint,
+  behaviorOf,
+  combineDateAndTime,
+  isDateOnlyColumn,
+  localZoneLabel,
+  parseDateTimeValue,
+  serializeDateTimeValue,
+} from './dateTimeValue';
 // Monaco — same instance + worker setup as CodeView. The `loader.config`
-// side-effect runs when CodeView is first imported (every mode file
-// imports it), so by the time FieldSetEditor renders, Monaco is ready.
-import Editor from '@monaco-editor/react';
+// side-effect lives in src/monaco/monacoSetup.ts, which the MonacoEditor
+// wrapper lazy-loads on the first editor render (#22).
+import Editor from '../monaco/MonacoEditor';
 import type { ThemeMode } from '../theme/theme';
 import type { CreateFieldValue, LookupFieldValue } from '../state/writeState';
 import type { RequestGroup } from '../registry/requestTypes';
@@ -144,6 +165,17 @@ export interface FieldSetEditorProps {
    */
   nullFields?: string[];
   setNullFields?: (next: string[]) => void;
+  /**
+   * JSON-mode body text, owned by the caller's state. When `setRawBody` is
+   * passed, JSON mode is controlled: the typed text is the request body
+   * (sent as parsed — nulls, annotations and unknown keys included), the
+   * editor never rewrites it, and switching back to Form maps what it can
+   * and reports the rest. `null` = Form mode. Without `setRawBody` (nested
+   * entity params, the PUT single-column editor) JSON edits are parsed into
+   * `values` as you type and unmapped keys are listed as not sent.
+   */
+  rawBody?: string | null;
+  setRawBody?: (next: string | null) => void;
   group?: RequestGroup;
   /** Theme mode — drives the Monaco JSON editor's vs-dark vs light. Caller-
    *  optional because not every consumer (e.g. nested ActionParamForm rows)
@@ -167,6 +199,12 @@ export interface FieldSetEditorProps {
    * value explicitly.
    */
   purpose?: 'create' | 'update' | 'upsert';
+  /**
+   * HTTP verb named in the pane header. Defaults from `purpose`: POST for
+   * create, PATCH for update / upsert. Update's single-column PUT passes
+   * 'PUT'.
+   */
+  method?: 'POST' | 'PATCH' | 'PUT';
 }
 
 type Filter = 'all' | 'required' | 'set' | 'common';
@@ -176,18 +214,27 @@ type Filter = 'all' | 'required' | 'set' | 'common';
 // ──────────────────────────────────────────────────────────────
 export function FieldSetEditor({
   table,
-  values,
+  values: valuesProp,
   setValues,
   nullFields: nullFieldsProp,
   setNullFields: setNullFieldsProp,
+  rawBody,
+  setRawBody,
   group = 'write',
   themeMode = 'light',
   purpose = 'create',
+  method,
 }: FieldSetEditorProps) {
+  const verb = method ?? (purpose === 'create' ? 'POST' : 'PATCH');
+  // Create (and Upsert, which may create) must carry every required column.
+  // Update is a partial PATCH: columns left out of the body keep their
+  // value, so an unset required column is fine — only clearing one to null
+  // is a problem (#80).
+  const requiresAllRequired = purpose !== 'update';
   // Internal fallback when the caller doesn't wire up explicit-null tracking.
   // Keeps the affordance hidden in those modes (the Set-null button checks
   // for the controlled handler before rendering itself).
-  const nullFields = nullFieldsProp ?? [];
+  const storedNullFields = nullFieldsProp ?? [];
   const nullFieldsSupported = !!setNullFieldsProp;
   const isNull = (k: string) => nullFields.includes(k);
   const addNull = (k: string) => {
@@ -212,22 +259,30 @@ export function FieldSetEditor({
   const [addPickerOpen, setAddPickerOpen] = useState(false);
 
   // Form ↔ JSON toggle (per v2.2 Mode_Create design). When 'json', the user
-  // edits the body directly in a Textarea; when valid JSON, it parses back to
-  // `values`. When 'form', the existing per-field controls are the source of
-  // truth. The toggle holds its own draft text so editing doesn't ping-pong
-  // through every keystroke.
-  const [bodyMode, setBodyMode] = useState<'form' | 'json'>('form');
-  const [jsonText, setJsonText] = useState<string>('');
-  const [jsonError, setJsonError] = useState<string | null>(null);
+  // edits the body directly in Monaco. The text is only ever written by the
+  // user (and seeded once on entering JSON mode) — never re-serialized from
+  // `values`, which used to reformat it mid-edit (#91).
+  //
+  // Controlled (caller passes setRawBody): the text lives in the mode state
+  // and IS the body; the mode is derived from it, so it survives this pane
+  // unmounting. Uncontrolled: local text, parsed into `values` per keystroke.
+  const jsonControlled = !!setRawBody;
+  const [localMode, setLocalMode] = useState<'form' | 'json'>('form');
+  const [localText, setLocalText] = useState<string>('');
+  const bodyMode: 'form' | 'json' = jsonControlled
+    ? rawBody != null
+      ? 'json'
+      : 'form'
+    : localMode;
+  const jsonText = jsonControlled ? (rawBody ?? '') : localText;
+  // Pending JSON → Form switch that needs the user's call (invalid JSON, or
+  // keys the form can't show). Cleared on every edit.
+  const [switchIssue, setSwitchIssue] = useState<
+    { kind: 'invalid'; error: string } | { kind: 'unmapped'; decoded: DecodedFieldBody } | null
+  >(null);
 
-  // Snapshot values into jsonText whenever we enter JSON mode
-  useEffect(() => {
-    if (bodyMode !== 'json') return;
-    setJsonText(JSON.stringify(valuesToJsonBody(tbl, values), null, 2));
-    setJsonError(null);
-  }, [bodyMode, tbl, values]);
-
-  // Set / Update / Remove helpers
+  // Set / Update / Remove helpers. (`values` / `nullFields` are declared
+  // below, after the JSON preview; these only run in Form mode.)
   const setField = (k: string, v: CreateFieldValue) => setValues({ ...values, [k]: v });
   const removeField = (k: string) => {
     const next = { ...values };
@@ -257,7 +312,69 @@ export function FieldSetEditor({
     [tbl, purpose],
   );
 
-  const requiredFields = useMemo(() => writable.filter((c) => c.required), [writable]);
+  // JSON mode: parse the typed body and preview what it maps to, so the
+  // header counts and required warnings describe the JSON, not the stale
+  // form values. In Form mode these are the caller's values as-is.
+  const jsonParse = useMemo(
+    () => (bodyMode === 'json' ? parseRawBody(jsonText) : null),
+    [bodyMode, jsonText],
+  );
+  const decodeOpts = useMemo(() => {
+    const ids = new Set(writable.map((c) => c.logicalName));
+    return { editable: (k: string) => ids.has(k), nullSupported: nullFieldsSupported };
+  }, [writable, nullFieldsSupported]);
+  const jsonDecoded = useMemo(
+    () => (tbl && jsonParse?.ok ? decodeFieldBody(tbl, jsonParse.body, decodeOpts) : null),
+    [tbl, jsonParse, decodeOpts],
+  );
+  const values = jsonDecoded ? jsonDecoded.values : valuesProp;
+  const nullFields = jsonDecoded ? jsonDecoded.nullFields : storedNullFields;
+
+  const enterJson = () => {
+    if (bodyMode === 'json' || !tbl) return;
+    const text = JSON.stringify(encodeFieldBody(tbl, valuesProp, storedNullFields), null, 2);
+    setSwitchIssue(null);
+    if (setRawBody) setRawBody(text);
+    else {
+      setLocalText(text);
+      setLocalMode('json');
+    }
+  };
+  const leaveJson = (decoded: DecodedFieldBody | null) => {
+    if (decoded) {
+      setValues(decoded.values);
+      if (setNullFieldsProp) setNullFieldsProp(decoded.nullFields);
+    }
+    setSwitchIssue(null);
+    if (setRawBody) setRawBody(null);
+    else setLocalMode('form');
+  };
+  const goForm = () => {
+    if (bodyMode === 'form' || !tbl) return;
+    // Uncontrolled: values already track the JSON keystroke by keystroke.
+    if (!jsonControlled) return leaveJson(null);
+    const p = parseRawBody(jsonText);
+    if (!p.ok) return setSwitchIssue({ kind: 'invalid', error: p.error });
+    const decoded = decodeFieldBody(tbl, p.body, decodeOpts);
+    if (decoded.unmapped.length > 0) return setSwitchIssue({ kind: 'unmapped', decoded });
+    leaveJson(decoded);
+  };
+  const onJsonChange = (t: string) => {
+    setSwitchIssue(null);
+    if (setRawBody) {
+      setRawBody(t);
+      return;
+    }
+    setLocalText(t);
+    const p = parseRawBody(t);
+    if (p.ok && tbl) setValues(decodeFieldBody(tbl, p.body, decodeOpts).values);
+  };
+
+  // Same required rule as the mode's Execute gate, in Form and JSON mode
+  // (#124): only ApplicationRequired columns count; SystemRequired ones such
+  // as ownerid are defaulted by Dataverse. They still sit at the top of the
+  // form (see `visible`) so they can be overridden.
+  const requiredFields = useMemo(() => writable.filter(mustSupplyOnCreate), [writable]);
   // "Populated" includes both columns with a value AND columns flagged as
   // explicit-null — both produce a body entry, so both count toward
   // "the user has expressed an intent for this column".
@@ -265,15 +382,28 @@ export function FieldSetEditor({
     () => writable.filter((c) => c.logicalName in values || nullFields.includes(c.logicalName)),
     [writable, values, nullFields],
   );
+  // A required column counts as set when what will be sent gives it a value:
+  // the typed body in JSON mode, a non-empty form value otherwise — the
+  // test the mode's Execute gate uses. A seeded but empty value (an Owner
+  // lookup with no record) is dropped from the body, so it isn't set (#124).
+  const isSupplied = useMemo(
+    () =>
+      tbl
+        ? suppliedColumnTest(tbl, bodyMode === 'json' ? jsonText : null, valuesProp)
+        : () => false,
+    [tbl, bodyMode, jsonText, valuesProp],
+  );
+
   // Required-field check: a column marked explicit-null still counts as
   // "missing" since the server will reject a null on a required column —
   // this matches Dataverse's runtime behavior and surfaces the issue.
+  // Update only flags required columns explicitly set to null.
   const missingRequired = useMemo(
     () =>
       requiredFields.filter(
-        (c) => !(c.logicalName in values) || nullFields.includes(c.logicalName),
+        (c) => (requiresAllRequired && !isSupplied(c)) || nullFields.includes(c.logicalName),
       ),
-    [requiredFields, values, nullFields],
+    [requiredFields, isSupplied, nullFields, requiresAllRequired],
   );
 
   // What to render in the form area.
@@ -314,7 +444,10 @@ export function FieldSetEditor({
 
     let pool: ColumnMeta[] = [...requiredCols, ...userAddedCols];
 
-    if (filter === 'required') pool = pool.filter((c) => c.required);
+    // Same set the "Required · N" chip counts (#199): the columns a create
+    // must supply. SystemRequired ones (ownerid, statecode) are defaulted
+    // by Dataverse and stay out of this view.
+    if (filter === 'required') pool = pool.filter(mustSupplyOnCreate);
     if (filter === 'set')
       pool = pool.filter((c) => c.logicalName in values || nullFields.includes(c.logicalName));
     if (filter === 'common') {
@@ -362,7 +495,7 @@ export function FieldSetEditor({
         title="Field set"
         sub={
           <span>
-            Pick the columns this <code>POST</code> should set.{' '}
+            Pick the columns this <code>{verb}</code> should set.{' '}
             <span style={{ color: tokens.colorNeutralForeground3 }}>
               Only fields below are emitted in the body — empty columns stay out.
             </span>
@@ -373,6 +506,7 @@ export function FieldSetEditor({
         {bodyMode === 'form' && (
           <Input
             contentBefore={<Search20Regular />}
+            aria-label="Filter fields"
             placeholder="Filter fields…"
             value={search}
             onChange={(_, d) => setSearch(d.value)}
@@ -381,7 +515,7 @@ export function FieldSetEditor({
           />
         )}
         <Badge appearance="ghost">{populatedFields.length} populated</Badge>
-        {requiredFields.length > 0 && (
+        {requiresAllRequired && requiredFields.length > 0 && (
           <Badge appearance="tint" color={missingRequired.length ? 'danger' : 'success'}>
             {requiredFields.length - missingRequired.length}/{requiredFields.length} required
           </Badge>
@@ -390,41 +524,51 @@ export function FieldSetEditor({
             primitive so it picks up the same hairline + radius treatment
             as FilterEditor (AND/OR) and OrderbyEditor (Asc/Desc). */}
         <SegmentedToggle ariaLabel="Body editor mode">
-          <ToggleButton
-            checked={bodyMode === 'form'}
-            icon={<FormNew20Regular />}
-            onClick={() => setBodyMode('form')}
-          >
+          <ToggleButton checked={bodyMode === 'form'} icon={<FormNew20Regular />} onClick={goForm}>
             Form
           </ToggleButton>
-          <ToggleButton
-            checked={bodyMode === 'json'}
-            icon={<Code20Regular />}
-            onClick={() => setBodyMode('json')}
-          >
+          <ToggleButton checked={bodyMode === 'json'} icon={<Code20Regular />} onClick={enterJson}>
             JSON
           </ToggleButton>
         </SegmentedToggle>
       </PaneHead>
 
-      {missingRequired.length > 0 && (
-        <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 12 }}>
-          <MessageBarBody>
-            <MessageBarTitle>
-              {missingRequired.length} required field
-              {missingRequired.length === 1 ? ' is' : 's are'} unset.
-            </MessageBarTitle>
-            Dataverse will reject the create with{' '}
-            <code>0x80040217 · A required field is missing</code> unless every required column has a
-            value. <strong>Missing:</strong>{' '}
-            {missingRequired.map((c) => (
-              <code key={c.logicalName} style={{ marginRight: 6 }}>
-                {c.logicalName}
-              </code>
-            ))}
-          </MessageBarBody>
-        </MessageBar>
-      )}
+      {missingRequired.length > 0 &&
+        (requiresAllRequired ? (
+          <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 12 }}>
+            <MessageBarBody>
+              <MessageBarTitle>
+                {missingRequired.length} required field
+                {missingRequired.length === 1 ? ' is' : 's are'} unset.
+              </MessageBarTitle>
+              Dataverse will reject the{' '}
+              {purpose === 'upsert' ? 'upsert when it creates the row' : 'create'} with{' '}
+              <code>0x80040217 · A required field is missing</code> unless every required column has
+              a value. <strong>Missing:</strong>{' '}
+              {missingRequired.map((c) => (
+                <code key={c.logicalName} style={{ marginRight: 6 }}>
+                  {c.logicalName}
+                </code>
+              ))}
+            </MessageBarBody>
+          </MessageBar>
+        ) : (
+          <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 12 }}>
+            <MessageBarBody>
+              <MessageBarTitle>
+                {missingRequired.length} required field
+                {missingRequired.length === 1 ? ' is' : 's are'} set to null.
+              </MessageBarTitle>
+              Dataverse may reject the update for clearing a required column. Columns left out of
+              the body keep their current value. <strong>Cleared:</strong>{' '}
+              {missingRequired.map((c) => (
+                <code key={c.logicalName} style={{ marginRight: 6 }}>
+                  {c.logicalName}
+                </code>
+              ))}
+            </MessageBarBody>
+          </MessageBar>
+        ))}
 
       {bodyMode === 'form' ? (
         <>
@@ -486,6 +630,7 @@ export function FieldSetEditor({
                     populated={col.logicalName in values || nullFields.includes(col.logicalName)}
                     isNull={isNull(col.logicalName)}
                     nullSupported={nullFieldsSupported}
+                    requiredOnWrite={requiresAllRequired}
                     onChange={(v) => setField(col.logicalName, v)}
                     onRemove={() => {
                       // Remove from both value map AND null flag — a single
@@ -502,33 +647,26 @@ export function FieldSetEditor({
           </div>
         </>
       ) : (
-        // JSON edit mode — Monaco editor with json language. Parses back
-        // to fieldValues on every keystroke so the Form view stays in
-        // sync.
+        // JSON edit mode — Monaco editor with json language. The text is
+        // never rewritten by us; see the bodyMode comment above.
         <JsonEditPane
-          tbl={tbl}
           text={jsonText}
-          error={jsonError}
-          themeMode={themeMode}
-          onChange={(t) => {
-            setJsonText(t);
-            try {
-              const parsed = JSON.parse(t);
-              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-                setValues(jsonBodyToValues(tbl, parsed));
-                setJsonError(null);
-              } else {
-                setJsonError('Body must be a JSON object.');
-              }
-            } catch (e) {
-              setJsonError(e instanceof Error ? e.message : 'Invalid JSON.');
-            }
+          error={jsonParse && !jsonParse.ok ? jsonParse.error : null}
+          unmapped={jsonDecoded?.unmapped ?? []}
+          verbatim={jsonControlled}
+          switchIssue={switchIssue}
+          onDiscard={() => leaveJson(null)}
+          onSwitchAnyway={() => {
+            if (switchIssue?.kind === 'unmapped') leaveJson(switchIssue.decoded);
           }}
+          onStay={() => setSwitchIssue(null)}
+          themeMode={themeMode}
+          onChange={onJsonChange}
         />
       )}
 
       {/* Add field — only if there's something left to add */}
-      {addable.length > 0 && (
+      {bodyMode === 'form' && addable.length > 0 && (
         <div
           style={{ marginTop: 14, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}
         >
@@ -543,34 +681,15 @@ export function FieldSetEditor({
             </Button>
           ) : (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <Combobox
-                size="small"
-                placeholder={`Add one of ${addable.length} fields…`}
-                style={{ minWidth: 320 }}
-                onOptionSelect={(_, d) => {
-                  if (!d.optionValue) return;
-                  const col = findColumn(tbl, d.optionValue);
+              <AddFieldPicker
+                addable={addable}
+                onPick={(logicalName) => {
+                  const col = findColumn(tbl, logicalName);
                   if (!col) return;
                   setField(col.logicalName, defaultValueFor(col));
                   setAddPickerOpen(false);
                 }}
-              >
-                {addable.map((c) => (
-                  <Option key={c.logicalName} value={c.logicalName} text={c.displayName}>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span>{c.displayName}</span>
-                      <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-                        {c.logicalName} · <code>{c.attributeType}</code>
-                        {c.required && (
-                          <span style={{ marginLeft: 6, color: tokens.colorPaletteRedForeground1 }}>
-                            required
-                          </span>
-                        )}
-                      </Caption1>
-                    </div>
-                  </Option>
-                ))}
-              </Combobox>
+              />
               <Button size="small" appearance="subtle" onClick={() => setAddPickerOpen(false)}>
                 Cancel
               </Button>
@@ -585,6 +704,40 @@ export function FieldSetEditor({
   );
 }
 
+// Row layout has to hold at PPTB's default tool width (~840 px), where the
+// value cell is only ~250 px wide (#112). The label column gives up width
+// first (35 % of the row, 120–220 px), the value input keeps a 160 px floor,
+// and the "Send as null" switch wraps onto its own line below the input
+// instead of overlapping it. Fluent's Combobox / Dropdown / DatePicker carry
+// intrinsic min-widths (250 px and up) that would otherwise push past the
+// cell, so they're released to the cell width here.
+const useFieldRowStyles = makeStyles({
+  valueLine: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: '8px',
+    rowGap: '4px',
+    minWidth: 0,
+  },
+  valueInput: {
+    flex: '1 1 160px',
+    minWidth: 0,
+    '& .fui-Input, & .fui-Combobox, & .fui-Dropdown, & .fui-SpinButton, & .fui-Textarea, & .fui-TagPickerControl':
+      {
+        minWidth: 0,
+        maxWidth: '100%',
+      },
+    // The lookup search box sets an inline 240 px min-width.
+    '& .fui-Combobox': {
+      minWidth: '0 !important',
+    },
+  },
+  nullSwitch: {
+    flexShrink: 0,
+  },
+});
+
 // ──────────────────────────────────────────────────────────────
 // FieldRow — one column's label + value + remove
 // ──────────────────────────────────────────────────────────────
@@ -595,6 +748,7 @@ function FieldRow({
   populated,
   isNull,
   nullSupported,
+  requiredOnWrite,
   onChange,
   onRemove,
   onSetNull,
@@ -610,21 +764,25 @@ function FieldRow({
    *  "Set null" button renders. Modes that haven't opted into the feature
    *  still get a clean row without the affordance. */
   nullSupported: boolean;
+  /** True when the body must carry every required column (create / upsert).
+   *  False for update, where an unset required column is left unchanged. */
+  requiredOnWrite: boolean;
   onChange: (v: CreateFieldValue) => void;
   onRemove: () => void;
   onSetNull: () => void;
   onClearNull: () => void;
 }) {
   const s = useStudioStyles();
-  const isMissing = col.required && !populated;
+  const isMissing = col.required && (requiredOnWrite ? !populated : isNull);
 
+  const rs = useFieldRowStyles();
   return (
     <div
       className={mergeClasses(s.inlineCard)}
       style={{
         padding: '10px 12px',
         display: 'grid',
-        gridTemplateColumns: '220px 1fr 30px',
+        gridTemplateColumns: 'minmax(120px, min(220px, 35%)) minmax(0, 1fr) 30px',
         gap: 12,
         alignItems: 'start',
         borderColor: isMissing ? tokens.colorPaletteRedBorder2 : undefined,
@@ -638,7 +796,11 @@ function FieldRow({
           </span>
           {col.required && (
             <Tooltip
-              content="Required — Dataverse rejects the create when this is empty."
+              content={
+                requiredOnWrite
+                  ? 'Required — Dataverse rejects the create when this is empty.'
+                  : 'Required — leave it out to keep its value; clearing it to null may be rejected.'
+              }
               relationship="description"
             >
               <Badge appearance="tint" color="danger" size="extra-small">
@@ -687,8 +849,8 @@ function FieldRow({
           fragment preview but the switch stays in the same position so
           the layout doesn't shift. Description (if any) renders below. */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
+        <div className={rs.valueLine}>
+          <div className={rs.valueInput}>
             {isNull ? (
               // Null-mode preview. Same row footprint as the input, so the
               // Switch's position doesn't jump when the user toggles. Shows
@@ -742,6 +904,7 @@ function FieldRow({
             // gesture feels like "enable this modifier" rather than
             // "this is the primary affordance".
             <Switch
+              className={rs.nullSwitch}
               checked={isNull}
               onChange={(_, d) => {
                 if (d.checked) onSetNull();
@@ -789,7 +952,18 @@ function FieldRow({
 // ──────────────────────────────────────────────────────────────
 // FieldInput — dispatch to the right control for the column's type
 // ──────────────────────────────────────────────────────────────
-function FieldInput({
+// Accessible name for value controls that don't get `col` (#120).
+const FieldLabelContext = createContext('Field value');
+
+function FieldInput(props: Parameters<typeof FieldInputBody>[0]) {
+  return (
+    <FieldLabelContext.Provider value={props.col.displayName}>
+      <FieldInputBody {...props} />
+    </FieldLabelContext.Provider>
+  );
+}
+
+function FieldInputBody({
   table,
   col,
   value,
@@ -812,7 +986,25 @@ function FieldInput({
   //
   // Same pattern FilterValueInput uses in Retrieve Multiple. Cached per
   // (entity, attribute) so re-renders don't refetch.
-  useColumnDetail(table.logicalName, col.logicalName);
+  const detail = useColumnDetail(table.logicalName, col.logicalName);
+  const input = renderFieldInput(col, value, onChange);
+  // Surface a failed option / detail load instead of an empty list (#199).
+  if (!detail.error) return input;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {input}
+      <Caption1 style={{ color: tokens.colorPaletteRedForeground1 }}>
+        Couldn’t load column details: {detail.error}
+      </Caption1>
+    </div>
+  );
+}
+
+function renderFieldInput(
+  col: ColumnMeta,
+  value: CreateFieldValue | undefined,
+  onChange: (v: CreateFieldValue) => void,
+) {
   switch (col.attributeType) {
     case 'String':
       return <StringFieldInput col={col} value={value as string | undefined} onChange={onChange} />;
@@ -878,6 +1070,7 @@ function FieldInput({
     default:
       return (
         <Input
+          aria-label={col.displayName}
           size="small"
           value={String(value ?? '')}
           onChange={(_, d) => onChange(d.value)}
@@ -903,6 +1096,7 @@ function StringFieldInput({
   if (isLong) {
     return (
       <Textarea
+        aria-label={col.displayName}
         rows={3}
         value={value ?? ''}
         maxLength={col.maxLength}
@@ -931,6 +1125,7 @@ function StringFieldInput({
             : `up to ${col.maxLength} chars`;
   return (
     <Input
+      aria-label={col.displayName}
       size="small"
       type={type}
       value={value ?? ''}
@@ -960,6 +1155,7 @@ function MemoFieldInput({
       }
     >
       <Textarea
+        aria-label={col.displayName}
         rows={4}
         value={v}
         maxLength={col.maxLength}
@@ -984,6 +1180,7 @@ function IntegerFieldInput({
   if (col.format === 'Language' || col.format === 'Locale') {
     return (
       <Combobox
+        aria-label={col.displayName}
         size="small"
         value={value != null ? String(value) : ''}
         selectedOptions={value != null ? [String(value)] : []}
@@ -1060,8 +1257,10 @@ function NumericFieldInput({
   step?: number;
   integer?: boolean;
 }) {
+  const fieldLabel = useContext(FieldLabelContext);
   return (
     <SpinButton
+      aria-label={fieldLabel}
       size="small"
       value={value ?? 0}
       min={min}
@@ -1137,84 +1336,79 @@ function DateTimeFieldInput({
   value: string | undefined;
   onChange: (v: string) => void;
 }) {
-  const isDateOnly = col.format === 'DateOnly' || col.dateTimeBehavior === 'DateOnly';
-  const behaviorHint =
-    col.dateTimeBehavior === 'UserLocal'
-      ? 'stored as UTC, displayed in user TZ'
-      : col.dateTimeBehavior === 'DateOnly'
-        ? 'midnight UTC, no TZ conversion'
-        : 'wall-clock as UTC (no TZ math)';
-
-  const parsed = value ? new Date(value) : null;
-  const dateOnly = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+  // Parsing / serializing is per behavior — see editors/dateTimeValue.ts.
+  // `current`'s LOCAL fields are what the pickers show.
+  const isDateOnly = isDateOnlyColumn(col);
+  const current = parseDateTimeValue(value, col);
+  const hint = behaviorHint(col, current);
 
   const writeDate = (d: Date | null | undefined) => {
     if (!d) {
       onChange('');
       return;
     }
-    if (isDateOnly) {
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
-      onChange(`${yyyy}-${mm}-${dd}`);
-    } else {
-      const prior = parsed && !Number.isNaN(parsed.getTime()) ? parsed : new Date(d);
-      const next = new Date(d);
-      next.setHours(prior.getHours(), prior.getMinutes(), 0, 0);
-      onChange(next.toISOString());
-    }
+    // Keep the time already picked when the date changes.
+    onChange(serializeDateTimeValue(combineDateAndTime(d, isDateOnly ? null : current), col));
   };
   const writeTime = (d: Date | null | undefined) => {
-    if (!d || !dateOnly) return;
-    const next = new Date(dateOnly);
-    next.setHours(d.getHours(), d.getMinutes(), 0, 0);
-    onChange(next.toISOString());
+    if (!d || !current) return;
+    onChange(serializeDateTimeValue(combineDateAndTime(current, d), col));
   };
+
+  // What's on the wire — shown under the pickers so the zone is never a
+  // guess (#92).
+  const sent = value ? (
+    <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
+      Sends <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{value}</code>
+      {behaviorOf(col) === 'UserLocal' && (
+        <> (UTC) · shown in {localZoneLabel(current ?? undefined)}</>
+      )}
+    </Caption1>
+  ) : null;
 
   if (isDateOnly) {
     return (
-      <Tooltip
-        content={`Behavior: ${col.dateTimeBehavior} — ${behaviorHint}`}
-        relationship="description"
-      >
-        <DatePicker
-          size="small"
-          value={dateOnly}
-          onSelectDate={writeDate}
-          placeholder="Pick a date…"
-          formatDate={(d) => (d ? d.toLocaleDateString() : '')}
-          allowTextInput
-        />
-      </Tooltip>
+      <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+        <Tooltip content={`Behavior: ${behaviorOf(col)} — ${hint}`} relationship="description">
+          <DatePicker
+            size="small"
+            value={current}
+            onSelectDate={writeDate}
+            placeholder="Pick a date…"
+            formatDate={(d) => (d ? d.toLocaleDateString() : '')}
+            allowTextInput
+          />
+        </Tooltip>
+        {sent}
+      </span>
     );
   }
   return (
-    <Tooltip
-      content={`Behavior: ${col.dateTimeBehavior} — ${behaviorHint}`}
-      relationship="description"
-    >
-      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-        <DatePicker
-          size="small"
-          value={dateOnly}
-          onSelectDate={writeDate}
-          placeholder="Date…"
-          formatDate={(d) => (d ? d.toLocaleDateString() : '')}
-          style={{ minWidth: 130 }}
-          allowTextInput
-        />
-        <TimePicker
-          size="small"
-          freeform
-          selectedTime={dateOnly}
-          onTimeChange={(_, d) => writeTime(d.selectedTime)}
-          placeholder="Time…"
-          style={{ minWidth: 100 }}
-          hourCycle="h23"
-        />
-      </span>
-    </Tooltip>
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+      <Tooltip content={`Behavior: ${behaviorOf(col)} — ${hint}`} relationship="description">
+        <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <DatePicker
+            size="small"
+            value={current}
+            onSelectDate={writeDate}
+            placeholder="Date…"
+            formatDate={(d) => (d ? d.toLocaleDateString() : '')}
+            style={{ minWidth: 130 }}
+            allowTextInput
+          />
+          <TimePicker
+            size="small"
+            freeform
+            selectedTime={current}
+            onTimeChange={(_, d) => writeTime(d.selectedTime)}
+            placeholder="Time…"
+            style={{ minWidth: 100 }}
+            hourCycle="h23"
+          />
+        </span>
+      </Tooltip>
+      {sent}
+    </span>
   );
 }
 
@@ -1231,6 +1425,7 @@ function ChoiceFieldInput({
   const cur = options.find((o) => o.value === value);
   return (
     <Combobox
+      aria-label={col.displayName}
       size="small"
       value={cur?.label ?? (value != null ? String(value) : '')}
       selectedOptions={value != null ? [String(value)] : []}
@@ -1443,7 +1638,13 @@ export function LookupFieldInput({
         <Badge appearance="ghost" style={{ fontFamily: tokens.fontFamilyMonospace }}>
           → loading targets…
         </Badge>
-        <Combobox size="small" disabled placeholder="Loading…" style={{ minWidth: 240 }}>
+        <Combobox
+          aria-label={col.displayName}
+          size="small"
+          disabled
+          placeholder="Loading…"
+          style={{ minWidth: 240 }}
+        >
           <Option value="__loading" text="" disabled>
             —
           </Option>
@@ -1456,6 +1657,7 @@ export function LookupFieldInput({
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
       {polymorphic ? (
         <Combobox
+          aria-label={`${col.displayName} (target table)`}
           size="small"
           value={targetTbl?.displayName ?? target}
           selectedOptions={[target]}
@@ -1486,6 +1688,7 @@ export function LookupFieldInput({
       )}
 
       <Combobox
+        aria-label={col.displayName}
         size="small"
         freeform
         clearable
@@ -1551,10 +1754,12 @@ function GuidFieldInput({
   value: string | undefined;
   onChange: (v: string) => void;
 }) {
+  const fieldLabel = useContext(FieldLabelContext);
   const v = value ?? '';
   const valid = !v || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
   return (
     <Input
+      aria-label={fieldLabel}
       size="small"
       value={v}
       placeholder="00000000-0000-0000-0000-000000000000"
@@ -1786,24 +1991,56 @@ function FieldSection({
 // JSON edit pane — raw body editing for power users
 // ──────────────────────────────────────────────────────────────
 function JsonEditPane({
-  tbl,
   text,
   error,
+  unmapped,
+  verbatim,
+  switchIssue,
+  onDiscard,
+  onSwitchAnyway,
+  onStay,
   themeMode,
   onChange,
 }: {
-  tbl: TableMeta;
   text: string;
   error: string | null;
+  /** Keys in the typed body the Form view can't represent. */
+  unmapped: UnmappedBodyKey[];
+  /** True when the text is the request body (controlled JSON mode). */
+  verbatim: boolean;
+  switchIssue: { kind: 'invalid'; error: string } | { kind: 'unmapped' } | null;
+  onDiscard: () => void;
+  onSwitchAnyway: () => void;
+  onStay: () => void;
   themeMode: ThemeMode;
   onChange: (text: string) => void;
 }) {
-  void tbl;
+  const keyList = (
+    <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+      {unmapped.map((u) => (
+        <li key={u.key}>
+          <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{u.key}</code> — {u.reason}
+        </li>
+      ))}
+    </ul>
+  );
   return (
     <div style={{ maxWidth: 880, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <MessageBar layout="multiline" intent="info">
         <MessageBarBody>
-          Raw JSON edit mode — what you type here becomes the request body verbatim. Lookups use{' '}
+          {verbatim ? (
+            <>
+              Raw JSON edit mode — the request body is exactly this JSON, including{' '}
+              <code style={{ fontFamily: tokens.fontFamilyMonospace }}>null</code> values and keys
+              the form doesn&apos;t know.{' '}
+            </>
+          ) : (
+            <>
+              Raw JSON edit mode — edits are applied to the fields as you type. Keys that don&apos;t
+              map to a field aren&apos;t sent.{' '}
+            </>
+          )}
+          Lookups use{' '}
           <code style={{ fontFamily: tokens.fontFamilyMonospace }}>
             {'"<col>@odata.bind": "/<entitySet>(<guid>)"'}
           </code>{' '}
@@ -1811,19 +2048,76 @@ function JsonEditPane({
           <strong>Form</strong> to use the metadata-driven controls.
         </MessageBarBody>
       </MessageBar>
-      {error && (
+      {switchIssue?.kind === 'invalid' && (
+        <MessageBar layout="multiline" intent="error">
+          <MessageBarBody>
+            <MessageBarTitle>
+              Can&apos;t switch to Form — the JSON doesn&apos;t parse.
+            </MessageBarTitle>
+            {switchIssue.error} Fix it, or discard your JSON edits and go back to the form as it
+            was.
+          </MessageBarBody>
+          <MessageBarActions>
+            <Button size="small" onClick={onDiscard}>
+              Discard JSON edits
+            </Button>
+            <Button size="small" appearance="primary" onClick={onStay}>
+              Keep editing
+            </Button>
+          </MessageBarActions>
+        </MessageBar>
+      )}
+      {switchIssue?.kind === 'unmapped' && (
+        <MessageBar layout="multiline" intent="warning">
+          <MessageBarBody>
+            <MessageBarTitle>
+              {unmapped.length} key{unmapped.length === 1 ? '' : 's'} can&apos;t be shown in the
+              Form view.
+            </MessageBarTitle>
+            Switching to Form drops {unmapped.length === 1 ? 'it' : 'them'} from the body:
+            {keyList}
+          </MessageBarBody>
+          <MessageBarActions>
+            <Button size="small" onClick={onSwitchAnyway}>
+              Switch and drop {unmapped.length === 1 ? 'it' : 'them'}
+            </Button>
+            <Button size="small" appearance="primary" onClick={onStay}>
+              Stay in JSON
+            </Button>
+          </MessageBarActions>
+        </MessageBar>
+      )}
+      {error && !switchIssue && (
         <MessageBar layout="multiline" intent="error">
           <MessageBarBody>
             <strong>Invalid JSON.</strong> {error}
+            {verbatim && ' Execute is disabled until the body parses.'}
+          </MessageBarBody>
+        </MessageBar>
+      )}
+      {!error && !switchIssue && unmapped.length > 0 && (
+        <MessageBar layout="multiline" intent={verbatim ? 'info' : 'warning'}>
+          <MessageBarBody>
+            {verbatim ? (
+              <>
+                Sent as typed, but the Form view can&apos;t show{' '}
+                {unmapped.length === 1 ? 'this key' : 'these keys'}:
+              </>
+            ) : (
+              <>
+                Not sent — {unmapped.length === 1 ? 'this key doesn’t' : 'these keys don’t'} map to
+                a field:
+              </>
+            )}
+            {keyList}
           </MessageBarBody>
         </MessageBar>
       )}
       <div style={{ position: 'relative' }}>
         {/* Monaco editor with `json` language — gives us syntax coloring,
             bracket matching, line numbers, and inline schema-style error
-            squiggles for free. Same instance + worker setup as CodeView
-            (the side-effect `loader.config({monaco})` there pre-loads
-            the workers globally). Height is fixed at 360 so the surrounding
+            squiggles for free. Same lazily loaded instance + worker setup
+            as CodeView (src/monaco/monacoSetup.ts). Height is fixed at 360 so the surrounding
             "Form / JSON" toggle + info bar don't get pushed off-screen on
             small viewports; the editor's internal scrollbar handles tall
             bodies. */}
@@ -1880,142 +2174,16 @@ function JsonEditPane({
 }
 
 /**
- * Convert in-memory fieldValues into the wire-format JSON body — same encoding
- * rules as engine/urlBuilder.buildCreateBody but lives here too so the JSON
- * edit pane can stay self-contained (no engine import).
+ * Seed values for a new Create against a given table — populates the
+ * columns a create must supply (ApplicationRequired). SystemRequired
+ * columns such as ownerid / statecode are defaulted by Dataverse, so they
+ * aren't seeded: a seeded `statecode: 0` was sent without ever showing in
+ * the form (#199).
  */
-/**
- * Resolve the `@odata.bind` property name for a lookup column. See
- * engine/urlBuilder.bindPropertyFor for the full rationale. We keep a
- * twin copy here because FieldSetEditor's JSON preview is intentionally
- * engine-free (no urlBuilder import — the JSON pane needs to render even
- * before the request would otherwise execute).
- */
-function bindPropertyFor(
-  parentTbl: TableMeta,
-  columnLogical: string,
-  targetEntity: string,
-): string {
-  const nav = parentTbl.navigationProperties.find(
-    (n) =>
-      n.cardinality === 'ManyToOne' &&
-      n.referencingAttribute === columnLogical &&
-      n.targetEntity === targetEntity,
-  );
-  return `${nav?.name ?? columnLogical}@odata.bind`;
-}
-
-function valuesToJsonBody(
-  tbl: TableMeta | undefined,
-  values: Record<string, CreateFieldValue>,
-): Record<string, unknown> {
-  if (!tbl) return {};
-  const body: Record<string, unknown> = {};
-  for (const [field, raw] of Object.entries(values)) {
-    if (raw == null) continue;
-    const col = findColumn(tbl, field);
-    if (!col) continue;
-    if (isLookupLike(col)) {
-      const lk = raw as { id: string; targetEntity: string };
-      if (!lk?.id) continue;
-      const target = findTable(lk.targetEntity);
-      if (!target) continue;
-      // Polymorphic-safe — picks `customerid_account` / `regardingobjectid_account_task`
-      // when the column is multi-target, or the bare `<col>` when single-target.
-      const bindProp = bindPropertyFor(tbl, col.logicalName, lk.targetEntity);
-      body[bindProp] = `/${target.entitySetName}(${lk.id})`;
-      continue;
-    }
-    if (col.attributeType === 'MultiSelectPicklist') {
-      const arr = raw as number[];
-      if (!Array.isArray(arr) || arr.length === 0) continue;
-      body[col.logicalName] = arr.join(',');
-      continue;
-    }
-    if (typeof raw === 'string' && raw === '') continue;
-    body[col.logicalName] = raw;
-  }
-  return body;
-}
-
-/**
- * Reverse of valuesToJsonBody — parse a user-edited JSON body back into
- * in-memory fieldValues. Lookup-bind entries become LookupFieldValue, multi-
- * select comma-strings become number[]. Unknown columns are dropped.
- */
-function jsonBodyToValues(
-  tbl: TableMeta | undefined,
-  body: Record<string, unknown>,
-): Record<string, CreateFieldValue> {
-  if (!tbl) return {};
-  const values: Record<string, CreateFieldValue> = {};
-  for (const [k, v] of Object.entries(body)) {
-    if (k.startsWith('@')) continue;
-    if (k.endsWith('@odata.bind')) {
-      // The key before `@odata.bind` is the property name. Two shapes:
-      //   1. Bare attribute name (single-target lookups): `primarycontactid`
-      //   2. Target-disambiguated nav-property (polymorphic): `customerid_account`,
-      //      `regardingobjectid_account_task`
-      // We try (1) first via findColumn; if no lookup column matches, fall
-      // back to matching nav-properties by name. The nav's `referencingAttribute`
-      // gives us the underlying column, and `targetEntity` gives the target.
-      const propName = k.replace('@odata.bind', '');
-      const m = typeof v === 'string' ? v.match(/\/([^/(]+)\(([^)]+)\)/) : null;
-      if (!m) continue;
-      const [, entitySet, id] = m;
-
-      // (1) Try as a bare column name first.
-      const directCol = findColumn(tbl, propName);
-      if (directCol && isLookupLike(directCol)) {
-        // Resolve target entity from the URL's entity-set segment by
-        // walking the column's known targets. If none match, fall back
-        // to the first target. (Most plain Lookups have one target.)
-        const targetLogical =
-          directCol.targets.find((t) => findTable(t)?.entitySetName === entitySet) ??
-          directCol.targets[0];
-        values[propName] = { id, targetEntity: targetLogical };
-        continue;
-      }
-
-      // (2) Try as a disambiguated nav-property name.
-      const nav = tbl.navigationProperties.find(
-        (n) => n.cardinality === 'ManyToOne' && n.name === propName,
-      );
-      if (nav && nav.referencingAttribute) {
-        values[nav.referencingAttribute] = {
-          id,
-          targetEntity: nav.targetEntity,
-        };
-        continue;
-      }
-      // Unknown property — drop. Keeps the parser tolerant of stray
-      // annotations the user might have copied from elsewhere.
-      continue;
-    }
-    const col = findColumn(tbl, k);
-    if (!col) continue;
-    if (col.attributeType === 'MultiSelectPicklist') {
-      if (typeof v === 'string') {
-        const arr = v
-          .split(',')
-          .map((n) => Number(n.trim()))
-          .filter((n) => Number.isFinite(n));
-        values[k] = arr;
-      } else if (Array.isArray(v)) {
-        values[k] = v.map(Number).filter((n) => Number.isFinite(n));
-      }
-      continue;
-    }
-    values[k] = v as CreateFieldValue;
-  }
-  return values;
-}
-
-/** Seed values for a new Create against a given table — populates required fields. */
 export function seedRequiredFieldValues(table: TableMeta): Record<string, CreateFieldValue> {
   const out: Record<string, CreateFieldValue> = {};
   for (const c of table.columns) {
-    if (!c.required) continue;
+    if (!mustSupplyOnCreate(c)) continue;
     if (isSystemManaged(c)) continue;
     out[c.logicalName] = defaultValueFor(c);
   }

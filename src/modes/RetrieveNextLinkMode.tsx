@@ -55,6 +55,7 @@ import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/Pref
 import { HeadersEditor, defaultReadHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
+import { topLevelRowCount } from '../views/results/flattenExpansions';
 import { findRequestType } from '../registry/requestTypes';
 import { runtime, type ExecResult } from '../engine/runtime';
 import { buildRetrieveNextLink } from '../engine/urlBuilder';
@@ -200,7 +201,7 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
           ts: Date.now(),
           status: res.status,
           ms: res.ms,
-          rowCount: (res.body as { value?: unknown[] } | null)?.value?.length ?? 0,
+          rowCount: topLevelRowCount(res.body) ?? 0,
         },
         ...rs,
       ].slice(0, 8),

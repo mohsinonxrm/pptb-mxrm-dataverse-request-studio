@@ -53,6 +53,7 @@ import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from '../editors/PaneHead';
 import { TargetEditor } from '../editors/TargetEditor';
@@ -65,6 +66,7 @@ import { ResultsView } from '../views/ResultsView';
 import { findTable, type FileColumnMeta } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildManageFile, manageFilePipeline, formatSize } from '../engine/urlBuilder';
+import { pipelineCodegen } from '../engine/binaryBuilders';
 import { runtime, type ExecResult } from '../engine/runtime';
 import {
   checkUploadSize,
@@ -85,7 +87,9 @@ import {
   hashState,
   type SavedRequest,
   type SerializedManageFileState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 const initialState = (): ManageFileState => ({
@@ -118,7 +122,8 @@ type RootClauseId =
 
 export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('manage-file');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('manage-file', deserializeManageFile, initialState);
+  const [state, setState] = useState(draft.state);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
   // The live table is a memo dependency below: build*() reads metadata via
   // findTable(), which is empty until the fetch lands — keying on `state`
@@ -184,6 +189,7 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: 'manage-file',
           url: built.relativeUrl,
           method: firstStepMethod,
@@ -200,9 +206,10 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const { entities } = useScopedEntities();
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const currentSerialized = useMemo(() => serializeManageFile(state), [state]);
+  useStashModeDraft('manage-file', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
   const onSaved = (saved: SavedRequest) => {
@@ -213,7 +220,7 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
     if (entry.modeId !== 'manage-file') return;
     const snap = entry.state as SerializedManageFileState;
     if (entities.length > 0 && snap.table && !entities.some((e) => e.logicalName === snap.table)) {
-      window.alert(
+      notify(
         `Can't load "${entry.name}": entity \`${snap.table}\` ` +
           `isn't available in this environment.`,
       );
@@ -225,6 +232,19 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(null);
     setRecordName('');
     setActivePath('pipeline');
+  };
+
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'manage-file');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
   };
   usePublishSaveContext(
     useMemo(() => {
@@ -518,19 +538,10 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
   const codeInputs = {
     method: firstStepMethod,
     built,
-    headers: headersMap,
+    // Per-step headers + bodies (#60) — chunked uploads need
+    // x-ms-transfer-mode / x-ms-file-name / Content-Range per request.
+    ...pipelineCodegen(pipeline, headersMap),
     entityLogical: built.entityLogical,
-    multiRequests:
-      pipeline.length > 1
-        ? pipeline.map((step) => ({
-            method: step.method,
-            relativeUrl: step.relativeUrl.startsWith('<')
-              ? step.relativeUrl
-              : step.relativeUrl.replace(/^https?:\/\/[^/]+/, ''),
-            body: typeof step.body === 'object' ? step.body : undefined,
-            description: step.title,
-          }))
-        : undefined,
   };
 
   return (
@@ -546,6 +557,7 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={

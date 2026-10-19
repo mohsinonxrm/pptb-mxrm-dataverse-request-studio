@@ -25,7 +25,7 @@ export function MethodPill({
           background: `linear-gradient(90deg, ${methodColorVar(method)} 50%, ${methodColorVar(altMethod)} 50%)`,
           fontSize: size === 'sm' ? '10px' : '11px',
           padding: size === 'sm' ? '2px 8px' : '4px 10px',
-          color: tokens.colorNeutralForegroundOnBrand,
+          color: 'var(--color-method-fg, #fff)',
         }}
         title={`${method} (collection-valued) / ${altMethod} (single-valued) — verb depends on the chosen navigation property's cardinality`}
       >
