@@ -71,6 +71,7 @@ import {
   formatLookup,
   type RowLookupValue,
 } from '../engine/recordSnapshot';
+import { formatDateTimeValue } from './dateTimeValue';
 
 // ──────────────────────────────────────────────────────────────
 // Columns we hide from the merge diff (audit + system-managed + binary)
@@ -229,6 +230,7 @@ export function MergeFieldDiff(props: MergeFieldDiffProps) {
       >
         <Input
           contentBefore={<Search20Regular />}
+          aria-label="Filter fields"
           placeholder="Filter fields…"
           value={search}
           onChange={(_, d) => setSearch(d.value)}
@@ -563,12 +565,10 @@ function formatValue(col: ColumnMeta, value: unknown): string {
       return n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
   }
   if (col.attributeType === 'DateTime' && typeof value === 'string') {
-    try {
-      const d = new Date(value);
-      if (Number.isFinite(d.getTime())) return d.toLocaleString();
-    } catch {
-      /* fall through */
-    }
+    // Per-behavior parse: a DateOnly `2026-05-01` must not shift to the
+    // previous day west of UTC, nor a time-zone-independent time by the
+    // offset (#92).
+    return formatDateTimeValue(value, col);
   }
   return String(value);
 }
@@ -597,6 +597,7 @@ function CustomValueInput({
     case 'Memo':
       return (
         <Textarea
+          aria-label={`${col.displayName} (custom value)`}
           rows={2}
           size="small"
           value={(value as string) ?? fallback}
@@ -611,6 +612,7 @@ function CustomValueInput({
     case 'Money':
       return (
         <SpinButton
+          aria-label={`${col.displayName} (custom value)`}
           size="small"
           value={Number(value ?? 0)}
           onChange={(_, d) => {
@@ -635,6 +637,7 @@ function CustomValueInput({
       const cur = opts.find((o) => o.value === value);
       return (
         <Combobox
+          aria-label={`${col.displayName} (custom value)`}
           size="small"
           value={cur?.label ?? (value != null ? String(value) : '')}
           selectedOptions={value != null ? [String(value)] : []}
@@ -678,6 +681,7 @@ function CustomValueInput({
           : [];
       return (
         <Combobox
+          aria-label={`${col.displayName} (custom value)`}
           size="small"
           multiselect
           value={currentArr
@@ -705,6 +709,7 @@ function CustomValueInput({
       // server accepts ISO 8601 either way.
       return (
         <Input
+          aria-label={`${col.displayName} (custom value)`}
           size="small"
           type={col.format === 'DateOnly' ? 'date' : 'datetime-local'}
           value={typeof value === 'string' ? value.slice(0, 16) : ''}
@@ -715,6 +720,7 @@ function CustomValueInput({
     default:
       return (
         <Input
+          aria-label={`${col.displayName} (custom value)`}
           size="small"
           value={(value as string) ?? fallback}
           onChange={(_, d) => onChange(d.value)}

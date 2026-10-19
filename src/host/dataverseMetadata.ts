@@ -167,6 +167,13 @@ export async function loadEntityRelationships(
   return relationships;
 }
 
+/** AttributeType of specific attributes (alternate-key columns the basic
+ *  attribute load leaves out, #64). Not cached: only called once per table
+ *  build, which is itself cached. */
+export function loadAttributeTypes(logicalName: string, attributeNames: string[]) {
+  return pptbClient.getAttributeTypes(logicalName, attributeNames);
+}
+
 /** Entity alternate keys (EntityKeyMetadata). Cached per entity logical name.
  *  Powers the Upsert mode's alternate-key picker — without this fetch,
  *  the picker would always be empty for entities that DO have alt keys
