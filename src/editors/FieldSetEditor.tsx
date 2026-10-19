@@ -24,7 +24,7 @@
 // they're working with raw schema names. This is the same v9 design language
 // used in SelectEditor and FilterValueInput.
 
-import { useMemo, useState, useEffect } from 'react';
+import { createContext, useContext, useMemo, useState, useEffect } from 'react';
 import {
   Input,
   Textarea,
@@ -53,6 +53,7 @@ import {
   TagPickerOption,
   useTagPickerFilter,
   Tag,
+  makeStyles,
 } from '@fluentui/react-components';
 import { DatePicker } from '@fluentui/react-datepicker-compat';
 import { TimePicker } from '@fluentui/react-timepicker-compat';
@@ -72,6 +73,7 @@ import {
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import { SegmentedToggle } from '../primitives/SegmentedToggle';
+import { AddFieldPicker } from './AddFieldPicker';
 import { PaneHead } from './PaneHead';
 import {
   findTable,
@@ -104,10 +106,19 @@ import {
   type UnmappedBodyKey,
 } from '../engine/fieldBody';
 import { useColumnDetail } from '../host/useColumnDetail';
+import {
+  behaviorHint,
+  behaviorOf,
+  combineDateAndTime,
+  isDateOnlyColumn,
+  localZoneLabel,
+  parseDateTimeValue,
+  serializeDateTimeValue,
+} from './dateTimeValue';
 // Monaco — same instance + worker setup as CodeView. The `loader.config`
-// side-effect runs when CodeView is first imported (every mode file
-// imports it), so by the time FieldSetEditor renders, Monaco is ready.
-import Editor from '@monaco-editor/react';
+// side-effect lives in src/monaco/monacoSetup.ts, which the MonacoEditor
+// wrapper lazy-loads on the first editor render (#22).
+import Editor from '../monaco/MonacoEditor';
 import type { ThemeMode } from '../theme/theme';
 import type { CreateFieldValue, LookupFieldValue } from '../state/writeState';
 import type { RequestGroup } from '../registry/requestTypes';
@@ -188,6 +199,12 @@ export interface FieldSetEditorProps {
    * value explicitly.
    */
   purpose?: 'create' | 'update' | 'upsert';
+  /**
+   * HTTP verb named in the pane header. Defaults from `purpose`: POST for
+   * create, PATCH for update / upsert. Update's single-column PUT passes
+   * 'PUT'.
+   */
+  method?: 'POST' | 'PATCH' | 'PUT';
 }
 
 type Filter = 'all' | 'required' | 'set' | 'common';
@@ -206,7 +223,14 @@ export function FieldSetEditor({
   group = 'write',
   themeMode = 'light',
   purpose = 'create',
+  method,
 }: FieldSetEditorProps) {
+  const verb = method ?? (purpose === 'create' ? 'POST' : 'PATCH');
+  // Create (and Upsert, which may create) must carry every required column.
+  // Update is a partial PATCH: columns left out of the body keep their
+  // value, so an unset required column is fine — only clearing one to null
+  // is a problem (#80).
+  const requiresAllRequired = purpose !== 'update';
   // Internal fallback when the caller doesn't wire up explicit-null tracking.
   // Keeps the affordance hidden in those modes (the Set-null button checks
   // for the controlled handler before rendering itself).
@@ -373,9 +397,13 @@ export function FieldSetEditor({
   // Required-field check: a column marked explicit-null still counts as
   // "missing" since the server will reject a null on a required column —
   // this matches Dataverse's runtime behavior and surfaces the issue.
+  // Update only flags required columns explicitly set to null.
   const missingRequired = useMemo(
-    () => requiredFields.filter((c) => !isSupplied(c) || nullFields.includes(c.logicalName)),
-    [requiredFields, isSupplied, nullFields],
+    () =>
+      requiredFields.filter(
+        (c) => (requiresAllRequired && !isSupplied(c)) || nullFields.includes(c.logicalName),
+      ),
+    [requiredFields, isSupplied, nullFields, requiresAllRequired],
   );
 
   // What to render in the form area.
@@ -464,7 +492,7 @@ export function FieldSetEditor({
         title="Field set"
         sub={
           <span>
-            Pick the columns this <code>POST</code> should set.{' '}
+            Pick the columns this <code>{verb}</code> should set.{' '}
             <span style={{ color: tokens.colorNeutralForeground3 }}>
               Only fields below are emitted in the body — empty columns stay out.
             </span>
@@ -475,6 +503,7 @@ export function FieldSetEditor({
         {bodyMode === 'form' && (
           <Input
             contentBefore={<Search20Regular />}
+            aria-label="Filter fields"
             placeholder="Filter fields…"
             value={search}
             onChange={(_, d) => setSearch(d.value)}
@@ -483,7 +512,7 @@ export function FieldSetEditor({
           />
         )}
         <Badge appearance="ghost">{populatedFields.length} populated</Badge>
-        {requiredFields.length > 0 && (
+        {requiresAllRequired && requiredFields.length > 0 && (
           <Badge appearance="tint" color={missingRequired.length ? 'danger' : 'success'}>
             {requiredFields.length - missingRequired.length}/{requiredFields.length} required
           </Badge>
@@ -501,24 +530,42 @@ export function FieldSetEditor({
         </SegmentedToggle>
       </PaneHead>
 
-      {missingRequired.length > 0 && (
-        <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 12 }}>
-          <MessageBarBody>
-            <MessageBarTitle>
-              {missingRequired.length} required field
-              {missingRequired.length === 1 ? ' is' : 's are'} unset.
-            </MessageBarTitle>
-            Dataverse will reject the create with{' '}
-            <code>0x80040217 · A required field is missing</code> unless every required column has a
-            value. <strong>Missing:</strong>{' '}
-            {missingRequired.map((c) => (
-              <code key={c.logicalName} style={{ marginRight: 6 }}>
-                {c.logicalName}
-              </code>
-            ))}
-          </MessageBarBody>
-        </MessageBar>
-      )}
+      {missingRequired.length > 0 &&
+        (requiresAllRequired ? (
+          <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 12 }}>
+            <MessageBarBody>
+              <MessageBarTitle>
+                {missingRequired.length} required field
+                {missingRequired.length === 1 ? ' is' : 's are'} unset.
+              </MessageBarTitle>
+              Dataverse will reject the{' '}
+              {purpose === 'upsert' ? 'upsert when it creates the row' : 'create'} with{' '}
+              <code>0x80040217 · A required field is missing</code> unless every required column has
+              a value. <strong>Missing:</strong>{' '}
+              {missingRequired.map((c) => (
+                <code key={c.logicalName} style={{ marginRight: 6 }}>
+                  {c.logicalName}
+                </code>
+              ))}
+            </MessageBarBody>
+          </MessageBar>
+        ) : (
+          <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 12 }}>
+            <MessageBarBody>
+              <MessageBarTitle>
+                {missingRequired.length} required field
+                {missingRequired.length === 1 ? ' is' : 's are'} set to null.
+              </MessageBarTitle>
+              Dataverse may reject the update for clearing a required column. Columns left out of
+              the body keep their current value. <strong>Cleared:</strong>{' '}
+              {missingRequired.map((c) => (
+                <code key={c.logicalName} style={{ marginRight: 6 }}>
+                  {c.logicalName}
+                </code>
+              ))}
+            </MessageBarBody>
+          </MessageBar>
+        ))}
 
       {bodyMode === 'form' ? (
         <>
@@ -580,6 +627,7 @@ export function FieldSetEditor({
                     populated={col.logicalName in values || nullFields.includes(col.logicalName)}
                     isNull={isNull(col.logicalName)}
                     nullSupported={nullFieldsSupported}
+                    requiredOnWrite={requiresAllRequired}
                     onChange={(v) => setField(col.logicalName, v)}
                     onRemove={() => {
                       // Remove from both value map AND null flag — a single
@@ -630,34 +678,15 @@ export function FieldSetEditor({
             </Button>
           ) : (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <Combobox
-                size="small"
-                placeholder={`Add one of ${addable.length} fields…`}
-                style={{ minWidth: 320 }}
-                onOptionSelect={(_, d) => {
-                  if (!d.optionValue) return;
-                  const col = findColumn(tbl, d.optionValue);
+              <AddFieldPicker
+                addable={addable}
+                onPick={(logicalName) => {
+                  const col = findColumn(tbl, logicalName);
                   if (!col) return;
                   setField(col.logicalName, defaultValueFor(col));
                   setAddPickerOpen(false);
                 }}
-              >
-                {addable.map((c) => (
-                  <Option key={c.logicalName} value={c.logicalName} text={c.displayName}>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span>{c.displayName}</span>
-                      <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-                        {c.logicalName} · <code>{c.attributeType}</code>
-                        {c.required && (
-                          <span style={{ marginLeft: 6, color: tokens.colorPaletteRedForeground1 }}>
-                            required
-                          </span>
-                        )}
-                      </Caption1>
-                    </div>
-                  </Option>
-                ))}
-              </Combobox>
+              />
               <Button size="small" appearance="subtle" onClick={() => setAddPickerOpen(false)}>
                 Cancel
               </Button>
@@ -672,6 +701,40 @@ export function FieldSetEditor({
   );
 }
 
+// Row layout has to hold at PPTB's default tool width (~840 px), where the
+// value cell is only ~250 px wide (#112). The label column gives up width
+// first (35 % of the row, 120–220 px), the value input keeps a 160 px floor,
+// and the "Send as null" switch wraps onto its own line below the input
+// instead of overlapping it. Fluent's Combobox / Dropdown / DatePicker carry
+// intrinsic min-widths (250 px and up) that would otherwise push past the
+// cell, so they're released to the cell width here.
+const useFieldRowStyles = makeStyles({
+  valueLine: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: '8px',
+    rowGap: '4px',
+    minWidth: 0,
+  },
+  valueInput: {
+    flex: '1 1 160px',
+    minWidth: 0,
+    '& .fui-Input, & .fui-Combobox, & .fui-Dropdown, & .fui-SpinButton, & .fui-Textarea, & .fui-TagPickerControl':
+      {
+        minWidth: 0,
+        maxWidth: '100%',
+      },
+    // The lookup search box sets an inline 240 px min-width.
+    '& .fui-Combobox': {
+      minWidth: '0 !important',
+    },
+  },
+  nullSwitch: {
+    flexShrink: 0,
+  },
+});
+
 // ──────────────────────────────────────────────────────────────
 // FieldRow — one column's label + value + remove
 // ──────────────────────────────────────────────────────────────
@@ -682,6 +745,7 @@ function FieldRow({
   populated,
   isNull,
   nullSupported,
+  requiredOnWrite,
   onChange,
   onRemove,
   onSetNull,
@@ -697,21 +761,25 @@ function FieldRow({
    *  "Set null" button renders. Modes that haven't opted into the feature
    *  still get a clean row without the affordance. */
   nullSupported: boolean;
+  /** True when the body must carry every required column (create / upsert).
+   *  False for update, where an unset required column is left unchanged. */
+  requiredOnWrite: boolean;
   onChange: (v: CreateFieldValue) => void;
   onRemove: () => void;
   onSetNull: () => void;
   onClearNull: () => void;
 }) {
   const s = useStudioStyles();
-  const isMissing = col.required && !populated;
+  const isMissing = col.required && (requiredOnWrite ? !populated : isNull);
 
+  const rs = useFieldRowStyles();
   return (
     <div
       className={mergeClasses(s.inlineCard)}
       style={{
         padding: '10px 12px',
         display: 'grid',
-        gridTemplateColumns: '220px 1fr 30px',
+        gridTemplateColumns: 'minmax(120px, min(220px, 35%)) minmax(0, 1fr) 30px',
         gap: 12,
         alignItems: 'start',
         borderColor: isMissing ? tokens.colorPaletteRedBorder2 : undefined,
@@ -725,7 +793,11 @@ function FieldRow({
           </span>
           {col.required && (
             <Tooltip
-              content="Required — Dataverse rejects the create when this is empty."
+              content={
+                requiredOnWrite
+                  ? 'Required — Dataverse rejects the create when this is empty.'
+                  : 'Required — leave it out to keep its value; clearing it to null may be rejected.'
+              }
               relationship="description"
             >
               <Badge appearance="tint" color="danger" size="extra-small">
@@ -774,8 +846,8 @@ function FieldRow({
           fragment preview but the switch stays in the same position so
           the layout doesn't shift. Description (if any) renders below. */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
+        <div className={rs.valueLine}>
+          <div className={rs.valueInput}>
             {isNull ? (
               // Null-mode preview. Same row footprint as the input, so the
               // Switch's position doesn't jump when the user toggles. Shows
@@ -829,6 +901,7 @@ function FieldRow({
             // gesture feels like "enable this modifier" rather than
             // "this is the primary affordance".
             <Switch
+              className={rs.nullSwitch}
               checked={isNull}
               onChange={(_, d) => {
                 if (d.checked) onSetNull();
@@ -876,7 +949,18 @@ function FieldRow({
 // ──────────────────────────────────────────────────────────────
 // FieldInput — dispatch to the right control for the column's type
 // ──────────────────────────────────────────────────────────────
-function FieldInput({
+// Accessible name for value controls that don't get `col` (#120).
+const FieldLabelContext = createContext('Field value');
+
+function FieldInput(props: Parameters<typeof FieldInputBody>[0]) {
+  return (
+    <FieldLabelContext.Provider value={props.col.displayName}>
+      <FieldInputBody {...props} />
+    </FieldLabelContext.Provider>
+  );
+}
+
+function FieldInputBody({
   table,
   col,
   value,
@@ -965,6 +1049,7 @@ function FieldInput({
     default:
       return (
         <Input
+          aria-label={col.displayName}
           size="small"
           value={String(value ?? '')}
           onChange={(_, d) => onChange(d.value)}
@@ -990,6 +1075,7 @@ function StringFieldInput({
   if (isLong) {
     return (
       <Textarea
+        aria-label={col.displayName}
         rows={3}
         value={value ?? ''}
         maxLength={col.maxLength}
@@ -1018,6 +1104,7 @@ function StringFieldInput({
             : `up to ${col.maxLength} chars`;
   return (
     <Input
+      aria-label={col.displayName}
       size="small"
       type={type}
       value={value ?? ''}
@@ -1047,6 +1134,7 @@ function MemoFieldInput({
       }
     >
       <Textarea
+        aria-label={col.displayName}
         rows={4}
         value={v}
         maxLength={col.maxLength}
@@ -1071,6 +1159,7 @@ function IntegerFieldInput({
   if (col.format === 'Language' || col.format === 'Locale') {
     return (
       <Combobox
+        aria-label={col.displayName}
         size="small"
         value={value != null ? String(value) : ''}
         selectedOptions={value != null ? [String(value)] : []}
@@ -1147,8 +1236,10 @@ function NumericFieldInput({
   step?: number;
   integer?: boolean;
 }) {
+  const fieldLabel = useContext(FieldLabelContext);
   return (
     <SpinButton
+      aria-label={fieldLabel}
       size="small"
       value={value ?? 0}
       min={min}
@@ -1224,84 +1315,79 @@ function DateTimeFieldInput({
   value: string | undefined;
   onChange: (v: string) => void;
 }) {
-  const isDateOnly = col.format === 'DateOnly' || col.dateTimeBehavior === 'DateOnly';
-  const behaviorHint =
-    col.dateTimeBehavior === 'UserLocal'
-      ? 'stored as UTC, displayed in user TZ'
-      : col.dateTimeBehavior === 'DateOnly'
-        ? 'midnight UTC, no TZ conversion'
-        : 'wall-clock as UTC (no TZ math)';
-
-  const parsed = value ? new Date(value) : null;
-  const dateOnly = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+  // Parsing / serializing is per behavior — see editors/dateTimeValue.ts.
+  // `current`'s LOCAL fields are what the pickers show.
+  const isDateOnly = isDateOnlyColumn(col);
+  const current = parseDateTimeValue(value, col);
+  const hint = behaviorHint(col, current);
 
   const writeDate = (d: Date | null | undefined) => {
     if (!d) {
       onChange('');
       return;
     }
-    if (isDateOnly) {
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
-      onChange(`${yyyy}-${mm}-${dd}`);
-    } else {
-      const prior = parsed && !Number.isNaN(parsed.getTime()) ? parsed : new Date(d);
-      const next = new Date(d);
-      next.setHours(prior.getHours(), prior.getMinutes(), 0, 0);
-      onChange(next.toISOString());
-    }
+    // Keep the time already picked when the date changes.
+    onChange(serializeDateTimeValue(combineDateAndTime(d, isDateOnly ? null : current), col));
   };
   const writeTime = (d: Date | null | undefined) => {
-    if (!d || !dateOnly) return;
-    const next = new Date(dateOnly);
-    next.setHours(d.getHours(), d.getMinutes(), 0, 0);
-    onChange(next.toISOString());
+    if (!d || !current) return;
+    onChange(serializeDateTimeValue(combineDateAndTime(current, d), col));
   };
+
+  // What's on the wire — shown under the pickers so the zone is never a
+  // guess (#92).
+  const sent = value ? (
+    <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
+      Sends <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{value}</code>
+      {behaviorOf(col) === 'UserLocal' && (
+        <> (UTC) · shown in {localZoneLabel(current ?? undefined)}</>
+      )}
+    </Caption1>
+  ) : null;
 
   if (isDateOnly) {
     return (
-      <Tooltip
-        content={`Behavior: ${col.dateTimeBehavior} — ${behaviorHint}`}
-        relationship="description"
-      >
-        <DatePicker
-          size="small"
-          value={dateOnly}
-          onSelectDate={writeDate}
-          placeholder="Pick a date…"
-          formatDate={(d) => (d ? d.toLocaleDateString() : '')}
-          allowTextInput
-        />
-      </Tooltip>
+      <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+        <Tooltip content={`Behavior: ${behaviorOf(col)} — ${hint}`} relationship="description">
+          <DatePicker
+            size="small"
+            value={current}
+            onSelectDate={writeDate}
+            placeholder="Pick a date…"
+            formatDate={(d) => (d ? d.toLocaleDateString() : '')}
+            allowTextInput
+          />
+        </Tooltip>
+        {sent}
+      </span>
     );
   }
   return (
-    <Tooltip
-      content={`Behavior: ${col.dateTimeBehavior} — ${behaviorHint}`}
-      relationship="description"
-    >
-      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-        <DatePicker
-          size="small"
-          value={dateOnly}
-          onSelectDate={writeDate}
-          placeholder="Date…"
-          formatDate={(d) => (d ? d.toLocaleDateString() : '')}
-          style={{ minWidth: 130 }}
-          allowTextInput
-        />
-        <TimePicker
-          size="small"
-          freeform
-          selectedTime={dateOnly}
-          onTimeChange={(_, d) => writeTime(d.selectedTime)}
-          placeholder="Time…"
-          style={{ minWidth: 100 }}
-          hourCycle="h23"
-        />
-      </span>
-    </Tooltip>
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+      <Tooltip content={`Behavior: ${behaviorOf(col)} — ${hint}`} relationship="description">
+        <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <DatePicker
+            size="small"
+            value={current}
+            onSelectDate={writeDate}
+            placeholder="Date…"
+            formatDate={(d) => (d ? d.toLocaleDateString() : '')}
+            style={{ minWidth: 130 }}
+            allowTextInput
+          />
+          <TimePicker
+            size="small"
+            freeform
+            selectedTime={current}
+            onTimeChange={(_, d) => writeTime(d.selectedTime)}
+            placeholder="Time…"
+            style={{ minWidth: 100 }}
+            hourCycle="h23"
+          />
+        </span>
+      </Tooltip>
+      {sent}
+    </span>
   );
 }
 
@@ -1318,6 +1404,7 @@ function ChoiceFieldInput({
   const cur = options.find((o) => o.value === value);
   return (
     <Combobox
+      aria-label={col.displayName}
       size="small"
       value={cur?.label ?? (value != null ? String(value) : '')}
       selectedOptions={value != null ? [String(value)] : []}
@@ -1530,7 +1617,13 @@ export function LookupFieldInput({
         <Badge appearance="ghost" style={{ fontFamily: tokens.fontFamilyMonospace }}>
           → loading targets…
         </Badge>
-        <Combobox size="small" disabled placeholder="Loading…" style={{ minWidth: 240 }}>
+        <Combobox
+          aria-label={col.displayName}
+          size="small"
+          disabled
+          placeholder="Loading…"
+          style={{ minWidth: 240 }}
+        >
           <Option value="__loading" text="" disabled>
             —
           </Option>
@@ -1543,6 +1636,7 @@ export function LookupFieldInput({
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
       {polymorphic ? (
         <Combobox
+          aria-label={`${col.displayName} (target table)`}
           size="small"
           value={targetTbl?.displayName ?? target}
           selectedOptions={[target]}
@@ -1573,6 +1667,7 @@ export function LookupFieldInput({
       )}
 
       <Combobox
+        aria-label={col.displayName}
         size="small"
         freeform
         clearable
@@ -1638,10 +1733,12 @@ function GuidFieldInput({
   value: string | undefined;
   onChange: (v: string) => void;
 }) {
+  const fieldLabel = useContext(FieldLabelContext);
   const v = value ?? '';
   const valid = !v || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
   return (
     <Input
+      aria-label={fieldLabel}
       size="small"
       value={v}
       placeholder="00000000-0000-0000-0000-000000000000"
@@ -1998,9 +2095,8 @@ function JsonEditPane({
       <div style={{ position: 'relative' }}>
         {/* Monaco editor with `json` language — gives us syntax coloring,
             bracket matching, line numbers, and inline schema-style error
-            squiggles for free. Same instance + worker setup as CodeView
-            (the side-effect `loader.config({monaco})` there pre-loads
-            the workers globally). Height is fixed at 360 so the surrounding
+            squiggles for free. Same lazily loaded instance + worker setup
+            as CodeView (src/monaco/monacoSetup.ts). Height is fixed at 360 so the surrounding
             "Form / JSON" toggle + info bar don't get pushed off-screen on
             small viewports; the editor's internal scrollbar handles tall
             bodies. */}

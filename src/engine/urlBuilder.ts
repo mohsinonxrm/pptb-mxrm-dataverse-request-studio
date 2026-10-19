@@ -2,7 +2,15 @@
 // rendered relative URL plus an estimated byte length for validation.
 
 import { ENV } from '../mock/environment';
-import { findTable, findColumn, isLookupLike, type TableMeta } from '../mock/metadata';
+import {
+  altKeyColumnType,
+  findTable,
+  findColumn,
+  isLookupLike,
+  type AlternateKeyDef,
+  type AttributeTypeCode,
+  type TableMeta,
+} from '../mock/metadata';
 import { bindPropertyFor, encodeFieldBody, parseRawBody } from './fieldBody';
 import { groupToOData } from '../editors/filter/filterTree';
 import { attrRefByName } from './odataAttr';
@@ -134,7 +142,8 @@ export function buildRetrieveMultiple(s: RetrieveMultipleState): BuiltRequest {
     }
     if (s.expand.length)
       parts.push({ key: '$expand', value: enc(expandToOData(s.expand, s.table)) });
-    if (s.orderby.length) parts.push({ key: '$orderby', value: enc(orderbyToOData(s.orderby)) });
+    if (s.orderby.length)
+      parts.push({ key: '$orderby', value: enc(orderbyToOData(s.orderby, tbl)) });
   }
   if (s.top != null && s.top > 0 && (s.prefer.maxpagesize == null || s.prefer.maxpagesize === 0)) {
     parts.push({ key: '$top', value: String(s.top) });
@@ -364,12 +373,31 @@ export function buildUpdateBody(s: UpdateState): Record<string, unknown> {
 //   • Composite alt-key: PATCH /sample_things(sample_key1=1,sample_key2=1)
 //
 // Alternate-key values follow OData literal rules: strings get single-quoted,
-// numbers / GUIDs / booleans are bare. We dispatch on the column metadata to
-// pick the right literal form.
+// numbers / GUIDs / booleans / date-times are bare. We dispatch on the column
+// metadata to pick the right literal form. The key segment is part of the
+// URL path, so every value is percent-encoded (`#`, `?`, `%`, spaces, … would
+// otherwise truncate or corrupt the URL when it's copied out) — MS Learn's own
+// example is `new_skts(new_name='M%26M')`. A lookup key column is addressed by
+// its lookup property, `_<name>_value` (MS Learn: "Use an alternate key to
+// reference a record").
 
-function odataLiteral(value: string, col: ReturnType<typeof findColumn>): string {
-  if (!col) return `'${value.replace(/'/g, "''")}'`;
-  switch (col.attributeType) {
+/** Placeholder for a key part the user hasn't filled in yet (preview only —
+ *  Execute is gated on every part being set). Mirrors the `(<id>)` placeholder. */
+const UNSET_KEY_PART = '<value>';
+
+/**
+ * Characters Dataverse rejects inside an alternate-key value even when
+ * percent-encoded (MS Learn: "Alternate keys with special character values").
+ * `#` is listed on the maker-portal page for PATCH.
+ */
+const ALT_KEY_RESERVED_CHARS = /[/<>*%&:\\?+#]/;
+
+const quoteKeyString = (value: string) => `'${encodeURIComponent(value.replace(/'/g, "''"))}'`;
+
+function odataLiteral(value: string, type: AttributeTypeCode | undefined): string {
+  // Unknown type → quoted as a string (the Upsert UI flags it, #64).
+  if (!type) return quoteKeyString(value);
+  switch (type) {
     case 'Integer':
     case 'BigInt':
     case 'Decimal':
@@ -380,31 +408,73 @@ function odataLiteral(value: string, col: ReturnType<typeof findColumn>): string
     case 'State':
     case 'Status':
     case 'EntityName':
-      return value === '' ? '0' : value;
-    case 'Boolean':
-      return value === 'true' || value === '1' ? 'true' : 'false';
     case 'Uniqueidentifier':
     case 'Lookup':
     case 'Customer':
-    case 'Owner':
-      return value;
+    case 'Owner': {
+      const v = value.trim();
+      return v === '' ? UNSET_KEY_PART : encodeURIComponent(v);
+    }
+    case 'DateTime': {
+      // Edm.DateTimeOffset / Edm.Date literals are unquoted:
+      // `(new_effectivedate=2024-05-01T00:00:00Z)`. `:` is a legal path
+      // character and part of the literal, so keep it readable; `+` in an
+      // offset (`+05:30`) must be encoded or it can read as a space.
+      const v = value.trim();
+      return v === '' ? UNSET_KEY_PART : encodeURIComponent(v).replace(/%3A/gi, ':');
+    }
+    case 'Boolean':
+      return value === 'true' || value === '1' ? 'true' : 'false';
     default:
-      return `'${value.replace(/'/g, "''")}'`;
+      return quoteKeyString(value);
   }
 }
 
 function altKeySegment(
   table: string,
-  keyColumns: string[],
+  def: AlternateKeyDef,
   keyValues: Record<string, string>,
 ): string {
   const tbl = findTable(table);
-  const parts = keyColumns.map((col) => {
-    const c = tbl ? findColumn(tbl, col) : undefined;
+  const parts = def.columns.map((col) => {
+    const type = altKeyColumnType(tbl, def, col);
     const raw = keyValues[col] ?? '';
-    return `${col}=${odataLiteral(raw, c)}`;
+    // A lookup key column missing from the loaded columns still needs the
+    // `_<name>_value` property name.
+    const loaded = tbl?.columns.some((c) => c.logicalName === col);
+    const name =
+      !loaded && (type === 'Lookup' || type === 'Customer' || type === 'Owner')
+        ? `_${col}_value`
+        : attrRefByName(tbl, col);
+    return `${name}=${odataLiteral(raw, type)}`;
   });
   return `(${parts.join(',')})`;
+}
+
+/** Key columns whose AttributeType is unknown — quoted as strings (#64). */
+export function altKeyUnknownTypeColumns(table: string, def: AlternateKeyDef): string[] {
+  const tbl = findTable(table);
+  return def.columns.filter((col) => !altKeyColumnType(tbl, def, col));
+}
+
+/**
+ * Key columns whose string value contains a character Dataverse rejects in
+ * an alternate-key URL even when encoded. Drives the Upsert advisory that
+ * points at the `$filter` workaround. Only parts emitted as quoted strings
+ * are checked (String / Memo, or unknown type, which is quoted as a string)
+ * — the `:` in a date-time literal is syntax, not data.
+ */
+export function altKeyReservedCharColumns(
+  table: string,
+  def: AlternateKeyDef,
+  keyValues: Record<string, string>,
+): string[] {
+  const tbl = findTable(table);
+  return def.columns.filter((col) => {
+    const type = altKeyColumnType(tbl, def, col);
+    if (type && type !== 'String' && type !== 'Memo') return false;
+    return ALT_KEY_RESERVED_CHARS.test(keyValues[col] ?? '');
+  });
 }
 
 export function buildUpsert(s: UpsertState): BuiltRequest {
@@ -430,7 +500,7 @@ export function buildUpsert(s: UpsertState): BuiltRequest {
   } else {
     const def = tbl.alternateKeys?.find((k) => k.name === key.keyName);
     if (def) {
-      idSegment = altKeySegment(s.table, def.columns, key.keyValues);
+      idSegment = altKeySegment(s.table, def, key.keyValues);
     }
   }
 
@@ -947,6 +1017,19 @@ export function buildDisassociateRequests(s: DisassociateState): DisassociateReq
   }));
 }
 
+/**
+ * Collection a predefined query runs against when it targets a related
+ * collection (#5): `<sourceSet>(<id>)/<nav>`. Null for the entity-set form,
+ * or while the source table / nav aren't picked or loaded yet.
+ */
+export function predefinedCollectionPath(s: PredefinedQueryState): string | null {
+  const r = s.related;
+  if (!r || !r.sourceTable || !r.navProperty) return null;
+  const src = findTable(r.sourceTable);
+  if (!src) return null;
+  return `${src.entitySetName}(${r.recordId || '<record-id>'})/${r.navProperty}`;
+}
+
 export function buildPredefinedQuery(s: PredefinedQueryState): BuiltRequest {
   const tbl = findTable(s.table);
   if (!tbl)
@@ -963,10 +1046,11 @@ export function buildPredefinedQuery(s: PredefinedQueryState): BuiltRequest {
   if (s.top != null && s.top > 0 && (s.prefer.maxpagesize == null || s.prefer.maxpagesize === 0)) {
     parts.push({ key: '$top', value: String(s.top) });
   }
-  const path = `${ENV.apiBase}/${tbl.entitySetName}`;
+  const collection = predefinedCollectionPath(s) ?? tbl.entitySetName;
+  const path = `${ENV.apiBase}/${collection}`;
   const qs = joinQuery(parts);
   const relativeUrl = qs ? `${path}?${qs}` : path;
-  const noBase = `/${tbl.entitySetName}${qs ? `?${qs}` : ''}`;
+  const noBase = `/${collection}${qs ? `?${qs}` : ''}`;
   return {
     relativeUrl,
     relativeNoBase: noBase,

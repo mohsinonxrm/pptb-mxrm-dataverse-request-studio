@@ -5,7 +5,7 @@
 //   https://learn.microsoft.com/en-us/power-apps/user/merge-duplicate-records
 //
 // Sidebar:
-//   • Entity        — pick which table (account / contact / incident)
+//   • Entity        — pick which table (account / contact / lead / incident)
 //   • Target        — winner record (survives)
 //   • Subordinate   — loser record (deactivated, re-parented)
 //   • Field diff    — per-field choice (Keep Target / Use Subordinate / Custom)
@@ -56,6 +56,7 @@ import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from '../editors/PaneHead';
 import { MergeFieldDiff } from '../editors/MergeFieldDiff';
@@ -68,7 +69,7 @@ import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advis
 import { RecordPicker } from '../primitives/RecordPicker';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { TABLES, findTable } from '../mock/metadata';
+import { findTable } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildMerge, buildMergeBody } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
@@ -88,15 +89,27 @@ import {
   hashState,
   type SavedRequest,
   type SerializedMergeState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { isRecordGuid } from '../primitives/guid';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
 // ──────────────────────────────────────────────────────────────
-// Empty initial state. The user picks one of account / contact / incident
-// (the only entities the Merge action supports per docs), then picks both
-// records via the live RecordPicker.
+// The only tables the Merge action supports. Hardcoded because it's a
+// server-side constraint of the OOB Merge action — not configurable per
+// environment. lead needs Dynamics 365 Sales, incident needs Customer
+// Service; the entity picker hides whichever the env doesn't have.
+//   Reference: https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/merge-entity-using-web-api
+const MERGE_SUPPORTED_LOGICAL_NAMES = ['account', 'contact', 'lead', 'incident'] as const;
+const MERGE_SUPPORTED_LABEL = 'account, contact, lead, and incident';
+const isMergeSupported = (logical: string): boolean =>
+  (MERGE_SUPPORTED_LOGICAL_NAMES as readonly string[]).includes(logical);
+
+// Empty initial state. The user picks one of the Merge-supported tables
+// above, then picks both records via the live RecordPicker.
 const initialState = (): MergeState => ({
   table: '',
   targetId: null,
@@ -112,15 +125,14 @@ const initialState = (): MergeState => ({
   subordinateSnapshot: null,
 });
 
-const GUID_RE =
-  /^[{(]?[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}[)}]?$/;
-const isValidGuid = (s: string | null | undefined): boolean => !!s && GUID_RE.test(s.trim());
+const isValidGuid = isRecordGuid;
 
 type RootClauseId = 'target' | 'subordinate' | 'fielddiff' | 'options' | 'headers' | 'bypass';
 
 export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('merge');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('merge', deserializeMerge, initialState);
+  const [state, setState] = useState(draft.state);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
   // The live table is a memo dependency below: build*() reads metadata via
   // findTable(), which is empty until the fetch lands — keying on `state`
@@ -134,8 +146,8 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
   // Save / Load tracking
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
 
   // Loading flags for the two record fetches.
   const [targetLoading, setTargetLoading] = useState(false);
@@ -257,13 +269,12 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
   const targetRow = state.targetSnapshot;
   const subRow = state.subordinateSnapshot;
 
-  const supportedTables = TABLES.filter((t) => t.supportsMerge);
   const overrideCount = Object.values(state.fieldChoices).filter((c) => c !== 'target').length;
 
   const disabledReason = !tbl
     ? 'Pick a target table first.'
-    : !tbl.supportsMerge
-      ? 'Merge is only supported for account, contact, and incident.'
+    : !isMergeSupported(tbl.logicalName)
+      ? `Merge is only supported for ${MERGE_SUPPORTED_LABEL}.`
       : !state.targetId
         ? 'Pick a Target record (the winner).'
         : !isValidGuid(state.targetId)
@@ -280,7 +291,7 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.merge(state);
+    const res = await runtime.merge(state, headerItemsToObject(effectiveHeaders, null));
     setResult(res);
     setLoading(false);
     setTab('results');
@@ -288,6 +299,7 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: 'merge',
           url: built.relativeUrl,
           method: 'POST',
@@ -351,6 +363,7 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeMerge(state), [state]);
+  useStashModeDraft('merge', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 
@@ -363,7 +376,7 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
     if (entry.modeId !== 'merge') return;
     const snap = entry.state as SerializedMergeState;
     if (entities.length > 0 && !entities.some((e) => e.logicalName === snap.table)) {
-      window.alert(
+      notify(
         `Can't load "${entry.name}": entity \`${snap.table}\` ` +
           `isn't available in this environment. The solution may have been ` +
           `removed or you may be connected to a different org.`,
@@ -375,6 +388,19 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedHash(hashState(snap));
     setResult(null);
     setActivePath('target');
+  };
+
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'merge');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
   };
 
   usePublishSaveContext(
@@ -511,7 +537,17 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
       // record picker. Subordinate is its own section.
       pane = (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <EntityPane state={state} setState={setState} markDirty={markDirty} />
+          <EntityPane
+            state={state}
+            setState={setState}
+            markDirty={markDirty}
+            onEntityChange={() => {
+              // New table → fresh draft. Forget the last save so Save can't
+              // overwrite an entry that belongs to the old table (#58).
+              setLastSavedId(undefined);
+              setLastSavedHash(null);
+            }}
+          />
           <RecordPickPane
             title="Master record"
             sub="The record that keeps its identity. Subordinate is merged into it."
@@ -614,6 +650,7 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={
@@ -904,44 +941,53 @@ function RecordCard({
 // ──────────────────────────────────────────────────────────────
 // Sidebar-driven panes
 // ──────────────────────────────────────────────────────────────
-// Per the docs Merge is restricted to these three entities (and lead in
-// older versions; current docs name account/contact/incident). Hardcoded
-// because it's a server-side constraint of the OOB Merge action — not
-// configurable per environment.
-//   Reference: https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/reference/merge
-const MERGE_SUPPORTED_LOGICAL_NAMES = ['account', 'contact', 'incident'] as const;
-
 function EntityPane({
   state,
   setState,
   markDirty,
+  onEntityChange,
 }: {
   state: MergeState;
   setState: React.Dispatch<React.SetStateAction<MergeState>>;
   markDirty: (id: string) => void;
+  /** Called after the user picks a different entity. */
+  onEntityChange: () => void;
 }) {
   const tbl = findTable(state.table);
-  const { entities } = useScopedEntities();
-  // Cross-reference the three docs-supported logical names against the
-  // live entity list — so we show the env's actual display names (which
-  // can be customized) and skip entities the env doesn't have provisioned.
+  // The UNSCOPED entity list: Merge's tables are fixed by the platform, so
+  // the user's Query Scope (default: publisher solutions, none picked yet)
+  // must not hide them — it left this dropdown empty on a fresh install (#97).
+  const { allEntities, allLoading } = useScopedEntities();
+  // Cross-reference the docs-supported logical names against the live
+  // entity list — so we show the env's actual display names (which can be
+  // customized) and skip entities the env doesn't have provisioned (lead /
+  // incident need Sales / Service).
   const supportedTables = useMemo(
     () =>
-      MERGE_SUPPORTED_LOGICAL_NAMES.map((ln) => entities.find((e) => e.logicalName === ln)).filter(
-        (e): e is NonNullable<typeof e> => !!e,
-      ),
-    [entities],
+      MERGE_SUPPORTED_LOGICAL_NAMES.map((ln) =>
+        allEntities.find((e) => e.logicalName === ln),
+      ).filter((e): e is NonNullable<typeof e> => !!e),
+    [allEntities],
   );
   return (
     <div>
       <PaneHead
         icon={Table20Filled}
         title="Merge entity type"
-        sub="Pick the table to merge. The Merge action is restricted to account, contact, and incident."
+        sub={`Pick the table to merge. The Merge action is restricted to ${MERGE_SUPPORTED_LABEL}.`}
         group="write"
       />
       <div style={{ maxWidth: 560 }}>
-        <Field label="Entity">
+        <Field
+          label="Entity"
+          hint={
+            allLoading
+              ? 'Loading tables…'
+              : supportedTables.length === 0
+                ? `No Merge-supported table (${MERGE_SUPPORTED_LOGICAL_NAMES.join(', ')}) was found in this environment.`
+                : undefined
+          }
+        >
           <Combobox
             value={tbl?.displayName ?? ''}
             selectedOptions={[state.table]}
@@ -961,6 +1007,7 @@ function EntityPane({
               markDirty('target');
               markDirty('subordinate');
               markDirty('fielddiff');
+              onEntityChange();
             }}
           >
             {supportedTables.map((t) => (
