@@ -106,7 +106,14 @@ const initialState = (): UpsertState => ({
 const isValidGuid = isRecordGuid;
 
 type RootClauseId =
-  'target' | 'key' | 'fieldset' | 'precondition' | 'prefer' | 'returnselect' | 'headers' | 'bypass';
+  | 'target'
+  | 'key'
+  | 'fieldset'
+  | 'precondition'
+  | 'prefer'
+  | 'returnselect'
+  | 'headers'
+  | 'bypass';
 
 export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('upsert');
