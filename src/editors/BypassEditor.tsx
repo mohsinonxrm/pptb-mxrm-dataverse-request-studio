@@ -268,8 +268,7 @@ export function BypassEditor({ value, onChange, group = 'write' }: BypassEditorP
             style={{ color: tokens.colorNeutralForeground2, display: 'block', marginBottom: 8 }}
           >
             Emits <code>MSCRM.SuppressCallbackRegistrationExpanderJob</code>. No privilege required,
-            but flow owners are <strong>not notified</strong>
-            that their logic was bypassed.
+            but flow owners are <strong>not notified</strong> that their logic was bypassed.
           </Caption1>
           <Switch
             checked={value.suppressFlows}

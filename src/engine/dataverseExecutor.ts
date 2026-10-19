@@ -125,6 +125,13 @@ function outcomeFor(status: number): ExecOutcome {
   return 'error';
 }
 
+/** Reason phrase for a status from the map above, or undefined when it
+ *  isn't listed. The status badges use it so a create reads "201 Created"
+ *  rather than "201 OK" (#123). */
+export function statusTextFor(status: number): string | undefined {
+  return STATUS_TEXT[status];
+}
+
 interface HostError {
   message?: string;
   code?: string;
