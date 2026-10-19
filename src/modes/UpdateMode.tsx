@@ -91,6 +91,7 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { rawBodyBlocker, sentFieldValues } from '../engine/fieldBody';
 import { isRecordGuid } from '../primitives/guid';
 
 // ──────────────────────────────────────────────────────────────
@@ -103,6 +104,7 @@ const initialState = (): UpdateState => ({
   putColumn: null,
   fieldValues: {},
   nullFields: [],
+  rawBody: null,
   prefer: { ...emptyPrefer(), formattedValues: true, returnRepresentation: false },
   headers: defaultWriteHeaders(),
   returnSelect: [],
@@ -165,6 +167,39 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   const built = useMemo(() => buildUpdate(state), [state, liveTable]);
   const body = useMemo(() => buildUpdateBody(state), [state, liveTable]);
   const tbl = findTable(state.table);
+
+  // What the Diff pane compares against the record: the PATCH that will
+  // actually be sent. In JSON mode that's the typed body (fieldValues are
+  // stale there), decoded back to columns; explicit nulls show as "→ empty".
+  const diff = useMemo((): {
+    values: Record<string, CreateFieldValue>;
+    note: { intent: 'info' | 'warning'; text: string } | null;
+  } => {
+    const sent = sentFieldValues(tbl, state.rawBody, state.fieldValues, state.nullFields);
+    if (!sent.fromJson) return { values: sent.values, note: null };
+    if (sent.error) {
+      return {
+        values: sent.values,
+        note: {
+          intent: 'warning',
+          text: `The JSON body is invalid (${sent.error}), so there is nothing to compare.`,
+        },
+      };
+    }
+    const skipped = sent.unmapped.map((u) => u.key);
+    return {
+      values: sent.values,
+      note: {
+        intent: 'info',
+        text:
+          'Compared against the typed JSON body.' +
+          (skipped.length > 0
+            ? ` Not shown (no matching column, or a value the diff can't map): ${skipped.join(', ')}.`
+            : ''),
+      },
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.rawBody, state.fieldValues, state.nullFields, tbl, liveTable]);
 
   const markDirty = (id: string) =>
     setState((s) => {
@@ -335,7 +370,10 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   );
 
   // ── Execute guards ──
-  const fieldCount = Object.keys(state.fieldValues).length;
+  // JSON mode: the typed body is what's sent, so count its keys.
+  const jsonMode = state.rawBody != null;
+  const jsonBlocker = state.method === 'PATCH' ? rawBodyBlocker(state.rawBody) : null;
+  const fieldCount = jsonMode ? Object.keys(body).length : Object.keys(state.fieldValues).length;
   const putValueOk =
     state.method !== 'PUT' ||
     (state.putColumn != null && state.fieldValues[state.putColumn] != null);
@@ -351,7 +389,8 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
             : !putValueOk
               ? `Set a value for ${state.putColumn}.`
               : null
-          : (fieldCount === 0
+          : jsonBlocker ||
+            (fieldCount === 0
               ? 'No field changes — nothing to PATCH. Pick at least one field to update.'
               : Object.keys(body).length === 0
                 ? 'Body is empty — set at least one value.'
@@ -672,6 +711,7 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
               table: t,
               recordId: null,
               fieldValues: {},
+              rawBody: null,
               method: 'PATCH',
               putColumn: null,
               returnSelect: [],
@@ -711,7 +751,8 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
         <UpdateDiffPane
           table={state.table}
           recordId={state.recordId}
-          fieldValues={state.fieldValues}
+          fieldValues={diff.values}
+          sourceNote={diff.note}
           original={originalRow}
           // Combine both load signals — the diff should show "loading"
           // when EITHER the table metadata is still resolving OR the
@@ -745,6 +786,8 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
           }
           nullFields={state.nullFields}
           setNullFields={(n) => set('nullFields', n, 'fieldset')}
+          rawBody={state.rawBody ?? null}
+          setRawBody={(t) => set('rawBody', t, 'fieldset')}
           group="write"
           themeMode={themeMode}
           purpose="update"

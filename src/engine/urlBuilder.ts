@@ -11,6 +11,7 @@ import {
   type AttributeTypeCode,
   type TableMeta,
 } from '../mock/metadata';
+import { bindPropertyFor, encodeFieldBody, parseRawBody } from './fieldBody';
 import { groupToOData } from '../editors/filter/filterTree';
 import { attrRefByName } from './odataAttr';
 import { orderbyToOData } from '../editors/OrderbyEditor';
@@ -262,125 +263,23 @@ export function buildCreate(s: CreateState): BuiltRequest {
 }
 
 /**
- * Serialize CreateState.fieldValues into the JSON shape Dataverse expects.
+ * Serialize a CreateState into the JSON body Dataverse expects.
  *
- * Per https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/create-entity-web-api:
- *
- *   • Lookup-like columns (Lookup / Customer / Owner) → `<col>@odata.bind`
- *     with value `/<entitySetName>(<guid>)`. The Customer/Owner polymorphic
- *     case uses the user-picked target's entity set (caller-picked at the
- *     LookupFieldInput level).
- *   • MultiSelectPicklist → comma-separated string of integer values.
- *   • Everything else → the literal as-is. The serializer doesn't quote
- *     numbers/booleans — JSON.stringify does that at the call site.
- *
- * Unset fields (`null`, `undefined`, `''` for strings, empty arrays, empty
- * lookup with no id) are dropped — only what the user explicitly populated
- * goes on the wire.
+ * In JSON mode (`rawBody` non-null) the typed text is the body: it is sent
+ * as parsed, without re-encoding, so nulls, annotations and keys the form
+ * doesn't know survive. An unparseable body yields `{}` (the modes block
+ * Execute with the parse error). Otherwise the body is encoded from
+ * fieldValues + nullFields — see engine/fieldBody.encodeFieldBody for the
+ * per-type rules.
  */
-/**
- * Resolve the `@odata.bind` property name for a lookup-like column.
- *
- * For SINGLE-target lookups (most plain Lookup columns), Dataverse exposes
- * one nav-property whose name == the attribute logical name. Both
- * `<col>@odata.bind` and `<navProp>@odata.bind` work because they're the
- * same string.
- *
- * For POLYMORPHIC lookups (Customer, multi-target Lookup like
- * `regardingobjectid` on activities), the bare attribute name is NOT a
- * declared nav-property. The server returns:
- *   "An undeclared property '<attr>' which only has property annotations
- *    in the payload but no property value was found in the payload."
- *
- * The right name is the target-disambiguated nav-property — e.g.,
- * `customerid_account`, `customerid_contact`, `regardingobjectid_account_task`.
- * We look that up by matching the ManyToOne nav whose `referencingAttribute`
- * equals our column AND whose `targetEntity` equals the user's picked target.
- *
- * For OWNER columns (`ownerid` on most tables), Dataverse special-cases
- * the bare attribute name — it accepts both `/systemusers(...)` and
- * `/teams(...)` via a single nav. Empirically `ownerid@odata.bind` works
- * regardless of target; using the disambiguated form ALSO works. We use
- * the disambiguated form when we can find it, and fall back to the bare
- * name otherwise.
- *
- * Falls back to `<col>@odata.bind` when metadata can't resolve the nav —
- * single-target lookups always work this way, and the server will produce
- * the same clear error as before if the lookup happens to be polymorphic.
- */
-function bindPropertyFor(
-  parentTbl: TableMeta,
-  col: { logicalName: string },
-  targetEntity: string,
-): string {
-  const nav = parentTbl.navigationProperties.find(
-    (n) =>
-      n.cardinality === 'ManyToOne' &&
-      n.referencingAttribute === col.logicalName &&
-      n.targetEntity === targetEntity,
-  );
-  return `${nav?.name ?? col.logicalName}@odata.bind`;
-}
-
 export function buildCreateBody(s: CreateState): Record<string, unknown> {
   const tbl = findTable(s.table);
   if (!tbl) return {};
-  const body: Record<string, unknown> = {};
-
-  // ── 1) Explicit-null entries from nullFields ──────────────────────────
-  //
-  // Emitted BEFORE the regular fieldValues loop so that if a column ends up
-  // in BOTH (the user typed a value AND flagged it for null), the regular
-  // value wins — most consistent with "the last thing the user did" UX,
-  // and the UI prevents the conflict anyway (clear-to-null swaps the input).
-  // For lookups we need the `<nav>@odata.bind: null` shape per docs:
-  //   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/associate-disassociate-entities-using-web-api#disassociate-by-using-a-single-valued-navigation-property
-  // We don't know which target entity the user "would have" picked, so the
-  // bind-property resolves via the first available target (it doesn't
-  // matter for null — the server clears the column regardless of which
-  // disambiguated form we use).
-  for (const field of s.nullFields ?? []) {
-    const col = findColumn(tbl, field);
-    if (!col) continue;
-    if (isLookupLike(col)) {
-      const target = col.targets?.[0] ?? '';
-      const bindProp = target ? bindPropertyFor(tbl, col, target) : `${col.logicalName}@odata.bind`;
-      body[bindProp] = null;
-    } else {
-      body[col.logicalName] = null;
-    }
+  if (s.rawBody != null) {
+    const parsed = parseRawBody(s.rawBody);
+    return parsed.ok ? parsed.body : {};
   }
-
-  // ── 2) Regular fieldValues — same as before ───────────────────────────
-  for (const [field, raw] of Object.entries(s.fieldValues)) {
-    if (raw == null) continue;
-    if ((s.nullFields ?? []).includes(field)) continue; // null wins; UI prevents this
-    const col = findColumn(tbl, field);
-    if (!col) continue;
-
-    if (isLookupLike(col)) {
-      const lk = raw as LookupFieldValue;
-      if (!lk?.id) continue;
-      const targetTbl = findTable(lk.targetEntity);
-      if (!targetTbl) continue;
-      // Polymorphic-safe: resolves to e.g. `regardingobjectid_account_task`
-      // for activity → account lookups, or `customerid_contact` for
-      // contact-Customer lookups. Falls back to bare attribute name for
-      // single-target Lookups (same string).
-      const bindProp = bindPropertyFor(tbl, col, lk.targetEntity);
-      body[bindProp] = `/${targetTbl.entitySetName}(${lk.id})`;
-      continue;
-    }
-    if (col.attributeType === 'MultiSelectPicklist') {
-      const arr = raw as number[];
-      if (!Array.isArray(arr) || arr.length === 0) continue;
-      body[col.logicalName] = arr.join(',');
-      continue;
-    }
-    if (typeof raw === 'string' && raw === '') continue;
-    body[col.logicalName] = raw;
-  }
-  return body;
+  return encodeFieldBody(tbl, s.fieldValues, s.nullFields ?? []);
 }
 
 // ────────────────────────────────────────────────────────────
@@ -454,6 +353,7 @@ export function buildUpdateBody(s: UpdateState): Record<string, unknown> {
     table: s.table,
     fieldValues: s.fieldValues,
     nullFields: s.nullFields ?? [],
+    rawBody: s.rawBody ?? null,
     prefer: s.prefer,
     headers: s.headers,
     returnSelect: s.returnSelect,
@@ -630,6 +530,7 @@ export function buildUpsertBody(s: UpsertState): Record<string, unknown> {
     table: s.table,
     fieldValues: s.fieldValues,
     nullFields: s.nullFields ?? [],
+    rawBody: s.rawBody ?? null,
     prefer: s.prefer,
     headers: s.headers,
     returnSelect: s.returnSelect,
