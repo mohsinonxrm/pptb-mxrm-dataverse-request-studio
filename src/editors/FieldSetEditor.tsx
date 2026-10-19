@@ -444,7 +444,10 @@ export function FieldSetEditor({
 
     let pool: ColumnMeta[] = [...requiredCols, ...userAddedCols];
 
-    if (filter === 'required') pool = pool.filter((c) => c.required);
+    // Same set the "Required · N" chip counts (#199): the columns a create
+    // must supply. SystemRequired ones (ownerid, statecode) are defaulted
+    // by Dataverse and stay out of this view.
+    if (filter === 'required') pool = pool.filter(mustSupplyOnCreate);
     if (filter === 'set')
       pool = pool.filter((c) => c.logicalName in values || nullFields.includes(c.logicalName));
     if (filter === 'common') {
@@ -983,7 +986,25 @@ function FieldInputBody({
   //
   // Same pattern FilterValueInput uses in Retrieve Multiple. Cached per
   // (entity, attribute) so re-renders don't refetch.
-  useColumnDetail(table.logicalName, col.logicalName);
+  const detail = useColumnDetail(table.logicalName, col.logicalName);
+  const input = renderFieldInput(col, value, onChange);
+  // Surface a failed option / detail load instead of an empty list (#199).
+  if (!detail.error) return input;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {input}
+      <Caption1 style={{ color: tokens.colorPaletteRedForeground1 }}>
+        Couldn’t load column details: {detail.error}
+      </Caption1>
+    </div>
+  );
+}
+
+function renderFieldInput(
+  col: ColumnMeta,
+  value: CreateFieldValue | undefined,
+  onChange: (v: CreateFieldValue) => void,
+) {
   switch (col.attributeType) {
     case 'String':
       return <StringFieldInput col={col} value={value as string | undefined} onChange={onChange} />;
@@ -2152,11 +2173,17 @@ function JsonEditPane({
   );
 }
 
-/** Seed values for a new Create against a given table — populates required fields. */
+/**
+ * Seed values for a new Create against a given table — populates the
+ * columns a create must supply (ApplicationRequired). SystemRequired
+ * columns such as ownerid / statecode are defaulted by Dataverse, so they
+ * aren't seeded: a seeded `statecode: 0` was sent without ever showing in
+ * the form (#199).
+ */
 export function seedRequiredFieldValues(table: TableMeta): Record<string, CreateFieldValue> {
   const out: Record<string, CreateFieldValue> = {};
   for (const c of table.columns) {
-    if (!c.required) continue;
+    if (!mustSupplyOnCreate(c)) continue;
     if (isSystemManaged(c)) continue;
     out[c.logicalName] = defaultValueFor(c);
   }

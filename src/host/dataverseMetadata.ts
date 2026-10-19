@@ -77,6 +77,7 @@ export async function loadEntityAttributes(
 export async function loadAttributeWithOptionSet(
   entityLogicalName: string,
   attributeLogicalName: string,
+  knownAttributeType?: string,
 ): Promise<AttributeMetadata> {
   const cacheKey = `${entityLogicalName}_${attributeLogicalName}_optionset`;
   const cached = metadataCache.getEntityAttributes(cacheKey);
@@ -85,6 +86,7 @@ export async function loadAttributeWithOptionSet(
   const attribute = await pptbClient.getAttributeWithOptionSet(
     entityLogicalName,
     attributeLogicalName,
+    knownAttributeType,
   );
   metadataCache.setEntityAttributes(cacheKey, [attribute]);
   return attribute;
