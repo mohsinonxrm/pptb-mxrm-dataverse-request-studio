@@ -62,23 +62,27 @@ export function PreferEditor({
         group={group}
       />
 
-      {/* PPTB's `dataverseAPI.queryData` builds the fetch internally and does
-          NOT forward custom request headers — Prefer, If-Match, MSCRM.*
-          values are dropped. The host substitutes its own defaults (which
-          DO include common annotations like FormattedValue / lookup logical
-          name), so basic display works. But user-tuned values — small page
-          sizes for testing, return=representation, etc. — don't apply on
-          Execute. They still appear in the Code tab samples (curl / Postman
-          / fetch) for use against the Web API directly. */}
+      {/* Prefer is host-owned: PPTB sets it on every request itself, and DRS
+          never passes this pane's value to the host (it's left out of the
+          1.2.7 `additionalHeaders`, see HOST_OWNED_HEADERS). On reads the
+          host's default Prefer carries the common annotations (FormattedValue
+          / lookup logical name), so the grid renders, and the page size is
+          Dataverse's 5,000. On create / update the host always sends
+          `return=representation` (desktop-app dataverseManager), whatever
+          the toggle says; `create()` returns the row, `update()` resolves
+          to nothing (#108). The values still go into the Code tab samples. */}
       {host.embedded && (
         <MessageBar layout="multiline" intent="info" style={{ marginBottom: 14, maxWidth: 720 }}>
           <MessageBarBody>
-            <MessageBarTitle>Prefer headers aren't honored by Execute inside PPTB.</MessageBarTitle>
-            The host builds the request itself and ignores custom headers you set here. Inside PPTB,
-            Dataverse uses its server defaults: page size <strong>5,000</strong>, no{' '}
-            <code>return=representation</code> echo on writes. Common annotations (FormattedValue,
-            lookuplogicalname) are still emitted by the host's own default Prefer, so the grid
-            renders correctly.{' '}
+            <MessageBarTitle>
+              Execute uses Power Platform ToolBox&apos;s own Prefer header
+            </MessageBarTitle>
+            ToolBox sets <code>Prefer</code> itself, so the values here don&apos;t change what
+            Execute sends. Reads use Dataverse&apos;s default page size of <strong>5,000</strong>,
+            and ToolBox still asks for the common annotations (FormattedValue, lookuplogicalname),
+            so the grid renders correctly. Creates and updates always go out with{' '}
+            <code>return=representation</code>, whatever you pick here: a create shows the new row,
+            while ToolBox doesn&apos;t pass the row back for an update or upsert.{' '}
             <strong>The values you set here are emitted into the Code tab</strong> — export to
             Postman / curl / fetch to test the full request shape (including small page sizes for
             pagination testing).

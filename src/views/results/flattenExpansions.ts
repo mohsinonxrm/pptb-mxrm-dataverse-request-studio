@@ -172,6 +172,18 @@ export function flattenRow(row: Record<string, unknown>): Array<Record<string, u
   return combined.map((r, i) => ({ ...r, [ROW_KEY]: `r${i}` }));
 }
 
+/**
+ * The row count of a collection result: the top-level records in `value`,
+ * not the grid lines they flatten into (a collection-valued `$expand` gives
+ * one line per child). The results footer and Recent runs both use this, so
+ * the same run shows the same count in both (#122). Undefined when the body
+ * isn't a collection.
+ */
+export function topLevelRowCount(body: unknown): number | undefined {
+  const value = (body as { value?: unknown } | null)?.value;
+  return Array.isArray(value) ? value.length : undefined;
+}
+
 /** Flatten every server row, concatenating the multi-row outputs. */
 export function flattenRows(rows: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
   // Re-stamp __rowKey globally so it's unique across the whole grid, not
