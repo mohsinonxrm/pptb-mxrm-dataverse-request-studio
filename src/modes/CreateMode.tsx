@@ -53,16 +53,11 @@ import { disabledReasonFromAdvisories } from '../primitives/advisories';
 import { Warning20Filled } from '@fluentui/react-icons';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { findTable, isLookupLike } from '../mock/metadata';
+import { findTable } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildCreate, buildCreateBody } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
-import {
-  defaultBypassOptions,
-  type CreateState,
-  type LookupFieldValue,
-  type CreateFieldValue,
-} from '../state/writeState';
+import { defaultBypassOptions, type CreateState, type CreateFieldValue } from '../state/writeState';
 import type { RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { useLiveTable } from '../host/useLiveMetadata';
@@ -77,7 +72,7 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
-import { rawBodyBlocker, rawBodyColumns } from '../engine/fieldBody';
+import { missingRequiredColumns, rawBodyBlocker } from '../engine/fieldBody';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -165,29 +160,20 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   //
   // (Recommended-level columns are still excluded — those are UI hints
   // in model-driven forms, not server-enforced at all.)
-  const rawCols = useMemo(
-    () => (tbl ? rawBodyColumns(tbl, state.rawBody) : null),
-    [tbl, state.rawBody],
-  );
+  //
+  // The rule lives in `missingRequiredColumns`, shared with the field-set
+  // editor's warning, and runs on what will be sent: the typed body in JSON
+  // mode, the form values (explicit nulls included) otherwise (#124).
   const missingRequired = useMemo(() => {
     if (!tbl) return [];
-    return tbl.columns
-      .filter((c) => c.requiredLevel === 'ApplicationRequired' && c.isValidForCreate !== false)
-      .filter((c) => {
-        // JSON mode: the typed body is what's sent — check it instead.
-        if (rawCols) return !rawCols.has(c.logicalName);
-        const v = state.fieldValues[c.logicalName];
-        if (v == null) return true;
-        if (typeof v === 'string' && v === '') return true;
-        if (Array.isArray(v) && v.length === 0) return true;
-        if (isLookupLike(c)) {
-          const lk = v as LookupFieldValue;
-          return !lk?.id;
-        }
-        return false;
-      })
-      .map((c) => c.logicalName);
-  }, [tbl, state.fieldValues, rawCols]);
+    return missingRequiredColumns(
+      tbl,
+      tbl.columns,
+      state.rawBody,
+      state.fieldValues,
+      state.nullFields,
+    ).map((c) => c.logicalName);
+  }, [tbl, state.rawBody, state.fieldValues, state.nullFields]);
 
   const jsonBlocker = rawBodyBlocker(state.rawBody);
   const disabledReason = !tbl

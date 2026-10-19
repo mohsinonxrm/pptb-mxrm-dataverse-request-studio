@@ -14,7 +14,13 @@
 // `rawBody` on the write states). `parseRawBody` is the single parser for
 // that text, so the URL bar / Code tab / Execute all agree on what is sent.
 
-import { findTable, findColumn, isLookupLike, type TableMeta } from '../mock/metadata';
+import {
+  findTable,
+  findColumn,
+  isLookupLike,
+  type ColumnMeta,
+  type TableMeta,
+} from '../mock/metadata';
 import type { CreateFieldValue, LookupFieldValue } from '../state/writeState';
 
 /**
@@ -446,4 +452,59 @@ export function rawBodyBlocker(rawBody: string | null | undefined): string | nul
   if (rawBody == null) return null;
   const p = parseRawBody(rawBody);
   return p.ok ? null : `The JSON body is invalid: ${p.error}`;
+}
+
+/**
+ * The required-column rule for a create (#124). One definition shared by the
+ * Create / Upsert Execute gate and the field-set editor's warning and badge,
+ * in Form and JSON mode alike:
+ *   - Only ApplicationRequired columns valid for create must be supplied.
+ *     SystemRequired columns (ownerid, statecode, …) are filled in by
+ *     Dataverse when absent, so they never warn.
+ *   - A column is supplied when what will be sent gives it a non-empty
+ *     value. JSON mode: the typed body sets it (see columnsSetByBody — the
+ *     body is sent as typed, so a key the form can't show still counts).
+ *     Form mode: a value that isn't null, '' or an empty list, and a lookup
+ *     needs a record id (a seeded empty lookup is dropped from the body).
+ *     An explicit null never counts.
+ */
+export function mustSupplyOnCreate(c: ColumnMeta): boolean {
+  return c.requiredLevel === 'ApplicationRequired' && c.isValidForCreate !== false;
+}
+
+function isFieldValueSet(c: ColumnMeta, v: CreateFieldValue | undefined): boolean {
+  if (v == null) return false;
+  if (typeof v === 'string') return v !== '';
+  if (Array.isArray(v)) return v.length > 0;
+  if (isLookupLike(c)) return !!(v as LookupFieldValue | null)?.id;
+  return true;
+}
+
+/**
+ * Whether what will be sent gives a column a non-empty value — see
+ * mustSupplyOnCreate. `rawBody` is the JSON-mode text, or null in Form
+ * mode. Explicit nulls (Form mode's `nullFields`) are the caller's check.
+ */
+export function suppliedColumnTest(
+  tbl: TableMeta,
+  rawBody: string | null | undefined,
+  fieldValues: Record<string, CreateFieldValue>,
+): (c: ColumnMeta) => boolean {
+  const inJson = rawBodyColumns(tbl, rawBody);
+  return (c) =>
+    inJson ? inJson.has(c.logicalName) : isFieldValueSet(c, fieldValues[c.logicalName]);
+}
+
+/** The columns (of `columns`) a create must supply that the body leaves unset. */
+export function missingRequiredColumns(
+  tbl: TableMeta,
+  columns: ColumnMeta[],
+  rawBody: string | null | undefined,
+  fieldValues: Record<string, CreateFieldValue>,
+  nullFields: string[],
+): ColumnMeta[] {
+  const supplied = suppliedColumnTest(tbl, rawBody, fieldValues);
+  return columns
+    .filter(mustSupplyOnCreate)
+    .filter((c) => !supplied(c) || nullFields.includes(c.logicalName));
 }
