@@ -7,13 +7,17 @@
 // ignored in live mode (it's a mock-only affordance for synthesizing 4xx
 // responses without round-trips); the host returns real status codes.
 //
+// Request headers: the write group (Create / Update / Upsert / Delete /
+// Merge) passes the headers its mode composed for the Code tab. On PPTB
+// 1.2.7+ the precondition (`If-Match` / `If-None-Match`), bypass (`MSCRM.*`)
+// and user-added headers go out as `additionalHeaders` once the user
+// approves them in the host. Headers the host builds itself (see
+// HOST_OWNED_HEADERS) stay with the host. Older hosts drop the map; there
+// `hostHeaderAdvisories` blocks the requests whose meaning depends on it.
+//
 // What's expressly NOT implemented:
-//   - Custom `MSCRM.*` bypass headers — the host strips them. The studio
-//     still builds + shows them in the UI and the Code tab, but the live
-//     executor doesn't send them. Users can copy the snippet from the Code
-//     tab and run it via an external Web API client.
-//   - `Prefer: return=representation` / `Prefer: odata.maxpagesize` —
-//     the host owns the Prefer header; we can't override it.
+//   - Headers on the read / relate / execute groups. Those still run with
+//     the host's own headers, including its default `Prefer`.
 //   - Binary (file/image) chunked upload — host doesn't expose this API.
 //     ManageFile / ManageImage modes return `host-not-supported` from the
 //     live executor so the user can BUILD the request and copy out, but
@@ -27,8 +31,9 @@
 //      so `ResultsView` rendering doesn't need to know which executor
 //      ran.
 
-import { dvHost, HostNotAvailableError } from '../host/pptbBridge';
+import { dvHost, HostNotAvailableError, hostSupportsAdditionalHeaders } from '../host/pptbBridge';
 import { metadata } from '../host/metadataProvider';
+import { cleanHostMessage } from './hostErrorText';
 import {
   buildRetrieveMultiple,
   buildRetrieveSingle,
@@ -73,11 +78,14 @@ import { actions } from '../host/csdlProvider';
 
 /** Coarse outcome bucket on every `ExecResult`. ResultsView inspects this
  *  to render the "no rows" empty-state distinctly from a network success
- *  that happens to return a populated body. */
-export type ExecOutcome = 'ok' | '404' | '401' | '403' | 'empty';
+ *  that happens to return a populated body. Derived from `status` by
+ *  `outcomeFor`; `'error'` covers every other failure (4xx, 5xx, 501, and
+ *  host errors whose status is unknown). */
+export type ExecOutcome = 'ok' | '404' | '401' | '403' | 'error' | 'empty';
 
 /** Normalized execution result handed back to every mode. */
 export interface ExecResult {
+  /** HTTP status. `0` when the host rejected without reporting one. */
   status: number;
   statusText: string;
   ms: number;
@@ -85,6 +93,9 @@ export interface ExecResult {
   ok: boolean;
   outcome: ExecOutcome;
   body: unknown;
+  /** Response headers. The PPTB host doesn't expose them, so this is `{}`
+   *  for every live result; the Headers tab says so instead of showing
+   *  made-up values. */
   headers: Record<string, string>;
 }
 
@@ -99,9 +110,27 @@ const STATUS_TEXT: Record<number, string> = {
   401: 'Unauthorized',
   403: 'Forbidden',
   404: 'Not Found',
+  409: 'Conflict',
   412: 'Precondition Failed',
   500: 'Internal Server Error',
+  501: 'Not Implemented',
 };
+
+/** Outcome bucket for a status. 2xx is 'ok'; anything else is a failure. */
+function outcomeFor(status: number): ExecOutcome {
+  if (status >= 200 && status < 300) return 'ok';
+  if (status === 401) return '401';
+  if (status === 403) return '403';
+  if (status === 404) return '404';
+  return 'error';
+}
+
+/** Reason phrase for a status from the map above, or undefined when it
+ *  isn't listed. The status badges use it so a create reads "201 Created"
+ *  rather than "201 OK" (#123). */
+export function statusTextFor(status: number): string | undefined {
+  return STATUS_TEXT[status];
+}
 
 interface HostError {
   message?: string;
@@ -116,23 +145,131 @@ function isHostError(e: unknown): e is HostError {
   return typeof e === 'object' && e !== null;
 }
 
-function mapError(err: unknown, ms: number): ExecResult {
-  const e: HostError = isHostError(err) ? err : {};
-  const status = e.statusCode ?? e.status ?? 500;
-  const message = e.message ?? e.innererror?.message ?? String(err);
-  const code = e.code ?? '0x80040217';
-  const outcome: ExecResult['outcome'] =
-    status === 404 ? '404' : status === 401 ? '401' : status === 403 ? '403' : 'ok';
+/** `error.code` on the ExecResult when PPTB didn't send a request because
+ *  the user declined (or didn't answer) its additional-headers prompt. */
+export const HEADER_CONSENT_DECLINED_CODE = 'DRS.HeaderConsentDeclined';
+/** `error.code` on the ExecResult when PPTB refused one of the
+ *  `additionalHeaders` (invalid or conflicting name) before sending anything. */
+export const HEADER_REJECTED_CODE = 'DRS.HeaderRejected';
+
+// PPTB 1.2.7 checks consent and validates `additionalHeaders` BEFORE it sends
+// anything, and rejects the call with these messages (desktop-app
+// dataverseHeaderConsentManager.ts / dataverseBatch.ts). Nothing reached
+// Dataverse, so we say so rather than report a Dataverse failure.
+const CONSENT_DECLINED_RE = /additional headers were rejected|header consent/i;
+const HEADER_INVALID_RE =
+  /invalid dataverse header|conflicting duplicate dataverse header|additional dataverse headers/i;
+
+// PPTB rejects failed Dataverse calls with a plain `Error` whose message is
+// `<code>: <message>` (or `HTTP <status>: <body>` when the response has no
+// error envelope), so `statusCode` / `status` are usually absent. Recover
+// the status from the message where it's unambiguous: an `HTTP <nnn>`
+// prefix, or a Dataverse error code that always maps to one status. The
+// precondition codes let WriteResultCard render its 412 / 404 copy.
+const STATUS_BY_DATAVERSE_CODE: Record<string, number> = {
+  '0x80040217': 404, // ObjectDoesNotExist (also If-Match: * on a missing row)
+  '0x80040220': 403, // Caller is missing a privilege
+  '0x80040237': 412, // DuplicateRecord (also If-None-Match: * on an existing row)
+  '0x80060882': 412, // ConcurrencyVersionMismatch: stale If-Match ETag
+  '0x80060888': 400, // OData: could not find a property
+};
+
+/** The first Dataverse error code (`0x8xxxxxxx`) in a host message, as written. */
+function dataverseCodeIn(message: string): string | undefined {
+  return /\b0x[0-9a-fA-F]{8}\b/.exec(message)?.[0];
+}
+
+/** Status recoverable from a host message: an explicit `HTTP <nnn>` wins,
+ *  then a Dataverse code with a fixed status. */
+function statusFromMessage(message: string): number | undefined {
+  const http = /\bHTTP (\d{3})\b/.exec(message);
+  if (http) return Number(http[1]);
+  const code = dataverseCodeIn(message);
+  return code ? STATUS_BY_DATAVERSE_CODE[code.toLowerCase()] : undefined;
+}
+
+/** The one shape every failed ExecResult takes. `statusText` defaults from
+ *  the status; status `0` means the host didn't report one. `rawMessage`
+ *  keeps the host's unedited text (IPC wrapper included) for the JSON view. */
+function failure(
+  status: number,
+  error: { code?: string; message: string; rawMessage?: string },
+  ms: number,
+  statusText?: string,
+): ExecResult {
+  const { code: _code, ...withoutCode } = error;
   return {
     status,
-    statusText: STATUS_TEXT[status] ?? 'Error',
+    statusText:
+      statusText ?? STATUS_TEXT[status] ?? (status ? 'Error' : 'Status not reported by host'),
     ms,
     bytes: 0,
     ok: false,
-    outcome: outcome === 'ok' ? '404' : outcome,
-    body: { error: { code, message } },
+    outcome: outcomeFor(status),
+    body: { error: error.code ? error : withoutCode },
     headers: {},
   };
+}
+
+/**
+ * Map anything a dvHost call threw to an ExecResult. `sentHeaders` is the
+ * `additionalHeaders` map the call carried, if any, so a host-side consent or
+ * header-validation rejection reads as "not sent" instead of a Dataverse error.
+ */
+function mapError(err: unknown, ms: number, sentHeaders?: Record<string, string>): ExecResult {
+  // Outside PPTB there is no host to send the request to. Report it as
+  // 501 Not Implemented (README → "Standalone vs PPTB-embedded").
+  if (err instanceof HostNotAvailableError) {
+    return failure(
+      501,
+      {
+        code: 'HostNotAvailable',
+        message:
+          'Running standalone: Execute needs the PPTB host. ' +
+          'Build the request here and copy it from the Code tab, or open DRS inside Power Platform ToolBox.',
+      },
+      ms,
+    );
+  }
+  const e: HostError = isHostError(err) ? err : {};
+  const rawMessage = e.message ?? e.innererror?.message ?? String(err);
+  // Drop Electron's "Error invoking remote method '…': Error: " (#188); the
+  // raw text stays on the result body when it differs.
+  const message = cleanHostMessage(rawMessage);
+  const raw = rawMessage !== message ? { rawMessage } : {};
+  if (sentHeaders && CONSENT_DECLINED_RE.test(message)) {
+    return failure(
+      403,
+      {
+        code: HEADER_CONSENT_DECLINED_CODE,
+        message:
+          `Power Platform ToolBox didn't send this request because its headers ` +
+          `(${Object.keys(sentHeaders).join(', ')}) weren't approved, so nothing reached Dataverse. ` +
+          `Execute again and allow the headers when ToolBox asks. Host message: ${message}`,
+        ...raw,
+      },
+      ms,
+      'Headers not approved',
+    );
+  }
+  if (sentHeaders && HEADER_INVALID_RE.test(message)) {
+    return failure(
+      400,
+      {
+        code: HEADER_REJECTED_CODE,
+        message:
+          `Power Platform ToolBox rejected a request header, so nothing was sent to Dataverse. ` +
+          `Fix the header in the Headers pane. Host message: ${message}`,
+        ...raw,
+      },
+      ms,
+    );
+  }
+  // 0 = the host didn't say. Better than a made-up 500 for what is usually
+  // a 400-class rejection.
+  const status = e.statusCode ?? e.status ?? statusFromMessage(message) ?? 0;
+  const code = e.code ?? dataverseCodeIn(message);
+  return failure(status, { code, message, ...raw }, ms);
 }
 
 function ok(status: number, body: unknown, ms: number): ExecResult {
@@ -143,42 +280,82 @@ function ok(status: number, body: unknown, ms: number): ExecResult {
     ms,
     bytes,
     ok: status >= 200 && status < 300,
-    outcome: 'ok',
+    outcome: outcomeFor(status),
     body,
-    headers: { 'OData-Version': '4.0' },
+    // The host returns parsed bodies only — no response headers to show.
+    headers: {},
   };
 }
 
 /** Returned by the binary modes — host doesn't expose chunked upload. */
 function hostNotSupported(feature: string, ms: number): ExecResult {
-  return {
-    status: 501,
-    statusText: 'Not Implemented',
-    ms,
-    bytes: 0,
-    ok: false,
-    outcome: '403',
-    body: {
-      error: {
-        code: '0x80048345',
-        message:
-          `${feature} isn't supported through the PPTB Dataverse API today. ` +
-          `Build the request here and run it from an external Web API client.`,
-      },
+  return failure(
+    501,
+    {
+      code: '0x80048345',
+      message:
+        `${feature} isn't supported through the PPTB Dataverse API today. ` +
+        `Build the request here and run it from an external Web API client.`,
     },
-    headers: {},
-  };
+    ms,
+  );
 }
 
-/** Wrap an async dvHost call with timing + error mapping. */
-async function timed<T>(fn: () => Promise<T>): Promise<{ ms: number; value: T } | ExecResult> {
+/** Wrap an async dvHost call with timing + error mapping. Pass the headers
+ *  the call sends so a declined consent prompt maps to a clear result. */
+async function timed<T>(
+  fn: () => Promise<T>,
+  sentHeaders?: Record<string, string>,
+): Promise<{ ms: number; value: T } | ExecResult> {
   const t0 = performance.now();
   try {
     const value = await fn();
     return { ms: Math.round(performance.now() - t0), value };
   } catch (e) {
-    return mapError(e, Math.round(performance.now() - t0));
+    return mapError(e, Math.round(performance.now() - t0), sentHeaders);
   }
+}
+
+// Headers PPTB's Dataverse client always sets itself. Its client spreads
+// `additionalHeaders` over its own, so sending these would override them
+// (and prompt for consent for nothing). `Prefer` is host-owned too: the host
+// always sends `return=representation` on writes and would only append ours.
+const HOST_OWNED_HEADERS = new Set([
+  'authorization',
+  'accept',
+  'content-type',
+  'content-length',
+  'odata-version',
+  'odata-maxversion',
+  'prefer',
+]);
+
+/**
+ * The part of a mode's composed headers (the Code tab map) that we hand to
+ * the host as `additionalHeaders`: host-owned headers removed, names
+ * de-duplicated case-insensitively (the later row wins, as the composers
+ * append precondition/bypass rows after the user's). `undefined` when
+ * nothing is left — the call then stays header-free and never prompts.
+ */
+export function toWireHeaders(
+  headers?: Record<string, string>,
+): Record<string, string> | undefined {
+  if (!headers) return undefined;
+  const byName = new Map<string, [string, string]>();
+  for (const [rawName, value] of Object.entries(headers)) {
+    const name = rawName.trim();
+    const key = name.toLowerCase();
+    if (!key || HOST_OWNED_HEADERS.has(key)) continue;
+    byName.delete(key);
+    byName.set(key, [name, value]);
+  }
+  return byName.size > 0 ? Object.fromEntries(byName.values()) : undefined;
+}
+
+/** `toWireHeaders`, but only when the host can actually send them — so the
+ *  consent-declined mapping never fires on a host that dropped them. */
+function sendable(headers?: Record<string, string>): Record<string, string> | undefined {
+  return hostSupportsAdditionalHeaders() ? toWireHeaders(headers) : undefined;
 }
 
 function isExecResult(x: unknown): x is ExecResult {
@@ -243,7 +420,21 @@ export async function executePredefined(s: PredefinedQueryState): Promise<ExecRe
   if (!tbl) return mapError({ statusCode: 404, message: `Unknown table ${s.table}` }, 0);
   const param = s.queryType === 'savedQuery' ? 'savedQuery' : 'userQuery';
   const top = s.top ? `&$top=${s.top}` : '';
-  const path = `${tbl.entitySetName}?${param}=${s.queryId}${top}`;
+  // Related collection (#5): /<sourceSet>(<id>)/<nav>?savedQuery=<id>
+  let collection = tbl.entitySetName;
+  if (s.related) {
+    const r = s.related;
+    if (!r.sourceTable || !r.navProperty || !r.recordId) {
+      return mapError(
+        { statusCode: 400, message: 'Pick the related collection and the source row.' },
+        0,
+      );
+    }
+    const src = metadata.peekTable(r.sourceTable) ?? (await metadata.getTable(r.sourceTable));
+    if (!src) return mapError({ statusCode: 404, message: `Unknown table ${r.sourceTable}` }, 0);
+    collection = `${src.entitySetName}(${r.recordId})/${r.navProperty}`;
+  }
+  const path = `${collection}?${param}=${s.queryId}${top}`;
   const res = await timed(() => dvHost.queryData(path));
   if (isExecResult(res)) return res;
   return ok(200, res.value, res.ms);
@@ -251,14 +442,21 @@ export async function executePredefined(s: PredefinedQueryState): Promise<ExecRe
 
 // ── Write group ──────────────────────────────────────────────────────────
 
-export async function executeCreate(s: CreateState): Promise<ExecResult> {
+export async function executeCreate(
+  s: CreateState,
+  headers?: Record<string, string>,
+): Promise<ExecResult> {
   const body = buildCreateBody(s);
-  const res = await timed(() => dvHost.create(s.table, body));
+  const wire = sendable(headers);
+  const res = await timed(() => dvHost.create(s.table, body, wire), wire);
   if (isExecResult(res)) return res;
   return ok(201, res.value, res.ms);
 }
 
-export async function executeUpdate(s: UpdateState): Promise<ExecResult> {
+export async function executeUpdate(
+  s: UpdateState,
+  headers?: Record<string, string>,
+): Promise<ExecResult> {
   if (!s.recordId) return mapError({ statusCode: 400, message: 'Pick a record to update.' }, 0);
   // CRITICAL: PUT single-column (PUT /<entityset>(<id>)/<column> with body
   // `{ value: <scalar> }`) is a real Web API pattern but PPTB's
@@ -282,7 +480,8 @@ export async function executeUpdate(s: UpdateState): Promise<ExecResult> {
   const body = buildUpdateBody(s);
   // The host's `update()` is PATCH semantics. For Upsert-via-Update (when
   // concurrency is `none`) the server still does the right thing.
-  const res = await timed(() => dvHost.update(s.table, s.recordId!, body));
+  const wire = sendable(headers);
+  const res = await timed(() => dvHost.update(s.table, s.recordId!, body, wire), wire);
   if (isExecResult(res)) return res;
   // dvHost.update resolves to void on 204 No Content. Best-effort GET to
   // hydrate the updated row for the Results pane, then fall back to a
@@ -291,7 +490,10 @@ export async function executeUpdate(s: UpdateState): Promise<ExecResult> {
   return ok(204, { '@odata.context': 'update' }, res.ms);
 }
 
-export async function executeUpsert(s: UpsertState): Promise<ExecResult> {
+export async function executeUpsert(
+  s: UpsertState,
+  headers?: Record<string, string>,
+): Promise<ExecResult> {
   // The host's `update()` is PATCH semantics, addressed by logical name +
   // GUID. For alt-key Upsert the address is `<entitySet>(<keyCol>='value')`
   // and PPTB's dataverseAPI doesn't expose a raw-request hook for that
@@ -322,12 +524,16 @@ export async function executeUpsert(s: UpsertState): Promise<ExecResult> {
   // s.fieldValues directly, which is the in-memory shape (Lookup is
   // `{id, targetEntity}` object) — not what Web API accepts.
   const body = buildUpsertBody(s);
-  const res = await timed(() => dvHost.update(s.table, recordId, body));
+  const wire = sendable(headers);
+  const res = await timed(() => dvHost.update(s.table, recordId, body, wire), wire);
   if (isExecResult(res)) return res;
   return ok(204, { '@odata.context': 'upsert' }, res.ms);
 }
 
-export async function executeDelete(s: DeleteState): Promise<ExecResult> {
+export async function executeDelete(
+  s: DeleteState,
+  headers?: Record<string, string>,
+): Promise<ExecResult> {
   if (!s.recordId) return mapError({ statusCode: 400, message: 'Pick a record to delete.' }, 0);
   // CRITICAL: single-property delete (DELETE /<entityset>(<id>)/<column>) is
   // a real Web API pattern (per the docs) but PPTB's dataverseAPI surface
@@ -349,20 +555,30 @@ export async function executeDelete(s: DeleteState): Promise<ExecResult> {
     );
   }
   void buildDelete;
-  const res = await timed(() => dvHost.delete(s.table, s.recordId!));
+  const wire = sendable(headers);
+  const res = await timed(() => dvHost.delete(s.table, s.recordId!, wire), wire);
   if (isExecResult(res)) return res;
   return ok(204, null, res.ms);
 }
 
-export async function executeMerge(s: MergeState): Promise<ExecResult> {
+export async function executeMerge(
+  s: MergeState,
+  headers?: Record<string, string>,
+): Promise<ExecResult> {
   // Per docs: POST /Merge with { Target, Subordinate, UpdateContent, PerformParentingChecks }
   const body = buildMergeBody(s);
-  const res = await timed(() =>
-    dvHost.execute({
-      operationName: 'Merge',
-      operationType: 'action',
-      parameters: body,
-    }),
+  const wire = sendable(headers);
+  const res = await timed(
+    () =>
+      dvHost.execute(
+        {
+          operationName: 'Merge',
+          operationType: 'action',
+          parameters: body,
+        },
+        wire,
+      ),
+    wire,
   );
   if (isExecResult(res)) return res;
   return ok(204, res.value, res.ms);
@@ -526,6 +742,18 @@ export async function executeManageImage(_s: ManageImageState): Promise<ExecResu
 
 export async function executeManageAttachment(_s: ManageAttachmentState): Promise<ExecResult> {
   return hostNotSupported('Manage Attachment/Annotation (chunked upload/download)', 0);
+}
+
+// ── Unexpected failures ──────────────────────────────────────────────────
+
+/**
+ * Result for an exception thrown while running a request (outside `timed`,
+ * e.g. a `$metadata` fetch failing inside `actions.find`). `runtime` routes
+ * every throw through this so a mode's Execute always gets a result back
+ * and its spinner clears (#102).
+ */
+export function execFailure(err: unknown, ms: number): ExecResult {
+  return mapError(err, ms);
 }
 
 // ── Bridge connectivity check (used by an "are we online" indicator) ─────

@@ -34,6 +34,7 @@ import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { PaneHead } from '../editors/PaneHead';
 import { ActionPicker } from '../editors/ActionPicker';
 import { ActionParamForm } from '../editors/ActionParamForm';
@@ -58,7 +59,9 @@ import {
   hashState,
   type SavedRequest,
   type SerializedExecuteFunctionState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 // Empty initial state — no pre-seeded function. User picks from the live
@@ -77,7 +80,8 @@ type RootClauseId = 'pick' | 'target' | 'params' | 'options' | 'headers';
 
 export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('exec-function');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('exec-function', deserializeExecuteFunction, initialState);
+  const [state, setState] = useState(draft.state);
   const [activePath, setActivePath] = useState<string>('pick');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
@@ -104,8 +108,8 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // Save / Load
   const { entities } = useScopedEntities();
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const [boundRecordName, setBoundRecordName] = useState<string>('');
 
   const markDirty = (id: string) =>
@@ -154,6 +158,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: 'exec-function',
           url: built.relativeUrl,
           method: 'GET',
@@ -170,6 +175,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeExecuteFunction(state), [state]);
+  useStashModeDraft('exec-function', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 
@@ -188,7 +194,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
     const snapEntity =
       snapFn && snapFn.binding.kind !== 'unbound' ? snapFn.binding.entityType : null;
     if (snapEntity && entities.length > 0 && !entities.some((e) => e.logicalName === snapEntity)) {
-      window.alert(
+      notify(
         `Can't load "${entry.name}": bound entity \`${snapEntity}\` ` +
           `isn't available in this environment.`,
       );
@@ -200,6 +206,19 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(null);
     setBoundRecordName('');
     setActivePath('pick');
+  };
+
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'exec-function');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
   };
 
   usePublishSaveContext(
@@ -498,6 +517,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={

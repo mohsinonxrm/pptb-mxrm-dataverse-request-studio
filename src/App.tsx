@@ -3,25 +3,31 @@ import { FluentProvider } from '@fluentui/react-components';
 import { useStudioStyles } from './primitives/styles';
 import { studioLight, studioDark, applyThemeAttr, type ThemeMode } from './theme/theme';
 import { FrameHeader } from './shell/FrameHeader';
+import { AppDialogHost } from './shell/dialogs';
 import { SaveContextRoot, type SaveContextValue } from './state/SaveContext';
 import { findRequestType } from './registry/requestTypes';
 import { RetrieveMultipleMode } from './modes/RetrieveMultipleMode';
 import { RetrieveSingleMode } from './modes/RetrieveSingleMode';
-import { RetrieveNextLinkMode } from './modes/RetrieveNextLinkMode';
-import { PredefinedQueryMode } from './modes/PredefinedQueryMode';
+// Less-used modes load on first use (#22).
+import {
+  RetrieveNextLinkMode,
+  PredefinedQueryMode,
+  MergeMode,
+  AssociateMode,
+  DisassociateMode,
+  ExecuteWorkflowMode,
+  ManageFileMode,
+  ManageImageMode,
+} from './modes/lazyModes';
 import { CreateMode } from './modes/CreateMode';
 import { UpdateMode } from './modes/UpdateMode';
 import { UpsertMode } from './modes/UpsertMode';
 import { DeleteMode } from './modes/DeleteMode';
-import { MergeMode } from './modes/MergeMode';
-import { AssociateMode } from './modes/AssociateMode';
-import { DisassociateMode } from './modes/DisassociateMode';
 import { ExecuteActionMode } from './modes/ExecuteActionMode';
 import { ExecuteFunctionMode } from './modes/ExecuteFunctionMode';
-import { ExecuteWorkflowMode } from './modes/ExecuteWorkflowMode';
-import { ManageFileMode } from './modes/ManageFileMode';
-import { ManageImageMode } from './modes/ManageImageMode';
 import { ManageAttachmentMode } from './modes/ManageAttachmentMode';
+import { ErrorBoundary } from './shell/ErrorBoundary';
+import { clearModeDrafts } from './state/modeDrafts';
 import { StubMode } from './modes/StubMode';
 import { findTable } from './mock/metadata';
 import { _setTableLookup } from './editors/filter/filterTree';
@@ -66,6 +72,8 @@ function ThemedApp() {
           setActiveId={setActiveId}
         />
       </OpenSettingsProvider>
+      {/* In-app confirm dialogs and notices; replaces the native confirm/alert boxes (#111). */}
+      <AppDialogHost />
     </FluentProvider>
   );
 }
@@ -116,6 +124,32 @@ function Frame({
 }
 
 function ModeRouter({
+  modeId,
+  themeMode,
+  setActiveId,
+}: {
+  modeId: string;
+  themeMode: ThemeMode;
+  setActiveId: (id: string) => void;
+}) {
+  // One boundary around whichever mode is routed (#19): a crash shows a
+  // fallback in the mode's place while the header stays usable. It lives
+  // inside ModeRouter, so anything that remounts the router via `key` also
+  // resets it; switching modes (`resetKey`) clears a caught error.
+  const type = findRequestType(modeId);
+  return (
+    <ErrorBoundary
+      scope="mode"
+      label={type.id === modeId ? type.name : modeId}
+      resetKey={modeId}
+      onReload={clearModeDrafts}
+    >
+      <ModeSwitch modeId={modeId} themeMode={themeMode} setActiveId={setActiveId} />
+    </ErrorBoundary>
+  );
+}
+
+function ModeSwitch({
   modeId,
   themeMode,
   setActiveId,
