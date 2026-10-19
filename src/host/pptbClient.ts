@@ -72,6 +72,9 @@ export interface AttributeMetadata {
   DateTimeBehavior?: { Value?: string };
   MinSupportedValue?: string;
   MaxSupportedValue?: string;
+  /** Picklist / MultiSelectPicklist default option (`getAttributeWithOptionSet`).
+   *  -1 means the column has no default. */
+  DefaultFormValue?: number | null;
   /** Only populated by `getAttributeWithOptionSet`. */
   OptionSet?: {
     Options?: Array<{

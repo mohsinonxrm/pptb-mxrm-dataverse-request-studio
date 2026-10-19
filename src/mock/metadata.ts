@@ -214,11 +214,14 @@ export interface PicklistColumnMeta extends BaseColumnMeta {
   attributeType: 'Picklist';
   options: { value: number; label: string }[];
   isGlobal?: boolean;
+  /** Metadata DefaultFormValue; -1 or missing means no default. */
   defaultFormValue?: number;
 }
 export interface MultiSelectPicklistColumnMeta extends BaseColumnMeta {
   attributeType: 'MultiSelectPicklist';
   options: { value: number; label: string }[];
+  /** Metadata DefaultFormValue; -1 or missing means no default. */
+  defaultFormValue?: number;
 }
 export interface StateColumnMeta extends BaseColumnMeta {
   attributeType: 'State';

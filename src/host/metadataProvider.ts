@@ -208,6 +208,17 @@ function mapAttribute(raw: AttributeMetadata): ColumnMeta | null {
         value: o.Value,
         label: labelOf(o.Label, String(o.Value)),
       }));
+      if (
+        (attrType === 'Picklist' || attrType === 'MultiSelectPicklist') &&
+        typeof raw.DefaultFormValue === 'number'
+      ) {
+        return {
+          ...base,
+          attributeType: attrType,
+          options: opts,
+          defaultFormValue: raw.DefaultFormValue,
+        };
+      }
       return { ...base, attributeType: attrType, options: opts };
     }
     case 'Status': {
