@@ -40,6 +40,7 @@ import { notify } from '../shell/dialogs';
 import { PaneHead } from '../editors/PaneHead';
 import { KvGrid } from '../primitives/KvGrid';
 import { RecordPicker } from '../primitives/RecordPicker';
+import { WorkflowArgumentsCard } from '../editors/WorkflowArgumentsCard';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
@@ -379,6 +380,7 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
                 placeholder={`Search ${tbl?.displayName ?? wf.primaryEntity} records…`}
               />
             </Field>
+            <WorkflowArgumentsCard workflowId={wf.id} />
           </div>
         </div>
       ) : (
