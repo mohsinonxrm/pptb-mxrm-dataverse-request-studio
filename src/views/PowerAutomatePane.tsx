@@ -186,6 +186,7 @@ function PARow({
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {field.multiline ? (
           <Textarea
+            aria-label={field.label}
             value={field.value}
             readOnly
             rows={Math.min(4, Math.max(1, Math.ceil(field.value.length / 80)))}
@@ -194,6 +195,7 @@ function PARow({
           />
         ) : (
           <Input
+            aria-label={field.label}
             value={field.value}
             readOnly
             appearance="filled-lighter"

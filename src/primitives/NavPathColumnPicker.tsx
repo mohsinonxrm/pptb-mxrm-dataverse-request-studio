@@ -482,6 +482,8 @@ export function NavPathColumnPicker({
           size={size}
           appearance="outline"
           disabled={disabled}
+          aria-haspopup="dialog"
+          aria-label={`Column: ${value ? triggerLabel : placeholder}`}
           className={styles.triggerButton}
           style={{ maxWidth: 320 }}
         >
@@ -527,6 +529,7 @@ export function NavPathColumnPicker({
         <Input
           size="small"
           appearance="filled-lighter"
+          aria-label="Search columns or relationships"
           placeholder="Search columns or relationships…"
           contentBefore={<Search20Regular />}
           value={query}
