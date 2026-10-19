@@ -3,6 +3,7 @@ import { FluentProvider } from '@fluentui/react-components';
 import { useStudioStyles } from './primitives/styles';
 import { studioLight, studioDark, applyThemeAttr, type ThemeMode } from './theme/theme';
 import { FrameHeader } from './shell/FrameHeader';
+import { AppDialogHost } from './shell/dialogs';
 import { SaveContextRoot, type SaveContextValue } from './state/SaveContext';
 import { findRequestType } from './registry/requestTypes';
 import { RetrieveMultipleMode } from './modes/RetrieveMultipleMode';
@@ -26,6 +27,7 @@ import { ExecuteActionMode } from './modes/ExecuteActionMode';
 import { ExecuteFunctionMode } from './modes/ExecuteFunctionMode';
 import { ManageAttachmentMode } from './modes/ManageAttachmentMode';
 import { ErrorBoundary } from './shell/ErrorBoundary';
+import { clearModeDrafts } from './state/modeDrafts';
 import { StubMode } from './modes/StubMode';
 import { findTable } from './mock/metadata';
 import { _setTableLookup } from './editors/filter/filterTree';
@@ -70,6 +72,8 @@ function ThemedApp() {
           setActiveId={setActiveId}
         />
       </OpenSettingsProvider>
+      {/* In-app confirm dialogs and notices; replaces the native confirm/alert boxes (#111). */}
+      <AppDialogHost />
     </FluentProvider>
   );
 }
@@ -134,7 +138,12 @@ function ModeRouter({
   // resets it; switching modes (`resetKey`) clears a caught error.
   const type = findRequestType(modeId);
   return (
-    <ErrorBoundary scope="mode" label={type.id === modeId ? type.name : modeId} resetKey={modeId}>
+    <ErrorBoundary
+      scope="mode"
+      label={type.id === modeId ? type.name : modeId}
+      resetKey={modeId}
+      onReload={clearModeDrafts}
+    >
       <ModeSwitch modeId={modeId} themeMode={themeMode} setActiveId={setActiveId} />
     </ErrorBoundary>
   );

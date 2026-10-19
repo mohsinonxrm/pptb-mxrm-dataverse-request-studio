@@ -38,6 +38,8 @@ import {
 import { PaneHead } from './PaneHead';
 import { findTable, columnOptions, isLookupLike, type ColumnMeta } from '../mock/metadata';
 import type { CreateFieldValue, LookupFieldValue } from '../state/writeState';
+import { readRowValue, sameLookup, formatLookup } from '../engine/recordSnapshot';
+import { formatDateTimeValue } from './dateTimeValue';
 
 // ──────────────────────────────────────────────────────────────
 // Columns we exclude from the diff (system / binary)
@@ -77,6 +79,11 @@ export interface UpdateDiffPaneProps {
   originalLoading: boolean;
   /** Drill into a single column → triggers PUT mode in the parent. */
   onDrillColumn: (column: string) => void;
+  /**
+   * Where `fieldValues` came from, when it isn't the form — e.g. "decoded
+   * from the typed JSON body". Shown above the table.
+   */
+  sourceNote?: { intent: 'info' | 'warning'; text: string } | null;
 }
 
 export function UpdateDiffPane({
@@ -86,6 +93,7 @@ export function UpdateDiffPane({
   original,
   originalLoading,
   onDrillColumn,
+  sourceNote,
 }: UpdateDiffPaneProps) {
   const tbl = findTable(table);
   const [showUnchanged, setShowUnchanged] = useState(false);
@@ -96,7 +104,9 @@ export function UpdateDiffPane({
     for (const col of tbl.columns) {
       if (HIDDEN_FROM_DIFF.has(col.logicalName)) continue;
       if (col.attributeType === 'File' || col.attributeType === 'Image') continue;
-      const before = original[col.logicalName];
+      // Lookups come back as `_<col>_value` + annotations, not under the
+      // logical name — read them as { id, targetEntity, name } (#96).
+      const before = readRowValue(original, col);
       const inDiff = col.logicalName in fieldValues;
       const raw = fieldValues[col.logicalName];
       const after = inDiff ? toComparable(col, raw) : before;
@@ -200,6 +210,16 @@ export function UpdateDiffPane({
           {changedCount} change{changedCount === 1 ? '' : 's'}
         </Badge>
       </PaneHead>
+
+      {sourceNote && (
+        <MessageBar
+          layout="multiline"
+          intent={sourceNote.intent}
+          style={{ marginBottom: 14, maxWidth: 720 }}
+        >
+          <MessageBarBody>{sourceNote.text}</MessageBarBody>
+        </MessageBar>
+      )}
 
       {changedCount === 0 && !showUnchanged && (
         <MessageBar layout="multiline" intent="info" style={{ marginBottom: 14 }}>
@@ -421,8 +441,7 @@ function formatValue(col: ColumnMeta, value: unknown): string {
   }
   if (isLookupLike(col)) {
     if (typeof value === 'object' && value !== null && 'id' in value) {
-      const lk = value as LookupFieldValue;
-      return `${lk.targetEntity}(${lk.id.slice(0, 8)}…)`;
+      return formatLookup(value as LookupFieldValue);
     }
     if (typeof value === 'string') return value;
   }
@@ -451,22 +470,21 @@ function formatValue(col: ColumnMeta, value: unknown): string {
       return n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
   }
   if (col.attributeType === 'DateTime' && typeof value === 'string') {
-    try {
-      const d = new Date(value);
-      if (Number.isFinite(d.getTime())) return d.toLocaleString();
-    } catch {
-      /* fall through */
-    }
+    // Per-behavior parse: a DateOnly `2026-05-01` must not shift to the
+    // previous day west of UTC, nor a time-zone-independent time by the
+    // offset (#92).
+    return formatDateTimeValue(value, col);
   }
   return String(value);
 }
 
 // Convert a CreateFieldValue (in-memory shape) into a comparable wire value.
+// Lookups stay as { id, targetEntity } so the After cell renders like Before.
 function toComparable(col: ColumnMeta, raw: CreateFieldValue): unknown {
   if (raw == null) return null;
   if (isLookupLike(col)) {
     const lk = raw as LookupFieldValue;
-    return lk?.id ?? null;
+    return lk?.id ? lk : null;
   }
   if (col.attributeType === 'MultiSelectPicklist' && Array.isArray(raw)) {
     return raw.join(',');
@@ -475,6 +493,12 @@ function toComparable(col: ColumnMeta, raw: CreateFieldValue): unknown {
 }
 
 function sameAsBefore(col: ColumnMeta, before: unknown, after: CreateFieldValue): boolean {
+  if (isLookupLike(col)) {
+    return sameLookup(
+      before as LookupFieldValue | null,
+      toComparable(col, after) as LookupFieldValue | null,
+    );
+  }
   const cmp = toComparable(col, after);
   if (before == null && (cmp == null || cmp === '')) return true;
   if (cmp == null) return false;

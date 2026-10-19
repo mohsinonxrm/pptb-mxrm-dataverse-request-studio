@@ -26,7 +26,7 @@ import {
 import { Key20Filled } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
 import { RecordPicker } from '../primitives/RecordPicker';
-import { findTable, findColumn } from '../mock/metadata';
+import { altKeyColumnType, findTable, findColumn } from '../mock/metadata';
 import type { UpsertKeyMode } from '../state/writeState';
 import type { RequestGroup } from '../registry/requestTypes';
 
@@ -192,21 +192,20 @@ export function AlternateKeyEditor({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {def.columns.map((c) => {
                     const col = findColumn(tbl, c);
+                    const type = altKeyColumnType(tbl, def, c);
                     return (
                       <Field
                         key={c}
                         label={col?.displayName ?? c}
                         hint={
                           <span>
-                            <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{c}</code>
-                            {col && (
-                              <>
-                                {' '}
-                                ·{' '}
-                                <span style={{ color: tokens.colorBrandForeground2 }}>
-                                  {col.attributeType}
-                                </span>
-                              </>
+                            <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{c}</code> ·{' '}
+                            {type ? (
+                              <span style={{ color: tokens.colorBrandForeground2 }}>{type}</span>
+                            ) : (
+                              <span style={{ color: tokens.colorPaletteMarigoldForeground2 }}>
+                                type unknown, quoted as string
+                              </span>
                             )}
                           </span>
                         }
@@ -221,7 +220,7 @@ export function AlternateKeyEditor({
                               keyValues: { ...keyMode.keyValues, [c]: d.value },
                             })
                           }
-                          placeholder={col?.attributeType === 'String' ? 'e.g. ACC-0001' : 'value'}
+                          placeholder={type === 'String' ? 'e.g. ACC-0001' : 'value'}
                           style={{ fontFamily: tokens.fontFamilyMonospace }}
                         />
                       </Field>

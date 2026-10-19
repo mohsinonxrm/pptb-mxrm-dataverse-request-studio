@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
@@ -170,5 +171,10 @@ export default defineConfig({
     // statically and all of Monaco (~930 kB gzip) loaded at startup. Monaco
     // is now reached only through a dynamic import (src/monaco/MonacoEditor),
     // which splits it — and its per-language chunks — out on its own.
+  },
+  test: {
+    // jsdom provides DOMParser, which the CSDL parser (host/csdlProvider) relies on.
+    environment: 'jsdom',
+    include: ['src/**/*.test.{ts,tsx}'],
   },
 });

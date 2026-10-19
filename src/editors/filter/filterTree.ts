@@ -394,7 +394,7 @@ export function strippedKindLabel(k: StrippedKind): string {
 
 function quoteLiteral(col: ColumnMeta | undefined, raw: string): string {
   if (raw === '' || raw == null) return "''";
-  if (!col) return `'${escapeStringLiteral(raw)}'`;
+  if (!col) return inferLiteral(raw);
   switch (col.attributeType) {
     case 'String':
     case 'Memo':
@@ -427,12 +427,35 @@ function quoteLiteral(col: ColumnMeta | undefined, raw: string): string {
       return `'${escapeStringLiteral(raw)}'`;
   }
 }
+/**
+ * Literal for a value whose column couldn't be resolved — typically a
+ * related entity whose metadata hasn't loaded yet (an `$expand`'s inner
+ * `$filter`, a nav-path leaf), or a column missing from metadata. Without the
+ * AttributeType we infer from the value's shape: numbers, booleans, `null`,
+ * GUIDs and ISO dates/date-times are OData literals that go unquoted;
+ * everything else is a string. Best effort — the clause is re-encoded with the
+ * real type once the metadata arrives, and the modes flag the pending load.
+ */
+function inferLiteral(raw: string): string {
+  const v = raw.trim();
+  if (
+    /^-?\d+(\.\d+)?$/.test(v) ||
+    v === 'true' ||
+    v === 'false' ||
+    v === 'null' ||
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v) ||
+    /^\d{4}-\d{2}-\d{2}(T[\d:.]+(Z|[+-]\d{2}:\d{2})?)?$/.test(v)
+  ) {
+    return v;
+  }
+  return `'${escapeStringLiteral(raw)}'`;
+}
 const arrayLiteral = (vals: string[]): string => JSON.stringify(vals.map((v) => String(v ?? '')));
 
 function colLookup(
   col: string,
   prefix: string | undefined,
-  table: TableMeta,
+  table: TableMeta | undefined,
 ): ColumnMeta | undefined {
   // Resolve the leaf through the canonical metadata-driven resolver so a
   // nav-path leaf (`msdyn_opportunityid/abc_salesstage`) is looked up on the
@@ -448,7 +471,10 @@ function colLookup(
 }
 
 export interface EncodeCtx {
-  table: TableMeta;
+  /** Entity the clause is scoped to. Undefined while its metadata is still
+   *  loading (e.g. an `$expand` target) — literals then fall back to
+   *  `inferLiteral` and lookup columns keep their stored name. */
+  table: TableMeta | undefined;
   /** Alias prefix used by enclosing lambda (e.g. `c`), if any */
   lambdaAlias?: string;
 }
@@ -475,7 +501,7 @@ export function ruleToOData(rule: FilterRule, ctx: EncodeCtx): string {
       // If the LHS uses a lambda alias prefix (e.g. `c/jobtitle`) we
       // mirror that on the RHS so both sides resolve in the same scope.
       // Same lookup-value rewrite applies on the RHS.
-      const rhsCol = ctx.table.columns.find((c) => c.logicalName === raw);
+      const rhsCol = ctx.table?.columns.find((c) => c.logicalName === raw);
       const rhsEnc = attrRef(rhsCol, raw);
       return ctx.lambdaAlias && !raw.includes('/') ? `${ctx.lambdaAlias}/${rhsEnc}` : rhsEnc;
     }
@@ -490,7 +516,10 @@ export function ruleToOData(rule: FilterRule, ctx: EncodeCtx): string {
     case 'odata-fn': {
       // Leading wildcards are explicitly unsupported — strip them.
       const { value } = stripLeadingWildcards(rule.val ?? '');
-      const expr = `${op.odata}(${colExpr},${quoteLiteral(col, value)})`;
+      // contains / startswith / endswith only take strings — don't let an
+      // unresolved column's value be inferred as a number.
+      const lit = col ? quoteLiteral(col, value) : `'${escapeStringLiteral(value)}'`;
+      const expr = `${op.odata}(${colExpr},${lit})`;
       return rule.negated ? `not ${expr}` : expr;
     }
     default:
@@ -538,7 +567,7 @@ function propertyNameForFunction(
   //    the *category* of hierarchy, but Dataverse demands the PK for the
   //    `PropertyName` argument.
   if (op?.category === 'hierarchy') {
-    return ctx.table.primaryKey || bare;
+    return ctx.table?.primaryKey || bare;
   }
   return bare;
 }
@@ -603,7 +632,7 @@ export function functionToOData(fn: FilterFunctionNode, ctx: EncodeCtx): string 
 
 export function lambdaToOData(
   node: FilterLambdaNode,
-  parentTable: TableMeta,
+  parentTable: TableMeta | undefined,
   /**
    * Alias of the ENCLOSING lambda scope, if this lambda is nested.
    * Per OData, every column / nav reference inside a lambda predicate
@@ -618,7 +647,7 @@ export function lambdaToOData(
   outerAlias?: string,
 ): string {
   // Resolve the related table for inner column lookups
-  const nav = parentTable.navigationProperties.find((n) => n.name === node.nav);
+  const nav = parentTable?.navigationProperties.find((n) => n.name === node.nav);
   const innerTbl = nav ? findTableByLogical(nav.targetEntity) : undefined;
   const inner = innerTbl
     ? groupToOData(node.inner, innerTbl, node.alias)
@@ -634,7 +663,11 @@ export function lambdaToOData(
   return node.negated ? `not ${body}` : body;
 }
 
-export function groupToOData(g: FilterGroup, table: TableMeta, lambdaAlias?: string): string {
+export function groupToOData(
+  g: FilterGroup,
+  table: TableMeta | undefined,
+  lambdaAlias?: string,
+): string {
   const ctx: EncodeCtx = { table, lambdaAlias };
   const parts = g.rules
     .map((c) => {

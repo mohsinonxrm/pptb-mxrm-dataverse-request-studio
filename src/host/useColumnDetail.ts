@@ -17,13 +17,20 @@
 // fire __registerLiveTable so every consumer re-renders with the fresh
 // data. Each (entity, attribute) is fetched at most once because the
 // loader-level cache short-circuits repeats.
+//
+// Enrichment is tracked per column OBJECT, not per (entity, attribute)
+// name. A metadata refresh rebuilds tables from the basic projection with
+// fresh column objects, and those must be enriched again — a name-keyed
+// flag used to skip them, so refreshed picklists lost their options and
+// lookups their targets (#53).
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import {
   findTable,
   type ColumnMeta,
   type TableMeta,
   __registerLiveTable,
+  __subscribeLiveTables,
   type PicklistColumnMeta,
   type StatusColumnMeta,
   type StateColumnMeta,
@@ -44,9 +51,9 @@ import {
 import { loadAttributeWithOptionSet, loadAttributeDetailedMetadata } from './dataverseMetadata';
 import type { AttributeMetadata } from './pptbClient';
 
-// Per-(entity, attribute) flag so we don't re-fetch on every render.
-const __enriched = new Set<string>();
-const key = (entity: string, attr: string) => `${entity}::${attr}`;
+// Column objects that are enriched (or need no enrichment), so we don't
+// re-fetch on every render. Weak, so replaced columns are collected.
+const __enriched = new WeakSet<ColumnMeta>();
 
 // Which AttributeType needs which loader? `null` means no enrichment.
 function loaderFor(col: ColumnMeta): 'optionset' | 'detail' | null {
@@ -225,6 +232,7 @@ function patchInto(tbl: TableMeta, columnLogical: string, raw: AttributeMetadata
 
   const nextCols = [...tbl.columns];
   nextCols[idx] = patched;
+  __enriched.add(patched);
   __registerLiveTable({ ...tbl, columns: nextCols });
 }
 
@@ -244,23 +252,26 @@ export function useColumnDetail(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // The live column object. Re-renders when it is replaced in the registry
+  // (table loaded, refreshed, or patched), which re-runs the effect below.
+  const col = useSyncExternalStore(__subscribeLiveTables, () =>
+    entityLogical && columnLogical
+      ? findTable(entityLogical)?.columns.find((c) => c.logicalName === columnLogical)
+      : undefined,
+  );
+
   useEffect(() => {
     if (!entityLogical || !columnLogical) return;
-    const cacheKey = key(entityLogical, columnLogical);
-    if (__enriched.has(cacheKey)) return;
-
-    const tbl = findTable(entityLogical);
-    if (!tbl) return; // wait until table is loaded
-    const col = tbl.columns.find((c) => c.logicalName === columnLogical);
-    if (!col) return;
+    if (!col) return; // wait until table is loaded
+    if (__enriched.has(col)) return;
     if (isAlreadyEnriched(col)) {
-      __enriched.add(cacheKey);
+      __enriched.add(col);
       return;
     }
 
     const which = loaderFor(col);
     if (!which) {
-      __enriched.add(cacheKey);
+      __enriched.add(col);
       return;
     }
 
@@ -270,15 +281,16 @@ export function useColumnDetail(
 
     const run =
       which === 'optionset'
-        ? loadAttributeWithOptionSet(entityLogical, columnLogical)
+        ? loadAttributeWithOptionSet(entityLogical, columnLogical, col.attributeType)
         : loadAttributeDetailedMetadata(entityLogical, columnLogical, col.attributeType);
 
     run
       .then((raw) => {
         if (cancelled) return;
+        // Patch only the column we fetched for. If a refresh replaced it in
+        // the meantime, the effect re-runs for the new column instead.
         const tbl2 = findTable(entityLogical);
-        if (tbl2) patchInto(tbl2, columnLogical, raw);
-        __enriched.add(cacheKey);
+        if (tbl2?.columns.includes(col)) patchInto(tbl2, columnLogical, raw);
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
@@ -290,7 +302,7 @@ export function useColumnDetail(
     return () => {
       cancelled = true;
     };
-  }, [entityLogical, columnLogical]);
+  }, [entityLogical, columnLogical, col]);
 
   return { loading, error };
 }

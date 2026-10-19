@@ -35,6 +35,8 @@ interface Props {
   label: string;
   /** Clears a caught error when it changes (mode id, tab id, …). */
   resetKey: unknown;
+  /** Runs before "Reload" remounts the children (e.g. drop state that would re-crash). */
+  onReload?: () => void;
   children: ReactNode;
 }
 
@@ -63,8 +65,10 @@ export class ErrorBoundary extends Component<Props, State> {
     }
   }
 
-  private reload = () =>
+  private reload = () => {
+    this.props.onReload?.();
     this.setState((s) => ({ error: null, componentStack: null, attempt: s.attempt + 1 }));
+  };
 
   render() {
     const { error, componentStack, attempt } = this.state;
