@@ -9,6 +9,8 @@
 //   • Copy URL     — copy the resolved request URL
 //   • Copy TSV     — copy current rows as tab-separated (paste-friendly)
 //   • Copy JSON    — copy the OData envelope
+//   • Export       — save CSV (as shown / raw) or the JSON envelope to a
+//                    file via toolboxAPI.fileSystem.saveFile (#15)
 //   • Selection count + row count
 //
 // Search is intentionally NOT here — it's a column-list operation handled
@@ -30,6 +32,11 @@ import {
   MenuButton,
   Spinner,
   Input,
+  MenuDivider,
+  MessageBar,
+  MessageBarBody,
+  MessageBarActions,
+  Button,
   MenuItemRadio,
 } from '@fluentui/react-components';
 import {
@@ -41,9 +48,14 @@ import {
   Stack20Regular,
   Search20Regular,
   TextDensity20Regular,
+  ArrowExportUp20Regular,
+  Dismiss20Regular,
 } from '@fluentui/react-icons';
 import type { GridDensity } from '../../state/displaySettings';
+import { useState } from 'react';
 import { useHostSession } from '../../host/HostContext';
+import { saveFileSafe } from '../../host/pptbBridge';
+import { exportFileName, toCsv, type ExportValueMode, type GridExportView } from './exportResults';
 
 const useStyles = makeStyles({
   bar: {
@@ -62,6 +74,7 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground3,
   },
   spacer: { flexGrow: 1 },
+  notice: { flexBasis: '100%' },
 });
 
 const DENSITY_LABEL: Record<GridDensity, string> = {
@@ -90,6 +103,10 @@ export interface ResultsCommandBarProps {
   /** Row density (persisted in the display settings, #16). */
   density: GridDensity;
   onDensityChange: (d: GridDensity) => void;
+  /** Root table logical name — names the exported file. */
+  table?: string;
+  /** The columns + rows the grid lists; CSV export writes exactly these. */
+  exportView?: GridExportView | null;
 }
 
 export function ResultsCommandBar({
@@ -105,9 +122,13 @@ export function ResultsCommandBar({
   onSearchChange,
   density,
   onDensityChange,
+  table,
+  exportView,
 }: ResultsCommandBarProps) {
   const s = useStyles();
   const host = useHostSession();
+  const [exporting, setExporting] = useState(false);
+  const [notice, setNotice] = useState<{ intent: 'success' | 'error'; text: string } | null>(null);
   // PPTB strips Prefer headers, so `odata.maxpagesize` for small-page-size
   // testing doesn't apply on Execute. When the response has no nextLink AND
   // we're inside PPTB, explain WHY pagination is unavailable rather than
@@ -150,6 +171,43 @@ export function ResultsCommandBar({
     );
     navigator.clipboard?.writeText([header, ...lines].join('\n'));
   };
+
+  const save = async (fileName: string, content: string, filter: { name: string; ext: string }) => {
+    setExporting(true);
+    setNotice(null);
+    try {
+      const path = await saveFileSafe(fileName, content, [
+        { name: filter.name, extensions: [filter.ext] },
+      ]);
+      // PPTB returns the chosen path (null/undefined when the dialog was
+      // cancelled); the standalone browser download returns null too.
+      if (path) setNotice({ intent: 'success', text: `Saved to ${path}` });
+    } catch (e) {
+      setNotice({
+        intent: 'error',
+        text: `Export failed: ${e instanceof Error ? e.message : String(e)}`,
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const exportCsv = (mode: ExportValueMode) => {
+    if (!exportView || exportView.rows.length === 0) return;
+    void save(exportFileName(table, 'csv'), toCsv(exportView.rows, exportView.columns, mode), {
+      name: 'CSV',
+      ext: 'csv',
+    });
+  };
+
+  const exportJson = () => {
+    void save(exportFileName(table, 'json'), JSON.stringify(body, null, 2), {
+      name: 'JSON',
+      ext: 'json',
+    });
+  };
+
+  const csvDisabled = exporting || !exportView || exportView.rows.length === 0;
 
   return (
     <div className={s.bar}>
@@ -224,6 +282,33 @@ export function ResultsCommandBar({
           </MenuPopover>
         </Menu>
 
+        <Menu>
+          <MenuTrigger disableButtonEnhancement>
+            <MenuButton
+              appearance="subtle"
+              size="small"
+              icon={exporting ? <Spinner size="tiny" /> : <ArrowExportUp20Regular />}
+              disabled={exporting}
+            >
+              Export
+            </MenuButton>
+          </MenuTrigger>
+          <MenuPopover>
+            <MenuList>
+              <MenuItem disabled={csvDisabled} onClick={() => exportCsv('shown')}>
+                CSV — values as shown
+              </MenuItem>
+              <MenuItem disabled={csvDisabled} onClick={() => exportCsv('raw')}>
+                CSV — raw values (GUIDs, numbers, ISO dates)
+              </MenuItem>
+              <MenuDivider />
+              <MenuItem disabled={exporting} onClick={exportJson}>
+                JSON — OData envelope
+              </MenuItem>
+            </MenuList>
+          </MenuPopover>
+        </Menu>
+
         <ToolbarDivider />
 
         <Input
@@ -263,6 +348,22 @@ export function ResultsCommandBar({
       </Toolbar>
 
       <span className={s.spacer} />
+
+      {notice && (
+        <MessageBar intent={notice.intent} className={s.notice}>
+          <MessageBarBody>{notice.text}</MessageBarBody>
+          <MessageBarActions
+            containerAction={
+              <Button
+                appearance="transparent"
+                aria-label="Dismiss"
+                icon={<Dismiss20Regular />}
+                onClick={() => setNotice(null)}
+              />
+            }
+          />
+        </MessageBar>
+      )}
     </div>
   );
 }

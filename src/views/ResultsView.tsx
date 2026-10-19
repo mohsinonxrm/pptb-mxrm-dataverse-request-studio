@@ -26,6 +26,7 @@ import { StatusPill } from '../primitives/StatusPill';
 import type { ExecResult } from '../engine/dataverseExecutor';
 import { ResultsGrid } from './results/ResultsGrid';
 import { ResultsCommandBar } from './results/ResultsCommandBar';
+import type { GridExportView } from './results/exportResults';
 import { usePersistedSettings } from '../host/usePersistedSettings';
 import { RecordDetailCard } from './detail/RecordDetailCard';
 import { WriteResultCard, type WriteResultContext } from './results/WriteResultCard';
@@ -103,6 +104,8 @@ export function ResultsView({
   // Row density is a persisted display setting (#16).
   const [settings, setSettings] = usePersistedSettings();
   const density = settings.gridDensity;
+  // What the grid lists (columns + rows after search) — CSV export writes this.
+  const [gridView, setGridView] = useState<GridExportView | null>(null);
   const s = useStudioStyles();
 
   if (!result) {
@@ -214,6 +217,8 @@ export function ResultsView({
           onSearchChange={setSearchQuery}
           density={density}
           onDensityChange={(d) => setSettings({ ...settings, gridDensity: d })}
+          table={table}
+          exportView={gridView}
         />
       )}
 
@@ -268,6 +273,7 @@ export function ResultsView({
               status={{ code: result.status, ms: result.ms, bytes: result.bytes }}
               serverTotal={serverTotal}
               preferredColumnOrder={preferredColumnOrder}
+              onViewChange={setGridView}
             />
           ))}
         {tab === 'json' && <JsonPane body={result.body} />}
