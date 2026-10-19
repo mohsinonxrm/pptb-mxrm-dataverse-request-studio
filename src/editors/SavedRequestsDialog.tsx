@@ -65,6 +65,7 @@ import {
   type SavedModeId,
 } from '../state/savedRequests';
 import { useSavedRequests } from '../state/useSavedRequests';
+import { findRequestType } from '../registry/requestTypes';
 
 const useStyles = makeStyles({
   libraryList: {
@@ -324,7 +325,7 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
               <MessageBar layout="multiline" intent="warning" style={{ marginTop: 12 }}>
                 <MessageBarBody>
                   <MessageBarTitle>Name in use in another mode</MessageBarTitle>A saved{' '}
-                  <strong>{modeIdShort(crossMode.existing.modeId)}</strong> request already uses{' '}
+                  <strong>{modeName(crossMode.existing.modeId)}</strong> request already uses{' '}
                   <code>{crossMode.existing.name}</code> (names are shared across modes). The name
                   above was changed to a free one — Save to keep both.
                 </MessageBarBody>
@@ -333,7 +334,7 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
                     size="small"
                     onClick={() => doSave(crossMode.existing.id, undefined, crossMode.typed)}
                   >
-                    Overwrite the {modeIdShort(crossMode.existing.modeId)} request
+                    Overwrite the {modeName(crossMode.existing.modeId)} request
                   </Button>
                 </MessageBarActions>
               </MessageBar>
@@ -347,7 +348,7 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
                   replace the oldest one
                   {capacity.oldest && (
                     <>
-                      : <code>{capacity.oldest.name}</code> ({modeIdShort(capacity.oldest.modeId)},
+                      : <code>{capacity.oldest.name}</code> ({modeName(capacity.oldest.modeId)},
                       saved {timeAgo(capacity.oldest.savedAt)})
                     </>
                   )}
@@ -557,7 +558,7 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
                         </div>
                         <div className={s.libraryRowMeta}>
                           {tableNameFromState(entry.state)} · saved {timeAgo(entry.savedAt)}
-                          {otherMode && ` · open ${modeIdShort(entry.modeId)} to load`}
+                          {otherMode && ` · open ${modeName(entry.modeId)} to load`}
                         </div>
                       </>
                     )}
@@ -762,6 +763,12 @@ function SavedLibraryTransfer() {
 
 /** Short chip label for the mode id — drops the leading "retrieve-" / "execute-"
  *  prefix for compact display, and falls back to the raw id for unknown modes. */
+/** Full mode name for sentences ("Retrieve Multiple"); unknown ids fall back to the short id. */
+function modeName(modeId: string): string {
+  const t = findRequestType(modeId);
+  return t.id === modeId ? t.name : modeIdShort(modeId);
+}
+
 function modeIdShort(modeId: string): string {
   return modeId.replace(/^(retrieve|execute|manage)-/, '');
 }
