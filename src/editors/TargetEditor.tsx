@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Field,
   Combobox,
@@ -26,6 +26,7 @@ import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
 import { useOpenSettings } from '../host/useOpenSettings';
 import { RecordPicker } from '../primitives/RecordPicker';
+import { MoreOptionsHint, useOptionSearch } from '../primitives/optionSearch';
 import { PasteODataDialog } from './PasteODataDialog';
 import { metadata } from '../host/metadataProvider';
 import type { RequestGroup } from '../registry/requestTypes';
@@ -103,16 +104,13 @@ export function TargetEditor({
     setValue(tbl?.displayName ?? '');
   }, [tbl?.displayName]);
 
-  const matching = useMemo(() => {
-    const q = value.trim().toLowerCase();
-    if (!q) return entities;
-    return entities.filter(
-      (t) =>
-        t.displayName.toLowerCase().includes(q) ||
-        t.logicalName.toLowerCase().includes(q) ||
-        t.entitySetName.toLowerCase().includes(q),
-    );
-  }, [entities, value]);
+  // Capped + deferred filter: an org can have ~2,000 tables and Fluent
+  // renders every Option on focus (#21).
+  const {
+    visible: matching,
+    matchCount,
+    hiddenCount,
+  } = useOptionSearch(entities, value, (t) => [t.displayName, t.logicalName, t.entitySetName]);
 
   const onChange: ComboboxProps['onChange'] = (e) => {
     const next = (e.target as HTMLInputElement).value;
@@ -138,15 +136,19 @@ export function TargetEditor({
   // retrieve mode does; specialty modes like ExecuteAction omit them).
   const hasActions = !!onResetRequest || !!onApplyParsed;
 
-  // Refresh metadata: nukes every cached entity/attribute/relationship
-  // record so the next read re-fetches with the current $select projection.
-  // Useful when (a) the user changed a column in the maker, (b) DRS rolled
-  // a new metadata-projection version (new flags appear after the cache
-  // is cleared), or (c) suspected stale data.
+  // Refresh metadata: drops every cached entity/attribute/relationship
+  // record and rebuilds the loaded tables in place, same as Settings →
+  // Refresh metadata. Useful when (a) the user changed a column in the
+  // maker, (b) DRS rolled a new metadata-projection version (new flags
+  // appear after the cache is cleared), or (c) suspected stale data.
+  // In place, so the selected table never blanks out mid-refresh (#53).
+  const [refreshing, setRefreshing] = useState(false);
   const onRefreshMetadata = () => {
-    metadata.invalidateAll();
-    // Re-warm the currently-selected entity so the user doesn't lose state.
-    if (table) void metadata.getTable(table);
+    setRefreshing(true);
+    metadata
+      .refreshAll()
+      .catch((e) => console.warn('[TargetEditor] refresh metadata failed', e))
+      .finally(() => setRefreshing(false));
   };
 
   // Guidance banner — shown only after the entity list has finished loading
@@ -211,6 +213,7 @@ export function TargetEditor({
               appearance="outline"
               size="small"
               onClick={onRefreshMetadata}
+              disabled={refreshing}
               title="Re-fetch every entity / attribute / relationship from Dataverse. Clears the in-memory metadata cache. Useful after editing the schema in the maker, or to pick up newly-added metadata flags."
             >
               Refresh metadata
@@ -254,7 +257,7 @@ export function TargetEditor({
             placeholder={entitiesLoading ? 'Loading…' : 'Search tables by name…'}
             listbox={{ style: { maxHeight: 360 } }}
           >
-            {matching.length === 0 && (
+            {matchCount === 0 && (
               <Option value="__none" text="" disabled>
                 <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
                   No tables match "{value}"
@@ -271,6 +274,7 @@ export function TargetEditor({
                 </div>
               </Option>
             ))}
+            <MoreOptionsHint hiddenCount={hiddenCount} />
           </Combobox>
         </Field>
 
@@ -295,6 +299,7 @@ export function TargetEditor({
               selectedId={recordId ?? null}
               onPick={(r) => onRecordChange?.(r?.id ?? null, r?.primary ?? '')}
               placeholder={`Search ${tbl.displayName} records by ${tbl.primaryName}…`}
+              memoryKey="target"
             />
           </Field>
         )}

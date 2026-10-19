@@ -77,6 +77,7 @@ export async function loadEntityAttributes(
 export async function loadAttributeWithOptionSet(
   entityLogicalName: string,
   attributeLogicalName: string,
+  knownAttributeType?: string,
 ): Promise<AttributeMetadata> {
   const cacheKey = `${entityLogicalName}_${attributeLogicalName}_optionset`;
   const cached = metadataCache.getEntityAttributes(cacheKey);
@@ -85,6 +86,7 @@ export async function loadAttributeWithOptionSet(
   const attribute = await pptbClient.getAttributeWithOptionSet(
     entityLogicalName,
     attributeLogicalName,
+    knownAttributeType,
   );
   metadataCache.setEntityAttributes(cacheKey, [attribute]);
   return attribute;
@@ -165,6 +167,13 @@ export async function loadEntityRelationships(
   const relationships = await pptbClient.getEntityRelationships(logicalName, advancedFindOnly);
   metadataCache.setEntityRelationships(cacheKey, relationships);
   return relationships;
+}
+
+/** AttributeType of specific attributes (alternate-key columns the basic
+ *  attribute load leaves out, #64). Not cached: only called once per table
+ *  build, which is itself cached. */
+export function loadAttributeTypes(logicalName: string, attributeNames: string[]) {
+  return pptbClient.getAttributeTypes(logicalName, attributeNames);
 }
 
 /** Entity alternate keys (EntityKeyMetadata). Cached per entity logical name.

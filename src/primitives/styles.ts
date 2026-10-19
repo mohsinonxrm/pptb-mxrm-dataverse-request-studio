@@ -175,6 +175,21 @@ export const useStudioStyles = makeStyles({
     width: '6px',
     textAlign: 'center',
   },
+  // Sidebar status badge (#200): readable 11px text in a 16px pill; long
+  // labels truncate so the label column keeps its width.
+  ctiBadge: {
+    display: 'inline-block',
+    maxWidth: '120px',
+    height: '16px',
+    lineHeight: '16px',
+    fontSize: '11px',
+    paddingLeft: '4px',
+    paddingRight: '4px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
+  },
   ctiChev: {
     width: '14px',
     height: '14px',
@@ -284,7 +299,7 @@ export const useStudioStyles = makeStyles({
     fontSize: '11px',
     fontWeight: 700,
     letterSpacing: '0.04em',
-    color: '#fff',
+    color: 'var(--color-method-fg, #fff)',
     flexShrink: 0,
     minWidth: '52px',
     textAlign: 'center',
@@ -928,6 +943,15 @@ export const useStudioStyles = makeStyles({
     color: tokens.colorNeutralForeground2,
     cursor: 'pointer',
     ':hover': { backgroundColor: tokens.colorNeutralBackground1Hover },
+  },
+  /** Recent-run row with nothing to restore — no pointer / hover affordance. */
+  recentRowStatic: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'center',
+    padding: '6px 14px',
+    fontSize: '11px',
+    color: tokens.colorNeutralForeground2,
   },
 
   // ── Card row utility ───────────────────────────────────
