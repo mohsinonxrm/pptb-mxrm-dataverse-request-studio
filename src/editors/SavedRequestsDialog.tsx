@@ -12,7 +12,7 @@
 // routing is the caller's responsibility — the dialog just hands back
 // the SavedRequest; the mode decides what to do with `state`.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dialog,
   DialogTrigger,
@@ -50,11 +50,13 @@ import {
   autoSuggestName,
   newSavedId,
   getOrgScope,
+  sameSaveTarget,
   tableNameFromState,
   type SavedRequest,
   type SavedModeId,
 } from '../state/savedRequests';
 import { useSavedRequests } from '../state/useSavedRequests';
+import { useConfirm } from '../shell/dialogs';
 
 const useStyles = makeStyles({
   libraryList: {
@@ -144,19 +146,26 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
   const [confirmReplace, setConfirmReplace] = useState(false);
   const { save, capacity, findById, findByName, error } = useSavedRequests();
 
+  // The remembered entry only counts while it targets the same table /
+  // action as the current draft. After a target switch it belongs to a
+  // different request: don't pre-fill its name or overwrite it silently.
+  // A same-name save then goes through the overwrite confirm below (#58).
+  const lastSaved = lastSavedId ? findById(lastSavedId) : undefined;
+  const ownSavedId = lastSaved && sameSaveTarget(lastSaved.state, state) ? lastSaved.id : undefined;
+
   // Auto-suggest name whenever the dialog opens. If the user previously
   // saved this request, default to the existing name so a quick re-save
   // is one click + Enter.
   useEffect(() => {
     if (!open) return;
-    if (lastSavedId) {
-      const existing = findById(lastSavedId);
+    if (ownSavedId) {
+      const existing = findById(ownSavedId);
       setName(existing?.name ?? autoSuggestName(modeId, state));
     } else {
       setName(autoSuggestName(modeId, state));
     }
     setConfirmOverwrite(false);
-  }, [open, state, modeId, lastSavedId, findById]);
+  }, [open, state, modeId, ownSavedId, findById]);
 
   const doSave = (overwriteId?: string, replaceId?: string) => {
     const trimmed = name.trim();
@@ -185,8 +194,8 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
     // Overwrite paths:
     //  • Same id (the entry we previously saved as): silent overwrite.
     //  • Same name, different id (collision): prompt confirm.
-    if (lastSavedId && findById(lastSavedId)?.name === trimmed) {
-      doSave(lastSavedId);
+    if (ownSavedId && findById(ownSavedId)?.name === trimmed) {
+      doSave(ownSavedId);
       return;
     }
     const byName = findByName(trimmed);
@@ -249,6 +258,7 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
                 ` ${capacity.count} of ${capacity.max} saved requests used for this connection (all modes).`}
             </Caption1>
             <Input
+              aria-label="Request name"
               value={name}
               onChange={(_, d) => {
                 setName(d.value);
@@ -347,6 +357,10 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const { saved, rename, remove } = useSavedRequests();
+  const askConfirm = useConfirm();
+  // Keeps the popover open while the in-app delete confirm is up: clicks on
+  // that dialog land outside the popover and would otherwise dismiss it.
+  const confirmingRef = useRef(false);
 
   // Filter to this mode's entries AND the current org scope. The bucket
   // is already org-scoped via getSavedRequestsKey(), so this filter is a
@@ -374,6 +388,7 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
     <Popover
       open={open}
       onOpenChange={(_, d) => {
+        if (!d.open && confirmingRef.current) return;
         setOpen(d.open);
         setRenameId(null);
       }}
@@ -445,6 +460,7 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
                   <div style={{ minWidth: 0 }}>
                     {isRenaming ? (
                       <Input
+                        aria-label={`New name for ${entry.name}`}
                         value={renameDraft}
                         onChange={(_, d) => setRenameDraft(d.value)}
                         size="small"
@@ -500,7 +516,16 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
                         icon={<Delete20Regular />}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (confirm(`Delete "${entry.name}"?`)) remove(entry.id);
+                          confirmingRef.current = true;
+                          void askConfirm({
+                            title: 'Delete saved request?',
+                            message: `"${entry.name}" will be removed from your saved requests.`,
+                            confirmLabel: 'Delete',
+                            destructive: true,
+                          }).then((ok) => {
+                            confirmingRef.current = false;
+                            if (ok) remove(entry.id);
+                          });
                         }}
                         aria-label={`Delete ${entry.name}`}
                       />

@@ -19,7 +19,12 @@
 // of the request — it tracks "has the user edited since last execute".
 // We strip it on serialize and re-init it as `new Set()` on deserialize.
 
-import type { RetrieveMultipleState, RetrieveSingleState, PredefinedQueryState } from './readState';
+import type {
+  RetrieveMultipleState,
+  RetrieveSingleState,
+  PredefinedQueryState,
+  RecentRun,
+} from './readState';
 import type { DeleteState, UpdateState, CreateState, UpsertState, MergeState } from './writeState';
 import type { AssociateState, DisassociateState } from './relateState';
 import type {
@@ -244,7 +249,12 @@ export function serializeUpdate(state: UpdateState): SerializedUpdateState {
 export function deserializeUpdate(snap: SerializedUpdateState): UpdateState {
   // `nullFields` backfill — entries saved before the field existed default
   // to []. The serializer always emits the field going forward.
-  return { ...snap, nullFields: snap.nullFields ?? [], dirty: new Set<string>() };
+  return {
+    ...snap,
+    nullFields: snap.nullFields ?? [],
+    rawBody: snap.rawBody ?? null,
+    dirty: new Set<string>(),
+  };
 }
 
 export function serializeCreate(state: CreateState): SerializedCreateState {
@@ -253,7 +263,12 @@ export function serializeCreate(state: CreateState): SerializedCreateState {
 }
 
 export function deserializeCreate(snap: SerializedCreateState): CreateState {
-  return { ...snap, nullFields: snap.nullFields ?? [], dirty: new Set<string>() };
+  return {
+    ...snap,
+    nullFields: snap.nullFields ?? [],
+    rawBody: snap.rawBody ?? null,
+    dirty: new Set<string>(),
+  };
 }
 
 export function serializeUpsert(state: UpsertState): SerializedUpsertState {
@@ -262,7 +277,12 @@ export function serializeUpsert(state: UpsertState): SerializedUpsertState {
 }
 
 export function deserializeUpsert(snap: SerializedUpsertState): UpsertState {
-  return { ...snap, nullFields: snap.nullFields ?? [], dirty: new Set<string>() };
+  return {
+    ...snap,
+    nullFields: snap.nullFields ?? [],
+    rawBody: snap.rawBody ?? null,
+    dirty: new Set<string>(),
+  };
 }
 
 export function serializeMerge(state: MergeState): SerializedMergeState {
@@ -649,6 +669,10 @@ function autoSuggestPredefinedQuery(state: SerializedPredefinedQueryState): stri
   const parts: string[] = [state.queryType === 'userQuery' ? 'userQuery' : 'savedQuery'];
   parts.push(state.table || 'untitled');
   if (state.queryId) parts.push(`#${state.queryId.replace(/[{}-]/g, '').slice(0, 8)}`);
+  // Related collection (#5): name the source table + nav.
+  if (state.related?.navProperty) {
+    parts.push(`via ${state.related.sourceTable}/${state.related.navProperty}`);
+  }
   if (state.top && state.top !== 50) parts.push(`top:${state.top}`);
   parts.push(new Date().toISOString().slice(0, 10));
   return parts.join(' · ');
@@ -686,7 +710,50 @@ export function tableNameFromState(state: unknown): string {
   return '—';
 }
 
+// ── Same-target check (silent-overwrite guard) ────────────────────────
+//
+// State keys that pick WHAT a request targets. Changing one of them
+// (switching the table, the action, the workflow, …) starts a different
+// request, so a save made before the switch must not be silently
+// overwritten by the new draft. Keys absent from both states are ignored,
+// so each mode is compared on whichever of these it carries.
+const TARGET_KEYS = ['table', 'actionName', 'functionName', 'workflowId'] as const;
+
+function targetKeyValue(state: unknown, key: string): string {
+  if (!state || typeof state !== 'object') return '';
+  const v = (state as Record<string, unknown>)[key];
+  return typeof v === 'string' ? v : '';
+}
+
+/**
+ * True when two serialized snapshots point at the same target (same table /
+ * action / function / workflow). The SaveButton uses this to decide whether
+ * a remembered `lastSavedId` still belongs to the current draft before it
+ * pre-fills that entry's name or overwrites it without asking (#58).
+ */
+export function sameSaveTarget(a: unknown, b: unknown): boolean {
+  return TARGET_KEYS.every((k) => targetKeyValue(a, k) === targetKeyValue(b, k));
+}
+
 // ── id generation ─────────────────────────────────────────────────────
+
+/**
+ * Wrap a Recent-runs snapshot as a transient SavedRequest so a mode can
+ * restore it through its existing `onLoadSaved` validator + hydrator (#2).
+ * Never persisted. Returns null when the run was recorded without a
+ * snapshot (nothing to restore).
+ */
+export function recentRunAsSavedEntry(run: RecentRun, modeId: SavedModeId): SavedRequest | null {
+  if (run.snapshot === undefined || run.snapshot === null) return null;
+  return {
+    id: run.id,
+    name: `Recent run (${run.method} · ${run.status})`,
+    modeId,
+    orgScope: getOrgScope(),
+    state: run.snapshot,
+    savedAt: run.ts,
+  };
+}
 
 export function newSavedId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
