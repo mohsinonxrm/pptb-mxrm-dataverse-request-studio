@@ -77,6 +77,7 @@ describe('columnSchema', () => {
       displayName: 'Birthday',
       attributeType: 'DateTime',
       format: 'DateOnly',
+      dateTimeBehavior: 'DateOnly',
     };
     expect(columnSchema(birthday)).toMatchObject({ type: 'string', format: 'date' });
   });
