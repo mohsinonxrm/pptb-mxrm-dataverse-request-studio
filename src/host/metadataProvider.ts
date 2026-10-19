@@ -13,7 +13,7 @@
 // loaders short-circuit on cache hit.
 
 import * as loader from './dataverseMetadata';
-import { __registerLiveTable, findTable, getLiveTables } from '../mock/metadata';
+import { __registerLiveTable, __clearLiveTables, findTable, getLiveTables } from '../mock/metadata';
 import type {
   TableMeta,
   ColumnMeta,
@@ -310,6 +310,17 @@ function mapEntityListItem(e: EntityMetadata): EntityListItem {
 
 let buildInFlight = new Map<string, Promise<TableMeta | undefined>>();
 
+// Fired after a refresh / invalidate drops the caches, so lists held in hook
+// state (the entity picker) re-fetch too instead of waiting for a remount.
+const resetListeners = new Set<() => void>();
+function notifyReset(): void {
+  for (const l of resetListeners) l();
+}
+export function subscribeMetadataReset(cb: () => void): () => void {
+  resetListeners.add(cb);
+  return () => resetListeners.delete(cb);
+}
+
 async function buildTable(logical: string): Promise<TableMeta | undefined> {
   // Dedupe concurrent builds for the same entity.
   const existing = buildInFlight.get(logical);
@@ -359,6 +370,35 @@ async function buildTable(logical: string): Promise<TableMeta | undefined> {
         }))
         .filter((k) => k.columns.length > 0);
 
+      // #64 — key columns missing from the basic (IsValidForAdvancedFind)
+      // load would otherwise be typed as strings and single-quoted in the
+      // key URL (e.g. canvasapp `componentstate` / `overwritetime`). Fetch
+      // their AttributeType; anything that still fails stays unknown.
+      const loaded = new Set(columns.map((c) => c.logicalName));
+      const missing = Array.from(
+        new Set(alternateKeys.flatMap((k) => k.columns).filter((c) => !loaded.has(c))),
+      );
+      if (missing.length > 0) {
+        try {
+          const typed = await loader.loadAttributeTypes(logical, missing);
+          const types = new Map<string, AttributeTypeCode>();
+          for (const t of typed) {
+            const code = ATTRIBUTE_TYPE_MAP[t.AttributeType];
+            if (code) types.set(t.LogicalName, code);
+          }
+          for (const k of alternateKeys) {
+            const ct: Record<string, AttributeTypeCode> = {};
+            for (const c of k.columns) {
+              const code = types.get(c);
+              if (code) ct[c] = code;
+            }
+            if (Object.keys(ct).length > 0) k.columnTypes = ct;
+          }
+        } catch (e) {
+          console.warn(`[metadata] alternate-key attribute types for ${logical} failed`, e);
+        }
+      }
+
       const built: TableMeta = {
         logicalName: entity.LogicalName,
         entitySetName: entity.EntitySetName,
@@ -373,7 +413,7 @@ async function buildTable(logical: string): Promise<TableMeta | undefined> {
           logical,
         ),
         alternateKeys,
-        supportsMerge: ['account', 'contact', 'incident'].includes(logical),
+        supportsMerge: ['account', 'contact', 'lead', 'incident'].includes(logical),
       };
 
       // Publish into the synchronous registry — this is what makes the
@@ -385,12 +425,14 @@ async function buildTable(logical: string): Promise<TableMeta | undefined> {
     } catch (e) {
       console.error(`[metadataProvider] getTable('${logical}') failed:`, e);
       return undefined;
-    } finally {
-      buildInFlight.delete(logical);
     }
   })();
 
   buildInFlight.set(logical, promise);
+  // Only drop our own slot — a refresh may have swapped in a newer build.
+  void promise.finally(() => {
+    if (buildInFlight.get(logical) === promise) buildInFlight.delete(logical);
+  });
   return promise;
 }
 
@@ -420,9 +462,11 @@ export const metadata: MetadataProvider = {
     metadataCache.clear();
     buildInFlight = new Map();
     // Also clear the synchronous registry so editors don't show stale data.
-    // The next mode-level `useLiveTable` fetch will repopulate.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    import('../mock/metadata').then(({ __clearLiveTables }) => __clearLiveTables());
+    // Synchronous on purpose: a caller's next `getTable` must miss the
+    // registry and refetch (#53). `useLiveTable` refetches its table when
+    // it disappears from the registry.
+    __clearLiveTables();
+    notifyReset();
   },
 
   async refreshAll(): Promise<void> {
@@ -443,6 +487,7 @@ export const metadata: MetadataProvider = {
     const logicals = getLiveTables().map((t) => t.logicalName);
     metadataCache.clear();
     buildInFlight = new Map();
+    notifyReset();
     await Promise.all(logicals.map((l) => buildTable(l)));
   },
 };

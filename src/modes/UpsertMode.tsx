@@ -36,6 +36,7 @@ import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { TargetEditor } from '../editors/TargetEditor';
 import { SelectEditor } from '../editors/SelectEditor';
 import { FieldSetEditor } from '../editors/FieldSetEditor';
@@ -52,7 +53,12 @@ import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { findTable } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
-import { buildUpsert, buildUpsertBody } from '../engine/urlBuilder';
+import {
+  altKeyReservedCharColumns,
+  altKeyUnknownTypeColumns,
+  buildUpsert,
+  buildUpsertBody,
+} from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
 import { defaultBypassOptions, type UpsertState, type CreateFieldValue } from '../state/writeState';
 import type { RecentRun } from '../state/readState';
@@ -65,9 +71,12 @@ import {
   hashState,
   type SavedRequest,
   type SerializedUpsertState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { missingRequiredColumns, rawBodyBlocker } from '../engine/fieldBody';
+import { isRecordGuid } from '../primitives/guid';
 
 // Empty initial state — user picks the table first, which then re-seeds
 // the key shape (GUID by default; switches to first alternate key once
@@ -89,9 +98,7 @@ const initialState = (): UpsertState => ({
 });
 
 // GUID validator — matches the Update / Delete approach.
-const GUID_RE =
-  /^[{(]?[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}[)}]?$/;
-const isValidGuid = (s: string | null | undefined): boolean => !!s && GUID_RE.test(s.trim());
+const isValidGuid = isRecordGuid;
 
 type RootClauseId =
   | 'target'
@@ -105,7 +112,8 @@ type RootClauseId =
 
 export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('upsert');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('upsert', deserializeUpsert, initialState);
+  const [state, setState] = useState(draft.state);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
   // The live table is a memo dependency below: build*() reads metadata via
   // findTable(), which is empty until the fetch lands — keying on `state`
@@ -119,8 +127,8 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
   // Save / Load tracking (Save button dirty/clean, library checkmark).
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
 
   const built = useMemo(() => buildUpsert(state), [state, liveTable]);
   const body = useMemo(() => buildUpsertBody(state), [state, liveTable]);
@@ -199,7 +207,7 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.upsert(state);
+    const res = await runtime.upsert(state, headerItemsToObject(effectiveHeaders, null));
     setResult(res);
     setLoading(false);
     setTab('results');
@@ -207,6 +215,7 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: 'upsert',
           url: built.relativeUrl,
           method: 'PATCH',
@@ -284,14 +293,66 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
           </>
         ),
       });
+
+      const key = state.key;
+      const def = tbl?.alternateKeys?.find((d) => d.name === key.keyName);
+      const reserved = def ? altKeyReservedCharColumns(state.table, def, key.keyValues) : [];
+      const unknownType = def ? altKeyUnknownTypeColumns(state.table, def) : [];
+      if (unknownType.length > 0) {
+        out.push({
+          id: 'ups-altkey-unknown-type',
+          severity: 'info',
+          source: 'validation',
+          focusNode: 'key',
+          title: 'Key column type unknown — quoted as string',
+          body: (
+            <>
+              {unknownType.map((c, i) => (
+                <span key={c}>
+                  {i > 0 && ', '}
+                  <code>{c}</code>
+                </span>
+              ))}{' '}
+              couldn&apos;t be found in the table metadata, so its value is quoted as a string
+              literal. If the column is numeric, a choice, a date or a GUID, remove the quotes from
+              the key segment before running the request.
+            </>
+          ),
+        });
+      }
+      if (reserved.length > 0) {
+        out.push({
+          id: 'ups-altkey-reserved-chars',
+          severity: 'warning',
+          source: 'validation',
+          focusNode: 'key',
+          title: 'Alternate-key value has characters Dataverse rejects',
+          body: (
+            <>
+              {reserved.map((c, i) => (
+                <span key={c}>
+                  {i > 0 && ', '}
+                  <code>{c}</code>
+                </span>
+              ))}{' '}
+              contains one of <code>/ &lt; &gt; * % &amp; : \ ? + #</code>. DRS percent-encodes the
+              value, but Dataverse still rejects these characters inside an alternate-key URL. Look
+              the row up with <code>$filter</code> instead (for example{' '}
+              <code>?$filter=accountnumber eq &apos;…&apos;&amp;$select=…id</code>), then upsert by
+              its GUID.
+            </>
+          ),
+        });
+      }
     }
 
     return out;
-  }, [state.bypass, state.concurrency, state.key, tbl]);
+  }, [state.bypass, state.concurrency, state.key, state.table, tbl]);
   const bypassBlocker = disabledReasonFromAdvisories(advisories);
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeUpsert(state), [state]);
+  useStashModeDraft('upsert', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 
@@ -304,7 +365,7 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
     if (entry.modeId !== 'upsert') return;
     const snap = entry.state as SerializedUpsertState;
     if (entities.length > 0 && !entities.some((e) => e.logicalName === snap.table)) {
-      window.alert(
+      notify(
         `Can't load "${entry.name}": entity \`${snap.table}\` ` +
           `isn't available in this environment. The solution may have been ` +
           `removed or you may be connected to a different org.`,
@@ -316,6 +377,19 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedHash(hashState(snap));
     setResult(null);
     setActivePath('target');
+  };
+
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'upsert');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
   };
 
   // Publish — hidden until a table is picked.
@@ -518,6 +592,10 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
               dirty: new Set(['target', 'key', 'fieldset']),
             }));
             setResult(null);
+            // New table → fresh draft. Forget the last save so Save can't
+            // overwrite an entry that belongs to the old table (#58).
+            setLastSavedId(undefined);
+            setLastSavedHash(null);
           }}
           group="write"
           sub="Pick the entity set for the upsert. Switching the target clears the key and field set."
@@ -632,6 +710,7 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={

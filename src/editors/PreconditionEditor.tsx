@@ -10,7 +10,7 @@
 // `If-Match` / `If-None-Match` "preconditions". The four kinds:
 //
 //   • none         → no header emitted; server proceeds regardless
-//   • update-only  → If-Match: *           → 412 if record doesn't exist
+//   • update-only  → If-Match: *           → 404 if record doesn't exist (not 412)
 //   • create-only  → If-None-Match: *      → 412 if record exists (Upsert-only)
 //   • etag         → If-Match: "<etag>"    → 412 unless current version matches
 //
@@ -42,6 +42,7 @@ import type { ConcurrencyMode } from '../state/writeState';
 import type { RequestGroup } from '../registry/requestTypes';
 import { HostHeaderNotice } from './HostHeaderNotice';
 import { isConcurrencyEnforcementRequired } from '../engine/hostHeaderAdvisories';
+import { hostSupportsAdditionalHeaders } from '../host/pptbBridge';
 
 export type PreconditionKind = ConcurrencyMode['kind'];
 
@@ -76,7 +77,7 @@ const KIND_META: Record<PreconditionKind, { title: string; header: string; body:
   'update-only': {
     title: 'Require existing record',
     header: 'If-Match: *',
-    body: "Fail with 412 Precondition Failed if no record matches the addressed key. Use to guarantee you're updating an existing row.",
+    body: "Fail with 404 Not Found if no record matches the addressed key, instead of creating one. Use to guarantee you're updating an existing row.",
   },
   'create-only': {
     title: 'Require absent record',
@@ -121,12 +122,20 @@ export function PreconditionEditor({
         group={group}
       />
 
-      {isConcurrencyEnforcementRequired(
-        // Only Upsert offers create-only; Update and Delete share the same rules.
-        available.includes('create-only') ? 'upsert' : 'update',
-        mode,
-      ) && (
-        <HostHeaderNotice>
+      {(hostSupportsAdditionalHeaders()
+        ? mode.kind !== 'none'
+        : isConcurrencyEnforcementRequired(
+            // Only Upsert offers create-only; Update and Delete share the same rules.
+            available.includes('create-only') ? 'upsert' : 'update',
+            mode,
+          )) && (
+        <HostHeaderNotice
+          header={
+            <>
+              the <code>{mode.kind === 'create-only' ? 'If-None-Match' : 'If-Match'}</code> header
+            </>
+          }
+        >
           The <code>If-Match</code> / <code>If-None-Match</code> header is dropped at execute time,
           so this condition wouldn't be enforced and <strong>Execute</strong> is disabled. Pick a
           different precondition to run the request here, or copy it from the Code tab to run it

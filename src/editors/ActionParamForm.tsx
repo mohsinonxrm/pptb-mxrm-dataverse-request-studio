@@ -16,7 +16,7 @@
 //
 // Reference: https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/use-web-api-actions
 
-import { useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import {
   Input,
   SpinButton,
@@ -58,7 +58,7 @@ import {
   Code20Regular,
   Open20Regular,
 } from '@fluentui/react-icons';
-import Editor from '@monaco-editor/react';
+import Editor from '../monaco/MonacoEditor';
 import { SegmentedToggle } from '../primitives/SegmentedToggle';
 import type { ThemeMode } from '../theme/theme';
 import { FieldSetEditor } from './FieldSetEditor';
@@ -477,7 +477,19 @@ function ParamRow({
 // ──────────────────────────────────────────────────────────────
 // Per-type input dispatch
 // ──────────────────────────────────────────────────────────────
-function ParamInput({
+// Accessible name (the parameter name) for value controls that don't get
+// `param` (#120). Nested complex-type fields override it with their own.
+const ParamLabelContext = createContext('Parameter value');
+
+function ParamInput(props: Parameters<typeof ParamInputBody>[0]) {
+  return (
+    <ParamLabelContext.Provider value={props.param.name}>
+      <ParamInputBody {...props} />
+    </ParamLabelContext.Provider>
+  );
+}
+
+function ParamInputBody({
   action,
   param,
   value,
@@ -499,6 +511,7 @@ function ParamInput({
     case 'Edm.String':
       return (
         <Input
+          aria-label={param.name}
           size="small"
           value={(value as string) ?? ''}
           onChange={(_, d) => onChange(d.value)}
@@ -508,6 +521,7 @@ function ParamInput({
     case 'Edm.Guid':
       return (
         <Input
+          aria-label={param.name}
           size="small"
           value={(value as string) ?? ''}
           onChange={(_, d) => onChange(d.value)}
@@ -524,6 +538,7 @@ function ParamInput({
       // commits as 3, matching Edm.Int32 semantics.
       return (
         <SpinButton
+          aria-label={param.name}
           size="small"
           value={Number.isFinite(value as number) ? (value as number) : 0}
           step={1}
@@ -539,6 +554,7 @@ function ParamInput({
     case 'Edm.Double':
       return (
         <SpinButton
+          aria-label={param.name}
           size="small"
           value={Number(value ?? 0)}
           step={0.01}
@@ -604,6 +620,7 @@ function ParamInput({
     case 'Edm.Binary':
       return (
         <Input
+          aria-label={param.name}
           size="small"
           value={(value as string) ?? ''}
           onChange={(_, d) => onChange(d.value)}
@@ -616,6 +633,7 @@ function ParamInput({
 
 // ── DateTime composite picker ──
 function DateTimeInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const paramLabel = useContext(ParamLabelContext);
   const parsed = value ? new Date(value) : null;
   const valid = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
   const write = (d: Date | null | undefined) => {
@@ -636,6 +654,7 @@ function DateTimeInput({ value, onChange }: { value: string; onChange: (v: strin
   return (
     <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
       <DatePicker
+        aria-label={`${paramLabel} (date)`}
         size="small"
         value={valid}
         onSelectDate={write}
@@ -645,6 +664,7 @@ function DateTimeInput({ value, onChange }: { value: string; onChange: (v: strin
         style={{ minWidth: 130 }}
       />
       <TimePicker
+        aria-label={`${paramLabel} (time)`}
         size="small"
         freeform
         selectedTime={valid}
@@ -671,6 +691,7 @@ function OptionSetInput({
   const cur = options.find((o) => o.value === value);
   return (
     <Combobox
+      aria-label={param.name}
       size="small"
       value={cur?.label ?? (value != null ? String(value) : '')}
       selectedOptions={value != null ? [String(value)] : []}
@@ -706,6 +727,7 @@ function StringArrayInput({
   onChange: (v: string[]) => void;
   mono?: boolean;
 }) {
+  const paramLabel = useContext(ParamLabelContext);
   return (
     <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
       {value.map((v, i) => (
@@ -720,6 +742,7 @@ function StringArrayInput({
         </Tag>
       ))}
       <Input
+        aria-label={`${paramLabel} item to add`}
         size="small"
         placeholder="add… (Enter)"
         style={{
@@ -748,6 +771,7 @@ function NumberArrayInput({
   value: number[];
   onChange: (v: number[]) => void;
 }) {
+  const paramLabel = useContext(ParamLabelContext);
   return (
     <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
       {value.map((v, i) => (
@@ -761,6 +785,7 @@ function NumberArrayInput({
         </Tag>
       ))}
       <Input
+        aria-label={`${paramLabel} item to add`}
         size="small"
         type="number"
         placeholder="add… (Enter)"
@@ -797,6 +822,7 @@ function EntityReferenceInput({
   param: ActionParam;
   polymorphic: boolean;
 }) {
+  const paramLabel = useContext(ParamLabelContext);
   const { entities } = useScopedEntities();
   const entityType = value?.entityType ?? param.entityType ?? entities[0]?.logicalName ?? '';
   // Warm the chosen entity's metadata so RecordPicker can display the
@@ -808,6 +834,7 @@ function EntityReferenceInput({
     <span style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
       {polymorphic && (
         <Combobox
+          aria-label={`${paramLabel} (table)`}
           size="small"
           value={tbl?.displayName ?? entityType}
           selectedOptions={[entityType]}
@@ -971,6 +998,7 @@ function EntitySpecificInput({
   value: Record<string, unknown> | undefined;
   onChange: (v: Record<string, CreateFieldValue>) => void;
 }) {
+  const paramLabel = useContext(ParamLabelContext);
   const entityType = param.entityType ?? '';
   // Warm the entity's live AttributeMetadata. The fetch runs in the
   // background via the live-metadata registry; once it lands findTable()
@@ -1014,6 +1042,7 @@ function EntitySpecificInput({
           environment. For now, edit the JSON inline:
         </MessageBarBody>
         <Input
+          aria-label={`${paramLabel} (JSON)`}
           size="small"
           value={JSON.stringify(v)}
           onChange={(_, d) => {
@@ -1091,6 +1120,7 @@ function ComplexTypeInput({
           </Caption1>
         </div>
         <Input
+          aria-label={`${param.name} (JSON)`}
           size="small"
           value={JSON.stringify(v)}
           onChange={(_, d) => {
