@@ -8,8 +8,12 @@ import {
   tokens,
   Tooltip,
   Spinner,
+  MessageBar,
+  MessageBarBody,
+  MessageBarActions,
 } from '@fluentui/react-components';
 import {
+  Dismiss20Regular,
   Copy20Regular,
   ArrowDownload20Regular,
   DocumentSearch20Regular,
@@ -42,6 +46,10 @@ export function ResultsView({
   onRefresh,
   onLoadMore,
   onRetrieveAll,
+  onStopLoadingMore,
+  loadMoreError,
+  onRetryLoadMore,
+  onDismissLoadMoreError,
   writeContext,
   preferredColumnOrder,
 }: {
@@ -65,6 +73,13 @@ export function ResultsView({
   onLoadMore?: () => void;
   /** Walk every page until exhausted. */
   onRetrieveAll?: () => void;
+  /** Stop an in-flight next-page fetch / Retrieve all, keeping rows loaded so far. */
+  onStopLoadingMore?: () => void;
+  /** Last next-page failure; rendered as an error bar above the grid. */
+  loadMoreError?: string | null;
+  /** Retry the failed next page. */
+  onRetryLoadMore?: () => void;
+  onDismissLoadMoreError?: () => void;
   /**
    * Write-mode context. When supplied AND `mode === 'single'`, the
    * results pane renders WriteResultCard (operation-specific success /
@@ -193,11 +208,32 @@ export function ResultsView({
           body={result.body}
           onRefresh={onRefresh ?? (() => {})}
           onRetrieveAll={onRetrieveAll}
+          onStopLoadingMore={onStopLoadingMore}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           density={density}
           onDensityChange={setDensity}
         />
+      )}
+
+      {loadMoreError && (
+        <MessageBar intent="error" layout="multiline">
+          <MessageBarBody>{loadMoreError} Rows already loaded are kept.</MessageBarBody>
+          <MessageBarActions
+            containerAction={
+              onDismissLoadMoreError && (
+                <Button
+                  appearance="transparent"
+                  aria-label="Dismiss"
+                  icon={<Dismiss20Regular />}
+                  onClick={onDismissLoadMoreError}
+                />
+              )
+            }
+          >
+            {onRetryLoadMore && <Button onClick={onRetryLoadMore}>Retry</Button>}
+          </MessageBarActions>
+        </MessageBar>
       )}
 
       <div
@@ -234,7 +270,13 @@ export function ResultsView({
             />
           ))}
         {tab === 'json' && <JsonPane body={result.body} />}
-        {tab === 'headers' && <HeadersPane headers={result.headers} status={result.status} />}
+        {tab === 'headers' && (
+          <HeadersPane
+            headers={result.headers}
+            status={result.status}
+            statusText={result.statusText}
+          />
+        )}
       </div>
     </div>
   );
@@ -292,10 +334,18 @@ function JsonPane({ body }: { body: unknown }) {
   );
 }
 
-function HeadersPane({ headers, status }: { headers: Record<string, string>; status: number }) {
+function HeadersPane({
+  headers,
+  status,
+  statusText,
+}: {
+  headers: Record<string, string>;
+  status: number;
+  statusText: string;
+}) {
   const s = useStudioStyles();
   const lines = Object.entries(headers).filter(([, v]) => v !== '');
-  const responseLine = `HTTP/1.1 ${status} ${status === 200 ? 'OK' : ''}`;
+  const responseLine = status ? `HTTP/1.1 ${status} ${statusText}` : statusText;
   return (
     <div className={s.inlineCard} style={{ padding: 16 }}>
       <Caption1
@@ -308,6 +358,11 @@ function HeadersPane({ headers, status }: { headers: Record<string, string>; sta
       >
         {responseLine}
       </Caption1>
+      {lines.length === 0 && (
+        <Caption1 style={{ color: tokens.colorNeutralForeground3, fontStyle: 'italic' }}>
+          Response headers aren&apos;t exposed by the PPTB host, so none can be shown here.
+        </Caption1>
+      )}
       <div
         style={{
           display: 'grid',
@@ -330,6 +385,14 @@ function HeadersPane({ headers, status }: { headers: Record<string, string>; sta
   );
 }
 
+/**
+ * True when the host refused the response because of its per-response size
+ * cap ("... exceeds the maximum size", or the 16 MB Buffer limit) (#126).
+ */
+function isResponseSizeLimitError(message: string | undefined): boolean {
+  return !!message && /16777216|exceeds the maximum size/i.test(message);
+}
+
 function ErrorState({ result }: { result: ExecResult }) {
   const Icon =
     result.status === 401
@@ -338,6 +401,21 @@ function ErrorState({ result }: { result: ExecResult }) {
         ? ShieldDismiss20Regular
         : ErrorCircle20Regular;
   const err = (result.body as { error?: { code?: string; message?: string } } | null)?.error;
+  // #126 — the host caps response size; say how to shrink the response.
+  const sizeHint = isResponseSizeLimitError(err?.message)
+    ? 'The response is larger than the host allows. Narrow it: add $select on the table and ' +
+      'inside each $expand, filter the expanded rows, or set Prefer: odata.maxpagesize to ' +
+      'return fewer rows per page.'
+    : null;
+  // #126 — 0x80060888 (a generic OData code, so match on the message):
+  // top-level $top with a collection $expand that has a nested $expand.
+  const nestedExpandTopHint = /at top level while doing \$expand on nested one-to-many/i.test(
+    err?.message ?? '',
+  )
+    ? 'Dataverse rejects top-level $top when a 1:N or N:N $expand has its own nested ' +
+      '$expand. Remove $top and set Prefer: odata.maxpagesize instead to limit the rows ' +
+      'per page.'
+    : null;
   const title =
     result.status === 401
       ? 'Unauthorized · 401'
@@ -345,7 +423,11 @@ function ErrorState({ result }: { result: ExecResult }) {
         ? 'Forbidden · 403'
         : result.status === 404
           ? 'Not Found · 404'
-          : `Error · ${result.status}`;
+          : result.status === 501
+            ? 'Not Implemented · 501'
+            : result.status === 0
+              ? 'Request failed'
+              : `Error · ${result.status}`;
   const advice =
     result.status === 401
       ? 'Sign in to refresh your access token, then re-run.'
@@ -353,13 +435,21 @@ function ErrorState({ result }: { result: ExecResult }) {
         ? 'Caller is missing a required privilege. Check role assignments.'
         : result.status === 404
           ? 'Record (or entity) not found. Verify the GUID and entity set.'
-          : 'Inspect the JSON body and headers tabs for details.';
-  const kind: 'success' | 'danger' | 'warning' =
-    result.status >= 400 ? 'danger' : result.status >= 300 ? 'warning' : 'success';
+          : result.status === 501
+            ? 'The request was not sent. See the message below.'
+            : result.status === 0
+              ? "The PPTB host didn't report an HTTP status. The error message below comes from Dataverse."
+              : 'Inspect the error message below for details.';
+  // Any failure is 'danger', including a status the host didn't report (0).
+  const kind: 'success' | 'danger' | 'warning' = !result.ok
+    ? 'danger'
+    : result.status >= 300
+      ? 'warning'
+      : 'success';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <StatusPill status={kind} code={result.status} ms={result.ms} />
+        <StatusPill status={kind} code={result.status || 'Error'} ms={result.ms} />
         <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
           {(result.bytes / 1024).toFixed(1)} KB
         </Caption1>
@@ -391,6 +481,16 @@ function ErrorState({ result }: { result: ExecResult }) {
         <Caption1 style={{ color: tokens.colorNeutralForeground2, maxWidth: 420 }}>
           {advice}
         </Caption1>
+        {sizeHint && (
+          <Caption1 style={{ color: tokens.colorNeutralForeground1, maxWidth: 420 }}>
+            {sizeHint}
+          </Caption1>
+        )}
+        {nestedExpandTopHint && (
+          <Caption1 style={{ color: tokens.colorNeutralForeground1, maxWidth: 420 }}>
+            {nestedExpandTopHint}
+          </Caption1>
+        )}
         {err && (
           // `whiteSpace: pre-wrap` keeps `\n` breaks but wraps the rest;
           // `wordBreak: break-word` + `overflowWrap: anywhere` break long
@@ -416,7 +516,9 @@ function ErrorState({ result }: { result: ExecResult }) {
               overflowWrap: 'anywhere',
               boxSizing: 'border-box',
             }}
-          >{`code: ${err.code}\nmessage: ${err.message}`}</pre>
+          >
+            {err.code ? `code: ${err.code}\nmessage: ${err.message}` : `message: ${err.message}`}
+          </pre>
         )}
       </div>
     </div>

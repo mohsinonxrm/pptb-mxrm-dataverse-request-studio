@@ -130,7 +130,12 @@ export function RequestTypePicker({
         withArrow={false}
       >
         <PopoverTrigger disableButtonEnhancement>
-          <button className={s.pickerChip} type="button">
+          <button
+            className={s.pickerChip}
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded={popOpen}
+          >
             <ActiveIcon
               style={{ color: groupColorVar(active.group), width: 18, height: 18, flexShrink: 0 }}
             />

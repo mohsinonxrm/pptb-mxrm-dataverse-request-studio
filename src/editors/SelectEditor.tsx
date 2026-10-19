@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useMemo, useState } from 'react';
 import {
   Button,
   mergeClasses,
@@ -58,7 +58,11 @@ export function SelectEditor({
   const [pickSel, setPickSel] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
-  const { available, selected, orphanCount } = useMemo(() => {
+  // The column grid can hold 500–800 rows: filter on a deferred copy of the
+  // search text so the input repaints before the grid re-renders (#21).
+  const deferredSearch = useDeferredValue(search);
+
+  const all = useMemo(() => {
     // Read picker filter:
     //   1. Honor IsValidForRead — a handful of platform-internal columns
     //      (entity-image side fields, `isprivate` etc.) are read-forbidden;
@@ -72,23 +76,27 @@ export function SelectEditor({
     //   3. `IsValidODataAttribute` is intentionally NOT used — Microsoft
     //      reports it wrong on inherited entities (task, email, etc.).
     //      See pptbClient.getEntityAttributes for the full story.
-    const all = (tbl?.columns ?? [])
+    return (tbl?.columns ?? [])
       .filter((c) => c.isValidForRead !== false)
       .filter((c) => !isCompanionLogicalReadOnly(c));
-    const filtered = (cs: ColumnMeta[]) => {
-      if (!search) return cs;
-      const q = search.toLowerCase();
-      return cs.filter(
-        (c) => c.displayName.toLowerCase().includes(q) || c.logicalName.toLowerCase().includes(q),
-      );
-    };
-    // Multi-select bulk-pick UX: the left "Columns" pane shows EVERY column
-    // regardless of selection state. A Fluent v9 Checkbox per row reflects
-    // membership in `selectedIds`; toggling it appends/removes immediately.
-    // This lets users tick many columns rapidly without items disappearing
-    // mid-flow (the previous "moved-to-right-pane" pattern was tedious for
-    // bulk picks). Selected pane (right) still shows ordered + DnD list.
-    const avail = filtered(all);
+  }, [tbl]);
+
+  // Multi-select bulk-pick UX: the left "Columns" pane shows EVERY column
+  // regardless of selection state. A Fluent v9 Checkbox per row reflects
+  // membership in `selectedIds`; toggling it appends/removes immediately.
+  // This lets users tick many columns rapidly without items disappearing
+  // mid-flow (the previous "moved-to-right-pane" pattern was tedious for
+  // bulk picks). Selected pane (right) still shows ordered + DnD list.
+  const available = useMemo(() => {
+    if (!deferredSearch) return all;
+    const q = deferredSearch.toLowerCase();
+    return all.filter(
+      (c) => c.displayName.toLowerCase().includes(q) || c.logicalName.toLowerCase().includes(q),
+    );
+  }, [all, deferredSearch]);
+
+  const { selected, orphanCount } = useMemo(() => {
+    const byName = new Map(all.map((c) => [c.logicalName, c]));
     // Build the displayed Selected list — preserve user-given order. If an
     // id doesn't match any known column on this table (e.g. a `_value` form
     // pasted via the OData parser for a column that doesn't actually exist
@@ -98,7 +106,7 @@ export function SelectEditor({
     // orphan id — a confusing UX mismatch.
     let orphans = 0;
     const sel2: ColumnMeta[] = selectedIds.map((id) => {
-      const hit = all.find((c) => c.logicalName === id);
+      const hit = byName.get(id);
       if (hit) return hit;
       orphans++;
       // Synthetic ColumnMeta for display + click handlers. The
@@ -113,8 +121,8 @@ export function SelectEditor({
         maxLength: 0,
       } as ColumnMeta;
     });
-    return { available: avail, selected: sel2, orphanCount: orphans };
-  }, [tbl, selectedIds, search]);
+    return { selected: sel2, orphanCount: orphans };
+  }, [all, selectedIds]);
 
   // ── DataGrid setup for the Columns pane ──
   //
@@ -184,16 +192,115 @@ export function SelectEditor({
   // Diff the incoming Set against the current ordered list. Anything new
   // gets appended; anything missing gets removed (preserving the order of
   // the survivors).
-  const onGridSelectionChange = (_evt: unknown, data: { selectedItems: Set<string | number> }) => {
-    const incoming = data.selectedItems;
-    const survivors = selectedIds.filter((id) => incoming.has(id));
-    const additions: string[] = [];
-    for (const id of incoming) {
-      const s = String(id);
-      if (!selectedIds.includes(s)) additions.push(s);
-    }
-    setSelectedIds([...survivors, ...additions]);
-  };
+  const onGridSelectionChange = useCallback(
+    (_evt: unknown, data: { selectedItems: Set<string | number> }) => {
+      const incoming = data.selectedItems;
+      const survivors = selectedIds.filter((id) => incoming.has(id));
+      const current = new Set(selectedIds);
+      const additions: string[] = [];
+      for (const id of incoming) {
+        const s = String(id);
+        if (!current.has(s)) additions.push(s);
+      }
+      setSelectedIds([...survivors, ...additions]);
+    },
+    [selectedIds, setSelectedIds],
+  );
+
+  // Memoized so a search keystroke (or the deferred re-filter) does not
+  // re-render every grid row and every Selected row (#21).
+  const columnGrid = useMemo(
+    () => (
+      <DataGrid
+        items={gridItems}
+        columns={gridColumns}
+        sortable
+        selectionMode="multiselect"
+        selectedItems={selectedSetForGrid}
+        onSelectionChange={onGridSelectionChange}
+        getRowId={(item) => (item as GridItem).logicalName}
+        size="small"
+        style={{ minWidth: 0 }}
+      >
+        <DataGridHeader>
+          <DataGridRow
+            selectionCell={{ checkboxIndicator: { 'aria-label': 'Select all columns' } }}
+          >
+            {({ renderHeaderCell }) => (
+              <DataGridHeaderCell>{renderHeaderCell()}</DataGridHeaderCell>
+            )}
+          </DataGridRow>
+        </DataGridHeader>
+        <DataGridBody<GridItem>>
+          {({ item, rowId }) => (
+            <DataGridRow<GridItem>
+              key={rowId}
+              selectionCell={{
+                checkboxIndicator: { 'aria-label': `Select ${item.displayName}` },
+              }}
+            >
+              {({ renderCell }) => <DataGridCell>{renderCell(item)}</DataGridCell>}
+            </DataGridRow>
+          )}
+        </DataGridBody>
+      </DataGrid>
+    ),
+    [gridItems, gridColumns, selectedSetForGrid, onGridSelectionChange],
+  );
+
+  const selectedList = useMemo(
+    () => (
+      <SortableList
+        ids={selectedIds}
+        onReorder={(from, to) => {
+          const next = [...selectedIds];
+          const [moved] = next.splice(from, 1);
+          next.splice(to, 0, moved);
+          setSelectedIds(next);
+        }}
+      >
+        {selected.map((c) => {
+          const isOrphan = c.displayName.startsWith('(unknown) ');
+          return (
+            <SortableItem key={c.logicalName} id={c.logicalName}>
+              {({ gripProps, Grip }) => (
+                <button
+                  type="button"
+                  className={mergeClasses(s.colRow, pickSel === c.logicalName && s.colRowSelected)}
+                  onClick={() => setPickSel(c.logicalName)}
+                  onDoubleClick={() =>
+                    setSelectedIds(selectedIds.filter((id) => id !== c.logicalName))
+                  }
+                  style={isOrphan ? { fontStyle: 'italic', opacity: 0.85 } : undefined}
+                >
+                  <span {...gripProps} aria-label={`Drag to reorder ${c.displayName}`}>
+                    <Grip />
+                  </span>
+                  <Checkmark20Filled
+                    style={{
+                      width: 14,
+                      height: 14,
+                      color: isOrphan ? tokens.colorPaletteRedForeground1 : groupColorVar(group),
+                    }}
+                  />
+                  <span>{c.displayName}</span>
+                  {isOrphan ? (
+                    <Badge appearance="tint" color="warning" size="small">
+                      unknown
+                    </Badge>
+                  ) : (
+                    <span className={s.colTypeBadge}>{c.attributeType}</span>
+                  )}
+                  <span className={s.colMeta}>{c.logicalName}</span>
+                </button>
+              )}
+            </SortableItem>
+          );
+        })}
+      </SortableList>
+    ),
+    [selected, selectedIds, setSelectedIds, pickSel, group, s],
+  );
 
   const moveLeft = () => {
     if (pickSel) {
@@ -304,42 +411,10 @@ export function SelectEditor({
                   color: tokens.colorNeutralForeground3,
                 }}
               >
-                <em>No columns match "{search}"</em>
+                <em>No columns match "{deferredSearch}"</em>
               </div>
             ) : (
-              <DataGrid
-                items={gridItems}
-                columns={gridColumns}
-                sortable
-                selectionMode="multiselect"
-                selectedItems={selectedSetForGrid}
-                onSelectionChange={onGridSelectionChange}
-                getRowId={(item) => (item as GridItem).logicalName}
-                size="small"
-                style={{ minWidth: 0 }}
-              >
-                <DataGridHeader>
-                  <DataGridRow
-                    selectionCell={{ checkboxIndicator: { 'aria-label': 'Select all columns' } }}
-                  >
-                    {({ renderHeaderCell }) => (
-                      <DataGridHeaderCell>{renderHeaderCell()}</DataGridHeaderCell>
-                    )}
-                  </DataGridRow>
-                </DataGridHeader>
-                <DataGridBody<GridItem>>
-                  {({ item, rowId }) => (
-                    <DataGridRow<GridItem>
-                      key={rowId}
-                      selectionCell={{
-                        checkboxIndicator: { 'aria-label': `Select ${item.displayName}` },
-                      }}
-                    >
-                      {({ renderCell }) => <DataGridCell>{renderCell(item)}</DataGridCell>}
-                    </DataGridRow>
-                  )}
-                </DataGridBody>
-              </DataGrid>
+              columnGrid
             )}
           </div>
         </div>
@@ -399,59 +474,7 @@ export function SelectEditor({
                 each row. Keyboard: Tab to grip → Space (pick up) →
                 ArrowUp/Down → Space (drop). Up/Down arrow buttons in the
                 colArrows toolbar still work as an alternative. */}
-            <SortableList
-              ids={selectedIds}
-              onReorder={(from, to) => {
-                const next = [...selectedIds];
-                const [moved] = next.splice(from, 1);
-                next.splice(to, 0, moved);
-                setSelectedIds(next);
-              }}
-            >
-              {selected.map((c) => {
-                const isOrphan = c.displayName.startsWith('(unknown) ');
-                return (
-                  <SortableItem key={c.logicalName} id={c.logicalName}>
-                    {({ gripProps, Grip }) => (
-                      <button
-                        type="button"
-                        className={mergeClasses(
-                          s.colRow,
-                          pickSel === c.logicalName && s.colRowSelected,
-                        )}
-                        onClick={() => setPickSel(c.logicalName)}
-                        onDoubleClick={() =>
-                          setSelectedIds(selectedIds.filter((id) => id !== c.logicalName))
-                        }
-                        style={isOrphan ? { fontStyle: 'italic', opacity: 0.85 } : undefined}
-                      >
-                        <span {...gripProps} aria-label={`Drag to reorder ${c.displayName}`}>
-                          <Grip />
-                        </span>
-                        <Checkmark20Filled
-                          style={{
-                            width: 14,
-                            height: 14,
-                            color: isOrphan
-                              ? tokens.colorPaletteRedForeground1
-                              : groupColorVar(group),
-                          }}
-                        />
-                        <span>{c.displayName}</span>
-                        {isOrphan ? (
-                          <Badge appearance="tint" color="warning" size="small">
-                            unknown
-                          </Badge>
-                        ) : (
-                          <span className={s.colTypeBadge}>{c.attributeType}</span>
-                        )}
-                        <span className={s.colMeta}>{c.logicalName}</span>
-                      </button>
-                    )}
-                  </SortableItem>
-                );
-              })}
-            </SortableList>
+            {selectedList}
           </div>
         </div>
       </div>

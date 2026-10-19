@@ -38,6 +38,7 @@ import {
 import { PaneHead } from './PaneHead';
 import { findTable, columnOptions, isLookupLike, type ColumnMeta } from '../mock/metadata';
 import type { CreateFieldValue, LookupFieldValue } from '../state/writeState';
+import { formatDateTimeValue } from './dateTimeValue';
 
 // ──────────────────────────────────────────────────────────────
 // Columns we exclude from the diff (system / binary)
@@ -451,12 +452,10 @@ function formatValue(col: ColumnMeta, value: unknown): string {
       return n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
   }
   if (col.attributeType === 'DateTime' && typeof value === 'string') {
-    try {
-      const d = new Date(value);
-      if (Number.isFinite(d.getTime())) return d.toLocaleString();
-    } catch {
-      /* fall through */
-    }
+    // Per-behavior parse: a DateOnly `2026-05-01` must not shift to the
+    // previous day west of UTC, nor a time-zone-independent time by the
+    // offset (#92).
+    return formatDateTimeValue(value, col);
   }
   return String(value);
 }

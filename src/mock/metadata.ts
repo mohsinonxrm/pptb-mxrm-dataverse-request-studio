@@ -483,6 +483,27 @@ export interface AlternateKeyDef {
   displayName: string;
   /** Column logical names that make up the key (order matters in the URL). */
   columns: string[];
+  /**
+   * AttributeType of key columns that aren't in the table's loaded `columns`
+   * (the basic load is filtered to IsValidForAdvancedFind, so e.g.
+   * `canvasapp.componentstate` / `overwritetime` are missing). Filled by the
+   * live metadata provider so key literals are typed correctly (#64).
+   */
+  columnTypes?: Record<string, AttributeTypeCode>;
+}
+
+/**
+ * AttributeType of an alternate-key column: the loaded column's type, else
+ * the type fetched for the key definition, else `undefined` (unknown — the
+ * URL builder quotes it as a string and the UI says so).
+ */
+export function altKeyColumnType(
+  table: TableMeta | undefined,
+  def: AlternateKeyDef,
+  column: string,
+): AttributeTypeCode | undefined {
+  const col = table?.columns.find((c) => c.logicalName === column);
+  return col?.attributeType ?? def.columnTypes?.[column];
 }
 
 export interface TableMeta {
@@ -495,7 +516,7 @@ export interface TableMeta {
   navigationProperties: NavProperty[];
   /** Alternate keys defined on the table (optional — used by Upsert). */
   alternateKeys?: AlternateKeyDef[];
-  /** True if this table is one of the Merge-supported types (account / contact / incident). */
+  /** True if this table is one of the Merge-supported types (account / contact / lead / incident). */
   supportsMerge?: boolean;
 }
 

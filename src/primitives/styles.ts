@@ -944,6 +944,15 @@ export const useStudioStyles = makeStyles({
     cursor: 'pointer',
     ':hover': { backgroundColor: tokens.colorNeutralBackground1Hover },
   },
+  /** Recent-run row with nothing to restore — no pointer / hover affordance. */
+  recentRowStatic: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'center',
+    padding: '6px 14px',
+    fontSize: '11px',
+    color: tokens.colorNeutralForeground2,
+  },
 
   // ── Card row utility ───────────────────────────────────
   inlineCard: {
