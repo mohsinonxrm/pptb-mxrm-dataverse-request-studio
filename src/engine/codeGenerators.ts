@@ -387,12 +387,13 @@ function genFetch(i: CodegenInputs): string {
   const hdrs = stripAuth(i.headers);
   const headerBlock = jsHeaderObject(hdrs, '      ');
   // No body on GET / DELETE (#60). A raw (binary) body is sent as bytes.
+  // `body:` sits at the same depth as `method:` / `headers:` (#200).
   const hasBody = !isBodyless(i.method);
   const bodyLine = !hasBody
     ? ''
     : i.rawBody
-      ? `\n      body: fileBytes,`
-      : `\n      body: JSON.stringify(payload),`;
+      ? `\n    body: fileBytes,`
+      : `\n    body: JSON.stringify(payload),`;
   const payloadDecl = !hasBody
     ? ''
     : i.rawBody
@@ -488,8 +489,7 @@ ${headerBlock}
   for (const r of requests) {
     const res = await fetch(r.url, {
       method: r.method,
-      headers: ${reqs.some((r) => r.headers && Object.keys(r.headers).length > 0) ? '{ ...sharedHeaders, ...r.headers }' : 'sharedHeaders'},
-      ${reqs.some((r) => r.body || r.rawBody) ? 'body: r.body,' : ''}
+      headers: ${reqs.some((r) => r.headers && Object.keys(r.headers).length > 0) ? '{ ...sharedHeaders, ...r.headers }' : 'sharedHeaders'},${reqs.some((r) => r.body || r.rawBody) ? '\n      body: r.body,' : ''}
     });
     if (!res.ok) {
       const err = await res.json().catch(() => null);

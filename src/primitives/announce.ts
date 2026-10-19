@@ -47,6 +47,23 @@ export function announce(message: string): void {
   timer = window.setTimeout(() => (el.textContent = message), fresh ? 250 : 50);
 }
 
+/**
+ * Empty the live region and drop any pending message, so a previous mode's
+ * run isn't read out (or left behind) in the next one (#200).
+ */
+export function clearAnnouncement(): void {
+  window.clearTimeout(timer);
+  if (region) region.textContent = '';
+}
+
+/** Clear the live region when the calling mode mounts and unmounts (#200). */
+export function useClearAnnouncementOnModeSwitch(): void {
+  useEffect(() => {
+    clearAnnouncement();
+    return clearAnnouncement;
+  }, []);
+}
+
 /** One-line spoken summary of an Execute result. */
 export function describeResult(result: ExecResult): string {
   const status = result.status
