@@ -5,6 +5,9 @@
 //     (handles 100k+ rows smoothly without paging tricks).
 //   • ResizeObserver measures the container + header so the virtualized
 //     body can size itself precisely (no scroll inside scroll inside scroll).
+//   • Column widths the user drags persist per table + column in the
+//     display settings (#12); "Reset column widths" in the info bar clears
+//     them for the table.
 //   • Per-column sizing options computed from BOTH header display name
 //     width and the column's attribute-type-based minimum (GUIDs need 260,
 //     dates need 160, etc.) — prevents the misaligned-header overflow you
@@ -62,6 +65,7 @@ import { findTable } from '../../mock/metadata';
 import type { ExpandSpec } from '../../editors/ExpandEditor';
 import type { OrderbySpec } from '../../editors/OrderbyEditor';
 import { usePersistedSettings } from '../../host/usePersistedSettings';
+import type { GridDensity } from '../../state/displaySettings';
 import { StatusPill } from '../../primitives/StatusPill';
 
 import {
@@ -73,10 +77,13 @@ import {
 import { resolveColumnDisplay, type ColumnDisplayInfo } from './columnDisplayMap';
 import { flattenRows, ROW_KEY, topLevelRowCount } from './flattenExpansions';
 import { getCellRenderer } from './DataGridCellRenderers';
+import type { ExportColumn, GridExportView } from './exportResults';
+import { widthsForTable, withColumnWidths, withoutTableWidths } from './columnWidths';
 import { buildSearchIndex, filterRows, isFiltering, type ColumnFilters } from './gridFilter';
 
-const ROW_HEIGHT_COZY = 44;
-const ROW_HEIGHT_COMPACT = 32;
+// Row heights per density — Fluent's table row heights for each `size` (#16).
+const ROW_HEIGHT: Record<GridDensity, number> = { medium: 44, small: 34, 'extra-small': 24 };
+const HEADER_HEIGHT: Record<GridDensity, number> = { medium: 40, small: 34, 'extra-small': 28 };
 
 const useStyles = makeStyles({
   container: {
@@ -204,8 +211,8 @@ export interface ResultsGridProps {
   onClearSearch?: () => void;
   /** Show the per-column filter row under the header (#17). */
   showFilterRow?: boolean;
-  /** Row density. */
-  density?: 'cozy' | 'compact';
+  /** Row density — Fluent DataGrid `size` (#16). */
+  density?: GridDensity;
   /** Status info rendered in the grid's bottom info bar (replaces the old top strip). */
   status?: { code: number; ms: number; bytes: number };
   /** Server-emitted @odata.count, when $count=true was set. */
@@ -223,6 +230,8 @@ export interface ResultsGridProps {
    * the server returned.
    */
   preferredColumnOrder?: string[];
+  /** Reports the columns and rows the grid lists, for CSV export (#15). */
+  onViewChange?: (view: GridExportView) => void;
 }
 
 export function ResultsGrid({
@@ -238,13 +247,14 @@ export function ResultsGrid({
   searchQuery = '',
   onClearSearch,
   showFilterRow = false,
-  density = 'cozy',
+  density: densityProp = 'medium',
   status,
   serverTotal,
   preferredColumnOrder,
+  onViewChange,
 }: ResultsGridProps) {
   const styles = useStyles();
-  const [settings] = usePersistedSettings();
+  const [settings, updateSettings] = usePersistedSettings();
   const useLogicalNames = settings.useLogicalNames;
   const valueMode = settings.valueDisplayMode;
 
@@ -258,7 +268,10 @@ export function ResultsGrid({
   const [headerHeight, setHeaderHeight] = useState(0);
   const [selectedItems, setSelectedItems] = useState<Set<string | number>>(new Set());
 
-  const rowHeight = density === 'compact' ? ROW_HEIGHT_COMPACT : ROW_HEIGHT_COZY;
+  // Fall back to medium for anything unexpected (e.g. a stale stored value).
+  const density: GridDensity = densityProp in ROW_HEIGHT ? densityProp : 'medium';
+  const rowHeight = ROW_HEIGHT[density];
+  const headerRowHeight = `${HEADER_HEIGHT[density]}px`;
 
   // ── Flatten nested $expand objects to dotted-key columns ──
   const allRows = useMemo(() => {
@@ -599,6 +612,67 @@ export function ResultsGrid({
     });
   }, [columnKeys, columnDisplay, sortMap, valueMode, useLogicalNames, allRows, styles]);
 
+  // ── Persisted column widths (#12) ──
+  // `liveWidths` holds widths dragged this session so the sizing options
+  // follow a drag immediately (Fluent resets a column to the options'
+  // idealWidth whenever the options change); the settings write is
+  // debounced so a drag doesn't save on every mouse move.
+  const storedWidths = useMemo(
+    () => widthsForTable(settings.columnWidths, table),
+    [settings.columnWidths, table],
+  );
+  const [liveWidths, setLiveWidths] = useState<Record<string, number>>({});
+  // Widths dragged but not yet saved, with the table they belong to.
+  const pendingWidthsRef = useRef<{ table?: string; widths: Record<string, number> }>({
+    widths: {},
+  });
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestRef = useRef({ settings, updateSettings, table });
+  latestRef.current = { settings, updateSettings, table };
+
+  const flushWidths = useCallback(() => {
+    if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+    flushTimerRef.current = null;
+    const { table: t, widths } = pendingWidthsRef.current;
+    pendingWidthsRef.current = { widths: {} };
+    if (Object.keys(widths).length === 0) return;
+    const { settings: s, updateSettings: update } = latestRef.current;
+    update({ ...s, columnWidths: withColumnWidths(s.columnWidths, t, widths) });
+  }, []);
+
+  // A different table starts from its own stored widths; unmount saves a pending drag.
+  useEffect(() => {
+    setLiveWidths({});
+    return flushWidths;
+  }, [table, flushWidths]);
+
+  const handleColumnResize = useCallback(
+    (_e: unknown, data: { columnId: string | number; width: number }) => {
+      const id = String(data.columnId);
+      setLiveWidths((prev) => ({ ...prev, [id]: data.width }));
+      const t = latestRef.current.table;
+      if (pendingWidthsRef.current.table !== t) {
+        flushWidths();
+        pendingWidthsRef.current = { table: t, widths: {} };
+      }
+      pendingWidthsRef.current.widths[id] = data.width;
+      if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = setTimeout(flushWidths, 400);
+    },
+    [flushWidths],
+  );
+
+  const hasCustomWidths =
+    Object.keys(storedWidths).length > 0 || Object.keys(liveWidths).length > 0;
+  const resetColumnWidths = useCallback(() => {
+    if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+    flushTimerRef.current = null;
+    pendingWidthsRef.current = { widths: {} };
+    setLiveWidths({});
+    const { settings: s, updateSettings: update, table: t } = latestRef.current;
+    update({ ...s, columnWidths: withoutTableWidths(s.columnWidths, t) });
+  }, []);
+
   // ── Column sizing options ──
   // Width is computed from BOTH the display-name pixel estimate AND a
   // type-based minimum (GUIDs need 260px, dates 160, etc.) — that way
@@ -642,15 +716,40 @@ export function ResultsGrid({
       // ~7px per char + 56px padding (sort icon + cell padding)
       const headerEstimate = Math.ceil(label.length * 7) + 56;
       const dataMin = typeMin(info?.column?.attributeType);
-      const ideal = Math.max(120, Math.min(Math.max(headerEstimate, dataMin), 360));
+      const minWidth = Math.max(80, Math.min(dataMin, 200));
+      // A width the user dragged (this session or stored) wins.
+      const userWidth = liveWidths[cid] ?? storedWidths[cid];
+      const ideal =
+        userWidth != null
+          ? Math.max(minWidth, userWidth)
+          : Math.max(120, Math.min(Math.max(headerEstimate, dataMin), 360));
       out[cid] = {
-        minWidth: Math.max(80, Math.min(dataMin, 200)),
+        minWidth,
         defaultWidth: ideal,
         idealWidth: ideal,
       };
     }
     return out;
-  }, [columns, columnDisplay, useLogicalNames]);
+  }, [columns, columnDisplay, useLogicalNames, liveWidths, storedWidths]);
+
+  // ── Export view: the grid's columns + rows, so export matches the grid ──
+  useEffect(() => {
+    if (!onViewChange) return;
+    const exportColumns: ExportColumn[] = columns.map((c) => {
+      const id = String(c.columnId);
+      const isTwin = id.endsWith('__raw');
+      const sourceCol = isTwin ? id.slice(0, -5) : id;
+      const info = columnDisplay.get(sourceCol);
+      const label = (useLogicalNames ? info?.logicalName : info?.displayName) ?? sourceCol;
+      return {
+        id,
+        header: isTwin ? `${label} (Raw)` : label,
+        sourceCol,
+        showsRaw: isTwin || valueMode === 'raw',
+      };
+    });
+    onViewChange({ columns: exportColumns, rows });
+  }, [onViewChange, columns, columnDisplay, useLogicalNames, valueMode, rows]);
 
   // ── Selection ──
   const handleSelectionChange = useCallback(
@@ -764,6 +863,7 @@ export function ResultsGrid({
         <div ref={containerRef} className={styles.gridContent}>
           <DataGrid
             aria-label={table ?? 'Results'}
+            size={density}
             items={rows}
             columns={columns}
             // We render sort arrows ourselves (driven by $orderby state).
@@ -771,6 +871,7 @@ export function ResultsGrid({
             resizableColumns
             resizableColumnsOptions={{ autoFitColumns: false }}
             columnSizingOptions={columnSizingOptions}
+            onColumnResize={handleColumnResize}
             selectionMode="multiselect"
             selectedItems={selectedItems}
             onSelectionChange={handleSelectionChange}
@@ -781,7 +882,7 @@ export function ResultsGrid({
               style={{ paddingRight: scrollbarWidth }}
             >
               <DataGridRow
-                style={{ minHeight: '40px', maxHeight: '40px' }}
+                style={{ minHeight: headerRowHeight, maxHeight: headerRowHeight }}
                 selectionCell={{ checkboxIndicator: { 'aria-label': 'Select all rows' } }}
               >
                 {({ renderHeaderCell }) => (
@@ -885,11 +986,16 @@ export function ResultsGrid({
               )}
             </span>
           </span>
-          <span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
             {selectedItems.size > 0 && (
-              <>
+              <span>
                 <strong>{selectedItems.size}</strong> selected
-              </>
+              </span>
+            )}
+            {hasCustomWidths && (
+              <Link as="button" onClick={resetColumnWidths}>
+                Reset column widths
+              </Link>
             )}
           </span>
         </div>
