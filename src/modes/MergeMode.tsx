@@ -83,6 +83,8 @@ import type { RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
+import { metadata } from '../host/metadataProvider';
+import { readRowLookup } from '../engine/recordSnapshot';
 import {
   serializeMerge,
   deserializeMerge,
@@ -153,9 +155,49 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
   const [targetLoading, setTargetLoading] = useState(false);
   const [subordinateLoading, setSubordinateLoading] = useState(false);
 
-  const built = useMemo(() => buildMerge(state), [state, liveTable]);
-  const body = useMemo(() => buildMergeBody(state), [state, liveTable]);
   const tbl = findTable(state.table);
+
+  // ── Lookup targets for "keep Subordinate" choices (#96) ──
+  // UpdateContent binds a kept lookup as `<nav>@odata.bind: /<set>(<id>)`,
+  // which needs the entity set of the row's ACTUAL target (from the
+  // lookuplogicalname annotation — customer / owner / regarding are
+  // polymorphic). buildCreateBody drops a lookup whose target table isn't
+  // in the registry yet, so warm those tables here and block Execute until
+  // they land (useLiveTable's registry subscription re-renders us then).
+  const subLookupTargets = useMemo(() => {
+    const sub = state.subordinateSnapshot;
+    if (!tbl || !sub) return [];
+    const out = new Set<string>();
+    for (const [field, choice] of Object.entries(state.fieldChoices)) {
+      if (choice !== 'subordinate') continue;
+      const col = tbl.columns.find((c) => c.logicalName === field);
+      // null for non-lookup columns
+      const target = col && readRowLookup(sub, col)?.targetEntity;
+      if (target) out.add(target);
+    }
+    return [...out].sort();
+  }, [tbl, state.subordinateSnapshot, state.fieldChoices]);
+  const subLookupKey = subLookupTargets.join('|');
+  const [failedLookupTargets, setFailedLookupTargets] = useState<string[]>([]);
+  useEffect(() => {
+    for (const t of subLookupTargets) {
+      if (findTable(t)) continue;
+      void metadata
+        .getTable(t)
+        .catch(() => undefined)
+        .then((loaded) => {
+          if (!loaded) setFailedLookupTargets((f) => (f.includes(t) ? f : [...f, t]));
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subLookupKey]);
+  const pendingLookupTargets = subLookupTargets.filter((t) => !findTable(t));
+  const failedPending = pendingLookupTargets.filter((t) => failedLookupTargets.includes(t));
+
+  const built = useMemo(() => buildMerge(state), [state, liveTable]);
+  // Keyed on the pending targets too, so the body rebuilds once they load.
+  const pendingKey = pendingLookupTargets.join('|');
+  const body = useMemo(() => buildMergeBody(state), [state, liveTable, pendingKey]);
 
   // ── Live row fetches ──
   //
@@ -287,7 +329,13 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
                 ? 'Target and Subordinate must be different records.'
                 : state.headers.some((h) => h.enabled && !h.name)
                   ? 'Fix empty header name.'
-                  : null;
+                  : failedPending.length > 0
+                    ? `Couldn't load metadata for ${failedPending.join(', ')}, so a lookup kept from ` +
+                      'the Subordinate can’t be bound. Pick Target or Custom for it instead.'
+                    : pendingLookupTargets.length > 0
+                      ? `Loading metadata for ${pendingLookupTargets.join(', ')} to bind the ` +
+                        'lookups kept from the Subordinate…'
+                      : null;
 
   const onExecute = async () => {
     setLoading(true);
