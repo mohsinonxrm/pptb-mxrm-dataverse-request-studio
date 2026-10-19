@@ -3,7 +3,20 @@
 // Persistence layers:
 //   • In-memory recents      — last 8 runs per mode, lost on reload
 //   • localStorage saves     — this module, up to MAX_SAVED entries per org scope
-//   • Export/Import to disk  — future, via the host's filesystem API
+//   • Export/Import to disk  — a versioned JSON file (buildSavedExport /
+//                              parseSavedImport), via the host's file dialogs
+//
+// Durability (#105, checked against the PPTB v1.2.7 source): a tool runs in
+// a BrowserView with no `partition` (toolWindowManager.ts:458), i.e. in
+// Electron's default persistent session under userData, and loads from
+// `pptb-webview://<toolId>/` (browserviewProtocolManager.ts:236), so the
+// localStorage origin is keyed by the tool id alone — not by version or
+// install path. Updates keep the same id and nothing in PPTB clears
+// storage data on update or uninstall, so the library survives both.
+// `toolboxAPI.settings` is keyed by the same tool id (settingsManager.ts:244),
+// so moving there would not be more durable. What does change the id is the
+// install source (registry id vs `npm-<pkg>` vs `local-<pkg>`), which is
+// what Export/Import is for.
 //
 // One saved entry = a named snapshot of a mode's state shape. Each mode
 // plugs in by:
@@ -49,6 +62,13 @@ import { getEnv } from '../mock/environment';
 // the live env host via `getSavedRequestsKey()`.
 
 export const SAVED_REQUESTS_KEY_PREFIX = 'drs:saved-requests:v1';
+/**
+ * Version of the SavedRequest entry shape, stamped on every entry and on
+ * export files. Entries written before the field existed read as 1. The
+ * stored value stays a plain array so older builds can still read it.
+ * Bump when an entry's shape changes in a way a reader must know about.
+ */
+export const SAVED_SCHEMA_VERSION = 1;
 /**
  * Library size per org scope, shared by every mode. A bound, not a target:
  * an entry is a few KB of JSON, so 200 stays far below the browser's
@@ -129,7 +149,29 @@ export interface SavedRequest {
   savedAt: number;
   /** Optional epoch ms — set when the user runs the loaded request. */
   lastRunAt?: number;
+  /** Entry shape version (SAVED_SCHEMA_VERSION); missing on pre-#105 entries = 1. */
+  schemaVersion?: number;
 }
+
+/** Runtime list of SavedModeId, for validating imported entries. */
+const SAVED_MODE_IDS: ReadonlySet<string> = new Set<SavedModeId>([
+  'retrieve-multiple',
+  'retrieve-single',
+  'predefined-query',
+  'delete',
+  'update',
+  'create',
+  'upsert',
+  'merge',
+  'associate',
+  'disassociate',
+  'exec-action',
+  'exec-function',
+  'exec-workflow',
+  'manage-file',
+  'manage-image',
+  'manage-attachment',
+]);
 
 // ── Per-mode serialized shapes ────────────────────────────────────────
 
@@ -397,20 +439,24 @@ export function loadSaved(): SavedRequest[] {
     // before the field existed (one-time migration; we tag them with the
     // current host since we have no way to know the original).
     return parsed
-      .filter(
-        (e): e is SavedRequest =>
-          e != null &&
-          typeof e === 'object' &&
-          typeof (e as SavedRequest).id === 'string' &&
-          typeof (e as SavedRequest).name === 'string' &&
-          typeof (e as SavedRequest).modeId === 'string' &&
-          typeof (e as SavedRequest).state === 'object' &&
-          typeof (e as SavedRequest).savedAt === 'number',
-      )
-      .map((e) => ({ ...e, orgScope: e.orgScope || scope }));
+      .filter(isSavedRequestShape)
+      .map((e) => ({ ...e, orgScope: e.orgScope || scope, schemaVersion: e.schemaVersion ?? 1 }));
   } catch {
     return [];
   }
+}
+
+function isSavedRequestShape(e: unknown): e is SavedRequest {
+  return (
+    e != null &&
+    typeof e === 'object' &&
+    typeof (e as SavedRequest).id === 'string' &&
+    typeof (e as SavedRequest).name === 'string' &&
+    typeof (e as SavedRequest).modeId === 'string' &&
+    typeof (e as SavedRequest).state === 'object' &&
+    (e as SavedRequest).state !== null &&
+    typeof (e as SavedRequest).savedAt === 'number'
+  );
 }
 
 /** Overwrite the entire list. Best-effort — silently no-ops if storage fails. */
@@ -423,6 +469,74 @@ export function persistSaved(list: SavedRequest[]): void {
     // ok/error return so the UI can show "couldn't save" toast.
     throw new Error('localStorage write failed (quota or privacy mode).');
   }
+}
+
+// ── Export / Import file ──────────────────────────────────────────────
+//
+// A self-describing JSON envelope. Import also accepts a bare array (a raw
+// copy of the localStorage value). Entries are re-tagged with the importing
+// org scope by the store; their original scope stays in the file only.
+
+export const SAVED_EXPORT_FORMAT = 'drs-saved-requests';
+
+export interface SavedRequestsExport {
+  format: typeof SAVED_EXPORT_FORMAT;
+  schemaVersion: number;
+  exportedAt: string;
+  orgScope: string;
+  entries: SavedRequest[];
+}
+
+/** Serialize a library (one org scope) to the export file text. */
+export function buildSavedExport(entries: SavedRequest[], orgScope: string): string {
+  const file: SavedRequestsExport = {
+    format: SAVED_EXPORT_FORMAT,
+    schemaVersion: SAVED_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    orgScope,
+    entries: entries.map((e) => ({ ...e, schemaVersion: e.schemaVersion ?? 1 })),
+  };
+  return JSON.stringify(file, null, 2);
+}
+
+/**
+ * Parse an export file. Throws an Error with a user-facing message when the
+ * file isn't a saved-requests export at all; otherwise returns the valid
+ * entries and how many were dropped (bad shape, unknown mode, newer schema).
+ */
+export function parseSavedImport(text: string): { entries: SavedRequest[]; invalid: number } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
+  } catch {
+    throw new Error('The file is not valid JSON.');
+  }
+  let raw: unknown[];
+  if (Array.isArray(parsed)) {
+    raw = parsed;
+  } else if (
+    parsed &&
+    typeof parsed === 'object' &&
+    (parsed as SavedRequestsExport).format === SAVED_EXPORT_FORMAT &&
+    Array.isArray((parsed as SavedRequestsExport).entries)
+  ) {
+    const v = (parsed as SavedRequestsExport).schemaVersion;
+    if (typeof v === 'number' && v > SAVED_SCHEMA_VERSION) {
+      throw new Error(
+        `The file was exported by a newer version of Dataverse Request Studio (schema ${v}). Update the tool and try again.`,
+      );
+    }
+    raw = (parsed as SavedRequestsExport).entries;
+  } else {
+    throw new Error('The file is not a Dataverse Request Studio saved-requests export.');
+  }
+  const entries = raw.filter(
+    (e): e is SavedRequest =>
+      isSavedRequestShape(e) &&
+      SAVED_MODE_IDS.has(e.modeId) &&
+      (e.schemaVersion ?? 1) <= SAVED_SCHEMA_VERSION,
+  );
+  return { entries, invalid: raw.length - entries.length };
 }
 
 // ── Hash + dirty detection ────────────────────────────────────────────
