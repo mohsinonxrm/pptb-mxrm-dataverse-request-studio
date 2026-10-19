@@ -26,15 +26,21 @@ import {
   ErrorCircle20Filled,
   Warning20Filled,
   Copy20Regular,
+  DocumentSearch20Regular,
   Open20Regular,
   BranchFork20Filled,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../../primitives/styles';
+import { canOpenInMode, openInMode } from '../../state/modeHandoff';
 import { StatusPill } from '../../primitives/StatusPill';
 import { RecordDetailCard } from '../detail/RecordDetailCard';
 import { ENV } from '../../mock/environment';
 import { findTable } from '../../mock/metadata';
-import type { ExecResult } from '../../engine/dataverseExecutor';
+import {
+  HEADER_CONSENT_DECLINED_CODE,
+  HEADER_REJECTED_CODE,
+  type ExecResult,
+} from '../../engine/dataverseExecutor';
 
 export type WriteOperation =
   | 'create'
@@ -94,6 +100,14 @@ export interface WriteResultContext {
   fileName?: string;
 }
 
+/** Writes after which the record still exists, so "Retrieve this record" makes sense. */
+const RETRIEVABLE_OPS: ReadonlySet<WriteOperation> = new Set<WriteOperation>([
+  'create',
+  'update',
+  'upsert',
+  'merge',
+]);
+
 export interface WriteResultCardProps {
   result: ExecResult;
   ctx: WriteResultContext;
@@ -143,6 +157,14 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
         : tokens.colorPaletteRedForeground1;
 
   const narrative = buildNarrative(ctx, result, resolvedId, entityDisplay);
+  // "Retrieve this record" (#3): after a write that leaves the record in
+  // place, jump to Retrieve Single with the table + id filled in and run it.
+  const canRetrieve =
+    family === 'success' &&
+    !!resolvedId &&
+    !!ctx.table &&
+    RETRIEVABLE_OPS.has(ctx.operation) &&
+    canOpenInMode();
   const recordUrl =
     resolvedId && tbl
       ? `https://${ENV.host}/api/data/v9.2/${tbl.entitySetName}(${resolvedId})`
@@ -195,7 +217,7 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
               status={
                 family === 'success' ? 'success' : family === 'warning' ? 'warning' : 'danger'
               }
-              code={result.status}
+              code={result.status || 'Error'}
               ms={result.ms}
             />
             <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
@@ -269,6 +291,27 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
                 </Tooltip>
               </>
             )}
+            {canRetrieve && (
+              <Tooltip
+                content="Open this record in Retrieve Single and run the request"
+                relationship="description"
+              >
+                <Button
+                  size="small"
+                  appearance="subtle"
+                  icon={<DocumentSearch20Regular />}
+                  onClick={() =>
+                    openInMode('retrieve-single', {
+                      table: ctx.table,
+                      recordId: resolvedId,
+                      autoExecute: true,
+                    })
+                  }
+                >
+                  Retrieve this record
+                </Button>
+              </Tooltip>
+            )}
           </div>
         )}
       </div>
@@ -314,6 +357,21 @@ function buildNarrative(
 
   // ── Failure framings — common error codes get specific copy ──
   if (!ok) {
+    const err = (result.body as { error?: { code?: string; message?: string } } | null)?.error;
+    const errCode = err?.code;
+    if (errCode === HEADER_CONSENT_DECLINED_CODE) {
+      return {
+        title: 'Not sent — headers not approved',
+        body: "Power Platform ToolBox didn't send the request because its headers weren't approved, so nothing changed in Dataverse. Execute again and approve the headers when ToolBox asks.",
+      };
+    }
+    if (errCode === HEADER_REJECTED_CODE) {
+      // Never sent: the host refused a header before calling Dataverse.
+      return {
+        title: 'Not sent — header rejected',
+        body: err?.message ?? 'Power Platform ToolBox rejected a request header.',
+      };
+    }
     if (result.status === 412) {
       const why =
         ctx.operation === 'upsert'
@@ -344,6 +402,14 @@ function buildNarrative(
     if (result.status === 403) {
       return { title: 'Forbidden', body: 'The calling user lacks the required privilege.' };
     }
+    if (result.status === 501) {
+      // Never sent: running standalone (no PPTB host), or an operation the
+      // host can't run. The executor's message says which.
+      return {
+        title: 'Not executed',
+        body: err?.message ?? 'The PPTB host could not run this request.',
+      };
+    }
     if (result.status >= 500) {
       return {
         title: 'Server error',
@@ -351,8 +417,8 @@ function buildNarrative(
       };
     }
     return {
-      title: `Failed · ${result.status} ${result.statusText}`,
-      body: 'See the JSON / Headers tabs for details.',
+      title: result.status ? `Failed · ${result.status} ${result.statusText}` : 'Failed',
+      body: 'See the JSON tab for details.',
     };
   }
 
