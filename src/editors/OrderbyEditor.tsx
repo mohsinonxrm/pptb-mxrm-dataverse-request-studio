@@ -20,10 +20,17 @@ import {
   ArrowDown20Regular,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
-import { findTable, isCompanionLogicalReadOnly, resolveNavPath } from '../mock/metadata';
+import {
+  findTable,
+  isCompanionLogicalReadOnly,
+  resolveNavPath,
+  type TableMeta,
+} from '../mock/metadata';
+import { attrRef } from '../engine/odataAttr';
 import { PaneHead } from './PaneHead';
 import { ApplyOverridesBanner } from './ApplyOverridesBanner';
 import { SortableList, SortableItem } from '../primitives/Sortable';
+import { MoreOptionsHint, useOptionSearch } from '../primitives/optionSearch';
 import type { RequestGroup } from '../registry/requestTypes';
 
 export interface OrderbySpec {
@@ -267,8 +274,34 @@ export function OrderbyEditor({
   );
 }
 
-export const orderbyToOData = (items: OrderbySpec[]): string =>
-  items.map((it) => (it.dir === 'asc' ? it.col : `${it.col} desc`)).join(',');
+/**
+ * Encode the sort list as the value of `$orderby=`.
+ *
+ * Lookup / Customer / Owner columns are emitted as `_<logical>_value` —
+ * the bare logical name is a navigation property, which Dataverse rejects
+ * in `$orderby` (same encoding `$select` / `$filter` already use, see
+ * `engine/odataAttr.ts`). Nav-path columns (`primarycontactid/fullname`)
+ * keep their prefix; only the leaf segment is rewritten, resolved against
+ * the table that owns it. `table` is the entity the sort applies to: the
+ * root table for the top-level `$orderby`, the expand's target table for
+ * an inner `$orderby`. Without it (metadata not loaded yet) columns pass
+ * through unchanged.
+ */
+export const orderbyToOData = (items: OrderbySpec[], table?: TableMeta): string =>
+  items
+    .map((it) => {
+      const c = orderbyColRef(table, it.col);
+      return it.dir === 'asc' ? c : `${c} desc`;
+    })
+    .join(',');
+
+function orderbyColRef(table: TableMeta | undefined, col: string): string {
+  if (!table) return col;
+  const leaf = resolveNavPath(table, col).leaf;
+  const parts = col.split('/');
+  const last = parts.pop() ?? col;
+  return [...parts, attrRef(leaf, last)].join('/');
+}
 
 // ────────────────────────────────────────────────────────────
 // Searchable column picker for the orderby row
@@ -293,13 +326,15 @@ function OrderbyColumnCombo({
   useEffect(() => {
     setQuery(currentDisplay ?? value);
   }, [currentDisplay, value]);
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q || q === (currentDisplay ?? '').toLowerCase()) return columns;
-    return columns.filter(
-      (c) => c.displayName.toLowerCase().includes(q) || c.logicalName.toLowerCase().includes(q),
-    );
-  }, [columns, query, currentDisplay]);
+  // Showing the committed column's label lists every column; capped +
+  // deferred because a table can have 800 columns (#21).
+  const effectiveQuery =
+    query.trim().toLowerCase() === (currentDisplay ?? '').toLowerCase() ? '' : query;
+  const {
+    visible: filtered,
+    matchCount,
+    hiddenCount,
+  } = useOptionSearch(columns, effectiveQuery, (c) => [c.displayName, c.logicalName]);
 
   return (
     <Combobox
@@ -318,10 +353,11 @@ function OrderbyColumnCombo({
           setQuery('');
         }
       }}
+      aria-label="Sort column"
       placeholder="Search columns…"
       listbox={{ style: { maxHeight: 320 } }}
     >
-      {filtered.length === 0 && (
+      {matchCount === 0 && (
         <Option value="__none" text="" disabled>
           <span style={{ color: tokens.colorNeutralForeground3, fontSize: 11 }}>
             No matches for "{query}"
@@ -342,6 +378,7 @@ function OrderbyColumnCombo({
           </span>
         </Option>
       ))}
+      <MoreOptionsHint hiddenCount={hiddenCount} />
     </Combobox>
   );
 }

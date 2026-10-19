@@ -284,7 +284,7 @@ export const useStudioStyles = makeStyles({
     fontSize: '11px',
     fontWeight: 700,
     letterSpacing: '0.04em',
-    color: '#fff',
+    color: 'var(--color-method-fg, #fff)',
     flexShrink: 0,
     minWidth: '52px',
     textAlign: 'center',
@@ -928,6 +928,15 @@ export const useStudioStyles = makeStyles({
     color: tokens.colorNeutralForeground2,
     cursor: 'pointer',
     ':hover': { backgroundColor: tokens.colorNeutralBackground1Hover },
+  },
+  /** Recent-run row with nothing to restore — no pointer / hover affordance. */
+  recentRowStatic: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'center',
+    padding: '6px 14px',
+    fontSize: '11px',
+    color: tokens.colorNeutralForeground2,
   },
 
   // ── Card row utility ───────────────────────────────────

@@ -517,6 +517,7 @@ export function ApplyEditor({
                       list (numeric vs numeric+date). */}
                         <LabeledInput label="function" minWidth={140}>
                           <Combobox
+                            aria-label={`Aggregate ${i + 1} function`}
                             size="small"
                             value={a.fn}
                             selectedOptions={[a.fn]}
@@ -559,6 +560,7 @@ export function ApplyEditor({
                         {a.fn !== '$count' && (
                           <LabeledInput label="column" minWidth={220} grow>
                             <Combobox
+                              aria-label={`Aggregate ${i + 1} column`}
                               size="small"
                               value={
                                 tbl.columns.find((c) => c.logicalName === a.col)?.displayName ??
@@ -599,6 +601,7 @@ export function ApplyEditor({
                         {/* Alias */}
                         <LabeledInput label="alias" minWidth={180} grow>
                           <Input
+                            aria-label={`Aggregate ${i + 1} alias`}
                             size="small"
                             value={a.alias}
                             onChange={(_, d) => updAgg(i, { alias: d.value })}

@@ -34,6 +34,7 @@ import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { TargetEditor } from '../editors/TargetEditor';
 import { SelectEditor } from '../editors/SelectEditor';
 import { FieldSetEditor, seedRequiredFieldValues } from '../editors/FieldSetEditor';
@@ -72,7 +73,9 @@ import {
   hashState,
   type SavedRequest,
   type SerializedCreateState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { rawBodyBlocker, rawBodyColumns } from '../engine/fieldBody';
 
@@ -101,7 +104,8 @@ type RootClauseId = 'target' | 'fieldset' | 'prefer' | 'returnselect' | 'headers
 
 export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('create');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('create', deserializeCreate, initialState);
+  const [state, setState] = useState(draft.state);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
   // The live table is a memo dependency below: build*() reads metadata via
   // findTable(), which is empty until the fetch lands — keying on `state`
@@ -115,8 +119,8 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
   // ── Save / Load tracking ──
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
 
   const built = useMemo(() => buildCreate(state), [state, liveTable]);
   const body = useMemo(() => buildCreateBody(state), [state, liveTable]);
@@ -201,7 +205,7 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   // ── Execute ──
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.create(state);
+    const res = await runtime.create(state, headerItemsToObject(headers, null));
     setResult(res);
     setLoading(false);
     setTab('results');
@@ -209,6 +213,7 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: 'create',
           url: built.relativeUrl,
           method: 'POST',
@@ -246,6 +251,7 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeCreate(state), [state]);
+  useStashModeDraft('create', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 
@@ -258,7 +264,7 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
     if (entry.modeId !== 'create') return;
     const snap = entry.state as SerializedCreateState;
     if (entities.length > 0 && !entities.some((e) => e.logicalName === snap.table)) {
-      window.alert(
+      notify(
         `Can't load "${entry.name}": entity \`${snap.table}\` ` +
           `isn't available in this environment. The solution may have been ` +
           `removed or you may be connected to a different org.`,
@@ -270,6 +276,19 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedHash(hashState(snap));
     setResult(null);
     setActivePath('target');
+  };
+
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'create');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
   };
 
   // Publish — hidden until table picked, no point persisting empty shell.
@@ -418,6 +437,10 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
               dirty: new Set(['target', 'fieldset']),
             }));
             setResult(null);
+            // New table → fresh draft. Forget the last save so Save can't
+            // overwrite an entry that belongs to the old table (#58).
+            setLastSavedId(undefined);
+            setLastSavedHash(null);
           }}
           group="write"
           sub="Pick the entity set the new row will be written to. Switching the target clears the body."
@@ -503,6 +526,7 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={
