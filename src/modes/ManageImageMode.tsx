@@ -50,6 +50,7 @@ import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from '../editors/PaneHead';
 import { TargetEditor } from '../editors/TargetEditor';
@@ -62,6 +63,7 @@ import { ResultsView } from '../views/ResultsView';
 import { findTable, type ImageColumnMeta } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildManageImage, manageImagePipeline } from '../engine/urlBuilder';
+import { pipelineCodegen } from '../engine/binaryBuilders';
 import { runtime, type ExecResult } from '../engine/runtime';
 import { checkUploadSize, type ManageImageState, type FileOperation } from '../state/binaryState';
 
@@ -87,7 +89,9 @@ import {
   hashState,
   type SavedRequest,
   type SerializedManageImageState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 const initialState = (): ManageImageState => ({
@@ -118,7 +122,8 @@ type RootClauseId =
 
 export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('manage-image');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('manage-image', deserializeManageImage, initialState);
+  const [state, setState] = useState(draft.state);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
   // The live table is a memo dependency below: build*() reads metadata via
   // findTable(), which is empty until the fetch lands — keying on `state`
@@ -188,6 +193,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: 'manage-image',
           url: built.relativeUrl,
           method: firstStepMethod,
@@ -204,9 +210,10 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const { entities } = useScopedEntities();
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const currentSerialized = useMemo(() => serializeManageImage(state), [state]);
+  useStashModeDraft('manage-image', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
   const onSaved = (saved: SavedRequest) => {
@@ -217,7 +224,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
     if (entry.modeId !== 'manage-image') return;
     const snap = entry.state as SerializedManageImageState;
     if (entities.length > 0 && snap.table && !entities.some((e) => e.logicalName === snap.table)) {
-      window.alert(
+      notify(
         `Can't load "${entry.name}": entity \`${snap.table}\` ` +
           `isn't available in this environment.`,
       );
@@ -229,6 +236,19 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(null);
     setRecordName('');
     setActivePath('preview');
+  };
+
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'manage-image');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
   };
   usePublishSaveContext(
     useMemo(() => {
@@ -582,11 +602,8 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
   const codeInputs = {
     method: firstStepMethod,
     built,
-    headers: headersMap,
-    body:
-      pipeline[0] && typeof pipeline[0].body === 'object'
-        ? (pipeline[0].body as Record<string, unknown>)
-        : undefined,
+    // Per-step headers + bodies (#60) — e.g. If-Match: * on image upload.
+    ...pipelineCodegen(pipeline, headersMap),
     entityLogical: built.entityLogical,
   };
 
@@ -603,6 +620,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={

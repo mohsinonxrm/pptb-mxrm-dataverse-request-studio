@@ -21,7 +21,7 @@
 // access control at the request boundary.
 
 import { useEffect, useMemo, useState } from 'react';
-import Editor from '@monaco-editor/react';
+import Editor from '../monaco/MonacoEditor';
 import {
   Filter20Regular,
   Filter20Filled,
@@ -49,23 +49,28 @@ import {
   Body1,
   Badge,
   Tooltip,
+  ToggleButton,
 } from '@fluentui/react-components';
 import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { PaneHead } from '../editors/PaneHead';
 import { TargetEditor } from '../editors/TargetEditor';
+import { RelatedCollectionTarget } from '../editors/RelatedCollectionTarget';
+import { SegmentedToggle } from '../primitives/SegmentedToggle';
 import { TopEditor } from '../editors/TopCountEditors';
 import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/PreferEditor';
 import { HeadersEditor, defaultReadHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
+import { topLevelRowCount } from '../views/results/flattenExpansions';
 import { findRequestType } from '../registry/requestTypes';
 import { findTable } from '../mock/metadata';
 import { buildPredefinedQuery } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
-import type { PredefinedQueryState, RecentRun } from '../state/readState';
+import type { PredefinedQueryState, PredefinedRelatedTarget, RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
@@ -76,7 +81,9 @@ import {
   hashState,
   type SavedRequest,
   type SerializedPredefinedQueryState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 // Empty initial state — the studio is a request *builder*. Pre-seeding a
@@ -94,6 +101,13 @@ const initialState = (): PredefinedQueryState => ({
 });
 
 type ClauseId = 'target' | 'conditions' | 'top' | 'prefer' | 'headers';
+
+const EMPTY_RELATED: PredefinedRelatedTarget = {
+  sourceTable: '',
+  relationshipName: '',
+  navProperty: '',
+  recordId: null,
+};
 
 // ── Live query shapes ──────────────────────────────────────────────────
 //
@@ -223,7 +237,8 @@ function queryTypeLabel(qt: number): string {
 export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('predefined-query');
   const s = useStudioStyles();
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('predefined-query', deserializePredefinedQuery, initialState);
+  const [state, setState] = useState(draft.state);
   // Live-metadata subscription so the entity-set name resolves once the
   // table cache lands.
   // The live table is a memo dependency below: build*() reads metadata via
@@ -238,8 +253,8 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
   // Save / Load
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
 
   // Live-fetched queries scoped to the chosen table.
   const [queries, setQueries] = useState<QueryRow[]>([]);
@@ -253,7 +268,10 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   // selection.
   const [comboInput, setComboInput] = useState<string>('');
 
-  const built = useMemo(() => buildPredefinedQuery(state), [state, liveTable]);
+  // Related-collection target (#5): the source table's entity set is part of
+  // the URL, so its metadata landing must rebuild it too.
+  const { table: liveSource } = useLiveTable(state.related?.sourceTable || null);
+  const built = useMemo(() => buildPredefinedQuery(state), [state, liveTable, liveSource]);
   const tbl = findTable(state.table);
   const selectedQuery = queries.find((q) => q.id === state.queryId) ?? null;
 
@@ -442,13 +460,14 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: 'predefined-query',
           url: built.relativeUrl,
           method: 'GET',
           ts: Date.now(),
           status: res.status,
           ms: res.ms,
-          rowCount: (res.body as { value?: unknown[] } | null)?.value?.length ?? 0,
+          rowCount: topLevelRowCount(res.body) ?? 0,
         },
         ...rs,
       ].slice(0, 8),
@@ -460,10 +479,13 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
     ? 'Pick a table first.'
     : !state.queryId
       ? 'Pick a saved query or user view.'
-      : null;
+      : state.related && !(state.related.navProperty && state.related.recordId)
+        ? 'Pick the relationship and the row whose related records to query.'
+        : null;
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializePredefinedQuery(state), [state]);
+  useStashModeDraft('predefined-query', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 
@@ -476,7 +498,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
     if (entry.modeId !== 'predefined-query') return;
     const snap = entry.state as SerializedPredefinedQueryState;
     if (entities.length > 0 && !entities.some((e) => e.logicalName === snap.table)) {
-      window.alert(
+      notify(
         `Can't load "${entry.name}": entity \`${snap.table}\` ` +
           `isn't available in this environment. The solution may have been ` +
           `removed or you may be connected to a different org.`,
@@ -488,6 +510,19 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedHash(hashState(snap));
     setResult(null);
     setActiveNode('target');
+  };
+
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'predefined-query');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
   };
 
   usePublishSaveContext(
@@ -596,13 +631,51 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <TargetEditor
             table={state.table}
-            onTableChange={onTableChange}
+            onTableChange={(logical) => {
+              onTableChange(logical);
+              // A related target belongs to the old table's relationships.
+              if (state.related) set('related', EMPTY_RELATED);
+            }}
             group="read"
             sub="Pick the table whose saved queries (system views) or user queries (personal views) you want to execute."
           />
 
           {state.table && (
             <div style={{ maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <Field
+                label="Run against"
+                hint={
+                  state.related
+                    ? 'The query runs over one row’s related records: /<set>(<id>)/<nav>?savedQuery=…'
+                    : 'The query runs over the whole table: /<set>?savedQuery=…'
+                }
+              >
+                <SegmentedToggle ariaLabel="Run the query against">
+                  <ToggleButton
+                    checked={!state.related}
+                    onClick={() => {
+                      if (state.related) set('related', null, 'target');
+                    }}
+                  >
+                    Table
+                  </ToggleButton>
+                  <ToggleButton
+                    checked={!!state.related}
+                    onClick={() => {
+                      if (!state.related) set('related', EMPTY_RELATED, 'target');
+                    }}
+                  >
+                    Related records of a row
+                  </ToggleButton>
+                </SegmentedToggle>
+              </Field>
+              {state.related && tbl && (
+                <RelatedCollectionTarget
+                  table={tbl}
+                  value={state.related}
+                  onChange={(next) => set('related', next, 'target')}
+                />
+              )}
               {/* One picker, two OptionGroups. Drops the tabs entirely — the
                 group headers ("System views" / "Personal views") communicate
                 kind without needing a second navigation level. Per the
@@ -947,6 +1020,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={
