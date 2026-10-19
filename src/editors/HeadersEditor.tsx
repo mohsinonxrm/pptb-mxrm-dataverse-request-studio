@@ -188,6 +188,7 @@ export function HeadersEditor({
             }}
           >
             <Switch
+              aria-label={`Send ${it.name || 'header'}`}
               checked={it.enabled}
               onChange={(_, d) => update(it.id, { enabled: d.checked })}
             />
@@ -196,6 +197,7 @@ export function HeadersEditor({
               value={it.name}
               onChange={(_, d) => update(it.id, { name: d.value })}
               placeholder="Header name"
+              aria-label="Header name"
               disabled={it.builtin}
               style={{ fontFamily: tokens.fontFamilyMonospace }}
             />
@@ -204,6 +206,7 @@ export function HeadersEditor({
               value={it.value}
               onChange={(_, d) => update(it.id, { value: d.value })}
               placeholder="value"
+              aria-label={`${it.name || 'Header'} value`}
               style={{ fontFamily: tokens.fontFamilyMonospace }}
             />
             {it.builtin ? (

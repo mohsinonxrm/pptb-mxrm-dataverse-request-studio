@@ -1,5 +1,6 @@
 import { tokens } from '@fluentui/react-components';
 import { useStudioStyles } from './styles';
+import { statusTextFor } from '../engine/dataverseExecutor';
 
 export type StatusKind = 'success' | 'danger' | 'warning' | 'info';
 
@@ -22,14 +23,12 @@ export function StatusPill({
     info: { bg: tokens.colorNeutralBackground3, fg: tokens.colorNeutralForeground2 },
   };
   const c = colors[status];
+  // Success badges carry the reason phrase from the shared status map, so a
+  // create reads "201 Created" and a 204 "204 No Content" (#123).
   const label =
     status === 'success'
-      ? `${code} OK`
-      : status === 'danger'
-        ? `${code}`
-        : status === 'warning'
-          ? `${code}`
-          : `${code}`;
+      ? `${code} ${(typeof code === 'number' && statusTextFor(code)) || 'OK'}`
+      : `${code}`;
   return (
     <span
       className={s.statusPill}

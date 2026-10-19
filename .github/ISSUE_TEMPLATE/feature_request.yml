@@ -23,7 +23,7 @@ body:
         - A new request mode
         - An existing mode (specify below)
         - URL builder / encoder
-        - Code generator (xrm / xrm-batch / fetch / curl / PowerShell)
+        - Code generator (fetch / Xrm.WebApi / executeMultiple / XHR / Power Automate / C# / PowerShell / cURL / JSON)
         - Results grid / detail view
         - Save / Load library
         - Settings / preferences
