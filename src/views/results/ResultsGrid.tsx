@@ -70,6 +70,7 @@ import {
 import { resolveColumnDisplay, type ColumnDisplayInfo } from './columnDisplayMap';
 import { flattenRows, ROW_KEY, topLevelRowCount } from './flattenExpansions';
 import { getCellRenderer } from './DataGridCellRenderers';
+import type { ExportColumn, GridExportView } from './exportResults';
 import { widthsForTable, withColumnWidths, withoutTableWidths } from './columnWidths';
 
 const ROW_HEIGHT_COZY = 44;
@@ -196,6 +197,8 @@ export interface ResultsGridProps {
    * the server returned.
    */
   preferredColumnOrder?: string[];
+  /** Reports the columns and rows the grid lists, for CSV export (#15). */
+  onViewChange?: (view: GridExportView) => void;
 }
 
 export function ResultsGrid({
@@ -213,6 +216,7 @@ export function ResultsGrid({
   status,
   serverTotal,
   preferredColumnOrder,
+  onViewChange,
 }: ResultsGridProps) {
   const styles = useStyles();
   const [settings, updateSettings] = usePersistedSettings();
@@ -675,6 +679,25 @@ export function ResultsGrid({
     }
     return out;
   }, [columns, columnDisplay, useLogicalNames, liveWidths, storedWidths]);
+
+  // ── Export view: the grid's columns + rows, so export matches the grid ──
+  useEffect(() => {
+    if (!onViewChange) return;
+    const exportColumns: ExportColumn[] = columns.map((c) => {
+      const id = String(c.columnId);
+      const isTwin = id.endsWith('__raw');
+      const sourceCol = isTwin ? id.slice(0, -5) : id;
+      const info = columnDisplay.get(sourceCol);
+      const label = (useLogicalNames ? info?.logicalName : info?.displayName) ?? sourceCol;
+      return {
+        id,
+        header: isTwin ? `${label} (Raw)` : label,
+        sourceCol,
+        showsRaw: isTwin || valueMode === 'raw',
+      };
+    });
+    onViewChange({ columns: exportColumns, rows });
+  }, [onViewChange, columns, columnDisplay, useLogicalNames, valueMode, rows]);
 
   // ── Selection ──
   const handleSelectionChange = useCallback(
