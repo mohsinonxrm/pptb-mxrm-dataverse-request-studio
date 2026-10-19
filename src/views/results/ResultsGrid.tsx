@@ -21,7 +21,12 @@
 //   • Selection: `getRowId` returns the entity's primary GUID. Multi-select
 //     via the DataGrid's built-in selection.
 //   • Infinite scroll: `onItemsRendered` fires `onLoadMore` when the user
-//     scrolls within 10 rows of the bottom and there are more pages.
+//     scrolls within 10 rows of the bottom and there are more pages —
+//     paused while the rows are filtered, so a narrow filter doesn't page
+//     through the whole table behind the user's back.
+//   • Client-side search + per-column filter row (#17) over the loaded
+//     rows, debounced and run against a per-row text index (gridFilter.ts).
+//     Columns come from all loaded rows, so they don't shift while filtering.
 //
 // Notes:
 //   - Sort state comes from `OrderbySpec[]` (the studio's multi-sort model).
@@ -42,6 +47,7 @@ import {
   useScrollbarWidth,
   useFluent,
   Spinner,
+  Input,
   Link,
 } from '@fluentui/react-components';
 import {
@@ -73,6 +79,7 @@ import { flattenRows, ROW_KEY, topLevelRowCount } from './flattenExpansions';
 import { getCellRenderer } from './DataGridCellRenderers';
 import type { ExportColumn, GridExportView } from './exportResults';
 import { widthsForTable, withColumnWidths, withoutTableWidths } from './columnWidths';
+import { buildSearchIndex, filterRows, isFiltering, type ColumnFilters } from './gridFilter';
 
 // Row heights per density — Fluent's table row heights for each `size` (#16).
 const ROW_HEIGHT: Record<GridDensity, number> = { medium: 44, small: 34, 'extra-small': 24 };
@@ -152,6 +159,26 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground3,
     fontSize: tokens.fontSizeBase300,
   },
+  filterRow: { backgroundColor: tokens.colorNeutralBackground2 },
+  filterCell: { paddingTop: '2px', paddingBottom: '2px' },
+  filterInput: { width: '100%', minWidth: 0 },
+  noMatch: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: tokens.spacingVerticalS,
+    paddingTop: tokens.spacingVerticalXXL,
+    color: tokens.colorNeutralForeground3,
+    pointerEvents: 'none',
+  },
+  filtered: {
+    color: tokens.colorBrandForeground1,
+    fontWeight: tokens.fontWeightSemibold,
+  },
   loadingMore: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -180,6 +207,10 @@ export interface ResultsGridProps {
   onSelectionChange?: (recordIds: string[]) => void;
   /** Client-side row search query (filters across raw + formatted values). */
   searchQuery?: string;
+  /** Clears the toolbar search (the grid's "Clear filters" action). */
+  onClearSearch?: () => void;
+  /** Show the per-column filter row under the header (#17). */
+  showFilterRow?: boolean;
   /** Row density — Fluent DataGrid `size` (#16). */
   density?: GridDensity;
   /** Status info rendered in the grid's bottom info bar (replaces the old top strip). */
@@ -214,6 +245,8 @@ export function ResultsGrid({
   onLoadMore,
   onSelectionChange,
   searchQuery = '',
+  onClearSearch,
+  showFilterRow = false,
   density: densityProp = 'medium',
   status,
   serverTotal,
@@ -250,21 +283,16 @@ export function ResultsGrid({
   // grid line per child, so the line count is shown separately (#122).
   const recordCount = topLevelRowCount(body) ?? 0;
 
-  // ── Client-side search (raw + formatted values) ──
-  const rows = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return allRows;
-    return allRows.filter((r) =>
-      Object.keys(r).some((k) => {
-        if (k.includes('@')) return false; // skip annotation keys for the column scan
-        const f = getFormattedValue(r, k);
-        if (f != null && String(f).toLowerCase().includes(q)) return true;
-        return String(r[k] ?? '')
-          .toLowerCase()
-          .includes(q);
-      }),
-    );
-  }, [allRows, searchQuery]);
+  // ── Per-column filter row state (#17) ──
+  // Hidden filters must not keep narrowing the rows, so hiding the row clears them.
+  const [columnFilters, setColumnFilters] = useState<ColumnFilters>({});
+  useEffect(() => {
+    if (!showFilterRow) setColumnFilters({});
+  }, [showFilterRow]);
+  // Debounced so typing stays responsive on large result sets.
+  const debouncedQuery = useDebouncedValue(searchQuery, 200);
+  const debouncedFilters = useDebouncedValue(columnFilters, 200);
+  const filtering = isFiltering(debouncedQuery, debouncedFilters);
 
   // ── Container ResizeObserver ──
   useEffect(() => {
@@ -278,7 +306,7 @@ export function ResultsGrid({
     });
     obs.observe(node);
     return () => obs.disconnect();
-  }, [rows.length === 0]);
+  }, [allRows.length === 0]);
 
   // ── Header ResizeObserver ──
   useEffect(() => {
@@ -287,7 +315,7 @@ export function ResultsGrid({
     const obs = new ResizeObserver(() => setHeaderHeight(node.offsetHeight));
     obs.observe(node);
     return () => obs.disconnect();
-  }, [rows.length === 0]);
+  }, [allRows.length === 0]);
 
   // ── Clear selection when results change ──
   useEffect(() => {
@@ -321,9 +349,9 @@ export function ResultsGrid({
   // Annotation keys (`@…`) and the synthetic `__rowKey` are filtered.
   const hasExplicitRootSelect = !!select && select.length > 0;
   const columnKeys = useMemo(() => {
-    if (rows.length === 0) return [];
+    if (allRows.length === 0) return [];
     const allPresent = new Set<string>();
-    for (const r of rows) for (const k of Object.keys(r)) allPresent.add(k);
+    for (const r of allRows) for (const k of Object.keys(r)) allPresent.add(k);
 
     const ordered: string[] = [];
     const seen = new Set<string>();
@@ -400,7 +428,18 @@ export function ResultsGrid({
     }
 
     return filterDisplayableColumns(ordered);
-  }, [rows, select, expand, hasExplicitRootSelect, preferredColumnOrder]);
+  }, [allRows, select, expand, hasExplicitRootSelect, preferredColumnOrder]);
+
+  // ── Client-side search + column filters over the loaded rows (#17) ──
+  const searchIndex = useMemo(() => buildSearchIndex(allRows, columnKeys), [allRows, columnKeys]);
+  const rows = useMemo(
+    () => filterRows(allRows, searchIndex, debouncedQuery, debouncedFilters),
+    [allRows, searchIndex, debouncedQuery, debouncedFilters],
+  );
+  const clearFilters = useCallback(() => {
+    setColumnFilters({});
+    onClearSearch?.();
+  }, [onClearSearch]);
 
   // ── Column display info (parent table, leaf column meta, header label) ──
   const rootTable = table ? findTable(table) : undefined;
@@ -412,6 +451,14 @@ export function ResultsGrid({
     return m;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columnKeys, rootTable?.logicalName, expand, useLogicalNames]);
+
+  // Header label for a grid column id (a "(Raw)" twin gets the suffix).
+  const columnLabel = (id: string): string => {
+    const isTwin = id.endsWith('__raw');
+    const info = columnDisplay.get(isTwin ? id.slice(0, -5) : id);
+    const label = (useLogicalNames ? info?.logicalName : info?.displayName) ?? id;
+    return isTwin ? `${label} (Raw)` : label;
+  };
 
   // ── Sort state map (from $orderby) ──
   const sortMap = useMemo(() => {
@@ -532,7 +579,7 @@ export function ResultsGrid({
       }
 
       if (valueMode === 'both') {
-        const anyDiffers = rows.some((r) => {
+        const anyDiffers = allRows.some((r) => {
           const f = getFormattedValue(r, key);
           return f != null && f !== r[key];
         });
@@ -563,7 +610,7 @@ export function ResultsGrid({
         }),
       ];
     });
-  }, [columnKeys, columnDisplay, sortMap, valueMode, useLogicalNames, rows, styles]);
+  }, [columnKeys, columnDisplay, sortMap, valueMode, useLogicalNames, allRows, styles]);
 
   // ── Persisted column widths (#12) ──
   // `liveWidths` holds widths dragged this session so the sizing options
@@ -756,13 +803,14 @@ export function ResultsGrid({
   // ── Infinite scroll: trigger onLoadMore when scrolled near the bottom ──
   const handleItemsRendered = useCallback(
     ({ visibleStopIndex }: { visibleStartIndex: number; visibleStopIndex: number }) => {
-      if (!hasMore || !onLoadMore || isLoadingMore) return;
+      // While filtered, the listed rows aren't the loaded rows: don't page behind the user's back.
+      if (!hasMore || !onLoadMore || isLoadingMore || filtering) return;
       const threshold = Math.min(10, Math.max(1, Math.floor(rows.length * 0.1)));
       if (visibleStopIndex >= rows.length - threshold) {
         onLoadMore();
       }
     },
-    [hasMore, onLoadMore, isLoadingMore, rows.length],
+    [hasMore, onLoadMore, isLoadingMore, filtering, rows.length],
   );
 
   // ── Empty / loading states ──
@@ -771,7 +819,7 @@ export function ResultsGrid({
   // it just had `value: []`. Include the executed URL so the user can
   // sanity-check the criteria they sent (e.g. spotting a typo in a filter
   // value) without leaving the Results tab.
-  if (rows.length === 0) {
+  if (allRows.length === 0) {
     const responseStatus = status?.code;
     return (
       <div
@@ -843,6 +891,29 @@ export function ResultsGrid({
                   </DataGridHeaderCell>
                 )}
               </DataGridRow>
+              {showFilterRow && (
+                <DataGridRow
+                  className={styles.filterRow}
+                  // The selection column has nothing to filter.
+                  selectionCell={{ style: { visibility: 'hidden' }, 'aria-hidden': true }}
+                >
+                  {({ columnId }) => {
+                    const id = String(columnId);
+                    return (
+                      <DataGridCell className={styles.filterCell}>
+                        <Input
+                          size="small"
+                          className={styles.filterInput}
+                          placeholder="Filter…"
+                          aria-label={`Filter ${columnLabel(id)}`}
+                          value={columnFilters[id] ?? ''}
+                          onChange={(_, d) => setColumnFilters((f) => ({ ...f, [id]: d.value }))}
+                        />
+                      </DataGridCell>
+                    );
+                  }}
+                </DataGridRow>
+              )}
             </DataGridHeader>
             <DataGridBody<Record<string, unknown>>
               itemSize={rowHeight}
@@ -856,6 +927,14 @@ export function ResultsGrid({
               {renderRow}
             </DataGridBody>
           </DataGrid>
+          {rows.length === 0 && filtering && (
+            <div className={styles.noMatch} style={{ top: headerHeight }}>
+              <span>No loaded rows match the search / filters.</span>
+              <Link style={{ pointerEvents: 'auto' }} onClick={clearFilters}>
+                Clear filters
+              </Link>
+            </div>
+          )}
         </div>
 
         {/* Info bar — status + size + row count + selection (moved from top strip per UX feedback) */}
@@ -882,10 +961,15 @@ export function ResultsGrid({
                   records
                 </>
               )}
-              {searchQuery && rows.length !== allRows.length && (
+              {filtering && (
                 <>
-                  {' '}
-                  · <strong>{rows.length.toLocaleString()}</strong> shown
+                  {' · '}
+                  <span className={styles.filtered}>
+                    Filtered: {rows.length.toLocaleString()} of {allRows.length.toLocaleString()}{' '}
+                    loaded {allRows.length === recordCount ? 'rows' : 'grid lines'}
+                    {hasMore ? ' (more pages not loaded)' : ''}
+                  </span>{' '}
+                  <Link onClick={clearFilters}>Clear filters</Link>
                 </>
               )}
               {serverTotal != null && serverTotal >= 0 && (
@@ -918,4 +1002,14 @@ export function ResultsGrid({
       </div>
     </div>
   );
+}
+
+/** `value`, updated only after it has been stable for `ms` milliseconds. */
+function useDebouncedValue<T>(value: T, ms: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return debounced;
 }

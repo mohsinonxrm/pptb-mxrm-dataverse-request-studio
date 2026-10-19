@@ -13,9 +13,9 @@
 //                    file via toolboxAPI.fileSystem.saveFile (#15)
 //   • Selection count + row count
 //
-// Search is intentionally NOT here — it's a column-list operation handled
-// inside ResultsGrid. The command bar is for *actions on the result set*,
-// not for filtering it.
+// The search box and the Filter row toggle only drive ResultsGrid's
+// client-side filtering of the loaded rows (#17); they never change the
+// request.
 
 import {
   Toolbar,
@@ -38,6 +38,7 @@ import {
   MessageBarActions,
   Button,
   MenuItemRadio,
+  ToggleButton,
 } from '@fluentui/react-components';
 import {
   ArrowClockwise20Regular,
@@ -50,6 +51,7 @@ import {
   TextDensity20Regular,
   ArrowExportUp20Regular,
   Dismiss20Regular,
+  Filter20Regular,
 } from '@fluentui/react-icons';
 import type { GridDensity } from '../../state/displaySettings';
 import { useState } from 'react';
@@ -107,6 +109,9 @@ export interface ResultsCommandBarProps {
   table?: string;
   /** The columns + rows the grid lists; CSV export writes exactly these. */
   exportView?: GridExportView | null;
+  /** Per-column filter row under the grid header (#17). */
+  showFilterRow: boolean;
+  onShowFilterRowChange: (show: boolean) => void;
 }
 
 export function ResultsCommandBar({
@@ -120,6 +125,8 @@ export function ResultsCommandBar({
   onStopLoadingMore,
   searchQuery,
   onSearchChange,
+  showFilterRow,
+  onShowFilterRowChange,
   density,
   onDensityChange,
   table,
@@ -321,6 +328,21 @@ export function ResultsCommandBar({
           onChange={(_, d) => onSearchChange(d.value)}
           style={{ minWidth: 220 }}
         />
+
+        <Tooltip
+          content="Filter each column of the loaded rows (doesn't change the request)"
+          relationship="description"
+        >
+          <ToggleButton
+            appearance="subtle"
+            size="small"
+            icon={<Filter20Regular />}
+            checked={showFilterRow}
+            onClick={() => onShowFilterRowChange(!showFilterRow)}
+          >
+            Filter row
+          </ToggleButton>
+        </Tooltip>
 
         <Menu
           checkedValues={{ density: [density] }}

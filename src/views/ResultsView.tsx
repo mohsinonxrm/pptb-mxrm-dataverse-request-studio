@@ -107,6 +107,7 @@ export function ResultsView({
   const density = settings.gridDensity;
   // What the grid lists (columns + rows after search) — CSV export writes this.
   const [gridView, setGridView] = useState<GridExportView | null>(null);
+  const [showFilterRow, setShowFilterRow] = useState(false);
   const s = useStudioStyles();
   useAnnounceResult(result);
 
@@ -217,6 +218,8 @@ export function ResultsView({
           onStopLoadingMore={onStopLoadingMore}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
+          showFilterRow={showFilterRow}
+          onShowFilterRowChange={setShowFilterRow}
           density={density}
           onDensityChange={(d) => setSettings({ ...settings, gridDensity: d })}
           table={table}
@@ -271,6 +274,8 @@ export function ResultsView({
               isLoadingMore={isLoadingMore}
               onLoadMore={onLoadMore}
               searchQuery={searchQuery}
+              onClearSearch={() => setSearchQuery('')}
+              showFilterRow={showFilterRow}
               density={density}
               status={{ code: result.status, ms: result.ms, bytes: result.bytes }}
               serverTotal={serverTotal}
