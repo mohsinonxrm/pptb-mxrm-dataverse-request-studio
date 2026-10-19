@@ -36,6 +36,12 @@ import {
   MessageBarTitle,
   MessageBarActions,
   Switch,
+  Menu,
+  MenuTrigger,
+  MenuButton,
+  MenuPopover,
+  MenuList,
+  MenuItem,
   mergeClasses,
   makeStyles,
 } from '@fluentui/react-components';
@@ -50,8 +56,17 @@ import {
   Checkmark16Filled,
   ArrowDownload16Regular,
   ArrowUpload16Regular,
+  DocumentArrowRight16Regular,
 } from '@fluentui/react-icons';
 import { isEmbedded, saveFileSafe, tbHost } from '../host/pptbBridge';
+import {
+  buildCollection,
+  collectionFileName,
+  countRequests,
+  COLLECTION_FORMAT_LABELS,
+  type CollectionFormat,
+} from '../engine/collectionFormats';
+import { currentBaseUrl, loadTablesFor, savedToCollectionItem } from '../engine/savedToCollection';
 import {
   autoSuggestName,
   buildSavedExport,
@@ -612,7 +627,7 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
             })}
           </div>
         )}
-        <SavedLibraryTransfer />
+        <SavedLibraryTransfer visible={list} allModes={allModes} modeId={modeId} />
       </PopoverSurface>
     </Popover>
   );
@@ -635,7 +650,16 @@ interface TransferStatus {
  * mode) as a JSON file. Uses the host's native dialogs inside PPTB and a
  * download / file input standalone. Results show inline — no native dialogs.
  */
-function SavedLibraryTransfer() {
+function SavedLibraryTransfer({
+  visible,
+  allModes,
+  modeId,
+}: {
+  /** Entries shown in the list (this mode, or every mode with All modes on). */
+  visible: SavedRequest[];
+  allModes: boolean;
+  modeId: SavedModeId;
+}) {
   const s = useStyles();
   const { saved, importEntries } = useSavedRequests();
   const [status, setStatus] = useState<TransferStatus | null>(null);
@@ -698,6 +722,51 @@ function SavedLibraryTransfer() {
     }
   };
 
+  // Export the listed entries as a request collection for another HTTP
+  // client (#27). Entries whose table isn't on this connection are skipped
+  // and named in the result.
+  const onExportCollection = async (fmt: CollectionFormat) => {
+    setStatus(null);
+    setBusy(true);
+    try {
+      await loadTablesFor(visible);
+      const converted = visible.map(savedToCollectionItem);
+      const items = converted.flatMap((c) => (c.ok ? [c.item] : []));
+      const skipped = converted.flatMap((c) => (c.ok ? [] : [`${c.name} (${c.reason})`]));
+      if (items.length === 0) {
+        setStatus({
+          intent: 'error',
+          title: "Couldn't export",
+          text: `None of the listed requests could be built. ${skipped.join('; ')}`,
+        });
+        return;
+      }
+      const scope = getOrgScope();
+      const name = `Dataverse Request Studio · ${scope}${allModes ? '' : ` · ${modeIdShort(modeId)}`}`;
+      const fileName = collectionFileName(
+        fmt,
+        `drs-${scope}${allModes ? '' : `-${modeIdShort(modeId)}`}`,
+      );
+      const text = buildCollection(fmt, { name, baseUrl: currentBaseUrl(), items });
+      const path = await saveFileSafe(fileName, text, JSON_FILTER);
+      if (path || !isEmbedded()) {
+        const n = countRequests(items);
+        setStatus({
+          intent: skipped.length ? 'warning' : 'success',
+          title: 'Exported',
+          text:
+            `${items.length} saved request(s) (${n} HTTP request(s)) written to ${path ?? fileName}. ` +
+            'Set the accessToken variable to a bearer token before sending.' +
+            (skipped.length ? ` Skipped: ${skipped.join('; ')}.` : ''),
+        });
+      }
+    } catch (e) {
+      fail("Couldn't export", e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const onImport = async () => {
     setStatus(null);
     if (!isEmbedded() || !window.toolboxAPI) {
@@ -737,6 +806,32 @@ function SavedLibraryTransfer() {
             Export
           </Button>
         </Tooltip>
+        <Menu>
+          <MenuTrigger disableButtonEnhancement>
+            <Tooltip
+              content={`Export the ${visible.length} listed request(s) as a collection for another HTTP client`}
+              relationship="description"
+            >
+              <MenuButton
+                appearance="subtle"
+                size="small"
+                icon={<DocumentArrowRight16Regular />}
+                disabled={busy || visible.length === 0}
+              >
+                Export as
+              </MenuButton>
+            </Tooltip>
+          </MenuTrigger>
+          <MenuPopover>
+            <MenuList>
+              {(Object.keys(COLLECTION_FORMAT_LABELS) as CollectionFormat[]).map((fmt) => (
+                <MenuItem key={fmt} onClick={() => void onExportCollection(fmt)}>
+                  {COLLECTION_FORMAT_LABELS[fmt]}
+                </MenuItem>
+              ))}
+            </MenuList>
+          </MenuPopover>
+        </Menu>
         <Tooltip
           content="Add saved requests from an exported JSON file to this connection"
           relationship="description"
