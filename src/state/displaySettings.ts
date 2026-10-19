@@ -17,6 +17,9 @@ export type ValueDisplayMode = 'formatted' | 'raw' | 'both';
 
 export type EntityScopeMode = 'publisher-solution' | 'solution-only' | 'all';
 
+/** Results-grid row density — Fluent DataGrid's `size` values (#16). */
+export type GridDensity = 'extra-small' | 'small' | 'medium';
+
 export interface DisplaySettings {
   useLogicalNames: boolean;
   valueDisplayMode: ValueDisplayMode;
@@ -24,6 +27,8 @@ export interface DisplaySettings {
   columnWidths: ColumnWidthStore;
   entityScopeMode: EntityScopeMode;
   advancedFindOnly: boolean;
+  /** Results-grid row density (#16). */
+  gridDensity: GridDensity;
   /**
    * Selected publisher ids (publisherid GUIDs). Used when
    * entityScopeMode === 'publisher-solution' to narrow the solution list.
@@ -44,6 +49,7 @@ export const defaultDisplaySettings: DisplaySettings = {
   columnWidths: {},
   entityScopeMode: 'publisher-solution',
   advancedFindOnly: true,
+  gridDensity: 'medium',
   selectedPublisherIds: [],
   selectedSolutionIds: [],
 };

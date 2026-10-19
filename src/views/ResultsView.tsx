@@ -28,6 +28,7 @@ import type { ExecResult } from '../engine/dataverseExecutor';
 import { ResultsGrid } from './results/ResultsGrid';
 import { ResultsCommandBar } from './results/ResultsCommandBar';
 import type { GridExportView } from './results/exportResults';
+import { usePersistedSettings } from '../host/usePersistedSettings';
 import { RecordDetailCard } from './detail/RecordDetailCard';
 import { WriteResultCard, type WriteResultContext } from './results/WriteResultCard';
 import type { ExpandSpec } from '../editors/ExpandEditor';
@@ -101,7 +102,9 @@ export function ResultsView({
   // Grid-local UI state. We hoist it here (not inside ResultsGrid) so the
   // command bar can drive it without prop-drilling through the grid.
   const [searchQuery, setSearchQuery] = useState('');
-  const [density, setDensity] = useState<'cozy' | 'compact'>('cozy');
+  // Row density is a persisted display setting (#16).
+  const [settings, setSettings] = usePersistedSettings();
+  const density = settings.gridDensity;
   // What the grid lists (columns + rows after search) — CSV export writes this.
   const [gridView, setGridView] = useState<GridExportView | null>(null);
   const s = useStudioStyles();
@@ -215,7 +218,7 @@ export function ResultsView({
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           density={density}
-          onDensityChange={setDensity}
+          onDensityChange={(d) => setSettings({ ...settings, gridDensity: d })}
           table={table}
           exportView={gridView}
         />

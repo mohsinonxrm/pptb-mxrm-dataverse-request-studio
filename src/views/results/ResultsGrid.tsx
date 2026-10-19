@@ -59,6 +59,7 @@ import { findTable } from '../../mock/metadata';
 import type { ExpandSpec } from '../../editors/ExpandEditor';
 import type { OrderbySpec } from '../../editors/OrderbyEditor';
 import { usePersistedSettings } from '../../host/usePersistedSettings';
+import type { GridDensity } from '../../state/displaySettings';
 import { StatusPill } from '../../primitives/StatusPill';
 
 import {
@@ -73,8 +74,9 @@ import { getCellRenderer } from './DataGridCellRenderers';
 import type { ExportColumn, GridExportView } from './exportResults';
 import { widthsForTable, withColumnWidths, withoutTableWidths } from './columnWidths';
 
-const ROW_HEIGHT_COZY = 44;
-const ROW_HEIGHT_COMPACT = 32;
+// Row heights per density — Fluent's table row heights for each `size` (#16).
+const ROW_HEIGHT: Record<GridDensity, number> = { medium: 44, small: 34, 'extra-small': 24 };
+const HEADER_HEIGHT: Record<GridDensity, number> = { medium: 40, small: 34, 'extra-small': 28 };
 
 const useStyles = makeStyles({
   container: {
@@ -178,8 +180,8 @@ export interface ResultsGridProps {
   onSelectionChange?: (recordIds: string[]) => void;
   /** Client-side row search query (filters across raw + formatted values). */
   searchQuery?: string;
-  /** Row density. */
-  density?: 'cozy' | 'compact';
+  /** Row density — Fluent DataGrid `size` (#16). */
+  density?: GridDensity;
   /** Status info rendered in the grid's bottom info bar (replaces the old top strip). */
   status?: { code: number; ms: number; bytes: number };
   /** Server-emitted @odata.count, when $count=true was set. */
@@ -212,7 +214,7 @@ export function ResultsGrid({
   onLoadMore,
   onSelectionChange,
   searchQuery = '',
-  density = 'cozy',
+  density: densityProp = 'medium',
   status,
   serverTotal,
   preferredColumnOrder,
@@ -233,7 +235,10 @@ export function ResultsGrid({
   const [headerHeight, setHeaderHeight] = useState(0);
   const [selectedItems, setSelectedItems] = useState<Set<string | number>>(new Set());
 
-  const rowHeight = density === 'compact' ? ROW_HEIGHT_COMPACT : ROW_HEIGHT_COZY;
+  // Fall back to medium for anything unexpected (e.g. a stale stored value).
+  const density: GridDensity = densityProp in ROW_HEIGHT ? densityProp : 'medium';
+  const rowHeight = ROW_HEIGHT[density];
+  const headerRowHeight = `${HEADER_HEIGHT[density]}px`;
 
   // ── Flatten nested $expand objects to dotted-key columns ──
   const allRows = useMemo(() => {
@@ -810,6 +815,7 @@ export function ResultsGrid({
         <div ref={containerRef} className={styles.gridContent}>
           <DataGrid
             aria-label={table ?? 'Results'}
+            size={density}
             items={rows}
             columns={columns}
             // We render sort arrows ourselves (driven by $orderby state).
@@ -828,7 +834,7 @@ export function ResultsGrid({
               style={{ paddingRight: scrollbarWidth }}
             >
               <DataGridRow
-                style={{ minHeight: '40px', maxHeight: '40px' }}
+                style={{ minHeight: headerRowHeight, maxHeight: headerRowHeight }}
                 selectionCell={{ checkboxIndicator: { 'aria-label': 'Select all rows' } }}
               >
                 {({ renderHeaderCell }) => (
