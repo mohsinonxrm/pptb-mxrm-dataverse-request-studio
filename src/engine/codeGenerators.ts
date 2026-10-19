@@ -9,6 +9,7 @@
 
 import type { BuiltRequest } from './urlBuilder';
 import { ENV } from '../mock/environment';
+import { generateOpenApi } from './openApiGenerator';
 
 export type CodeFormat =
   | 'fetch'
@@ -19,7 +20,8 @@ export type CodeFormat =
   | 'csharp'
   | 'powershell'
   | 'curl'
-  | 'json';
+  | 'json'
+  | 'openapi';
 
 export const FORMAT_LABELS: Record<CodeFormat, string> = {
   fetch: 'fetch',
@@ -31,6 +33,7 @@ export const FORMAT_LABELS: Record<CodeFormat, string> = {
   powershell: 'PowerShell',
   curl: 'cURL',
   json: 'JSON',
+  openapi: 'OpenAPI',
 };
 
 export const FORMAT_LANG: Record<CodeFormat, string> = {
@@ -45,6 +48,7 @@ export const FORMAT_LANG: Record<CodeFormat, string> = {
   powershell: 'powershell',
   curl: 'shell',
   json: 'json',
+  openapi: 'json',
 };
 
 export interface CodegenInputs {
@@ -163,6 +167,8 @@ export function generateCode(fmt: CodeFormat, i: CodegenInputs): string {
       return genCurl(i);
     case 'json':
       return genJson(i);
+    case 'openapi':
+      return generateOpenApi(i);
   }
 }
 
