@@ -54,6 +54,31 @@ import type {
   ManageAttachmentState,
 } from '../state/binaryState';
 import { isEmbedded } from '../host/pptbBridge';
+import { invalidateLookupRecords } from '../host/useLookupRecords';
+
+// Writes go through `afterWrite`, which drops cached record-picker searches
+// once the request settles, so pickers re-query instead of showing a
+// record's old name (#81). It runs even when the call fails, since a
+// failed or timed-out response doesn't prove nothing was written.
+// `table` is the table written to; `undefined` drops every table — a delete
+// can cascade, a create can deep-insert related rows, and actions and
+// workflows can touch anything.
+// Trailing arguments (the write group's request headers, #43) pass through
+// unchanged.
+function afterWrite<S, Rest extends unknown[]>(
+  run: (s: S, ...rest: Rest) => Promise<ExecResult>,
+  table: (s: S) => string | undefined,
+): (s: S, ...rest: Rest) => Promise<ExecResult> {
+  return async (s, ...rest) => {
+    try {
+      return await run(s, ...rest);
+    } finally {
+      invalidateLookupRecords(table(s));
+    }
+  };
+}
+const everyTable = () => undefined;
+const ownTable = (s: { table: string }) => s.table;
 
 // One dispatch wrapper per executor method.
 export const runtime = neverThrow({
@@ -62,16 +87,32 @@ export const runtime = neverThrow({
   nextLink: (s: RetrieveNextLinkState) => liveNextLink(s),
   absoluteUrl: (url: string) => liveAbsoluteUrl(url),
   predefined: (s: PredefinedQueryState) => livePredefined(s),
-  create: (s: CreateState, headers?: Record<string, string>) => liveCreate(s, headers),
-  update: (s: UpdateState, headers?: Record<string, string>) => liveUpdate(s, headers),
-  upsert: (s: UpsertState, headers?: Record<string, string>) => liveUpsert(s, headers),
-  delete: (s: DeleteState, headers?: Record<string, string>) => liveDelete(s, headers),
-  merge: (s: MergeState, headers?: Record<string, string>) => liveMerge(s, headers),
-  associate: (s: AssociateState) => liveAssociate(s),
-  disassociate: (s: DisassociateState) => liveDisassociate(s),
-  action: (s: ExecuteActionState) => liveAction(s),
+  create: afterWrite(
+    (s: CreateState, headers?: Record<string, string>) => liveCreate(s, headers),
+    everyTable,
+  ),
+  update: afterWrite(
+    (s: UpdateState, headers?: Record<string, string>) => liveUpdate(s, headers),
+    ownTable,
+  ),
+  upsert: afterWrite(
+    (s: UpsertState, headers?: Record<string, string>) => liveUpsert(s, headers),
+    ownTable,
+  ),
+  delete: afterWrite(
+    (s: DeleteState, headers?: Record<string, string>) => liveDelete(s, headers),
+    everyTable,
+  ),
+  merge: afterWrite(
+    (s: MergeState, headers?: Record<string, string>) => liveMerge(s, headers),
+    ownTable,
+  ),
+  associate: afterWrite((s: AssociateState) => liveAssociate(s), ownTable),
+  disassociate: afterWrite((s: DisassociateState) => liveDisassociate(s), ownTable),
+  action: afterWrite((s: ExecuteActionState) => liveAction(s), everyTable),
+  // Functions are side-effect free by definition — nothing to invalidate.
   function: (s: ExecuteFunctionState) => liveFunction(s),
-  workflow: (s: ExecuteWorkflowState) => liveWorkflow(s),
+  workflow: afterWrite((s: ExecuteWorkflowState) => liveWorkflow(s), everyTable),
   manageFile: (s: ManageFileState) => liveManageFile(s),
   manageImage: (s: ManageImageState) => liveManageImage(s),
   manageAttachment: (s: ManageAttachmentState) => liveManageAttachment(s),

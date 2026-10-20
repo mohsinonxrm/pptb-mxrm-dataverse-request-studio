@@ -1,6 +1,6 @@
 // useAccessMode — privilege check + access-mode derivation.
 //
-// On mount:
+// On mount, and again when the PPTB connection switches to another org (#52):
 //   1. Calls WhoAmI to grab the current user id.
 //   2. Parallel `RetrieveUserPrivilegeByPrivilegeName` for prvReadPublisher /
 //      prvReadSolution / prvReadCustomization.
@@ -12,13 +12,21 @@
 import { useState, useEffect } from 'react';
 import { getAccessSummary, type AccessSummary } from './pptbClient';
 import { loadAllEntities } from './dataverseMetadata';
+import { useActiveOrg } from './activeOrg';
+import { useHostSession } from './HostContext';
 
 export function useAccessMode() {
   const [accessSummary, setAccessSummary] = useState<AccessSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { embedded } = useHostSession();
+  const org = useActiveOrg();
 
   useEffect(() => {
+    // Privileges belong to the org (and user) — never show the previous one's.
+    setAccessSummary(null);
+    // Inside PPTB, wait for a connection. Standalone runs once and fails.
+    if (embedded && !org) return;
     let mounted = true;
 
     async function checkAccess() {
@@ -53,7 +61,7 @@ export function useAccessMode() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [embedded, org]);
 
   return {
     accessSummary,

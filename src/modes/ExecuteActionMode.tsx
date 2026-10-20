@@ -36,7 +36,7 @@ import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../edit
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { type CsdlAction } from '../mock/actionsCsdl';
-import { actions as actionsProvider } from '../host/csdlProvider';
+import { actions as actionsProvider, fetchSourceClassificationStatus } from '../host/csdlProvider';
 import { findRequestType } from '../registry/requestTypes';
 import { buildExecuteAction, buildExecuteActionBody } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
@@ -181,6 +181,32 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
     if (dirtyId) markDirty(dirtyId);
   };
 
+  // Custom API / Custom Action membership comes from the customapis and
+  // workflows tables (#54). When a lookup fails (no read privilege), that
+  // half falls back to a name guess — say so in the sub-modes it affects.
+  const [classificationNotice, setClassificationNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (category === 'oob') return;
+    let cancelled = false;
+    fetchSourceClassificationStatus()
+      .then((st) => {
+        if (cancelled) return;
+        const missing = [
+          !st.customApis ? 'customapis' : null,
+          !st.customActions ? 'workflows' : null,
+        ].filter(Boolean);
+        setClassificationNotice(
+          missing.length > 0
+            ? `${missing.join(' and ')} table${missing.length > 1 ? 's' : ''}`
+            : null,
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [category]);
+
   // Bound action requires a record id
   const requiresBoundRecord = action?.binding.kind === 'entity';
   const boundEntity = action?.binding.kind === 'entity' ? action.binding.entityType : null;
@@ -255,18 +281,21 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
     setLastSavedId(saved.id);
     setLastSavedHash(hashState(saved.state));
   };
-  const onLoadSaved = (entry: SavedRequest) => {
+  const onLoadSaved = async (entry: SavedRequest) => {
     if (entry.modeId !== 'exec-action') return;
     const snap = entry.state as SerializedExecuteActionState;
     // Entity-existence guard only matters for bound actions; unbound is fine
     // even on orgs that don't have the source's entity provisioned (rare).
-    if (
-      boundEntity &&
-      entities.length > 0 &&
-      !entities.some((e) => e.logicalName === boundEntity)
-    ) {
+    // Resolve the SNAPSHOT's action — not the one currently selected (#56).
+    // A CSDL load failure skips the guard; the picker surfaces that error.
+    const snapAction = snap.actionName
+      ? await actionsProvider.find(snap.actionName).catch(() => undefined)
+      : undefined;
+    const snapEntity =
+      snapAction && snapAction.binding.kind !== 'unbound' ? snapAction.binding.entityType : null;
+    if (snapEntity && entities.length > 0 && !entities.some((e) => e.logicalName === snapEntity)) {
       notify(
-        `Can't load "${entry.name}": bound entity \`${boundEntity}\` ` +
+        `Can't load "${entry.name}": bound entity \`${snapEntity}\` ` +
           `isn't available in this environment.`,
       );
       return;
@@ -414,24 +443,36 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
   switch (root) {
     case 'pick':
       pane = (
-        <ActionPicker
-          filter={config.filter}
-          title={config.picker.title}
-          sub={config.picker.sub}
-          value={state.actionName}
-          onChange={(name) => {
-            setState((s) => ({
-              ...s,
-              actionName: name ?? '',
-              paramValues: {},
-              boundRecordId: null,
-            }));
-            markDirty('pick');
-            markDirty('params');
-            markDirty('target');
-          }}
-          group="execute"
-        />
+        <>
+          {classificationNotice && (
+            <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 12 }}>
+              <MessageBarBody>
+                <MessageBarTitle>Classification is approximate.</MessageBarTitle>
+                Couldn't read the {classificationNotice} (you may lack read privilege), so Custom
+                APIs, custom process actions and OOB actions are partly told apart by name prefix.
+                Some messages may be listed under a different Execute mode.
+              </MessageBarBody>
+            </MessageBar>
+          )}
+          <ActionPicker
+            filter={config.filter}
+            title={config.picker.title}
+            sub={config.picker.sub}
+            value={state.actionName}
+            onChange={(name) => {
+              setState((s) => ({
+                ...s,
+                actionName: name ?? '',
+                paramValues: {},
+                boundRecordId: null,
+              }));
+              markDirty('pick');
+              markDirty('params');
+              markDirty('target');
+            }}
+            group="execute"
+          />
+        </>
       );
       break;
     case 'target':

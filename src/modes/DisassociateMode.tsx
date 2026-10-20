@@ -54,6 +54,7 @@ import { findTable } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildDisassociate, buildDisassociateRequests } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
+import { relateDoneCount } from '../engine/dataverseExecutor';
 import type { DisassociateState } from '../state/relateState';
 import { isCollectionValuedNav, isSingleValuedNav } from '../state/relateState';
 import type { RecentRun } from '../state/readState';
@@ -256,7 +257,7 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
           ts: Date.now(),
           status: res.status,
           ms: res.ms,
-          rowCount: res.ok ? requests.length : 0,
+          rowCount: relateDoneCount(res, requests.length) ?? 0,
         },
         ...rs,
       ].slice(0, 8),
@@ -544,7 +545,11 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
         />
       }
     >
-      <MainTabs tab={tab} onTabChange={setTab} resultCount={result?.ok ? requests.length : null}>
+      <MainTabs
+        tab={tab}
+        onTabChange={setTab}
+        resultCount={relateDoneCount(result, requests.length)}
+      >
         {tab === 'builder' && pane}
         {tab === 'code' && <CodeView themeMode={themeMode} inputs={codeInputs} />}
         {tab === 'results' && (
@@ -560,6 +565,7 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
               navProperty: state.navProperty ?? undefined,
               targetCount: writeCtxTargetCount,
               targetNames: writeCtxTargetNames,
+              targetNameById: state.targetNames,
             }}
           />
         )}
