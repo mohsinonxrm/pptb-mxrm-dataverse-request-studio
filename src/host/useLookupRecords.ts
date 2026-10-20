@@ -116,9 +116,13 @@ export function useLookupRecords(
   const version = useLookupRecordsVersion();
 
   useEffect(() => {
+    // The early returns below also clear `loading`: a search still in
+    // flight was just cancelled by this effect's cleanup, and a cancelled
+    // search leaves `loading` alone (#104).
     if (!targetEntity) {
       setRows([]);
       setError(null);
+      setLoading(false);
       return;
     }
 
@@ -128,6 +132,7 @@ export function useLookupRecords(
     if (cached) {
       setRows(cached);
       setError(null);
+      setLoading(false);
       return;
     }
 
