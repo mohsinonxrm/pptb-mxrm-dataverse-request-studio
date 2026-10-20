@@ -728,6 +728,9 @@ function StringArrayInput({
   mono?: boolean;
 }) {
   const paramLabel = useContext(ParamLabelContext);
+  // Controlled: Fluent's Input keeps its own state, so clearing the DOM value
+  // after an add didn't stick and the next item was appended to it (#246).
+  const [draft, setDraft] = useState('');
   return (
     <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
       {value.map((v, i) => (
@@ -749,12 +752,14 @@ function StringArrayInput({
           width: 160,
           fontFamily: mono ? tokens.fontFamilyMonospace : tokens.fontFamilyBase,
         }}
+        value={draft}
+        onChange={(_, d) => setDraft(d.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
-            const v = (e.target as HTMLInputElement).value.trim();
+            const v = draft.trim();
             if (v) {
               onChange([...value, v]);
-              (e.target as HTMLInputElement).value = '';
+              setDraft('');
             }
             e.preventDefault();
           }
@@ -772,6 +777,7 @@ function NumberArrayInput({
   onChange: (v: number[]) => void;
 }) {
   const paramLabel = useContext(ParamLabelContext);
+  const [draft, setDraft] = useState('');
   return (
     <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
       {value.map((v, i) => (
@@ -790,12 +796,15 @@ function NumberArrayInput({
         type="number"
         placeholder="add… (Enter)"
         style={{ width: 120 }}
+        value={draft}
+        onChange={(_, d) => setDraft(d.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
-            const v = Number((e.target as HTMLInputElement).value);
-            if (Number.isFinite(v)) {
+            const t = draft.trim();
+            const v = Number(t);
+            if (t !== '' && Number.isFinite(v)) {
               onChange([...value, v]);
-              (e.target as HTMLInputElement).value = '';
+              setDraft('');
             }
             e.preventDefault();
           }
@@ -824,7 +833,9 @@ function EntityReferenceInput({
 }) {
   const paramLabel = useContext(ParamLabelContext);
   const { entities } = useScopedEntities();
-  const entityType = value?.entityType ?? param.entityType ?? entities[0]?.logicalName ?? '';
+  // No fallback to the first table: an untyped reference (crmbaseentity) starts
+  // empty so the user picks the table (#246).
+  const entityType = value?.entityType ?? param.entityType ?? '';
   // Warm the chosen entity's metadata so RecordPicker can display the
   // primaryName column when results arrive.
   warmTableMetadata(entityType || null);
@@ -879,12 +890,14 @@ function EntityReferenceInput({
           placeholder={`Search ${tbl?.displayName ?? entityType} records…`}
         />
       )}
-      <Caption1 style={{ color: tokens.colorNeutralForeground3, fontSize: 10 }}>
-        Emitted as{' '}
-        <code style={{ fontFamily: tokens.fontFamilyMonospace }}>
-          @odata.type=Microsoft.Dynamics.CRM.{entityType}
-        </code>
-      </Caption1>
+      {entityType && (
+        <Caption1 style={{ color: tokens.colorNeutralForeground3, fontSize: 10 }}>
+          Emitted as{' '}
+          <code style={{ fontFamily: tokens.fontFamilyMonospace }}>
+            @odata.type=Microsoft.Dynamics.CRM.{entityType}
+          </code>
+        </Caption1>
+      )}
     </span>
   );
 }
