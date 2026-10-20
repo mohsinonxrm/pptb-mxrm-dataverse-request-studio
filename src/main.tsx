@@ -1,6 +1,9 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { installChunkLoadErrorListener } from './shell/chunkLoadError';
+
+installChunkLoadErrorListener();
 
 const splash = document.getElementById('boot-splash');
 if (splash) {

@@ -1,4 +1,11 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react';
 import {
   Popover,
   PopoverTrigger,
@@ -75,6 +82,41 @@ export function RequestTypePicker({
     setSearch('');
   };
 
+  // Palette keyboard support (#20) — the footer promises ↑↓ / ↵:
+  // ArrowDown from the search box enters the list, ArrowUp/Down move between
+  // rows (ArrowUp on the first row returns to the search box), Enter in the
+  // search box picks the first match, Enter/Space on a row picks it.
+  const paletteListRef = useRef<HTMLDivElement>(null);
+  const paletteInputRef = useRef<HTMLInputElement>(null);
+  const paletteRows = () =>
+    Array.from(paletteListRef.current?.querySelectorAll<HTMLElement>('[data-palette-row]') ?? []);
+  const onPaletteSearchKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      paletteRows()[0]?.focus();
+    } else if (e.key === 'Enter') {
+      const first = grouped[0]?.items[0];
+      if (first) {
+        e.preventDefault();
+        pick(first.id);
+      }
+    }
+  };
+  const onPaletteRowKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>, id: string) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      pick(id);
+      return;
+    }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const rows = paletteRows();
+    const i = rows.indexOf(e.currentTarget);
+    if (e.key === 'ArrowDown') rows[Math.min(i + 1, rows.length - 1)]?.focus();
+    else if (i <= 0) paletteInputRef.current?.focus();
+    else rows[i - 1]?.focus();
+  };
+
   const ActiveIcon = active.icon;
 
   return (
@@ -88,7 +130,12 @@ export function RequestTypePicker({
         withArrow={false}
       >
         <PopoverTrigger disableButtonEnhancement>
-          <button className={s.pickerChip} type="button">
+          <button
+            className={s.pickerChip}
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded={popOpen}
+          >
             <ActiveIcon
               style={{ color: groupColorVar(active.group), width: 18, height: 18, flexShrink: 0 }}
             />
@@ -184,20 +231,26 @@ export function RequestTypePicker({
       </Popover>
 
       <Dialog open={palOpen} onOpenChange={(_, d) => setPalOpen(d.open)} modalType="non-modal">
-        <DialogSurface style={{ padding: 0, maxWidth: 600, width: '90vw' }}>
+        <DialogSurface
+          aria-label="Search request types"
+          style={{ padding: 0, maxWidth: 600, width: '90vw' }}
+        >
           <DialogBody style={{ display: 'block', padding: 0 }}>
             <div className={s.paletteSearchWrap}>
               <Input
                 appearance="filled-darker"
+                aria-label="Search request types"
                 placeholder="Search request types…"
                 value={search}
                 onChange={(_, d) => setSearch(d.value)}
+                onKeyDown={onPaletteSearchKeyDown}
+                input={{ ref: paletteInputRef }}
                 contentBefore={<Search20Regular />}
                 style={{ width: '100%' }}
                 autoFocus
               />
             </div>
-            <div className={s.paletteList}>
+            <div className={s.paletteList} ref={paletteListRef}>
               {grouped.length === 0 && (
                 <div
                   style={{
@@ -222,8 +275,10 @@ export function RequestTypePicker({
                           !r.implemented && s.paletteRowDisabled,
                         )}
                         onClick={() => pick(r.id)}
+                        onKeyDown={(e) => onPaletteRowKeyDown(e, r.id)}
                         role="button"
                         tabIndex={0}
+                        data-palette-row
                       >
                         <Icon style={{ color: groupColorVar(r.group), width: 18, height: 18 }} />
                         <div>
