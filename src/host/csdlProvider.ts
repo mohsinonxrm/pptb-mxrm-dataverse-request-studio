@@ -259,6 +259,11 @@ interface EnumTypeDef {
   /** Underlying type — almost always Edm.Int32 in Dataverse. */
   underlyingType: string;
   members: Array<{ name: string; value: number }>;
+  /** `IsFlags="true"` — values combine bitwise (e.g. EntityFilters). */
+  isFlags: boolean;
+  /** Namespace-qualified name (e.g. "Microsoft.Dynamics.CRM.EntityFilters"),
+   *  the prefix of an OData enum literal. Set when registered. */
+  fullName?: string;
 }
 
 interface ComplexTypeDef {
@@ -287,7 +292,10 @@ export function parseCsdl(xml: string): CsdlAction[] {
     const ns = schema.getAttribute('Namespace') || 'Microsoft.Dynamics.CRM';
     for (const el of Array.from(schema.getElementsByTagName('EnumType'))) {
       const def = parseEnumType(el);
-      if (def) registerType(enumMap, ns, def.name, def);
+      if (def) {
+        def.fullName = `${ns}.${def.name}`;
+        registerType(enumMap, ns, def.name, def);
+      }
     }
     for (const el of Array.from(schema.getElementsByTagName('ComplexType'))) {
       const def = parseComplexType(el);
@@ -354,7 +362,7 @@ function parseEnumType(el: Element): EnumTypeDef | null {
       value: Number(m.getAttribute('Value') ?? '0'),
     }))
     .filter((m) => m.name);
-  return { name, underlyingType, members };
+  return { name, underlyingType, members, isFlags: el.getAttribute('IsFlags') === 'true' };
 }
 
 function parseComplexType(el: Element): ComplexTypeDef | null {
@@ -446,6 +454,8 @@ function parseActionOrFunction(
         type: 'OptionSetValue',
         required,
         optionSet: enumDef.members.map((m) => ({ value: m.value, label: m.name })),
+        enumType: enumDef.fullName,
+        enumIsFlags: enumDef.isFlags || undefined,
       });
     } else if (complexDef) {
       params.push({
@@ -538,6 +548,8 @@ function resolveComplexFields(def: ComplexTypeDef, seen: Set<string> = new Set()
         type: 'OptionSetValue' as const,
         required: !p.nullable,
         optionSet: enumDef.members.map((m) => ({ value: m.value, label: m.name })),
+        enumType: enumDef.fullName,
+        enumIsFlags: enumDef.isFlags || undefined,
       };
     }
     const childComplex = lookupComplexType(p.type);

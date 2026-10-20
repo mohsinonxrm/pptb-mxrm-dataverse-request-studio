@@ -148,12 +148,16 @@ export function buildExecuteFunctionWirePath(s: ExecuteFunctionState): string | 
 
 /**
  * Shared function-URL composer. `wire` only switches value escaping:
- *   • alias values (query string) → encodeURIComponent, so `&`, `#`, `+`,
- *     `%` and `?` inside a string literal can't split or corrupt the query.
- *   • inline literals (path) → escape only `%`, `#`, `?` and `\`, which
- *     would otherwise end the path or be rewritten by the URL parser. Other
- *     characters stay literal, matching the preview (aliases are the
- *     documented answer for awkward values).
+ *   • alias values (query string) → on the wire, encodeURIComponent. In the
+ *     preview (URL bar / Copy / Code tab) only `%`, `&`, `#` and `+` are
+ *     escaped — the characters that would split the query, start a fragment,
+ *     read as a space or start an escape — so a copied URL still means the
+ *     same thing while quotes, brackets, spaces and `:` stay readable like
+ *     the MS Learn examples (#61).
+ *   • inline literals (path) → escape `%`, `#`, `?` and `\` in both forms,
+ *     which would otherwise end the path or be rewritten by the URL parser.
+ *     Other characters stay literal (aliases are the documented answer for
+ *     awkward values).
  */
 function composeFunctionRequest(
   s: ExecuteFunctionState,
@@ -171,8 +175,9 @@ function composeFunctionRequest(
     entityLogical,
   } = buildActionUrlSegment(fn, s.boundRecordId);
 
-  const escAlias = (v: string) => (wire ? encodeURIComponent(v) : v);
-  const escInline = (v: string) => (wire ? v.replace(/[%#?\\]/g, (c) => encodeURIComponent(c)) : v);
+  const escAlias = (v: string) =>
+    wire ? encodeURIComponent(v) : v.replace(/[%&#+]/g, (c) => encodeURIComponent(c));
+  const escInline = (v: string) => v.replace(/[%#?\\]/g, (c) => encodeURIComponent(c));
 
   // Compose the parameter portion: either inline literals or alias placeholders
   const namedParams = fn.parameters;
@@ -427,18 +432,19 @@ export function encodeParamForBody(param: ActionParam, value: unknown): unknown 
 }
 
 /**
- * Encode a parameter value for inclusion in a function URL.
+ * Encode a parameter value as an OData literal for a function URL (the same
+ * literal works inline and as a parameter-alias value). Unescaped — the
+ * composer percent-encodes for the URL position. Per MS Learn ("Use Web API
+ * functions", "Web API functions and actions sample"):
  *
- *   • OData literal rules (when inline / not aliased):
- *       string  → 'value'  (single quotes, inner ' doubled)
- *       guid    → bare guid
- *       int/decimal/double → bare number
- *       boolean → true / false
- *       collection → ['a','b'] (rare inline; aliases recommended)
- *
- *   • When aliased (preferred):
- *       string  → 'value'  (same — the alias substitution happens server-side)
- *       all others → same form
+ *   string          → 'value'  (single quotes, inner ' doubled)
+ *   DateTimeOffset  → 2024-01-01T00:00:00Z  (unquoted)
+ *   guid            → bare guid
+ *   int/decimal/double → bare number
+ *   boolean         → true / false
+ *   collection      → JSON array: ["account","contact"], [1,2]
+ *   enum            → Microsoft.Dynamics.CRM.EntityFilters'Entity'
+ *                     (flags: comma-joined members, 'Entity,Attributes')
  *
  *   • EntityReference in a function: not supported as a function URL param —
  *     use `Target=@tid&@tid={'@odata.id':'/entitySet(<guid>)'}` instead.
@@ -447,10 +453,13 @@ export function encodeParamForBody(param: ActionParam, value: unknown): unknown 
 export function encodeParamForUrl(param: ActionParam, value: unknown, aliased: boolean): string {
   if (value === null || value === undefined) return 'null';
   switch (param.type) {
-    case 'Edm.String':
-    case 'Edm.DateTimeOffset': {
+    case 'Edm.String': {
       const s = String(value).replace(/'/g, "''");
       return `'${s}'`;
+    }
+    case 'Edm.DateTimeOffset': {
+      const s = String(value).trim();
+      return s === '' ? 'null' : s;
     }
     case 'Edm.Guid':
       return String(value);
@@ -458,21 +467,19 @@ export function encodeParamForUrl(param: ActionParam, value: unknown, aliased: b
     case 'Edm.Int64':
     case 'Edm.Decimal':
     case 'Edm.Double':
-    case 'OptionSetValue':
       return String(Number(value));
+    case 'OptionSetValue':
+      return enumLiteral(param, value);
     case 'Edm.Boolean':
       return value === true || value === 'true' || value === 1 ? 'true' : 'false';
-    case 'Collection(Edm.String)': {
-      const arr = (value as string[]) ?? [];
-      return `[${arr.map((s) => `'${String(s).replace(/'/g, "''")}'`).join(',')}]`;
+    case 'Collection(Edm.String)':
+    case 'Collection(Edm.Guid)': {
+      const arr = Array.isArray(value) ? value : [];
+      return JSON.stringify(arr.map((s) => String(s)));
     }
     case 'Collection(Edm.Int32)': {
-      const arr = (value as number[]) ?? [];
-      return `[${arr.map((n) => Number(n)).join(',')}]`;
-    }
-    case 'Collection(Edm.Guid)': {
-      const arr = (value as string[]) ?? [];
-      return `[${arr.join(',')}]`;
+      const arr = Array.isArray(value) ? value : [];
+      return JSON.stringify(arr.map((n) => Number(n)));
     }
     case 'EntityReference': {
       // Functions accept entity-typed params via @odata.id record-ref syntax.
@@ -487,6 +494,36 @@ export function encodeParamForUrl(param: ActionParam, value: unknown, aliased: b
     default:
       return String(value);
   }
+}
+
+/**
+ * OData enum literal `<Namespace.EnumType>'<Member>'` for an OptionSetValue
+ * parameter, e.g. `Microsoft.Dynamics.CRM.EndpointAccessType'Default'` (MS
+ * Learn: Web API functions and actions sample, RetrieveCurrentOrganization).
+ * A flags enum value that isn't a single member is decomposed into its
+ * members, comma-joined. Without the enum type name (mock / unresolved CSDL
+ * type) the integer is emitted as before; a value that maps to no member is
+ * passed as its number inside the quotes, which OData also accepts.
+ */
+function enumLiteral(param: ActionParam, value: unknown): string {
+  const n = Number(value);
+  if (!param.enumType || !Number.isFinite(n)) return String(n);
+  const members = param.optionSet ?? [];
+  let names = members.find((m) => m.value === n)?.label;
+  if (!names && param.enumIsFlags && n > 0) {
+    // Single-bit members in the value; first name wins when several share a
+    // bit (EntityFilters declares both Entity and Default as 1).
+    const bits = members.filter(
+      (m, i) =>
+        m.value > 0 &&
+        (m.value & (m.value - 1)) === 0 &&
+        (n & m.value) === m.value &&
+        members.findIndex((o) => o.value === m.value) === i,
+    );
+    const covered = bits.reduce((acc, m) => acc | m.value, 0);
+    if (bits.length > 0 && covered === n) names = bits.map((m) => m.label).join(',');
+  }
+  return `${param.enumType}'${names ?? String(n)}'`;
 }
 
 // Placeholder used in body preview when a required param is unset

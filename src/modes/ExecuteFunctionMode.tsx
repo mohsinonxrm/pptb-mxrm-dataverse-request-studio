@@ -486,12 +486,16 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
                 {state.useParamAliases ? (
                   <>
                     Each param becomes <code>p=@pN</code> in the URL path, with values in the query
-                    string. Strings stay single-quoted; numbers/booleans/GUIDs go bare.
+                    string. Strings stay single-quoted; numbers/booleans/GUIDs/date-times go bare;
+                    collections are JSON arrays; enums are{' '}
+                    <code>Namespace.Type&apos;Member&apos;</code>.
                   </>
                 ) : (
                   <>
                     Params are written inline like <code>(p='val',q=42)</code>. Faster to read but
-                    breaks for long URLs and DateTimeOffset.
+                    breaks for long URLs, and Dataverse rejects inline values containing{' '}
+                    <code>/ &lt; &gt; * % &amp; : \ ? +</code> — which includes every
+                    DateTimeOffset. Use aliases for those.
                   </>
                 )}
               </MessageBarBody>
