@@ -209,6 +209,17 @@ function mapAttribute(raw: AttributeMetadata): ColumnMeta | null {
         value: o.Value,
         label: labelOf(o.Label, String(o.Value)),
       }));
+      if (
+        (attrType === 'Picklist' || attrType === 'MultiSelectPicklist') &&
+        typeof raw.DefaultFormValue === 'number'
+      ) {
+        return {
+          ...base,
+          attributeType: attrType,
+          options: opts,
+          defaultFormValue: raw.DefaultFormValue,
+        };
+      }
       return { ...base, attributeType: attrType, options: opts };
     }
     case 'Status': {
@@ -377,6 +388,35 @@ async function buildTable(logical: string): Promise<TableMeta | undefined> {
         }))
         .filter((k) => k.columns.length > 0);
 
+      // #64 — key columns missing from the basic (IsValidForAdvancedFind)
+      // load would otherwise be typed as strings and single-quoted in the
+      // key URL (e.g. canvasapp `componentstate` / `overwritetime`). Fetch
+      // their AttributeType; anything that still fails stays unknown.
+      const loaded = new Set(columns.map((c) => c.logicalName));
+      const missing = Array.from(
+        new Set(alternateKeys.flatMap((k) => k.columns).filter((c) => !loaded.has(c))),
+      );
+      if (missing.length > 0) {
+        try {
+          const typed = await loader.loadAttributeTypes(logical, missing);
+          const types = new Map<string, AttributeTypeCode>();
+          for (const t of typed) {
+            const code = ATTRIBUTE_TYPE_MAP[t.AttributeType];
+            if (code) types.set(t.LogicalName, code);
+          }
+          for (const k of alternateKeys) {
+            const ct: Record<string, AttributeTypeCode> = {};
+            for (const c of k.columns) {
+              const code = types.get(c);
+              if (code) ct[c] = code;
+            }
+            if (Object.keys(ct).length > 0) k.columnTypes = ct;
+          }
+        } catch (e) {
+          console.warn(`[metadata] alternate-key attribute types for ${logical} failed`, e);
+        }
+      }
+
       const built: TableMeta = {
         logicalName: entity.LogicalName,
         entitySetName: entity.EntitySetName,
@@ -391,7 +431,7 @@ async function buildTable(logical: string): Promise<TableMeta | undefined> {
           logical,
         ),
         alternateKeys,
-        supportsMerge: ['account', 'contact', 'incident'].includes(logical),
+        supportsMerge: ['account', 'contact', 'lead', 'incident'].includes(logical),
       };
 
       // Publish into the synchronous registry — this is what makes the
