@@ -17,12 +17,20 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { loadSolutionEntityNames } from './dataverseMetadata';
-import { metadata, type EntityListItem } from './metadataProvider';
+import { metadata, subscribeMetadataReset, type EntityListItem } from './metadataProvider';
 import { useHostSession } from './HostContext';
 import { usePersistedSettings } from './usePersistedSettings';
 
 export interface UseScopedEntitiesResult {
   entities: EntityListItem[];
+  /**
+   * The full, unscoped entity list. For pickers whose choices are fixed by
+   * the platform rather than by the user's Query Scope (e.g. Merge, which
+   * only supports account / contact / lead / incident).
+   */
+  allEntities: EntityListItem[];
+  /** True while the unscoped list is loading. */
+  allLoading: boolean;
   loading: boolean;
   error: string | null;
   /** Re-run the entity list (and solution scope) fetch after an error. */
@@ -55,6 +63,9 @@ export function useScopedEntities(): UseScopedEntitiesResult {
   const connectionKey = `${ready}|${noConnection}|${session.environmentUrl}`;
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
+  // "Refresh metadata" drops the cached entity list — re-pull it so newly
+  // created tables show up without a remount.
+  useEffect(() => subscribeMetadataReset(retry), [retry]);
 
   const [all, setAll] = useState<EntityListItem[]>([]);
   const [allLoading, setAllLoading] = useState(true);
@@ -151,6 +162,8 @@ export function useScopedEntities(): UseScopedEntitiesResult {
 
   return {
     entities: visible,
+    allEntities: all,
+    allLoading,
     loading: allLoading || scopedLoading,
     error: allError ?? scopedError,
     retry,

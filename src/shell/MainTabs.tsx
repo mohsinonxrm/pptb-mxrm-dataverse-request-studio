@@ -2,6 +2,9 @@ import type { ReactNode } from 'react';
 import { TabList, Tab, Badge } from '@fluentui/react-components';
 import { TextBulletList20Regular, Code20Regular, Table20Regular } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
+import { ErrorBoundary } from './ErrorBoundary';
+
+const TAB_LABEL: Record<MainTab, string> = { builder: 'Builder', code: 'Code', results: 'Results' };
 
 export type MainTab = 'builder' | 'code' | 'results';
 
@@ -39,7 +42,14 @@ export function MainTabs({
           </Tab>
         </TabList>
       </div>
-      <div className={s.mainBody}>{children}</div>
+      <div className={s.mainBody}>
+        {/* Pane-level boundary (#19): a crash in one tab (e.g. the Results
+            grid or the code generator) keeps the mode, its state and the
+            other tabs usable. Switching tabs clears the error. */}
+        <ErrorBoundary scope="pane" label={TAB_LABEL[tab]} resetKey={tab}>
+          {children}
+        </ErrorBoundary>
+      </div>
     </main>
   );
 }
