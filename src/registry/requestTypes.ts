@@ -12,10 +12,11 @@ import {
   Flowchart20Regular,
   Image20Regular,
   Attach20Regular,
+  Stack20Regular,
 } from '@fluentui/react-icons';
 import type { FC } from 'react';
 
-export type RequestGroup = 'read' | 'write' | 'relate' | 'execute' | 'binary';
+export type RequestGroup = 'read' | 'write' | 'relate' | 'execute' | 'binary' | 'bulk';
 export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE' | 'BATCH';
 
 export interface RequestType {
@@ -142,6 +143,18 @@ export const REQ_TYPES: RequestType[] = [
     implemented: true,
     executeVerb: 'Send',
   },
+  // Bulk — CreateMultiple / UpdateMultiple / UpsertMultiple / DeleteMultiple
+  // (collection-bound actions with a Targets array, #8).
+  {
+    id: 'bulk-write',
+    name: 'Bulk Write',
+    method: 'POST',
+    group: 'bulk',
+    icon: Stack20Regular,
+    sub: 'Create/Update/Upsert/DeleteMultiple',
+    implemented: true,
+    executeVerb: 'Send',
+  },
 
   // Relate
   // Associate / Disassociate are cardinality-dependent — verb on the wire
@@ -263,6 +276,7 @@ export const GROUPS: { id: RequestGroup; label: string }[] = [
   { id: 'relate', label: 'Relate' },
   { id: 'execute', label: 'Execute' },
   { id: 'binary', label: 'Binary' },
+  { id: 'bulk', label: 'Bulk' },
 ];
 
 export const findRequestType = (id: string): RequestType =>

@@ -15,6 +15,8 @@ import { AppDialogHost } from './shell/dialogs';
 import { SaveContextRoot, type SaveContextValue } from './state/SaveContext';
 import { findRequestType } from './registry/requestTypes';
 import { RetrieveMultipleMode } from './modes/RetrieveMultipleMode';
+// Bulk Write loads on first use (#8, #22).
+import { BulkWriteMode } from './modes/BulkWriteMode.lazy';
 import { RetrieveSingleMode } from './modes/RetrieveSingleMode';
 // Less-used modes load on first use (#22).
 import {
@@ -288,6 +290,8 @@ function ModeSwitch({
       return <DeleteMode themeMode={themeMode} />;
     case 'merge':
       return <MergeMode themeMode={themeMode} />;
+    case 'bulk-write':
+      return <BulkWriteMode themeMode={themeMode} />;
     case 'associate':
       return <AssociateMode themeMode={themeMode} />;
     case 'disassociate':
