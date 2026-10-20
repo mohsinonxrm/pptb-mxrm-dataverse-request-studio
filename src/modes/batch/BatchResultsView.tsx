@@ -255,7 +255,7 @@ export function BatchResultsView({
                   <MessageBarTitle>
                     {noResultsFor(s) ? 'No results for ' : ''}
                     {s.transaction ? 'Change set' : 'Requests'} ${s.contentIds[0]}
-                    {s.contentIds.length > 1 ? `–${s.contentIds[s.contentIds.length - 1]}` : ''}
+                    {s.contentIds.length > 1 ? `–$${s.contentIds[s.contentIds.length - 1]}` : ''}
                     {noResultsFor(s) ? '' : ' failed'}
                   </MessageBarTitle>
                   {s.error ??
