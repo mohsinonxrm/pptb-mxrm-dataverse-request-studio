@@ -124,7 +124,8 @@ export function Sidebar({
                     }}
                   >
                     {/* status 0 = the host failed the call without an HTTP status */}
-                    {timeAgo(r.ts)} · {r.status || 'error'} · {r.rowCount ?? '—'} rows
+                    {timeAgo(r.ts)} · {r.status || 'error'} ·{' '}
+                    {r.summary ?? `${r.rowCount ?? '—'} rows`}
                   </span>
                 </div>
               ))}

@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { compileBatch, newGroup, newItem, planDispatch } from './batchModel';
-import { describeHostError, mapSegmentResults, toHostRequest } from './batchExecutor';
+import {
+  describeHostError,
+  mapSegmentResults,
+  summarizeBatchRun,
+  toHostRequest,
+  type BatchItemResult,
+  type BatchRunResult,
+  type SegmentResult,
+} from './batchExecutor';
 
 function segmentOf(atomic: boolean, n: number) {
   const items = Array.from({ length: n }, (_, i) =>
@@ -49,6 +57,83 @@ describe('mapSegmentResults', () => {
     ]);
     expect(items.map((i) => i.outcome)).toEqual(['done', 'done', 'not-run']);
     expect(segment.ok).toBe(false);
+  });
+});
+
+describe('summarizeBatchRun', () => {
+  const seg = (s: Partial<SegmentResult> = {}): SegmentResult => ({
+    transaction: false,
+    contentIds: [],
+    ms: 0,
+    ok: true,
+    ...s,
+  });
+  const item = (outcome: BatchItemResult['outcome'], status?: number): BatchItemResult => ({
+    itemId: 'i',
+    contentId: '1',
+    outcome,
+    status,
+  });
+
+  it('records the batch status, not a failing part (#204)', () => {
+    // Change set (204) + independent group (200, 404).
+    const res: BatchRunResult = {
+      ms: 10,
+      ok: false,
+      segments: [seg({ transaction: true }), seg({ ok: false })],
+      items: [item('done', 204), item('done', 200), item('done', 404)],
+    };
+    expect(summarizeBatchRun(res)).toEqual({
+      status: 200,
+      summary: '3 requests · 1 failed',
+      succeeded: 2,
+    });
+  });
+
+  it('says when every part succeeded', () => {
+    const res: BatchRunResult = {
+      ms: 1,
+      ok: true,
+      segments: [seg()],
+      items: [item('done', 204)],
+    };
+    expect(summarizeBatchRun(res).summary).toBe('1 request · all succeeded');
+  });
+
+  it('counts rolled-back and not-run parts', () => {
+    const res: BatchRunResult = {
+      ms: 1,
+      ok: false,
+      segments: [seg({ transaction: true, ok: false }), seg({ ok: false, skipped: true })],
+      items: [item('done', 400), item('rolled-back'), item('not-run')],
+    };
+    expect(summarizeBatchRun(res)).toMatchObject({
+      status: 200,
+      summary: '3 requests · 1 failed · 1 rolled back · 1 not run',
+    });
+  });
+
+  it('has no status when Dataverse never answered', () => {
+    const res: BatchRunResult = {
+      ms: 1,
+      ok: false,
+      segments: [seg({ ok: false, error: 'header consent declined' })],
+      items: [item('unknown'), item('unknown')],
+    };
+    expect(summarizeBatchRun(res)).toMatchObject({
+      status: 0,
+      summary: '2 requests · 2 no result',
+    });
+  });
+
+  it('treats a partial response the host could not parse as answered', () => {
+    const res: BatchRunResult = {
+      ms: 1,
+      ok: false,
+      segments: [seg({ ok: false, error: 'missing operation results', requestFailed: true })],
+      items: [item('unknown')],
+    };
+    expect(summarizeBatchRun(res).status).toBe(200);
   });
 });
 

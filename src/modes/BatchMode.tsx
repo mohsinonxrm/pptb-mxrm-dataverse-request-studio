@@ -63,6 +63,7 @@ import {
 import {
   batchUnavailableReason,
   executeBatchPlan,
+  summarizeBatchRun,
   type BatchRunResult,
 } from '../engine/batch/batchExecutor';
 import { convertSnapshot, type RequestSnapshot } from '../engine/batch/savedToBatch';
@@ -273,6 +274,9 @@ export function BatchMode({
     try {
       const res = await executeBatchPlan(plan, { continueOnError: state.continueOnError });
       setRun(res);
+      // The batch's own status plus a per-part summary — never one part's
+      // error status (#204).
+      const { status, summary, succeeded } = summarizeBatchRun(res);
       setRecents((rs) =>
         [
           {
@@ -281,9 +285,10 @@ export function BatchMode({
             url: `${API_BASE}/$batch`,
             method: 'BATCH',
             ts: Date.now(),
-            status: res.ok ? 200 : 400,
+            status,
             ms: res.ms,
-            rowCount: res.items.filter((i) => i.outcome === 'done').length,
+            rowCount: succeeded,
+            summary,
           },
           ...rs,
         ].slice(0, 8),

@@ -76,6 +76,8 @@ export interface RecentRun {
   method: string;
   ts: number;
   status: number;
+  /** Replaces the "N rows" text — e.g. a batch's "3 requests · 1 failed". */
+  summary?: string;
   ms: number;
   rowCount?: number;
   /**
