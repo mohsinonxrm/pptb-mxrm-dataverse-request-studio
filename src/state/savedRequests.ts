@@ -111,6 +111,8 @@ export type SavedModeId =
   | 'retrieve-single'
   | 'predefined-query'
   | 'delete'
+  // Bulk Delete job (#10) — query + schedule; see engine/bulkDelete.
+  | 'bulk-delete'
   | 'update'
   | 'create'
   | 'upsert'
@@ -657,6 +659,13 @@ export function autoSuggestName(modeId: SavedModeId, state: unknown): string {
       return autoSuggestPredefinedQuery(state as SerializedPredefinedQueryState);
     case 'delete':
       return autoSuggestDelete(state as SerializedDeleteState);
+    case 'bulk-delete': {
+      // Format: "bulk delete · account · 2026-10-17"
+      const b = state as { table?: string };
+      return ['bulk delete', b.table || 'untitled', new Date().toISOString().slice(0, 10)].join(
+        ' · ',
+      );
+    }
     case 'update':
       return autoSuggestUpdate(state as SerializedUpdateState);
     case 'create':

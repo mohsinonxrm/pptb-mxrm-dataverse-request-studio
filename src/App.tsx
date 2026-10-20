@@ -14,6 +14,8 @@ import { FrameHeader } from './shell/FrameHeader';
 import { AppDialogHost } from './shell/dialogs';
 import { SaveContextRoot, type SaveContextValue } from './state/SaveContext';
 import { findRequestType } from './registry/requestTypes';
+// Bulk Delete Job loads on first use (#10, #22).
+import { BulkDeleteMode } from './modes/BulkDeleteMode.lazy';
 import { RetrieveMultipleMode } from './modes/RetrieveMultipleMode';
 // Bulk Write loads on first use (#8, #22).
 import { BulkWriteMode } from './modes/BulkWriteMode.lazy';
@@ -288,6 +290,8 @@ function ModeSwitch({
       return <UpsertMode themeMode={themeMode} />;
     case 'delete':
       return <DeleteMode themeMode={themeMode} />;
+    case 'bulk-delete':
+      return <BulkDeleteMode themeMode={themeMode} />;
     case 'merge':
       return <MergeMode themeMode={themeMode} />;
     case 'bulk-write':
