@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
+import { useClearAnnouncementOnModeSwitch } from '../primitives/announce';
 import { useStudioStyles } from '../primitives/styles';
+import { RecordPickerMemoryScope } from '../primitives/RecordPicker';
 
 /**
  * Wraps a mode's three regions in the correct DOM structure:
@@ -23,14 +25,18 @@ export function ModeShell({
   children: ReactNode;
   urlBar: ReactNode;
 }) {
+  // Each mode renders its own ModeShell, so this runs on every mode switch.
+  useClearAnnouncementOnModeSwitch();
   const s = useStudioStyles();
+  // The picker memory scope lives here because ModeShell outlives the
+  // sidebar panes (#189): a pane switch keeps the record picker's mode.
   return (
-    <>
+    <RecordPickerMemoryScope>
       <div className={s.body}>
         {sidebar}
         {children}
       </div>
       {urlBar}
-    </>
+    </RecordPickerMemoryScope>
   );
 }
