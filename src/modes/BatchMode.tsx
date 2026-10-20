@@ -35,6 +35,7 @@ import { ENV } from '../mock/environment';
 import { adv, disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { hashState, type SavedRequest } from '../state/savedRequests';
 import { lastPublishedRequest, usePublishSaveContext } from '../state/SaveContext';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import {
   API_BASE,
   compileBatch,
@@ -77,7 +78,10 @@ const NOT_BATCHABLE_MODES = new Set(['bulk-delete', 'bulk-write', 'batch', 'exec
 
 export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('batch');
-  const [state, setState] = useState<BatchState>(initialBatchState);
+  // Keep the composed batch across mode switches (#101): building a batch
+  // means visiting other modes to run requests and "Add last request".
+  const draft = useModeDraft('batch', deserializeBatch, initialBatchState);
+  const [state, setState] = useState<BatchState>(draft.state);
   const [activePath, setActivePath] = useState('overview');
   const [tab, setTab] = useState<MainTab>('builder');
   const [run, setRun] = useState<BatchRunResult | null>(null);
@@ -85,8 +89,8 @@ export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
   const [recents, setRecents] = useState<RecentRun[]>([]);
   const [savedOpen, setSavedOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
 
   const orgUrl = ENV.host ? `https://${ENV.host}` : '';
   const compiled = useMemo(() => compileBatch(state.groups, orgUrl), [state.groups, orgUrl]);
@@ -306,6 +310,7 @@ export function BatchMode({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeBatch(state), [state]);
+  useStashModeDraft('batch', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
   const total = compiled.items.length;
