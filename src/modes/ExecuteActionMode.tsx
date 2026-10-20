@@ -44,6 +44,7 @@ import type { ExecuteActionState } from '../state/executeState';
 import type { RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { useScopedEntities } from '../host/useScopedEntities';
+import { useLiveTable } from '../host/useLiveMetadata';
 import {
   serializeExecuteAction,
   deserializeExecuteAction,
@@ -121,9 +122,6 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
   const [loading, setLoading] = useState(false);
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
-  const built = useMemo(() => buildExecuteAction(state), [state]);
-  const body = useMemo(() => buildExecuteActionBody(state), [state]);
-
   // Async live action lookup. The actionsProvider caches the parsed CSDL for
   // the session, so this is one fetch on first action pick — every subsequent
   // pick is synchronous-fast. We resolve to `undefined` while loading; the
@@ -142,6 +140,24 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
       cancelled = true;
     };
   }, [state.actionName]);
+
+  // Bound actions (entity OR collection) need the binding table's metadata
+  // for the real entity set name in the URL. Load it, and rebuild the URL
+  // when it (or the action itself) resolves — otherwise a cold session shows
+  // a placeholder set name until some unrelated state change (#55).
+  const bindingEntity =
+    action && action.binding.kind !== 'unbound' ? action.binding.entityType : null;
+  const { table: bindingTable } = useLiveTable(bindingEntity);
+  const built = useMemo(
+    () => buildExecuteAction(state),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state, action, bindingTable],
+  );
+  const body = useMemo(
+    () => buildExecuteActionBody(state),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state, action],
+  );
 
   // Save / Load tracking
   const { entities } = useScopedEntities();
@@ -215,14 +231,16 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
     ? 'Pick an action.'
     : requiresBoundRecord && !state.boundRecordId
       ? `Action '${action.name}' is bound to ${boundEntity} — supply a source record.`
-      : missingRequired.length > 0
-        ? `${missingRequired.length} required param${missingRequired.length === 1 ? '' : 's'} unset: ${missingRequired
-            .slice(0, 3)
-            .map((p) => p.name)
-            .join(', ')}${missingRequired.length > 3 ? '…' : ''}`
-        : state.headers.some((h) => h.enabled && !h.name)
-          ? 'Fix empty header name.'
-          : null;
+      : bindingEntity && !bindingTable
+        ? `Can't build the URL yet — ${bindingEntity} table metadata isn't loaded.`
+        : missingRequired.length > 0
+          ? `${missingRequired.length} required param${missingRequired.length === 1 ? '' : 's'} unset: ${missingRequired
+              .slice(0, 3)
+              .map((p) => p.name)
+              .join(', ')}${missingRequired.length > 3 ? '…' : ''}`
+          : state.headers.some((h) => h.enabled && !h.name)
+            ? 'Fix empty header name.'
+            : null;
 
   const onExecute = async () => {
     setLoading(true);
@@ -322,7 +340,9 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
       meta: action
         ? action.binding.kind === 'unbound'
           ? 'unbound'
-          : `bound to ${boundEntity}`
+          : action.binding.kind === 'collection'
+            ? `bound to ${bindingEntity} collection`
+            : `bound to ${boundEntity}`
         : 'pick one',
       items: [
         {
@@ -463,12 +483,14 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
             setBoundRecordName(primary ?? '');
           }}
           group="execute"
-          sub={`Pick the ${boundEntity} record this action operates on. The id slots into the URL: /${boundEntity}s(<id>)/Microsoft.Dynamics.CRM.${action?.name}.`}
+          sub={`Pick the ${boundEntity} record this action operates on. The id slots into the URL: /${bindingTable?.entitySetName ?? `${boundEntity}s`}(<id>)/Microsoft.Dynamics.CRM.${action?.name}.`}
         />
       ) : (
         <MessageBar layout="multiline" intent="info">
           <MessageBarBody>
-            The selected action is unbound — no source record required.
+            {action?.binding.kind === 'collection'
+              ? `The selected action is bound to the ${bindingEntity} collection — no source record required.`
+              : 'The selected action is unbound — no source record required.'}
           </MessageBarBody>
         </MessageBar>
       );

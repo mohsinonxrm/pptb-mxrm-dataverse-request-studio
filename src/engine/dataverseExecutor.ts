@@ -46,7 +46,7 @@ import {
   buildAssociateRequests,
   buildDisassociateRequests,
 } from './urlBuilder';
-import { buildExecuteActionBody, buildExecuteFunction } from './executeBuilders';
+import { buildExecuteActionBody, buildExecuteFunctionWirePath } from './executeBuilders';
 import type {
   RetrieveMultipleState,
   RetrieveSingleState,
@@ -829,9 +829,23 @@ export async function executeAction(s: ExecuteActionState): Promise<ExecResult> 
 
   const params = buildExecuteActionBody(s);
   // Resolve binding from the action CSDL — the source state only stores the
-  // record id; the entity name lives on action.binding.entityType.
-  const boundEntity = action.binding.kind === 'entity' ? action.binding.entityType : undefined;
-  const boundEntityId = boundEntity ? (s.boundRecordId ?? undefined) : undefined;
+  // record id; the entity name lives on action.binding.entityType. The host
+  // maps the three binding shapes as (#55):
+  //   entityName + entityId → POST /<set>(<id>)/Microsoft.Dynamics.CRM.<op>
+  //   entityName only       → POST /<set>/Microsoft.Dynamics.CRM.<op>  (collection)
+  //   neither               → POST /<op>                               (unbound)
+  // Collection-bound actions used to fall through to the unbound form.
+  const boundEntity = action.binding.kind === 'unbound' ? undefined : action.binding.entityType;
+  let boundEntityId: string | undefined;
+  if (action.binding.kind === 'entity') {
+    if (!s.boundRecordId) {
+      return mapError(
+        { statusCode: 400, message: `Action '${action.name}' is bound — pick a source record.` },
+        0,
+      );
+    }
+    boundEntityId = s.boundRecordId;
+  }
 
   const res = await timed(() =>
     dvHost.execute({
@@ -851,22 +865,40 @@ export async function executeFunction(s: ExecuteFunctionState): Promise<ExecResu
   const action = await actions.find(s.functionName);
   if (!action)
     return mapError({ statusCode: 404, message: `Unknown function ${s.functionName}` }, 0);
-  void buildExecuteFunction;
+  if (action.binding.kind === 'entity' && !s.boundRecordId) {
+    return mapError(
+      { statusCode: 400, message: `Function '${action.name}' is bound — pick a source record.` },
+      0,
+    );
+  }
+  // Bound functions need the table's real entity set name for the URL; make
+  // sure its metadata is in the registry the builder reads from.
+  if (action.binding.kind !== 'unbound') {
+    await metadata.getTable(action.binding.entityType);
+  }
 
-  const boundEntity = action.binding.kind === 'entity' ? action.binding.entityType : undefined;
-  const boundEntityId = boundEntity ? (s.boundRecordId ?? undefined) : undefined;
-
-  // The host's execute() handles parameter encoding (URL-aliased for
-  // functions, JSON-body for actions) so we just pass the raw param map.
-  const res = await timed(() =>
-    dvHost.execute({
-      operationName: s.functionName!,
-      operationType: 'function',
-      entityName: boundEntity,
-      entityId: boundEntityId,
-      parameters: s.paramValues as Record<string, unknown>,
-    }),
-  );
+  // Send the exact URL the builder shows (#55). The host's execute() would
+  // re-encode the raw editor values itself — EntityReference objects and
+  // numeric enums came out differently from the URL bar, it ignored the
+  // parameter-alias toggle, and it guesses the entity set name by
+  // pluralizing. A function call is a plain GET, so route the builder's
+  // path through queryData instead: one source of truth for preview, Code
+  // tab and execution.
+  const path = buildExecuteFunctionWirePath(s);
+  if (!path) {
+    return mapError(
+      {
+        statusCode: 400,
+        message:
+          action.binding.kind === 'unbound'
+            ? `Couldn't build the URL for function '${action.name}'.`
+            : `Couldn't resolve the entity set for '${action.binding.entityType}' — ` +
+              `table metadata isn't available.`,
+      },
+      0,
+    );
+  }
+  const res = await timed(() => dvHost.queryData(path));
   if (isExecResult(res)) return res;
   return ok(200, res.value, res.ms);
 }
