@@ -192,11 +192,17 @@ export function BatchResultsView({
     (acc, r) => {
       if (r.outcome === 'done' && r.status !== undefined && r.status < 400) acc.ok += 1;
       else if (r.outcome === 'done') acc.failed += 1;
+      else if (r.outcome === 'unknown') acc.noResult += 1;
       else acc.other += 1;
       return acc;
     },
-    { ok: 0, failed: 0, other: 0 },
+    { ok: 0, failed: 0, other: 0, noResult: 0 },
   );
+  // Dataverse answered this segment but the host couldn't read the response,
+  // so its requests have no result (they may well have run).
+  const noResultsFor = (seg: { requestFailed?: boolean; contentIds: string[] }) =>
+    !!seg.requestFailed &&
+    seg.contentIds.every((id) => rows.find((r) => r.contentId === id)?.outcome === 'unknown');
   // A failed change set answers with one error the host can't tie to a
   // request (and a partial response the host can't parse gives no
   // per-request results), so every request reads "rolled back" / "not run".
@@ -237,6 +243,8 @@ export function BatchResultsView({
             <span style={{ fontSize: 13 }}>
               {counts.ok} succeeded · {counts.failed} failed
               {counts.other ? ` · ${counts.other} rolled back or not run` : ''}
+              {/* The host couldn't read these results; Dataverse may still have run them. */}
+              {counts.noResult ? ` · ${counts.noResult} no result` : ''}
               {run.segments.length > 1 ? ` · ${run.segments.length} host calls` : ''}
             </span>
             {extraTitle && <Caption1>{extraTitle}</Caption1>}
@@ -246,11 +254,10 @@ export function BatchResultsView({
               <MessageBar key={i} intent="error" layout="multiline" style={{ marginBottom: 8 }}>
                 <MessageBarBody>
                   <MessageBarTitle>
+                    {noResultsFor(s) ? 'No results for ' : ''}
                     {s.transaction ? 'Change set' : 'Requests'} ${s.contentIds[0]}
-                    {s.contentIds.length > 1
-                      ? `–$${s.contentIds[s.contentIds.length - 1]}`
-                      : ''}{' '}
-                    failed
+                    {s.contentIds.length > 1 ? `–${s.contentIds[s.contentIds.length - 1]}` : ''}
+                    {noResultsFor(s) ? '' : ' failed'}
                   </MessageBarTitle>
                   {s.error ??
                     `${s.changesetError!.status} ${s.changesetError!.statusText ?? ''} — ${
