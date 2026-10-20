@@ -14,6 +14,7 @@ import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from './PaneHead';
 import type { RequestGroup } from '../registry/requestTypes';
 import { useHostSession } from '../host/HostContext';
+import { hostSupportsAdditionalHeaders } from '../host/pptbBridge';
 
 export interface HeaderItem {
   id: string;
@@ -126,35 +127,53 @@ export function HeadersEditor({
         group={group}
       />
 
-      {/* PPTB doesn't pass our headers through — its Dataverse API client builds
-          its own (Authorization, Accept, OData-Version, etc.). The values below
-          are still useful as a reference + for standalone testing. */}
-      <MessageBar
-        layout="multiline"
-        intent={host.embedded ? 'warning' : 'info'}
-        style={{ marginBottom: 14 }}
-      >
-        <MessageBarBody>
-          <MessageBarTitle>Headers are managed by the PPTB host at execute time.</MessageBarTitle>
-          {host.embedded ? (
-            <>
-              You're running inside Power Platform ToolBox. When you click <strong>Execute</strong>,
-              the host's Dataverse API client takes over and supplies its own{' '}
-              <code>Authorization</code>, <code>Accept</code>, <code>OData-Version</code>, and other
-              defaults — <strong>the values below are not transmitted</strong>. You can still
-              configure them here for reference or for the generated code in the Code tab.
-            </>
-          ) : (
-            <>
-              When this tool ships into PPTB, the host's Dataverse API client builds its own headers
-              (<code>Authorization</code>, <code>Accept</code>, <code>OData-Version</code>, …) and
-              the values below will be ignored at execute time. Configure them here anyway — they
-              flow through into the generated <strong>Code</strong> tab snippets, which you'd run
-              outside PPTB with your own bearer token.
-            </>
-          )}
-        </MessageBarBody>
-      </MessageBar>
+      {/* PPTB 1.2.7+ sends the write group's headers as `additionalHeaders`
+          (minus the ones its Dataverse client builds itself); every other
+          group still runs with the host's own headers. The values below are
+          always emitted into the Code tab. */}
+      {group === 'write' && host.embedded && hostSupportsAdditionalHeaders() ? (
+        <MessageBar layout="multiline" intent="info" style={{ marginBottom: 14 }}>
+          <MessageBarBody>
+            <MessageBarTitle>
+              Enabled headers are sent through Power Platform ToolBox.
+            </MessageBarTitle>
+            When you click <strong>Execute</strong>, the host sends the enabled headers below plus
+            the ones composed by the Precondition and Bypass panes. It builds{' '}
+            <code>Authorization</code>, <code>Accept</code>, <code>Content-Type</code>,{' '}
+            <code>OData-Version</code>, <code>OData-MaxVersion</code> and <code>Prefer</code>{' '}
+            itself, so those rows aren&apos;t sent. If you haven&apos;t approved additional request
+            headers for this tool yet, ToolBox asks first; if you reject, the request isn&apos;t
+            sent.
+          </MessageBarBody>
+        </MessageBar>
+      ) : (
+        <MessageBar
+          layout="multiline"
+          intent={host.embedded ? 'warning' : 'info'}
+          style={{ marginBottom: 14 }}
+        >
+          <MessageBarBody>
+            <MessageBarTitle>Headers are managed by the PPTB host at execute time.</MessageBarTitle>
+            {host.embedded ? (
+              <>
+                You're running inside Power Platform ToolBox. When you click{' '}
+                <strong>Execute</strong>, the host's Dataverse API client takes over and supplies
+                its own <code>Authorization</code>, <code>Accept</code>, <code>OData-Version</code>,
+                and other defaults — <strong>the values below are not transmitted</strong>. You can
+                still configure them here for reference or for the generated code in the Code tab.
+              </>
+            ) : (
+              <>
+                When this tool ships into PPTB, the host's Dataverse API client builds its own
+                headers (<code>Authorization</code>, <code>Accept</code>, <code>OData-Version</code>
+                , …) and the values below will be ignored at execute time. Configure them here
+                anyway — they flow through into the generated <strong>Code</strong> tab snippets,
+                which you'd run outside PPTB with your own bearer token.
+              </>
+            )}
+          </MessageBarBody>
+        </MessageBar>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 760 }}>
         {items.map((it) => (
           <div
@@ -169,6 +188,7 @@ export function HeadersEditor({
             }}
           >
             <Switch
+              aria-label={`Send ${it.name || 'header'}`}
               checked={it.enabled}
               onChange={(_, d) => update(it.id, { enabled: d.checked })}
             />
@@ -177,6 +197,7 @@ export function HeadersEditor({
               value={it.name}
               onChange={(_, d) => update(it.id, { name: d.value })}
               placeholder="Header name"
+              aria-label="Header name"
               disabled={it.builtin}
               style={{ fontFamily: tokens.fontFamilyMonospace }}
             />
@@ -185,6 +206,7 @@ export function HeadersEditor({
               value={it.value}
               onChange={(_, d) => update(it.id, { value: d.value })}
               placeholder="value"
+              aria-label={`${it.name || 'Header'} value`}
               style={{ fontFamily: tokens.fontFamilyMonospace }}
             />
             {it.builtin ? (
