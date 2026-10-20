@@ -81,7 +81,7 @@ import { actions } from '../host/csdlProvider';
  *  that happens to return a populated body. Derived from `status` by
  *  `outcomeFor`; `'error'` covers every other failure (4xx, 5xx, 501, and
  *  host errors whose status is unknown). */
-export type ExecOutcome = 'ok' | '404' | '401' | '403' | 'error' | 'empty';
+export type ExecOutcome = 'ok' | '404' | '401' | '403' | 'error' | 'empty' | 'partial';
 
 /** Normalized execution result handed back to every mode. */
 export interface ExecResult {
@@ -144,7 +144,6 @@ const STATUS_TEXT: Record<number, string> = {
   200: 'OK',
   201: 'Created',
   204: 'No Content',
-  207: 'Partial success',
   304: 'Not Modified',
   400: 'Bad Request',
   401: 'Unauthorized',
@@ -678,7 +677,10 @@ async function linkedTargets(
  *   • nothing succeeded    → the first failure's status and error (skipped
  *                            targets don't count as successes: nothing
  *                            changed).
- *   • some of each         → 207 "Partial success", not ok.
+ *   • some of each         → outcome 'partial', not ok. The status is the
+ *                            first failure's real HTTP status: Dataverse
+ *                            has no status for "some targets failed", so
+ *                            DRS doesn't invent one (D2, #99).
  * `targets` and the body's `targets` list every target either way.
  */
 async function runPerTarget(
@@ -721,14 +723,12 @@ async function runPerTarget(
     return { ...firstFailure, ms, body, bytes: JSON.stringify(body).length, targets };
   }
   return {
-    status: 207,
-    statusText: STATUS_TEXT[207],
+    ...firstFailure,
     ms,
     bytes: JSON.stringify(body).length,
     ok: false,
-    outcome: 'error',
+    outcome: 'partial',
     body,
-    headers: {},
     targets,
   };
 }

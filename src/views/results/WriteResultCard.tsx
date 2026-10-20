@@ -144,10 +144,10 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
     extractGuidFromBody(result.body, tbl?.primaryKey);
 
   // Status family — drives icon + tone. A multi-target Associate /
-  // Disassociate that partly succeeded (207) is a warning, not a success.
+  // Disassociate that partly succeeded is a warning, not a success.
   const family: 'success' | 'warning' | 'danger' = result.ok
     ? 'success'
-    : result.status === 207 ||
+    : result.outcome === 'partial' ||
         result.status === 412 ||
         result.status === 404 ||
         result.status === 409
@@ -227,7 +227,8 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
               status={
                 family === 'success' ? 'success' : family === 'warning' ? 'warning' : 'danger'
               }
-              code={result.status || 'Error'}
+              // A partly-successful run has no single HTTP status (D2).
+              code={result.outcome === 'partial' ? 'Partial success' : result.status || 'Error'}
               ms={result.ms}
             />
             <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
