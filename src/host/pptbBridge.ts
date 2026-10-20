@@ -108,19 +108,49 @@ async function fetchInitialTheme(
   }
 }
 
-async function fetchInitialConnection(api: NonNullable<Window['toolboxAPI']>): Promise<{
+interface ConnectionSnapshot {
   connected: boolean;
   environmentUrl: string;
   environment: string;
-}> {
+}
+
+/**
+ * Id of the connection the last successful `getActiveConnection` returned
+ * (null when none / not yet known). Used to tell whether a
+ * `connection:deleted` event concerns the connection this tool is bound to.
+ */
+let activeConnectionId: string | null = null;
+
+/**
+ * Read the tool's active connection. Resolves to `null` when the host call
+ * FAILED (timeout, IPC error, a hiccup mid token-refresh) — distinct from a
+ * successful "no connection" answer — so callers can keep the last known
+ * session instead of reporting a disconnect that never happened.
+ */
+async function fetchActiveConnection(
+  api: NonNullable<Window['toolboxAPI']>,
+): Promise<ConnectionSnapshot | null> {
   try {
     const c = await api.connections?.getActiveConnection?.();
-    if (!c) return { connected: false, environmentUrl: '', environment: '' };
+    if (!c) {
+      activeConnectionId = null;
+      return { connected: false, environmentUrl: '', environment: '' };
+    }
+    activeConnectionId = typeof c.id === 'string' && c.id ? c.id : null;
     return { connected: true, environmentUrl: c.url ?? '', environment: c.environment ?? '' };
   } catch (e) {
     console.warn('[pptbBridge] getActiveConnection failed', e);
-    return { connected: false, environmentUrl: '', environment: '' };
+    return null;
   }
+}
+
+/** The `id` carried by a `connection:deleted` payload (`{ id }` in PPTB 1.2.7), if any. */
+function deletedConnectionId(data: unknown): string | null {
+  if (data && typeof data === 'object' && 'id' in data) {
+    const id = (data as { id: unknown }).id;
+    if (typeof id === 'string' && id) return id;
+  }
+  return null;
 }
 
 function hookEvents(api: NonNullable<Window['toolboxAPI']>): void {
@@ -149,9 +179,18 @@ function hookEvents(api: NonNullable<Window['toolboxAPI']>): void {
       case 'connection:created':
         void refetchConnection(api);
         break;
-      case 'connection:deleted':
-        emit({ ...session, connected: false, environmentUrl: '', environment: '' });
+      case 'connection:deleted': {
+        // PPTB forwards CONNECTION_DELETED to EVERY tool window and refuses
+        // to delete a connection an open tool is bound to, so this event is
+        // almost always about some other connection. Ignore it when the
+        // deleted id is known and isn't ours; otherwise re-read the active
+        // connection rather than assuming we lost it.
+        const deletedId = deletedConnectionId(payload.data);
+        if (deletedId && activeConnectionId && deletedId !== activeConnectionId) break;
+        // Our own connection was deleted: if the re-read fails, treat it as gone.
+        void refetchConnection(api, deletedId !== null && deletedId === activeConnectionId);
         break;
+      }
     }
   };
 
@@ -162,8 +201,23 @@ async function refetchTheme(api: NonNullable<Window['toolboxAPI']>): Promise<voi
   const theme = await fetchInitialTheme(api);
   emit({ ...session, theme });
 }
-async function refetchConnection(api: NonNullable<Window['toolboxAPI']>): Promise<void> {
-  const conn = await fetchInitialConnection(api);
+async function refetchConnection(
+  api: NonNullable<Window['toolboxAPI']>,
+  disconnectOnFailure = false,
+): Promise<void> {
+  const conn = await fetchActiveConnection(api);
+  // A failed read keeps the last known session: a transient host error (e.g.
+  // during a token-refresh `connection:updated`) must not look like a
+  // disconnect, which would wipe org-scoped state.
+  if (!conn) {
+    if (disconnectOnFailure) {
+      activeConnectionId = null;
+      emit({ ...session, connected: false, environmentUrl: '', environment: '' });
+      return;
+    }
+    console.warn('[pptbBridge] keeping the last known connection after a failed refetch');
+    return;
+  }
   emit({ ...session, ...conn });
 }
 
@@ -173,7 +227,13 @@ if (EMBEDDED && typeof window !== 'undefined' && window.toolboxAPI) {
   // Theme first (controls boot paint), then connection.
   void (async () => {
     const theme = await fetchInitialTheme(api);
-    const conn = await fetchInitialConnection(api);
+    // No last-known session exists yet, so a failed initial read is reported
+    // as "not connected"; a later connection event re-reads it.
+    const conn = (await fetchActiveConnection(api)) ?? {
+      connected: false,
+      environmentUrl: '',
+      environment: '',
+    };
     emit({ ...session, theme, ...conn, handshakeDone: true });
     hookEvents(api);
   })();
