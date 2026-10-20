@@ -70,6 +70,7 @@ import {
   manageAttachmentPipeline,
   attachmentTargetLabel,
   formatSize,
+  pipelineCodegen,
 } from '../engine/binaryBuilders';
 import { runtime, type ExecResult } from '../engine/runtime';
 import {
@@ -92,7 +93,9 @@ import {
   hashState,
   type SavedRequest,
   type SerializedManageAttachmentState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 // Default cap = Organization.MaxUploadFileSize default per doc (5 MB).
@@ -130,7 +133,8 @@ type RootClauseId =
 
 export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('manage-attachment');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('manage-attachment', deserializeManageAttachment, initialState);
+  const [state, setState] = useState(draft.state);
   const [activePath, setActivePath] = useState<string>('pipeline');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
@@ -184,6 +188,7 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: 'manage-attachment',
           url: built.relativeUrl,
           method: firstStepMethod,
@@ -200,9 +205,10 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const { entities } = useScopedEntities();
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const currentSerialized = useMemo(() => serializeManageAttachment(state), [state]);
+  useStashModeDraft('manage-attachment', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
   const onSaved = (saved: SavedRequest) => {
@@ -220,6 +226,19 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedHash(hashState(snap));
     setResult(null);
     setActivePath('pipeline');
+  };
+
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'manage-attachment');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
   };
   usePublishSaveContext(
     useMemo(
@@ -522,19 +541,9 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
   const codeInputs = {
     method: firstStepMethod,
     built,
-    headers: headersMap,
+    // Per-step headers + bodies (#60).
+    ...pipelineCodegen(pipeline, headersMap),
     entityLogical: built.entityLogical,
-    multiRequests:
-      pipeline.length > 1
-        ? pipeline.map((step) => ({
-            method: step.method,
-            relativeUrl: step.relativeUrl.startsWith('<')
-              ? step.relativeUrl
-              : step.relativeUrl.replace(/^https?:\/\/[^/]+/, ''),
-            body: typeof step.body === 'object' ? step.body : undefined,
-            description: step.title,
-          }))
-        : undefined,
   };
 
   return (
@@ -550,6 +559,7 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={

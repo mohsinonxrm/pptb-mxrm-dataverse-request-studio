@@ -9,6 +9,7 @@
 
 import type { BuiltRequest } from './urlBuilder';
 import { ENV } from '../mock/environment';
+import { generateOpenApi } from './openApiGenerator';
 
 export type CodeFormat =
   | 'fetch'
@@ -19,7 +20,8 @@ export type CodeFormat =
   | 'csharp'
   | 'powershell'
   | 'curl'
-  | 'json';
+  | 'json'
+  | 'openapi';
 
 export const FORMAT_LABELS: Record<CodeFormat, string> = {
   fetch: 'fetch',
@@ -31,6 +33,7 @@ export const FORMAT_LABELS: Record<CodeFormat, string> = {
   powershell: 'PowerShell',
   curl: 'cURL',
   json: 'JSON',
+  openapi: 'OpenAPI',
 };
 
 export const FORMAT_LANG: Record<CodeFormat, string> = {
@@ -45,6 +48,7 @@ export const FORMAT_LANG: Record<CodeFormat, string> = {
   powershell: 'powershell',
   curl: 'shell',
   json: 'json',
+  openapi: 'json',
 };
 
 export interface CodegenInputs {
@@ -63,6 +67,12 @@ export interface CodegenInputs {
    * encoding via engine/urlBuilder.buildCreateBody.
    */
   body?: Record<string, unknown>;
+  /**
+   * Opaque non-JSON body placeholder (e.g. `<base64 file bytes>` for a file
+   * column PATCH). Takes precedence over `body`: generators send it as raw
+   * bytes instead of serializing JSON.
+   */
+  rawBody?: string;
   /**
    * Logical-name (NOT entity-set-name) of the target entity for Xrm.WebApi
    * .createRecord — emitted as the first argument. Optional because it's
@@ -91,9 +101,21 @@ export interface MultiRequest {
   /** Path + query (no host) — same form as built.relativeUrl */
   relativeUrl: string;
   body?: Record<string, unknown>;
+  /** Opaque non-JSON body placeholder (e.g. `<chunk bytes>`); wins over `body`. */
+  rawBody?: string;
+  /**
+   * Headers specific to this request (e.g. `x-ms-transfer-mode`,
+   * `Content-Range` on a chunked upload). Merged over the shared headers.
+   */
+  headers?: Record<string, string>;
   /** Inline label for the request (e.g. "John Doe"). Optional. */
   description?: string;
 }
+
+/** Methods that never carry a request body. */
+const isBodyless = (method: string) => method === 'GET' || method === 'DELETE';
+/** Header names .NET only accepts on HttpContent, not on the request. */
+const CONTENT_HEADERS = new Set(['content-type', 'content-range', 'content-length']);
 
 // ── Power Automate field-spec (consumed by PowerAutomatePane) ──
 export interface PowerAutomateField {
@@ -145,6 +167,8 @@ export function generateCode(fmt: CodeFormat, i: CodegenInputs): string {
       return genCurl(i);
     case 'json':
       return genJson(i);
+    case 'openapi':
+      return generateOpenApi(i);
   }
 }
 
@@ -155,6 +179,87 @@ function fullUrl(i: CodegenInputs): string {
   // The nextLink comes straight from a textarea — drop pasted whitespace.
   if (i.isNextLink && i.rawNextLink) return i.rawNextLink.trim();
   return `https://${ENV.host}${i.built.relativeUrl}`;
+}
+
+/** Absolute URL of one multi-request step. A placeholder URL (e.g.
+ *  `<upload-url-from-Location-header>`) is kept as-is, not host-prefixed. */
+function multiUrl(r: MultiRequest): string {
+  return r.relativeUrl.startsWith('<') ? r.relativeUrl : `https://${ENV.host}${r.relativeUrl}`;
+}
+
+/** URL path without the query string. */
+function urlPath(i: CodegenInputs): string {
+  return i.built.relativeUrl.split('?')[0];
+}
+
+interface FunctionCall {
+  name: string;
+  binding: 'unbound' | 'entity' | 'collection';
+}
+
+/**
+ * Detect an OData function call from the URL shape (#60). Bound functions
+ * carry the namespace (`/<set>(<id>)/Microsoft.Dynamics.CRM.<name>(…)` or
+ * `/<set>/Microsoft.Dynamics.CRM.<name>(…)`) and DO have an entity set, so
+ * the old `!entitySet` test turned them into CRUD retrieves. Only the path
+ * is inspected — query functions inside `$filter` don't count.
+ */
+function detectFunction(i: CodegenInputs): FunctionCall | null {
+  if (i.method !== 'GET' || i.isNextLink) return null;
+  const path = urlPath(i);
+  const bound = path.match(/\/Microsoft\.Dynamics\.CRM\.([A-Za-z_]\w*)/);
+  if (bound) {
+    return {
+      name: bound[1],
+      binding: /\)\/Microsoft\.Dynamics\.CRM\./.test(path) ? 'entity' : 'collection',
+    };
+  }
+  if (!i.built.entitySet && !i.built.recordId) {
+    const m = i.built.relativeNoBase.split('?')[0].match(/^\/([^/(]+)/);
+    return { name: m?.[1] ?? '', binding: 'unbound' };
+  }
+  return null;
+}
+
+/** A write addressed by alternate key — `/<set>(<col>=<value>,…)`, no GUID. */
+function isAltKeyAddressed(i: CodegenInputs): boolean {
+  return !i.built.recordId && /^\/[^/]+\([^)]*=/.test(i.built.relativeNoBase.split('?')[0]);
+}
+
+/** Column name of a single-property PUT (`/<set>(<id>)/<column>`), else null. */
+function putColumn(i: CodegenInputs): string | null {
+  if (i.method !== 'PUT') return null;
+  return urlPath(i).match(/\)\/([A-Za-z_]\w*)$/)?.[1] ?? null;
+}
+
+/**
+ * Members of an Xrm.WebApi.online.execute request object for a function:
+ * alias parameter values, the bound `entity` (entity-bound), and
+ * getMetadata(). `indent` is the member indentation.
+ */
+function xrmFunctionMembers(i: CodegenInputs, fn: FunctionCall, indent: string): string {
+  const params = i.built.queryParts
+    .filter((p) => p.key.startsWith('@'))
+    .map((p) => `${indent}${p.key.replace(/^@/, '')}: ${decodeFunctionAlias(p.value)},`);
+  const isEntity = fn.binding === 'entity';
+  const logical = i.built.entityLogical;
+  const lines = [
+    ...params,
+    ...(isEntity
+      ? [
+          `${indent}entity: { entityType: '${logical}', id: '${jsEscape(i.built.recordId ?? '<id>')}' },`,
+        ]
+      : []),
+    `${indent}getMetadata: () => ({`,
+    `${indent}  boundParameter: ${isEntity ? `'entity'` : 'null'},`,
+    `${indent}  operationType: 1,  // 1 = Function`,
+    `${indent}  operationName: '${fn.name}',`,
+    isEntity
+      ? `${indent}  parameterTypes: { entity: { typeName: 'mscrm.${logical}', structuralProperty: 5 } /* + parameter type descriptors per CSDL */ },`
+      : `${indent}  parameterTypes: { /* parameter type descriptors per CSDL */ },`,
+    `${indent}}),`,
+  ];
+  return lines.join('\n');
 }
 
 /** Strip headers a generator already inserts elsewhere (e.g. Authorization). */
@@ -297,9 +402,19 @@ function genFetch(i: CodegenInputs): string {
   const url = fullUrl(i);
   const hdrs = stripAuth(i.headers);
   const headerBlock = jsHeaderObject(hdrs, '      ');
-  const isWrite = i.method !== 'GET';
-  const bodyLine = isWrite ? `\n      body: JSON.stringify(payload),` : '';
-  const payloadDecl = isWrite ? `  const payload = ${formatJsObject(i.body ?? {}, '  ')};\n\n` : '';
+  // No body on GET / DELETE (#60). A raw (binary) body is sent as bytes.
+  // `body:` sits at the same depth as `method:` / `headers:` (#200).
+  const hasBody = !isBodyless(i.method);
+  const bodyLine = !hasBody
+    ? ''
+    : i.rawBody
+      ? `\n    body: fileBytes,`
+      : `\n    body: JSON.stringify(payload),`;
+  const payloadDecl = !hasBody
+    ? ''
+    : i.rawBody
+      ? `  // ${i.rawBody}: an ArrayBuffer / Blob / Uint8Array with the file content.\n  const fileBytes = new Uint8Array();\n\n`
+      : `  const payload = ${formatJsObject(i.body ?? {}, '  ')};\n\n`;
 
   return `// Dataverse Web API — fetch
 // Run from a browser context (or Node 18+). Provide a bearer token via the
@@ -351,10 +466,20 @@ function genFetchMulti(i: CodegenInputs): string {
   const reqs = i.multiRequests ?? [];
   const requestArray = reqs
     .map((r) => {
-      const url = `https://${ENV.host}${r.relativeUrl}`;
-      const bodyLine = r.body ? `, body: JSON.stringify(${formatJsObject(r.body, '    ')})` : '';
+      const url = multiUrl(r);
+      const bodyLine = r.rawBody
+        ? `, body: '${jsEscape(r.rawBody)}' /* replace with the bytes (ArrayBuffer / Blob) */`
+        : r.body
+          ? `, body: JSON.stringify(${formatJsObject(r.body, '    ')})`
+          : '';
+      const hdrLine =
+        r.headers && Object.keys(r.headers).length > 0
+          ? `, headers: { ${Object.entries(r.headers)
+              .map(([k, v]) => `'${jsEscape(k)}': '${jsEscape(v)}'`)
+              .join(', ')} }`
+          : '';
       const desc = r.description ? `  // ${r.description}\n` : '';
-      return `${desc}  { method: '${r.method}', url: '${jsEscape(url)}'${bodyLine} },`;
+      return `${desc}  { method: '${r.method}', url: '${jsEscape(url)}'${hdrLine}${bodyLine} },`;
     })
     .join('\n');
 
@@ -380,8 +505,7 @@ ${headerBlock}
   for (const r of requests) {
     const res = await fetch(r.url, {
       method: r.method,
-      headers: sharedHeaders,
-      ${reqs.some((r) => r.body) ? 'body: r.body,' : ''}
+      headers: ${reqs.some((r) => r.headers && Object.keys(r.headers).length > 0) ? '{ ...sharedHeaders, ...r.headers }' : 'sharedHeaders'},${reqs.some((r) => r.body || r.rawBody) ? '\n      body: r.body,' : ''}
     });
     if (!res.ok) {
       const err = await res.json().catch(() => null);
@@ -451,12 +575,31 @@ ${genFetchMulti(i)}`;
     (url.includes('/Microsoft.Dynamics.CRM.') ||
       url.endsWith('/Merge') ||
       (!recordId && !i.built.entitySet && !!i.body)); // unbound action like POST /WhoAmI(…) is GET so this won't match
-  const isFunction = i.method === 'GET' && !recordId && !i.built.entitySet;
+  const fn = detectFunction(i);
+  const isFunction = !!fn;
   const isRef = url.endsWith('/$ref') || /\$ref\?/.test(url);
   const isWorkflow = url.includes('/workflows(');
   const isRetrieveMultiple = i.method === 'GET' && !recordId && !isFunction;
   const isRetrieveSingle = i.method === 'GET' && !!recordId && !isFunction;
   const isWrite = i.method !== 'GET' && !isAction && !isRef && !isWorkflow;
+
+  // Xrm.WebApi has no helper for these — the CRUD helpers address rows by
+  // GUID only and send JSON. Emit the fetch equivalent with the reason (#60).
+  const xrmUnsupported = i.rawBody
+    ? 'Xrm.WebApi sends JSON only — binary file content needs a raw request.'
+    : fn?.binding === 'collection'
+      ? "Xrm.WebApi.online.execute only binds functions to a single record ('entity'), not to an entity set."
+      : isWrite && isAltKeyAddressed(i)
+        ? 'Xrm.WebApi.updateRecord / deleteRecord take a GUID, not an alternate key.'
+        : i.method === 'PUT' && !putColumn(i)
+          ? 'Xrm.WebApi has no single-property PUT helper.'
+          : null;
+  if (xrmUnsupported) {
+    return `// ${xrmUnsupported}
+// Use fetch from the form script instead:
+
+${genFetch(i)}`;
+  }
 
   // ── Actions / Workflow ─────────────────────────────────────────
   // Xrm.WebApi.online.execute() takes a request descriptor object whose
@@ -502,30 +645,13 @@ ${isBound ? `    entity: { entityType: '${logical}', id: '${jsEscape(recordId ??
   }
 
   // ── Functions ─────────────────────────────────────────────────
-  if (isFunction) {
-    const fnMatch = url.match(/\/([^/?(]+)(?=\(|$)/);
-    const fnName = fnMatch ? fnMatch[1] : (url.split('/').pop() ?? '');
+  if (fn) {
     return `// Xrm.WebApi.online.execute — OData function call.
 // Functions are GET requests; the descriptor sets operationType: 1.
 
 (async () => {
   const request = {
-${Object.entries(
-  i.built.queryParts
-    .filter((p) => p.key.startsWith('@'))
-    .reduce<Record<string, string>>((acc, p) => {
-      acc[p.key.replace(/^@/, '')] = p.value;
-      return acc;
-    }, {}),
-)
-  .map(([k, v]) => `    ${k}: ${decodeFunctionAlias(v)},`)
-  .join('\n')}
-    getMetadata: () => ({
-      boundParameter: null,
-      operationType: 1,  // 1 = Function
-      operationName: '${fnName}',
-      parameterTypes: { /* parameter type descriptors per CSDL */ },
-    }),
+${xrmFunctionMembers(i, fn, '    ')}
   };
 
   const response = await Xrm.WebApi.online.execute(request);
@@ -589,22 +715,28 @@ ${genFetchMulti(i)}`;
 
   // Write group — Create / Update / Delete / Upsert
   if (isWrite) {
+    // POST → createRecord(name, data); PATCH → updateRecord(name, id, data);
+    // DELETE → deleteRecord(name, id). A single-column PUT has no helper —
+    // updateRecord with just that column is the equivalent PATCH (#60).
     const verb =
       i.method === 'POST'
         ? 'createRecord'
-        : i.method === 'PATCH'
-          ? 'updateRecord'
-          : i.method === 'DELETE'
-            ? 'deleteRecord'
-            : 'execute';
+        : i.method === 'DELETE'
+          ? 'deleteRecord'
+          : 'updateRecord';
+    const putCol = putColumn(i);
+    const data = putCol ? { [putCol]: i.body?.value ?? null } : (i.body ?? {});
     const dataLiteral =
       verb === 'deleteRecord'
         ? '' // delete doesn't take a body
-        : `  const data = ${formatJsObject(i.body ?? {}, '  ')};\n\n`;
+        : `  const data = ${formatJsObject(data, '  ')};\n\n`;
     const callArgs =
       verb === 'deleteRecord'
         ? 'entityLogicalName, id'
-        : `entityLogicalName${recordId ? ', id' : ''}, data`;
+        : verb === 'createRecord'
+          ? 'entityLogicalName, data'
+          : 'entityLogicalName, id, data';
+    const needsId = verb !== 'createRecord';
     return `// Xrm.WebApi.${verb} — write-side request.
 // Run inside a model-driven app / D365 form script.
 //
@@ -612,12 +744,16 @@ ${genFetchMulti(i)}`;
 //   • @odata.bind keys in \`data\` set lookup values — the value is the OData
 //     entity-set URL fragment, e.g. '/contacts(<guid>)'.
 //   • Multi-select choice columns are sent as comma-separated integer strings.
-//   • return=representation is automatic with Xrm.WebApi.${verb}: the resolved
-//     result already carries the freshly-saved row (with system-set values).
+//   • createRecord / updateRecord resolve to { entityType, id } only — no
+//     column values. Call Xrm.WebApi.retrieveRecord if you need the saved row.${
+      putCol
+        ? `\n//   • PUT /<set>(<id>)/${putCol} has no Xrm.WebApi helper — updateRecord with\n//     just that column is the equivalent PATCH.`
+        : ''
+    }
 
 (async () => {
   const entityLogicalName = '${logical}';
-${recordId ? `  const id = '${jsEscape(recordId)}';\n` : ''}${dataLiteral}  const result = await Xrm.WebApi.${verb}(${callArgs});
+${needsId ? `  const id = '${jsEscape(recordId ?? '<id>')}';\n` : ''}${dataLiteral}  const result = await Xrm.WebApi.${verb}(${callArgs});
   console.log('Result:', result);
 })().catch(err => console.error('Xrm.WebApi error:', err));
 `;
@@ -672,12 +808,32 @@ function genXrmBatch(i: CodegenInputs): string {
     (url.includes('/Microsoft.Dynamics.CRM.') ||
       url.endsWith('/Merge') ||
       (!recordId && !i.built.entitySet && !!i.body));
-  const isFunction = i.method === 'GET' && !recordId && !i.built.entitySet;
+  const fn = detectFunction(i);
+  const isFunction = !!fn;
   const isWorkflow = url.includes('/workflows(');
   const isRef = url.endsWith('/$ref') || /\$ref\?/.test(url);
   const isRetrieveMultiple = i.method === 'GET' && !recordId && !isFunction;
   const isRetrieveSingle = i.method === 'GET' && !!recordId && !isFunction;
   const isWrite = i.method !== 'GET' && !isAction && !isRef && !isWorkflow;
+
+  // Requests a CRUD / function descriptor can't express — emit the fetch
+  // equivalent with the reason instead of a wrong descriptor (#60).
+  const batchUnsupported =
+    i.rawBody || (i.multiRequests && i.multiRequests.length > 1 && !isRef)
+      ? 'executeMultiple descriptors send JSON only — binary file uploads / downloads need raw requests.'
+      : fn?.binding === 'collection'
+        ? "Function descriptors only bind to a single record ('entity'), not to an entity set."
+        : isWrite && isAltKeyAddressed(i)
+          ? 'CRUD descriptors address rows by GUID, not by alternate key.'
+          : i.method === 'PUT' && !putColumn(i)
+            ? 'There is no CRUD descriptor for this single-property PUT.'
+            : null;
+  if (batchUnsupported) {
+    return `// ${batchUnsupported}
+// Use fetch instead:
+
+${genFetch(i)}`;
+  }
 
   // Re-derive the OData query options string from the request's
   // queryParts (decoded for readability inside the JS snippet).
@@ -725,21 +881,14 @@ ${isBound ? `      entity: { entityType: '${logical}', id: '${jsEscape(recordId 
   }
 
   // ── Function (operationType: 1) ───────────────────────────────
-  if (isFunction) {
-    const fnMatch = url.match(/\/([^/?(]+)(?=\(|$)/);
-    const fnName = fnMatch ? fnMatch[1] : (url.split('/').pop() ?? '');
+  if (fn) {
     return `// Xrm.WebApi.online.executeMultiple — batched function call.
 // Functions use operationType: 1 in the metadata descriptor.
 
 (async () => {
   const requests = [
     {
-      getMetadata: () => ({
-        boundParameter: null,
-        operationType: 1,  // 1 = Function
-        operationName: '${fnName}',
-        parameterTypes: { /* parameter type descriptors per CSDL */ },
-      }),
+${xrmFunctionMembers(i, fn, '      ')}
     },
   ];
 
@@ -870,16 +1019,21 @@ ${sources
           : i.method === 'DELETE'
             ? 'Delete'
             : 'Update';
+    // Single-column PUT → Update with just that column (equivalent PATCH).
+    const putCol = putColumn(i);
+    const data = putCol ? { [putCol]: i.body?.value ?? null } : (i.body ?? {});
     const bodyLiteral =
-      opName === 'Delete' ? '' : `\n      data: ${formatJsObject(i.body ?? {}, '      ')},\n`;
+      opName === 'Delete' ? '' : `\n      data: ${formatJsObject(data, '      ')},\n`;
     // Honest fallback: if neither entitySet nor entityLogical is known we
     // emit a placeholder rather than guessing 'accounts'. The user can fill
     // in the right collection name (or the action detection above should
     // have caught this case — log a console warning if we get here).
     const collectionName = i.built.entitySet || (logical ? `${logical}s` : '<entity-set>');
-    const entityLine = recordId
-      ? `      entity: { entityType: '${logical || '<entity-logical>'}', id: '${jsEscape(recordId ?? '')}' },`
-      : `      collection: '${collectionName}',`;
+    // Update / Delete always address a row (placeholder until one is picked).
+    const entityLine =
+      recordId || opName !== 'Create'
+        ? `      entity: { entityType: '${logical || '<entity-logical>'}', id: '${jsEscape(recordId ?? '<id>')}' },`
+        : `      collection: '${collectionName}',`;
     return `// Xrm.WebApi.online.executeMultiple — batched ${opName.toLowerCase()} via CRUD descriptor.
 //
 // Extending: drop more descriptors into \`requests\` to do them in a batch.
@@ -953,7 +1107,7 @@ ${setHeaders ? '  ' + setHeaders.split('\n').join('\n  ') : ''}
       console.error('Dataverse ' + req.status + ':', req.responseText);
     }
   };
-  req.send(${i.method === 'GET' || i.method === 'DELETE' ? '' : `JSON.stringify(${formatJsObject(i.body ?? {}, '  ')})`});
+  req.send(${isBodyless(i.method) ? '' : i.rawBody ? `/* ${i.rawBody}: ArrayBuffer / Blob with the file content */ new Uint8Array()` : `JSON.stringify(${formatJsObject(i.body ?? {}, '  ')})`});
 })();
 
 // XMLHttpRequest example — full URL form (if you can't use Xrm.Utility):
@@ -1739,16 +1893,28 @@ function genCsharp(i: CodegenInputs): string {
           `http.DefaultRequestHeaders.TryAddWithoutValidation("${k}", "${v.replace(/"/g, '\\"')}");`,
       )
       .join('\n');
+    // One tuple type for every row so `new[] { … }` has a best type — the
+    // old anonymous objects differed per row (with / without `content`) and
+    // used `content:` (invalid in an anonymous type), so it didn't compile (#60).
+    const csStr = (v: string) => `@"${csharpVerbatimEscape(v)}"`;
     const requestObjects = reqs
       .map((r) => {
-        const url = `https://${ENV.host}${r.relativeUrl}`;
-        const desc = r.description ? `        // ${r.description}\n` : '';
-        const body = r.body ? `, content: @"${csharpVerbatimEscape(JSON.stringify(r.body))}"` : '';
-        return `${desc}        new { method = HttpMethod.${methodCsharp(r.method)}, url = "${url}"${body} },`;
+        const url = multiUrl(r);
+        const desc = r.description ? `    // ${r.description}\n` : '';
+        const content = r.rawBody
+          ? csStr(r.rawBody)
+          : r.body
+            ? csStr(JSON.stringify(r.body))
+            : 'null';
+        const hdrs = Object.entries(r.headers ?? {})
+          .map(([k, v]) => `(${csStr(k)}, ${csStr(v)})`)
+          .join(', ');
+        return `${desc}    (HttpMethod.${methodCsharp(r.method)}, ${csStr(url)}, ${content}, new (string, string)[] { ${hdrs} }),`;
       })
       .join('\n');
+    const anyRaw = reqs.some((r) => r.rawBody);
     return `// .NET 8 — HttpClient (multi-request)
-// Associate / Disassociate over a collection fires one call per related id.
+// One call per request, sent in order.${anyRaw ? '\n// Placeholder bodies like <chunk bytes> stand for the binary content — send the\n// real bytes with ByteArrayContent instead of the placeholder string.' : ''}
 
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -1757,33 +1923,59 @@ var http = new HttpClient { BaseAddress = new Uri("https://${ENV.host}/") };
 http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "<access-token>");
 ${headerLines}
 
-var requests = new[] {
+var requests = new (HttpMethod Method, string Url, string? Content, (string Name, string Value)[] Headers)[]
+{
 ${requestObjects}
 };
 
 int ok = 0;
 foreach (var r in requests)
 {
-    var req = new HttpRequestMessage((HttpMethod)((dynamic)r).method, (string)((dynamic)r).url);
-    var content = ((dynamic)r).content as string;
-    if (!string.IsNullOrEmpty(content))
-        req.Content = new StringContent(content, System.Text.Encoding.UTF8, "application/json");
+    var req = new HttpRequestMessage(r.Method, r.Url);
+    if (r.Content is not null)
+        req.Content = new StringContent(r.Content, System.Text.Encoding.UTF8, "application/json");
+    foreach (var (name, value) in r.Headers)
+    {
+        // Content-Type / Content-Range / Content-Length belong on the content.
+        if (req.Headers.TryAddWithoutValidation(name, value)) continue;
+        req.Content?.Headers.Remove(name);
+        req.Content?.Headers.TryAddWithoutValidation(name, value);
+    }
     using var res = await http.SendAsync(req);
     if (res.IsSuccessStatusCode) ok++;
-    else Console.WriteLine($"{r} → {(int)res.StatusCode} {res.ReasonPhrase}");
+    else Console.WriteLine($"{r.Method} {r.Url} → {(int)res.StatusCode} {res.ReasonPhrase}");
 }
 Console.WriteLine($"{ok}/{requests.Length} requests succeeded");
 `;
   }
   const url = fullUrl(i);
-  const headerLines = Object.entries(i.headers)
+  const hasBody = !isBodyless(i.method);
+  const sendable = Object.entries(i.headers)
     .filter(([, v]) => v)
-    .filter(([k]) => k.toLowerCase() !== 'authorization')
+    .filter(([k]) => k.toLowerCase() !== 'authorization');
+  // Content-* headers can't go on DefaultRequestHeaders (TryAdd silently
+  // fails) — set them on the content instead, when there is one.
+  const headerLines = sendable
+    .filter(([k]) => !CONTENT_HEADERS.has(k.toLowerCase()))
     .map(
       ([k, v]) =>
         `http.DefaultRequestHeaders.TryAddWithoutValidation("${k}", "${v.replace(/"/g, '\\"')}");`,
     )
     .join('\n');
+  const contentHeaderLines = hasBody
+    ? sendable
+        .filter(([k]) => CONTENT_HEADERS.has(k.toLowerCase()))
+        .map(
+          ([k, v]) =>
+            `req.Content.Headers.Remove("${k}");\nreq.Content.Headers.TryAddWithoutValidation("${k}", "${v.replace(/"/g, '\\"')}");\n`,
+        )
+        .join('')
+    : '';
+  const contentLine = !hasBody
+    ? ''
+    : i.rawBody
+      ? `// ${i.rawBody}: the file content.\nreq.Content = new ByteArrayContent(File.ReadAllBytes("<path-to-file>"));\n`
+      : `req.Content = new StringContent(@"${csharpVerbatimEscape(JSON.stringify(i.body ?? {}, null, 2))}", System.Text.Encoding.UTF8, "application/json");\n`;
   return `// .NET 8 — HttpClient. For production use Microsoft.PowerPlatform.Dataverse.Client
 // (ServiceClient) instead — it handles auth, retries, and OData parsing for you.
 
@@ -1795,7 +1987,7 @@ http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer
 ${headerLines}
 
 var req = new HttpRequestMessage(HttpMethod.${methodCsharp(i.method)}, "${url}");
-${i.method !== 'GET' ? `req.Content = new StringContent(@"${csharpVerbatimEscape(JSON.stringify(i.body ?? {}, null, 2))}", System.Text.Encoding.UTF8, "application/json");\n` : ''}
+${contentLine}${contentHeaderLines}
 using var res = await http.SendAsync(req);
 res.EnsureSuccessStatusCode();
 var json = await res.Content.ReadAsStringAsync();
@@ -1854,13 +2046,26 @@ function genPowershell(i: CodegenInputs): string {
       .join('\n');
     const lines = reqs
       .map((r) => {
-        const url = `https://${ENV.host}${r.relativeUrl}`;
-        const body = r.body
-          ? ` -ContentType 'application/json' -Body '${JSON.stringify(r.body).replace(/'/g, "''")}'`
-          : '';
-        return `Invoke-RestMethod -Method ${r.method} -Uri ${psQuote(url)} -Headers $headers${body}`;
+        const url = multiUrl(r);
+        // Per-request headers go on a copy of the shared table; Content-Type
+        // is passed via -ContentType (it can't also be in -Headers).
+        const extra = Object.entries(r.headers ?? {});
+        const ctype = extra.find(([k]) => k.toLowerCase() === 'content-type')?.[1];
+        const own = extra.filter(([k]) => k.toLowerCase() !== 'content-type');
+        const hdrVar = own.length > 0 ? '$h' : '$headers';
+        const setup =
+          own.length > 0
+            ? `$h = $headers.Clone()\n${own.map(([k, v]) => `$h[${psQuote(k)}] = ${psQuote(v)}`).join('\n')}\n`
+            : '';
+        const body = r.rawBody
+          ? ` -ContentType ${psQuote(ctype ?? 'application/octet-stream')} -InFile '<path-to-file>'  # ${r.rawBody}`
+          : r.body
+            ? ` -ContentType ${psQuote(ctype ?? 'application/json')} -Body ${psQuote(JSON.stringify(r.body))}`
+            : '';
+        const desc = r.description ? `# ${r.description}\n` : '';
+        return `${desc}${setup}Invoke-RestMethod -Method ${r.method} -Uri ${psQuote(url)} -Headers ${hdrVar}${body}`;
       })
-      .join('\n');
+      .join('\n\n');
     return `# PowerShell — Invoke-RestMethod (multi-request)
 $token = "<access-token>"
 $headers = @{
@@ -1872,11 +2077,23 @@ ${lines}
 `;
   }
   const url = fullUrl(i);
-  const headerLines = Object.entries(i.headers)
+  const hasBody = !isBodyless(i.method);
+  const sendable = Object.entries(i.headers)
     .filter(([, v]) => v)
-    .filter(([k]) => k.toLowerCase() !== 'authorization')
+    .filter(([k]) => k.toLowerCase() !== 'authorization');
+  // Content-Type goes through -ContentType, not the -Headers table.
+  const ctype = sendable.find(([k]) => k.toLowerCase() === 'content-type')?.[1];
+  const headerLines = sendable
+    .filter(([k]) => k.toLowerCase() !== 'content-type')
     .map(([k, v]) => `  ${psQuote(k)} = ${psQuote(v)}`)
     .join('\n');
+  const bodyDecl =
+    hasBody && !i.rawBody ? `$body = @'\n${JSON.stringify(i.body ?? {}, null, 2)}\n'@\n\n` : '';
+  const bodyArgs = !hasBody
+    ? ''
+    : i.rawBody
+      ? ` \`\n  -ContentType ${psQuote(ctype ?? 'application/octet-stream')} \`\n  -InFile '<path-to-file>'  # ${i.rawBody}`
+      : ` \`\n  -ContentType ${psQuote(ctype ?? 'application/json')} \`\n  -Body $body`;
   return `# PowerShell — Invoke-RestMethod
 # Replace <access-token> with a real bearer token (Get-AzAccessToken / msal-token).
 
@@ -1886,10 +2103,10 @@ $headers = @{
 ${headerLines}
 }
 
-${i.method !== 'GET' ? `$body = @'\n${JSON.stringify(i.body ?? {}, null, 2)}\n'@\n\n` : ''}$response = Invoke-RestMethod \`
+${bodyDecl}$response = Invoke-RestMethod \`
   -Method ${i.method} \`
   -Uri ${psQuote(url)} \`
-  -Headers $headers${i.method !== 'GET' ? ' `\n  -ContentType "application/json" `\n  -Body $body' : ''}
+  -Headers $headers${bodyArgs}
 
 $response | ConvertTo-Json -Depth 8
 `;
@@ -1908,12 +2125,18 @@ function genCurl(i: CodegenInputs): string {
       .join(' \\\n');
     const lines = reqs
       .map((r) => {
-        const url = `https://${ENV.host}${r.relativeUrl}`;
+        const url = multiUrl(r);
         const desc = r.description ? `# ${r.description}\n` : '';
-        const body = r.body
-          ? ` \\\n  --data-raw '${JSON.stringify(r.body).replace(/'/g, "'\\''")}'`
-          : '';
-        return `${desc}curl -X ${r.method} --globoff ${shQuote(url)} \\\n  -H "Authorization: Bearer <access-token>" \\\n${hdrLines}${body}`;
+        const body = r.rawBody
+          ? ` \\\n  --data-binary '@<path-to-file>'  # ${r.rawBody}`
+          : r.body
+            ? ` \\\n  --data-raw '${JSON.stringify(r.body).replace(/'/g, "'\\''")}'`
+            : '';
+        // Request-specific headers (Content-Range, x-ms-transfer-mode, …).
+        const ownHdrs = Object.entries(r.headers ?? {})
+          .map(([k, v]) => ` \\\n  -H ${shQuote(`${k}: ${v}`)}`)
+          .join('');
+        return `${desc}curl -X ${r.method} --globoff ${shQuote(url)} \\\n  -H "Authorization: Bearer <access-token>"${hdrLines ? ` \\\n${hdrLines}` : ''}${ownHdrs}${body}`;
       })
       .join('\n\n');
     return `# cURL — multi-request (Associate / Disassociate over a collection)\n# Each association is a separate request per the docs.\n\n${lines}\n`;
@@ -1924,10 +2147,11 @@ function genCurl(i: CodegenInputs): string {
     .filter(([, v]) => v)
     .map(([k, v]) => `  -H ${shQuote(`${k}: ${v}`)}`)
     .join(' \\\n');
-  const body =
-    i.method !== 'GET' && i.method !== 'DELETE'
-      ? ` \\\n  --data-raw '${JSON.stringify(i.body ?? {}).replace(/'/g, "'\\''")}'`
-      : '';
+  const body = isBodyless(i.method)
+    ? ''
+    : i.rawBody
+      ? ` \\\n  --data-binary '@<path-to-file>'  # ${i.rawBody}`
+      : ` \\\n  --data-raw '${JSON.stringify(i.body ?? {}).replace(/'/g, "'\\''")}'`;
   return `# cURL — shell context
 # The URL is single-quoted so the shell doesn't expand $select / $filter / $ref
 # --globoff stops curl's own [] {} URL globbing (OData literals can contain them)
@@ -1953,9 +2177,10 @@ function genJson(i: CodegenInputs): string {
         headers: i.headers,
         requests: i.multiRequests.map((r) => ({
           method: r.method,
-          url: `https://${ENV.host}${r.relativeUrl}`,
+          url: multiUrl(r),
           relativeUrl: r.relativeUrl,
-          body: r.body,
+          headers: r.headers,
+          body: r.rawBody ?? r.body,
           description: r.description,
         })),
       },
@@ -1971,6 +2196,6 @@ function genJson(i: CodegenInputs): string {
     entitySet: i.built.entitySet,
     headers: i.headers,
   };
-  if (i.method !== 'GET' && i.body) out.body = i.body;
+  if (!isBodyless(i.method) && (i.rawBody || i.body)) out.body = i.rawBody ?? i.body;
   return JSON.stringify(out, null, 2);
 }

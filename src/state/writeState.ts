@@ -83,6 +83,13 @@ export interface LookupFieldValue {
   id: string;
   /** Entity logical name of the related table (must be one of the column's targets). */
   targetEntity: string;
+  /**
+   * Entity set of the related table, when known without its metadata —
+   * set when the value is read out of a typed JSON body
+   * (`"/contacts(<guid>)"`) so the bind can be rebuilt even if the
+   * target's metadata was never loaded.
+   */
+  entitySet?: string;
 }
 
 /** Any value the FieldSetEditor can produce for a single column. */
@@ -118,6 +125,16 @@ export interface CreateState {
    *   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/associate-disassociate-entities-using-web-api#disassociate-by-using-a-single-valued-navigation-property
    */
   nullFields: string[];
+
+  /**
+   * The field set's JSON-mode text. When non-null, this text IS the request
+   * body: the URL bar, Code tab and Execute send exactly what it parses to
+   * (nulls, annotations and unknown keys included), and fieldValues /
+   * nullFields are ignored until the user switches back to Form. null = Form
+   * mode (body built from fieldValues + nullFields). Optional for saves made
+   * before the field existed.
+   */
+  rawBody?: string | null;
 
   /** Prefer header — return=representation lives here and controls 201 vs 204. */
   prefer: PreferSpec;
@@ -225,6 +242,16 @@ export interface UpdateState {
    */
   nullFields: string[];
 
+  /**
+   * The field set's JSON-mode text. When non-null, this text IS the request
+   * body: the URL bar, Code tab and Execute send exactly what it parses to
+   * (nulls, annotations and unknown keys included), and fieldValues /
+   * nullFields are ignored until the user switches back to Form. null = Form
+   * mode (body built from fieldValues + nullFields). Optional for saves made
+   * before the field existed.
+   */
+  rawBody?: string | null;
+
   /** Prefer header — return=representation flips 204 ↔ 200 + body. */
   prefer: PreferSpec;
 
@@ -285,6 +312,16 @@ export interface UpsertState {
    * columns anyway, so explicit-null vs absent is mostly equivalent there.
    */
   nullFields: string[];
+
+  /**
+   * The field set's JSON-mode text. When non-null, this text IS the request
+   * body: the URL bar, Code tab and Execute send exactly what it parses to
+   * (nulls, annotations and unknown keys included), and fieldValues /
+   * nullFields are ignored until the user switches back to Form. null = Form
+   * mode (body built from fieldValues + nullFields). Optional for saves made
+   * before the field existed.
+   */
+  rawBody?: string | null;
 
   prefer: PreferSpec;
   headers: HeaderItem[];
