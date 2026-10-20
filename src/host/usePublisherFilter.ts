@@ -28,7 +28,8 @@ import {
   type EntityMetadata,
   type PublisherWithSolutions,
 } from './pptbClient';
-import { metadataCache } from './cache';
+import { pinMetadataCache } from './cache';
+import { useActiveOrg } from './activeOrg';
 
 export function usePublisherFilter() {
   // ── Layer 1: publishers + solutions (combined) ──
@@ -50,11 +51,17 @@ export function usePublisherFilter() {
   const [entitiesLoading, setEntitiesLoading] = useState(false);
   const [entitiesError, setEntitiesError] = useState<string | null>(null);
 
+  // Reload when the PPTB connection switches to another org (#52).
+  const org = useActiveOrg();
+
   // ── Effect 1: load publishers + solutions on mount ──
   useEffect(() => {
     let mounted = true;
 
     async function loadPublishersWithSolutions() {
+      // Pinned: a response that lands after a connection switch is cached
+      // under the org it came from (#52).
+      const metadataCache = pinMetadataCache();
       const cached = metadataCache.getPublishersWithSolutions();
       if (cached) {
         setPublishersWithSolutions(cached);
@@ -80,7 +87,7 @@ export function usePublisherFilter() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [org]);
 
   // ── Effect 2: cascade publisher → solution selection ──
   useEffect(() => {
@@ -117,6 +124,9 @@ export function usePublisherFilter() {
     let mounted = true;
 
     async function loadEntities() {
+      // Pinned: a response that lands after a connection switch is cached
+      // under the org it came from (#52).
+      const metadataCache = pinMetadataCache();
       const cached = metadataCache.getFilteredEntities(selectedSolutionIds);
       if (cached) {
         setEntities(cached);
@@ -148,7 +158,7 @@ export function usePublisherFilter() {
     return () => {
       mounted = false;
     };
-  }, [selectedSolutionIds]);
+  }, [selectedSolutionIds, org]);
 
   const updateSelectedPublishers = useCallback((ids: string[]) => {
     setSelectedPublisherIds(ids);
