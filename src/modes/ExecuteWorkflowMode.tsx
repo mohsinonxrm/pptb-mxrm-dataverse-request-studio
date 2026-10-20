@@ -36,9 +36,11 @@ import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { PaneHead } from '../editors/PaneHead';
 import { KvGrid } from '../primitives/KvGrid';
 import { RecordPicker } from '../primitives/RecordPicker';
+import { WorkflowArgumentsCard } from '../editors/WorkflowArgumentsCard';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
@@ -57,7 +59,9 @@ import {
   hashState,
   type SavedRequest,
   type SerializedExecuteWorkflowState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 // Workflow shape used by the picker — the wire response fields are
@@ -83,7 +87,8 @@ type RootClauseId = 'pick' | 'target' | 'headers';
 
 export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('exec-workflow');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('exec-workflow', deserializeExecuteWorkflow, initialState);
+  const [state, setState] = useState(draft.state);
   const [activePath, setActivePath] = useState<string>('pick');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
@@ -159,8 +164,8 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // Save / Load
   const { entities } = useScopedEntities();
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const [entityRecordName, setEntityRecordName] = useState<string>('');
 
   const markDirty = (id: string) =>
@@ -196,6 +201,7 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: 'exec-workflow',
           url: built.relativeUrl,
           method: 'POST',
@@ -212,6 +218,7 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeExecuteWorkflow(state), [state]);
+  useStashModeDraft('exec-workflow', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 
@@ -230,7 +237,7 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
       entities.length > 0 &&
       !entities.some((e) => e.logicalName === targetWf.primaryEntity)
     ) {
-      window.alert(
+      notify(
         `Can't load "${entry.name}": workflow's primary entity \`${targetWf.primaryEntity}\` ` +
           `isn't available in this environment.`,
       );
@@ -242,6 +249,19 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(null);
     setEntityRecordName('');
     setActivePath('pick');
+  };
+
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'exec-workflow');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
   };
 
   usePublishSaveContext(
@@ -360,6 +380,7 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
                 placeholder={`Search ${tbl?.displayName ?? wf.primaryEntity} records…`}
               />
             </Field>
+            <WorkflowArgumentsCard workflowId={wf.id} />
           </div>
         </div>
       ) : (
@@ -401,6 +422,7 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={
