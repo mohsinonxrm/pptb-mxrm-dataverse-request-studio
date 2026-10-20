@@ -47,7 +47,11 @@ import type {
 } from './executeState';
 import type { ManageFileState, ManageImageState, ManageAttachmentState } from './binaryState';
 import { getEnv } from '../mock/environment';
-import { autoSuggestBatch, type SerializedBatchState } from '../engine/batch/batchModel';
+import {
+  autoSuggestBatch,
+  autoSuggestExecuteMultiple,
+  type SerializedBatchState,
+} from '../engine/batch/batchModel';
 
 // ── Storage shape ─────────────────────────────────────────────────────
 //
@@ -134,7 +138,9 @@ export type SavedModeId =
   | 'manage-image'
   | 'manage-attachment'
   // $batch composer (#9) — a list of raw requests grouped into change sets.
-  | 'batch';
+  | 'batch'
+  // ExecuteMultiple-style mode (#11) — same state shape, one independent group.
+  | 'execute-multiple';
 
 export interface SavedRequest {
   /** Stable random id — never reused across renames; survives content edits. */
@@ -706,6 +712,8 @@ export function autoSuggestName(modeId: SavedModeId, state: unknown): string {
       return autoSuggestManageAttachment(state as SerializedManageAttachmentState);
     case 'batch':
       return autoSuggestBatch(state as SerializedBatchState);
+    case 'execute-multiple':
+      return autoSuggestExecuteMultiple(state as SerializedBatchState);
   }
 }
 

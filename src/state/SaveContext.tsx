@@ -75,7 +75,7 @@ export function SaveContextRoot({
 export function usePublishSaveContext(value: SaveContextValue | null): void {
   const setter = useContext(SaveSetterContext);
   useEffect(() => {
-    if (value && value.modeId !== 'batch') {
+    if (value && value.modeId !== 'batch' && value.modeId !== 'execute-multiple') {
       lastPublished = { modeId: value.modeId, state: value.state, orgScope: getOrgScope() };
     }
     if (!setter) return;

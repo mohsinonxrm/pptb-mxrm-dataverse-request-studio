@@ -65,6 +65,11 @@ export interface BatchState {
   groups: BatchGroup[];
   /** `Prefer: odata.continue-on-error` — keep going after a failed request. */
   continueOnError: boolean;
+  /**
+   * ExecuteMultiple-style mode (#11) only: SDK `ReturnResponses`. False →
+   * the results list only the faults, as ExecuteMultipleResponse does.
+   */
+  returnResponses?: boolean;
   dirty: Set<string>;
 }
 
@@ -415,6 +420,7 @@ export function deserializeBatch(snap: SerializedBatchState): BatchState {
       items: (Array.isArray(g.items) ? g.items : []).map((i) => ({ ...newItem(i.op), ...i })),
     })),
     continueOnError: !!snap.continueOnError,
+    ...(snap.returnResponses !== undefined ? { returnResponses: !!snap.returnResponses } : {}),
     dirty: new Set(),
   };
 }
@@ -424,6 +430,25 @@ export function autoSuggestBatch(snap: SerializedBatchState): string {
   const cs = (snap.groups ?? []).filter((g) => g.atomic && g.items?.length).length;
   const parts = ['batch', `${n} request${n === 1 ? '' : 's'}`];
   if (cs) parts.push(`${cs} change set${cs === 1 ? '' : 's'}`);
+  parts.push(new Date().toISOString().slice(0, 10));
+  return parts.join(' · ');
+}
+
+// ── ExecuteMultiple-style mode (#11) ────────────────────────────────────
+// One flat list of independent requests: ExecuteMultiple has no change
+// sets (ExecuteTransaction is the atomic message — a change set here).
+
+export const initialExecuteMultipleState = (): BatchState => ({
+  groups: [newGroup(false)],
+  continueOnError: false,
+  returnResponses: true,
+  dirty: new Set(),
+});
+
+export function autoSuggestExecuteMultiple(snap: SerializedBatchState): string {
+  const n = (snap.groups ?? []).reduce((acc, g) => acc + (g.items?.length ?? 0), 0);
+  const parts = ['ExecuteMultiple', `${n} request${n === 1 ? '' : 's'}`];
+  if (snap.continueOnError) parts.push('continue on error');
   parts.push(new Date().toISOString().slice(0, 10));
   return parts.join(' · ');
 }

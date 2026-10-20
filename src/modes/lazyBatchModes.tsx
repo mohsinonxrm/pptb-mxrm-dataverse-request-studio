@@ -30,3 +30,13 @@ function lazyMode(name: string, load: () => Promise<ComponentType<ModeProps>>) {
 export const BatchMode = lazyMode('BatchMode', () =>
   import('./BatchMode').then((m) => m.BatchMode),
 );
+
+// ExecuteMultiple-style mode (#11): the same component with the SDK settings.
+export const ExecuteMultipleMode = lazyMode('ExecuteMultipleMode', () =>
+  import('./BatchMode').then(
+    (m) =>
+      function ExecuteMultipleMode(props: ModeProps) {
+        return <m.BatchMode {...props} variant="execute-multiple" />;
+      },
+  ),
+);

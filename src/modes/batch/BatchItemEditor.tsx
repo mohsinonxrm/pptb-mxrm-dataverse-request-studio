@@ -162,19 +162,21 @@ export function BatchItemEditor({
             ))}
           </Dropdown>
         </Field>
-        <Field label="Group">
-          <Dropdown
-            value={`${group.atomic ? 'Change set' : 'Independent'} ${groupIndex + 1}`}
-            selectedOptions={[group.id]}
-            onOptionSelect={(_, d) => d.optionValue && onMoveToGroup(d.optionValue)}
-          >
-            {groups.map((g, i) => (
-              <Option key={g.id} value={g.id}>
-                {`${g.atomic ? 'Change set' : 'Independent'} ${i + 1}`}
-              </Option>
-            ))}
-          </Dropdown>
-        </Field>
+        {groups.length > 1 && (
+          <Field label="Group">
+            <Dropdown
+              value={`${group.atomic ? 'Change set' : 'Independent'} ${groupIndex + 1}`}
+              selectedOptions={[group.id]}
+              onOptionSelect={(_, d) => d.optionValue && onMoveToGroup(d.optionValue)}
+            >
+              {groups.map((g, i) => (
+                <Option key={g.id} value={g.id}>
+                  {`${g.atomic ? 'Change set' : 'Independent'} ${i + 1}`}
+                </Option>
+              ))}
+            </Dropdown>
+          </Field>
+        )}
         <Field label="Label (optional)">
           <Input value={item.label} onChange={(_, d) => onChange({ label: d.value })} />
         </Field>
