@@ -672,8 +672,6 @@ interface MessageSources {
 
 const NO_MESSAGE_SOURCES: MessageSources = { customApis: null, customActions: null };
 
-const FORMATTED = '@OData.Community.Display.V1.FormattedValue';
-
 // Each lookup is memoized on its own and only when it succeeded: a failed
 // one (null) is retried by the next load rather than pinning the name
 // heuristic for the whole session.
@@ -686,28 +684,43 @@ async function fetchMessageSources(org: string): Promise<MessageSources> {
       () => queryNames('customapis?$select=uniquename', (r) => [r.uniquename]),
       notFailed,
     ),
-    memoize(
-      org,
-      K_CUSTOM_ACTIONS,
-      () =>
-        queryNames(
-          'workflows?$select=uniquename,_sdkmessageid_value&$filter=category eq 3 and type eq 1',
-          // The message name is the sdkmessage lookup's formatted value. Also
-          // take uniquename when it carries a publisher prefix (it's the same
-          // string then); an unprefixed one could collide with an OOB message.
-          (r) => {
-            const u = r.uniquename;
-            return [
-              r[`_sdkmessageid_value${FORMATTED}`],
-              typeof u === 'string' && u.includes('_') ? u : undefined,
-            ];
-          },
-        ),
-      notFailed,
-    ),
+    memoize(org, K_CUSTOM_ACTIONS, fetchCustomActionNames, notFailed),
   ]);
   return { customApis, customActions };
 }
+
+/**
+ * Message names of custom process actions (workflows with category 3,
+ * type 1). The name lives on the `sdkmessage` row the workflow points at.
+ * PPTB's queryData doesn't return the lookup's FormattedValue annotation, and
+ * `workflow` exposes no navigation property for it, so collect the
+ * sdkmessage ids first and read their names in chunks of ids (#54).
+ */
+async function fetchCustomActionNames(): Promise<Set<string> | null> {
+  const ids = await queryNames(
+    'workflows?$select=_sdkmessageid_value&$filter=category eq 3 and type eq 1',
+    (r) => [r._sdkmessageid_value],
+  );
+  if (!ids) return null;
+  const names = new Set<string>();
+  const all = [...ids];
+  for (let i = 0; i < all.length; i += SDKMESSAGE_CHUNK) {
+    const filter = all
+      .slice(i, i + SDKMESSAGE_CHUNK)
+      .map((id) => `sdkmessageid eq ${id}`)
+      .join(' or ');
+    const chunk = await queryNames(
+      `sdkmessages?$select=name&$filter=${encodeURIComponent(filter)}`,
+      (r) => [r.name],
+    );
+    if (!chunk) return null;
+    for (const n of chunk) names.add(n);
+  }
+  return names;
+}
+
+/** sdkmessage ids per `$filter` — keeps the request URL well under limits. */
+const SDKMESSAGE_CHUNK = 50;
 
 /** Run an OData query (following `@odata.nextLink`) and collect the
  *  lower-cased string names `pick` returns per row. Null on any failure. */
