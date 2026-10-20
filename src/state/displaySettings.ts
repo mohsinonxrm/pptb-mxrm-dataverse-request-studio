@@ -74,6 +74,41 @@ export function settingsForOrg(stored: PersistedDisplaySettings, org: string): D
   };
 }
 
+/**
+ * `stored` after the settings were changed to `next` while connected to
+ * `org`: the shared fields, plus that org's scope selection (#52). Without
+ * an org only the top-level selection changes.
+ */
+export function withSettingsChange(
+  stored: PersistedDisplaySettings,
+  next: DisplaySettings,
+  org: string,
+): PersistedDisplaySettings {
+  const result: PersistedDisplaySettings = { ...stored, ...next };
+  if (org) {
+    result.scopeByOrg = {
+      ...stored.scopeByOrg,
+      [org]: {
+        selectedPublisherIds: next.selectedPublisherIds,
+        selectedSolutionIds: next.selectedSolutionIds,
+      },
+    };
+  }
+  return result;
+}
+
+/** The fields of `next` that differ from `prev` (compared by reference). */
+export function changedSettings(
+  prev: DisplaySettings,
+  next: DisplaySettings,
+): Partial<DisplaySettings> {
+  const changed: Partial<DisplaySettings> = {};
+  for (const key of Object.keys(next) as (keyof DisplaySettings)[]) {
+    if (next[key] !== prev[key]) Object.assign(changed, { [key]: next[key] });
+  }
+  return changed;
+}
+
 export const defaultDisplaySettings: DisplaySettings = {
   useLogicalNames: false,
   valueDisplayMode: 'formatted',
