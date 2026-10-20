@@ -12,7 +12,7 @@ body:
   - type: input
     attributes:
       label: Tool version
-      placeholder: 'e.g., v1.0.0'
+      placeholder: 'e.g., v1.1.4'
     validations:
       required: true
 

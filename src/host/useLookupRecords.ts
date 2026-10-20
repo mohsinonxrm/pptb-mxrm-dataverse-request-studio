@@ -79,6 +79,26 @@ export async function fetchRecordName(tbl: TableMeta, id: string): Promise<strin
 const DEBOUNCE_MS = 250;
 const PAGE = 50;
 
+/**
+ * `$filter` value for "name contains the text the user typed", ready to
+ * append to a query string (#95):
+ *   - `%`, `_` and `[` are Dataverse wildcards inside `contains()`; wrapping
+ *     each in brackets makes it match literally ("50%" finds "50%", not
+ *     "50 anything").
+ *   - `'` is doubled — the OData string-literal escape.
+ *   - The text is then percent-encoded (the column is a logical name and
+ *     needs none). PPTB's `queryData` appends the query to the URL as
+ *     given (Node's URL parser only escapes characters such as spaces and
+ *     quotes), so a raw `&` would start a new query option, `#` would cut
+ *     the rest off as a fragment, `+` would arrive as a space and `%` would
+ *     start an escape sequence. Nothing decodes or re-encodes it on the
+ *     way, so this is the only encoding pass.
+ */
+export function containsFilter(column: string, text: string): string {
+  const literal = text.replace(/[[%_]/g, (c) => `[${c}]`).replace(/'/g, "''");
+  return `contains(${column},'${encodeURIComponent(literal)}')`;
+}
+
 export function useLookupRecords(
   targetEntity: string | null | undefined,
   query: string,
@@ -134,9 +154,7 @@ export function useLookupRecords(
           return;
         }
         const q = query.trim();
-        const filterPart = q
-          ? `&$filter=contains(${tbl.primaryName},'${q.replace(/'/g, "''")}')`
-          : '';
+        const filterPart = q ? `&$filter=${containsFilter(tbl.primaryName, q)}` : '';
         const queryUrl =
           `${tbl.entitySetName}?$select=${tbl.primaryKey},${tbl.primaryName}` +
           `&$top=${PAGE}${filterPart}`;
