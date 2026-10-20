@@ -36,7 +36,7 @@ import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../edit
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { type CsdlAction } from '../mock/actionsCsdl';
-import { actions as actionsProvider } from '../host/csdlProvider';
+import { actions as actionsProvider, fetchSourceClassificationStatus } from '../host/csdlProvider';
 import { findRequestType } from '../registry/requestTypes';
 import { buildExecuteAction, buildExecuteActionBody } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
@@ -164,6 +164,32 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
     setState((s) => ({ ...s, [k]: v }));
     if (dirtyId) markDirty(dirtyId);
   };
+
+  // Custom API / Custom Action membership comes from the customapis and
+  // workflows tables (#54). When a lookup fails (no read privilege), that
+  // half falls back to a name guess — say so in the sub-modes it affects.
+  const [classificationNotice, setClassificationNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (category === 'oob') return;
+    let cancelled = false;
+    fetchSourceClassificationStatus()
+      .then((st) => {
+        if (cancelled) return;
+        const missing = [
+          !st.customApis ? 'customapis' : null,
+          !st.customActions ? 'workflows' : null,
+        ].filter(Boolean);
+        setClassificationNotice(
+          missing.length > 0
+            ? `${missing.join(' and ')} table${missing.length > 1 ? 's' : ''}`
+            : null,
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [category]);
 
   // Bound action requires a record id
   const requiresBoundRecord = action?.binding.kind === 'entity';
@@ -394,24 +420,36 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
   switch (root) {
     case 'pick':
       pane = (
-        <ActionPicker
-          filter={config.filter}
-          title={config.picker.title}
-          sub={config.picker.sub}
-          value={state.actionName}
-          onChange={(name) => {
-            setState((s) => ({
-              ...s,
-              actionName: name ?? '',
-              paramValues: {},
-              boundRecordId: null,
-            }));
-            markDirty('pick');
-            markDirty('params');
-            markDirty('target');
-          }}
-          group="execute"
-        />
+        <>
+          {classificationNotice && (
+            <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 12 }}>
+              <MessageBarBody>
+                <MessageBarTitle>Classification is approximate.</MessageBarTitle>
+                Couldn't read the {classificationNotice} (you may lack read privilege), so Custom
+                APIs, custom process actions and OOB actions are partly told apart by name prefix.
+                Some messages may be listed under a different Execute mode.
+              </MessageBarBody>
+            </MessageBar>
+          )}
+          <ActionPicker
+            filter={config.filter}
+            title={config.picker.title}
+            sub={config.picker.sub}
+            value={state.actionName}
+            onChange={(name) => {
+              setState((s) => ({
+                ...s,
+                actionName: name ?? '',
+                paramValues: {},
+                boundRecordId: null,
+              }));
+              markDirty('pick');
+              markDirty('params');
+              markDirty('target');
+            }}
+            group="execute"
+          />
+        </>
       );
       break;
     case 'target':
