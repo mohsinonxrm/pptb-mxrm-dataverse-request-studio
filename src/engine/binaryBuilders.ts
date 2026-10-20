@@ -15,6 +15,7 @@
 import { ENV } from '../mock/environment';
 import { findTable } from '../mock/metadata';
 import type { BuiltRequest } from './urlBuilder';
+import type { CodegenInputs } from './codeGenerators';
 import {
   ATTACHMENT_TARGET_INFO,
   type ManageFileState,
@@ -43,6 +44,42 @@ export interface BinaryPipelineStep {
   body?: Record<string, unknown> | '<base64 file bytes>' | '<chunk bytes>';
   /** Inline detail / description. */
   detail?: string;
+}
+
+/**
+ * Code-tab inputs for a binary pipeline (#60). Each step's own headers
+ * (`x-ms-transfer-mode`, `x-ms-file-name`, `Content-Range`, `If-Match`, …)
+ * and its body — JSON object or opaque bytes marker — travel with the
+ * request, so the snippets send what Execute sends. A single-step pipeline
+ * folds its headers into the shared map; step headers win over the user's.
+ */
+export function pipelineCodegen(
+  pipeline: BinaryPipelineStep[],
+  userHeaders: Record<string, string>,
+): Pick<CodegenInputs, 'headers' | 'body' | 'rawBody' | 'multiRequests'> {
+  const bodyOf = (step: BinaryPipelineStep) =>
+    typeof step.body === 'object'
+      ? { body: step.body }
+      : typeof step.body === 'string'
+        ? { rawBody: step.body }
+        : {};
+  if (pipeline.length <= 1) {
+    const step = pipeline[0];
+    if (!step) return { headers: userHeaders };
+    return { headers: { ...userHeaders, ...step.headers }, ...bodyOf(step) };
+  }
+  return {
+    headers: userHeaders,
+    multiRequests: pipeline.map((step) => ({
+      method: step.method,
+      relativeUrl: step.relativeUrl.startsWith('<')
+        ? step.relativeUrl
+        : step.relativeUrl.replace(/^https?:\/\/[^/]+/, ''),
+      headers: step.headers,
+      ...bodyOf(step),
+      description: step.title,
+    })),
+  };
 }
 
 // ──────────────────────────────────────────────────────────────

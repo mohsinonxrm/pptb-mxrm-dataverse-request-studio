@@ -4,19 +4,31 @@
 // active publisher / solution selections sourced from the Settings drawer.
 // Persisted across reloads so the user's scope sticks.
 //
+// Results-grid column widths (#12) are stored here too, keyed per table —
+// see views/results/columnWidths.ts.
+//
 // Storage namespace: `pptb-dataverse-request-studio:displaySettings` so the
 // blob doesn't collide with other PPTB tools that persist their own
 // preferences in localStorage.
+
+import type { ColumnWidthStore } from '../views/results/columnWidths';
 
 export type ValueDisplayMode = 'formatted' | 'raw' | 'both';
 
 export type EntityScopeMode = 'publisher-solution' | 'solution-only' | 'all';
 
+/** Results-grid row density — Fluent DataGrid's `size` values (#16). */
+export type GridDensity = 'extra-small' | 'small' | 'medium';
+
 export interface DisplaySettings {
   useLogicalNames: boolean;
   valueDisplayMode: ValueDisplayMode;
+  /** Results-grid column widths the user dragged, per table + column (#12). */
+  columnWidths: ColumnWidthStore;
   entityScopeMode: EntityScopeMode;
   advancedFindOnly: boolean;
+  /** Results-grid row density (#16). */
+  gridDensity: GridDensity;
   /**
    * Selected publisher ids (publisherid GUIDs). Used when
    * entityScopeMode === 'publisher-solution' to narrow the solution list.
@@ -65,8 +77,10 @@ export function settingsForOrg(stored: PersistedDisplaySettings, org: string): D
 export const defaultDisplaySettings: DisplaySettings = {
   useLogicalNames: false,
   valueDisplayMode: 'formatted',
+  columnWidths: {},
   entityScopeMode: 'publisher-solution',
   advancedFindOnly: true,
+  gridDensity: 'medium',
   selectedPublisherIds: [],
   selectedSolutionIds: [],
 };

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Field,
   Combobox,
@@ -26,6 +26,7 @@ import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
 import { useOpenSettings } from '../host/useOpenSettings';
 import { RecordPicker } from '../primitives/RecordPicker';
+import { MoreOptionsHint, useOptionSearch } from '../primitives/optionSearch';
 import { PasteODataDialog } from './PasteODataDialog';
 import { metadata } from '../host/metadataProvider';
 import type { RequestGroup } from '../registry/requestTypes';
@@ -103,16 +104,13 @@ export function TargetEditor({
     setValue(tbl?.displayName ?? '');
   }, [tbl?.displayName]);
 
-  const matching = useMemo(() => {
-    const q = value.trim().toLowerCase();
-    if (!q) return entities;
-    return entities.filter(
-      (t) =>
-        t.displayName.toLowerCase().includes(q) ||
-        t.logicalName.toLowerCase().includes(q) ||
-        t.entitySetName.toLowerCase().includes(q),
-    );
-  }, [entities, value]);
+  // Capped + deferred filter: an org can have ~2,000 tables and Fluent
+  // renders every Option on focus (#21).
+  const {
+    visible: matching,
+    matchCount,
+    hiddenCount,
+  } = useOptionSearch(entities, value, (t) => [t.displayName, t.logicalName, t.entitySetName]);
 
   const onChange: ComboboxProps['onChange'] = (e) => {
     const next = (e.target as HTMLInputElement).value;
@@ -259,7 +257,7 @@ export function TargetEditor({
             placeholder={entitiesLoading ? 'Loading…' : 'Search tables by name…'}
             listbox={{ style: { maxHeight: 360 } }}
           >
-            {matching.length === 0 && (
+            {matchCount === 0 && (
               <Option value="__none" text="" disabled>
                 <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
                   No tables match "{value}"
@@ -276,6 +274,7 @@ export function TargetEditor({
                 </div>
               </Option>
             ))}
+            <MoreOptionsHint hiddenCount={hiddenCount} />
           </Combobox>
         </Field>
 
@@ -300,6 +299,7 @@ export function TargetEditor({
               selectedId={recordId ?? null}
               onPick={(r) => onRecordChange?.(r?.id ?? null, r?.primary ?? '')}
               placeholder={`Search ${tbl.displayName} records by ${tbl.primaryName}…`}
+              memoryKey="target"
             />
           </Field>
         )}

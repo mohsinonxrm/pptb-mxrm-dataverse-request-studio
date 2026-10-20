@@ -131,14 +131,23 @@ export function ClauseTreeItem(props: ClauseTreeItemProps) {
              here so callsites don't each have to import the icon. */
           (badge === '✓' ? (
             <Badge
-              size="extra-small"
+              size="small"
               appearance="tint"
               color="success"
               icon={<Checkmark16Filled />}
               aria-label="Set"
             />
           ) : (
-            <Badge size="extra-small" appearance={badgeAppearance} color={badgeColor}>
+            // `small` with an 11px label (#200): Fluent's `extra-small` is a
+            // 6px dot and squeezed text badges to ~4px. Long labels
+            // ("PATCH 1 field") truncate instead of pushing the row wider.
+            <Badge
+              size="small"
+              appearance={badgeAppearance}
+              color={badgeColor}
+              className={s.ctiBadge}
+              title={typeof badge === 'string' ? badge : undefined}
+            >
               {badge}
             </Badge>
           ))}

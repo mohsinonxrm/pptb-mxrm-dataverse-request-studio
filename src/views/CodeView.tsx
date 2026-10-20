@@ -1,24 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import Editor, { loader, type OnMount } from '@monaco-editor/react';
-import * as monaco from 'monaco-editor';
+import type { OnMount } from '@monaco-editor/react';
 // Type-only namespace import — keeps `monacoNs.editor.IStandaloneEditorConstructionOptions`
 // dotted access working without forcing every type ref to dig through `typeof monaco`.
 import type * as monacoNs from 'monaco-editor';
-// Monaco language workers — bundled by Vite as separate same-origin chunks
-// via the `?worker` suffix. The CSP allows worker-src from the iframe's own
-// origin, so these load cleanly inside PPTB (the `cdn.jsdelivr.net` path
-// that Monaco defaults to is the one that was blocked).
-//
-// Without this MonacoEnvironment setup, language modes that ship a worker
-// (TypeScript/JavaScript validation, JSON parsing, HTML/CSS analysis) throw
-// `You must define a function MonacoEnvironment.getWorkerUrl or
-// MonacoEnvironment.getWorker` — visible in the PPTB devtools when any
-// Code-tab format other than plain text is selected.
-import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
-import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
-import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
-import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker';
-import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
+// Monaco is lazy-loaded (#22): `loader.config({ monaco })` and the worker
+// routing now live in src/monaco/monacoSetup.ts, fetched with the first
+// editor render.
+import Editor from '../monaco/MonacoEditor';
 import {
   TabList,
   Tab,
@@ -36,8 +24,10 @@ import {
   Play20Filled,
   Code20Filled,
   Edit20Filled,
+  ArrowDownload20Regular,
 } from '@fluentui/react-icons';
 import { PaneHead } from '../editors/PaneHead';
+import { saveFileSafe } from '../host/pptbBridge';
 import {
   generateCode,
   FORMAT_LABELS,
@@ -65,28 +55,13 @@ const FORMATS: CodeFormat[] = [
   'powershell',
   'curl',
   'json',
+  'openapi',
 ];
 // Power Automate is a field-list form, not source code — skip it in the Editor tab.
-const EDITOR_FORMATS: CodeFormat[] = FORMATS.filter((f) => f !== 'powerautomate');
-
-// Bundle Monaco locally — PPTB's CSP forbids fetching from cdn.jsdelivr.net
-// ("script-src 'self' 'unsafe-inline' pptb-webview:"). `loader.config({ monaco })`
-// tells `@monaco-editor/react` to use the already-imported package instead
-// of its default CDN-AMD loader path.
-loader.config({ monaco });
-
-// Route language workers to Vite's same-origin bundled chunks (see the
-// `?worker` imports above). The fallback `editorWorker` covers plain-text
-// modes that don't have a dedicated language worker (curl, csharp, etc.).
-self.MonacoEnvironment = {
-  getWorker(_workerId: string, label: string) {
-    if (label === 'json') return new jsonWorker();
-    if (label === 'typescript' || label === 'javascript') return new tsWorker();
-    if (label === 'css' || label === 'scss' || label === 'less') return new cssWorker();
-    if (label === 'html' || label === 'handlebars' || label === 'razor') return new htmlWorker();
-    return new editorWorker();
-  },
-};
+// OpenAPI is a document, not runnable code — skip it there too.
+const EDITOR_FORMATS: CodeFormat[] = FORMATS.filter(
+  (f) => f !== 'powerautomate' && f !== 'openapi',
+);
 
 export interface CodeViewProps {
   themeMode: ThemeMode;
@@ -271,6 +246,22 @@ function CodePane({
                 Copy
               </Button>
             </Tooltip>
+            {fmt === 'openapi' && (
+              <Tooltip content="Save the OpenAPI document as a JSON file" relationship="label">
+                <Button
+                  icon={<ArrowDownload20Regular />}
+                  appearance="subtle"
+                  size="small"
+                  onClick={() =>
+                    void saveFileSafe(`${inputs.built.entitySet || 'request'}.openapi.json`, code, [
+                      { name: 'OpenAPI (JSON)', extensions: ['json'] },
+                    ]).catch(() => undefined)
+                  }
+                >
+                  Save
+                </Button>
+              </Tooltip>
+            )}
           </>
         )}
       </div>

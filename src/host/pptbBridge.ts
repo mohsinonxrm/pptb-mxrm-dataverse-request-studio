@@ -275,10 +275,11 @@ export async function dataverseQuery(odataQuery: string): Promise<DataverseQuery
 //
 // Every consumer in the studio goes through these helpers. They:
 //   - throw `HostNotAvailableError` when called outside PPTB
-//   - preserve the exact dataverseAPI signature (no re-arranging args)
-//   - never inject custom headers (the host strips most of them anyway;
-//     studio-composed headers like `MSCRM.*` bypass and `Prefer` are
-//     surfaced via the Code tab for external execution)
+//   - preserve the exact dataverseAPI argument order
+//   - take an optional `headers` map on the write methods. PPTB 1.2.7+
+//     forwards it as `additionalHeaders` (after the user approves it in the
+//     host); older hosts have no header parameter, so the map is dropped
+//     there and `hostHeaderAdvisories` blocks requests that depend on it.
 
 export class HostNotAvailableError extends Error {
   constructor(method: string) {
@@ -294,6 +295,35 @@ function dv(): DataverseAPI.API {
   return window.dataverseAPI;
 }
 
+// PPTB 1.2.7 added the trailing `additionalHeaders` parameter to every
+// dataverseAPI method in the same release as `executeBatch`. Extra arguments
+// can't be feature-detected on a function, and an older host silently ignores
+// them, so `executeBatch` is the probe. The preload bridge is fixed for the
+// life of the page, so we check once.
+const HEADER_PASS_THROUGH =
+  EMBEDDED &&
+  typeof window !== 'undefined' &&
+  typeof window.dataverseAPI?.executeBatch === 'function';
+
+/**
+ * True when the host sends `additionalHeaders` on Dataverse requests
+ * (PPTB 1.2.7+). The user approves the headers in a host prompt the first
+ * time; if they decline, the host rejects the call without sending it.
+ */
+export const hostSupportsAdditionalHeaders = (): boolean => HEADER_PASS_THROUGH;
+
+/**
+ * The headers a dvHost call should pass as `additionalHeaders`. `undefined`
+ * when there's nothing to send or the host can't send it — the call then
+ * keeps the pre-1.2.7 shape and never triggers the consent prompt.
+ */
+function sendHeaders(
+  headers?: DataverseAPI.AdditionalHeaders,
+): DataverseAPI.AdditionalHeaders | undefined {
+  if (!HEADER_PASS_THROUGH || !headers || Object.keys(headers).length === 0) return undefined;
+  return headers;
+}
+
 function tb(): ToolBoxAPI.API {
   if (!EMBEDDED || typeof window === 'undefined' || !window.toolboxAPI) {
     throw new HostNotAvailableError('window.toolboxAPI');
@@ -304,11 +334,28 @@ function tb(): ToolBoxAPI.API {
 // ── Dataverse host surface ───────────────────────────────────────────────
 export const dvHost = {
   // CRUD
-  create: (entity: string, body: Record<string, unknown>) => dv().create(entity, body),
+  create: (
+    entity: string,
+    body: Record<string, unknown>,
+    headers?: DataverseAPI.AdditionalHeaders,
+  ) => {
+    const h = sendHeaders(headers);
+    return h ? dv().create(entity, body, undefined, h) : dv().create(entity, body);
+  },
   retrieve: (entity: string, id: string, columns?: string[]) => dv().retrieve(entity, id, columns),
-  update: (entity: string, id: string, body: Record<string, unknown>) =>
-    dv().update(entity, id, body),
-  delete: (entity: string, id: string) => dv().delete(entity, id),
+  update: (
+    entity: string,
+    id: string,
+    body: Record<string, unknown>,
+    headers?: DataverseAPI.AdditionalHeaders,
+  ) => {
+    const h = sendHeaders(headers);
+    return h ? dv().update(entity, id, body, undefined, h) : dv().update(entity, id, body);
+  },
+  delete: (entity: string, id: string, headers?: DataverseAPI.AdditionalHeaders) => {
+    const h = sendHeaders(headers);
+    return h ? dv().delete(entity, id, undefined, h) : dv().delete(entity, id);
+  },
 
   // Batch
   createMultiple: (entity: string, records: Record<string, unknown>[]) =>
@@ -321,13 +368,19 @@ export const dvHost = {
   fetchXmlQuery: (xml: string) => dv().fetchXmlQuery(xml),
 
   // Actions / Functions
-  execute: (req: {
-    operationName: string;
-    operationType: 'action' | 'function';
-    entityName?: string;
-    entityId?: string;
-    parameters?: Record<string, unknown>;
-  }) => dv().execute(req),
+  execute: (
+    req: {
+      operationName: string;
+      operationType: 'action' | 'function';
+      entityName?: string;
+      entityId?: string;
+      parameters?: Record<string, unknown>;
+    },
+    headers?: DataverseAPI.AdditionalHeaders,
+  ) => {
+    const h = sendHeaders(headers);
+    return h ? dv().execute(req, undefined, h) : dv().execute(req);
+  },
 
   // Relationships
   associate: (primary: string, id: string, rel: string, target: string, targetId: string) =>
