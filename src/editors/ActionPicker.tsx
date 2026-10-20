@@ -268,18 +268,28 @@ export function ActionPicker({
       </PaneHead>
 
       {loadError && isCsdlSizeLimitError(loadError) ? (
-        // PPTB 1.2.7 caps getCSDLDocument at 16 MB; Dynamics orgs exceed it.
-        // Explain instead of showing the raw buffer error (#79).
+        // Some PPTB releases cap getCSDLDocument at 16 MB; Dynamics orgs
+        // exceed it. Explain instead of showing the raw buffer error (#79).
+        // No version number in the text: the cap isn't tied to one release
+        // and a hard-coded number reads as "you're on the wrong version" (#113).
         <MessageBar intent="error" layout="multiline" style={{ marginBottom: 12, maxWidth: 760 }}>
           <MessageBarBody>
             <MessageBarTitle>
-              This environment's metadata is too large for PPTB 1.2.7
+              This environment's metadata is too large for this version of Power Platform ToolBox
             </MessageBarTitle>
-            Power Platform ToolBox 1.2.7 can't load a <code>$metadata</code> document larger than 16
-            MB, so actions and functions can't be listed here. It worked in PPTB 1.2.6 and will work
-            again once PPTB ships the fix (
+            This version of Power Platform ToolBox can't load a <code>$metadata</code> document
+            larger than 16 MB, so actions and functions can't be listed here. It will work once a
+            ToolBox release includes the upstream fix (
             <Link href={CSDL_SIZE_LIMIT_ISSUE_URL} target="_blank" rel="noopener noreferrer">
               desktop-app#736
+            </Link>
+            ,{' '}
+            <Link
+              href="https://github.com/PowerPlatformToolBox/desktop-app/pull/737"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              #737
             </Link>
             ). Other request types aren't affected.
             <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>Host error: {loadError}</div>

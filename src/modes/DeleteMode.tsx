@@ -69,6 +69,7 @@ import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { useStudioStyles } from '../primitives/styles';
 import { TargetEditor } from '../editors/TargetEditor';
 import { PaneHead } from '../editors/PaneHead';
@@ -107,8 +108,11 @@ import {
   hashState,
   type SavedRequest,
   type SerializedDeleteState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { isRecordGuid } from '../primitives/guid';
 
 const initialState = (): DeleteState => ({
   table: '',
@@ -128,13 +132,12 @@ type RootClauseId = 'target' | 'scope' | 'confirmation' | 'precondition' | 'head
 // GUID shape — Dataverse rejects malformed ids at the wire level, but we
 // surface the mismatch via an advisory so the user finds out before the
 // DELETE is sent (we don't want an irreversible round-trip on a typo).
-const GUID_RE =
-  /^[{(]?[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}[)}]?$/;
-const isValidGuid = (s: string | null | undefined): boolean => !!s && GUID_RE.test(s.trim());
+const isValidGuid = isRecordGuid;
 
 export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('delete');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('delete', deserializeDelete, initialState);
+  const [state, setState] = useState(draft.state);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
   // The live table is a memo dependency below: build*() reads metadata via
   // findTable(), which is empty until the fetch lands — keying on `state`
@@ -148,8 +151,8 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
   // Last-saved tracking (Save button dirty/clean + library checkmark).
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
 
   const built = useMemo(() => buildDelete(state), [state, liveTable]);
   const tbl = findTable(state.table);
@@ -278,6 +281,7 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeDelete(state), [state]);
+  useStashModeDraft('delete', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 
@@ -291,7 +295,7 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     const snap = entry.state as SerializedDeleteState;
     // Lenient table check — entity list may still be warming up.
     if (entities.length > 0 && !entities.some((e) => e.logicalName === snap.table)) {
-      window.alert(
+      notify(
         `Can't load "${entry.name}": entity \`${snap.table}\` ` +
           `isn't available in this environment. The solution may have been ` +
           `removed or you may be connected to a different org.`,
@@ -303,6 +307,19 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedHash(hashState(snap));
     setResult(null);
     setActivePath('target');
+  };
+
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'delete');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
   };
 
   // Publish save context — hide when no table set (nothing meaningful
@@ -415,7 +432,7 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.delete(state);
+    const res = await runtime.delete(state, headerItemsToObject(effectiveHeaders, null));
     setResult(res);
     setLoading(false);
     setTab('results');
@@ -423,6 +440,7 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: 'delete',
           url: built.relativeUrl,
           method: 'DELETE',
@@ -605,6 +623,10 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
             }));
             setResult(null);
             setPickerPick(null);
+            // New table → fresh draft. Forget the last save so Save can't
+            // overwrite an entry that belongs to the old table (#58).
+            setLastSavedId(undefined);
+            setLastSavedHash(null);
           }}
           onRecordChange={(id, primary) => {
             set('recordId', id, 'target');
@@ -695,6 +717,7 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={

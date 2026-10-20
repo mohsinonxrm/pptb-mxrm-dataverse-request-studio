@@ -16,21 +16,28 @@
 //
 // Returned API:
 //   • `saved`              — current list, newest first
-//   • `save(entry)`        — upsert by id (insert if new, overwrite if id matches)
+//   • `save(entry, opts)`  — upsert by id (insert if new, overwrite if id matches);
+//                            refused when a new entry would exceed MAX_SAVED,
+//                            unless `opts.replaceId` names an entry to drop
+//   • `capacity`           — { max, full, oldest } for the library-full prompt
 //   • `rename(id, name)`   — set the name field
 //   • `remove(id)`         — drop one entry by id
 //   • `clearAll()`         — wipe the entire store (used by a "reset" affordance)
+//   • `importEntries(list)`— merge entries from an export file (newer wins by id)
 //   • `findById(id)`       — read a single entry
 //   • `findByName(name)`   — case-insensitive name lookup, for collision detection
 //   • `error`              — last write error message, null if clean
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import {
   loadSaved,
   persistSaved,
   MAX_SAVED,
   SAVED_REQUESTS_KEY_PREFIX,
+  SAVED_SCHEMA_VERSION,
+  getOrgScope,
   getSavedRequestsKey,
+  hashState,
   type SavedRequest,
 } from './savedRequests';
 
@@ -87,12 +94,42 @@ export function reloadSavedFromStorage(): void {
   setSnapshot(next);
 }
 
+export interface SaveResult {
+  ok: boolean;
+  error?: string;
+  /** True when the save was refused because the library is at MAX_SAVED. */
+  full?: boolean;
+}
+
+export interface ImportResult extends SaveResult {
+  added: number;
+  /** Existing entries (same id) replaced by a newer copy from the file. */
+  updated: number;
+  /** Already present, identical or newer here. */
+  unchanged: number;
+  /** New entries left out because the library reached MAX_SAVED. */
+  skippedFull: number;
+}
+
+export interface SavedCapacity {
+  /** MAX_SAVED — entries allowed per org scope, across all modes. */
+  max: number;
+  /** Entries in this org scope's library right now. */
+  count: number;
+  /** True when a NEW entry can't be added without removing one. */
+  full: boolean;
+  /** Least recently saved entry (any mode), the default replacement offer. */
+  oldest: SavedRequest | undefined;
+}
+
 export interface UseSavedRequestsApi {
   saved: SavedRequest[];
-  save: (entry: SavedRequest) => { ok: boolean; error?: string };
+  save: (entry: SavedRequest, opts?: { replaceId?: string }) => SaveResult;
+  capacity: SavedCapacity;
   rename: (id: string, name: string) => void;
   remove: (id: string) => void;
   clearAll: () => void;
+  importEntries: (entries: SavedRequest[]) => ImportResult;
   findById: (id: string) => SavedRequest | undefined;
   findByName: (name: string) => SavedRequest | undefined;
   /** Last localStorage write error, if any. Cleared on next successful write. */
@@ -118,7 +155,7 @@ export function useSavedRequests(): UseSavedRequestsApi {
     reloadSavedFromStorage();
   }, [activeKey]);
 
-  const writeBack = useCallback((next: SavedRequest[]): { ok: boolean; error?: string } => {
+  const writeBack = useCallback((next: SavedRequest[]): SaveResult => {
     try {
       persistSaved(next);
       setSnapshot(next); // broadcasts to every subscribed consumer
@@ -133,27 +170,46 @@ export function useSavedRequests(): UseSavedRequestsApi {
 
   // Save (upsert):
   //   • If id already exists in list → overwrite that entry's content + savedAt.
-  //   • Else → prepend. If we exceed MAX_SAVED, drop the OLDEST entry
-  //     (smallest savedAt). User can manually remove others first if they
-  //     want a different eviction order.
+  //   • Else → prepend, unless the library is at MAX_SAVED. Then the save is
+  //     refused (`full: true`) — the caller asks the user what to remove and
+  //     retries with `replaceId`. Entries are never evicted silently (#100):
+  //     the library is shared by every mode, so the oldest entry is often
+  //     one the user can't even see from the current mode's list.
   const save = useCallback(
-    (entry: SavedRequest) => {
+    (input: SavedRequest, opts?: { replaceId?: string }): SaveResult => {
+      const entry: SavedRequest = { ...input, schemaVersion: SAVED_SCHEMA_VERSION };
       const idx = list.findIndex((e) => e.id === entry.id);
       let next: SavedRequest[];
       if (idx >= 0) {
         next = [...list];
         next[idx] = entry;
       } else {
-        next = [entry, ...list];
-        if (next.length > MAX_SAVED) {
-          // Sort copy by savedAt asc, drop the oldest until at cap.
-          next.sort((a, b) => b.savedAt - a.savedAt);
-          next = next.slice(0, MAX_SAVED);
+        const kept = opts?.replaceId ? list.filter((e) => e.id !== opts.replaceId) : list;
+        if (kept.length >= MAX_SAVED) {
+          return {
+            ok: false,
+            full: true,
+            error: `The saved-request library is full (${MAX_SAVED} for this connection).`,
+          };
         }
+        next = [entry, ...kept];
       }
       return writeBack(next);
     },
     [list, writeBack],
+  );
+
+  const capacity = useMemo<SavedCapacity>(
+    () => ({
+      max: MAX_SAVED,
+      count: list.length,
+      full: list.length >= MAX_SAVED,
+      oldest: list.reduce<SavedRequest | undefined>(
+        (o, e) => (!o || e.savedAt < o.savedAt ? e : o),
+        undefined,
+      ),
+    }),
+    [list],
   );
 
   const rename = useCallback(
@@ -175,11 +231,60 @@ export function useSavedRequests(): UseSavedRequestsApi {
     writeBack([]);
   }, [writeBack]);
 
+  // Import: entries land in the CURRENT org's library (re-tagged with its
+  // scope). Same id → the copy with the later savedAt wins; new ids are
+  // added until MAX_SAVED, the rest reported as skipped — never evicting.
+  const importEntries = useCallback(
+    (entries: SavedRequest[]): ImportResult => {
+      const scope = getOrgScope();
+      const next = [...list];
+      const r = { added: 0, updated: 0, unchanged: 0, skippedFull: 0 };
+      for (const raw of entries) {
+        const entry: SavedRequest = {
+          ...raw,
+          orgScope: scope,
+          schemaVersion: raw.schemaVersion ?? 1,
+        };
+        const idx = next.findIndex((e) => e.id === entry.id);
+        if (idx >= 0) {
+          const cur = next[idx];
+          const same = cur.name === entry.name && hashState(cur.state) === hashState(entry.state);
+          if (!same && entry.savedAt > cur.savedAt) {
+            next[idx] = entry;
+            r.updated++;
+          } else {
+            r.unchanged++;
+          }
+        } else if (next.length >= MAX_SAVED) {
+          r.skippedFull++;
+        } else {
+          next.push(entry);
+          r.added++;
+        }
+      }
+      if (r.added === 0 && r.updated === 0) return { ok: true, ...r };
+      next.sort((a, b) => b.savedAt - a.savedAt);
+      return { ...writeBack(next), ...r };
+    },
+    [list, writeBack],
+  );
+
   const findById = useCallback((id: string) => list.find((e) => e.id === id), [list]);
   const findByName = useCallback(
     (name: string) => list.find((e) => e.name.toLowerCase() === name.toLowerCase()),
     [list],
   );
 
-  return { saved: list, save, rename, remove, clearAll, findById, findByName, error };
+  return {
+    saved: list,
+    save,
+    capacity,
+    rename,
+    remove,
+    clearAll,
+    importEntries,
+    findById,
+    findByName,
+    error,
+  };
 }

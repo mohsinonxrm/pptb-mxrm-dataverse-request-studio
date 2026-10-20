@@ -76,7 +76,13 @@ export function BypassEditor({ value, onChange, group = 'write' }: BypassEditorP
       </PaneHead>
 
       {(value.businessLogic !== 'none' || value.suppressFlows) && (
-        <HostHeaderNotice>
+        <HostHeaderNotice
+          header={
+            <>
+              the <code>MSCRM.*</code> bypass headers
+            </>
+          }
+        >
           The <code>MSCRM.*</code> bypass headers are dropped at execute time, so{' '}
           <strong>Execute</strong> is disabled while a bypass option is on. Copy the request from
           the Code tab to run it elsewhere.
@@ -226,6 +232,8 @@ export function BypassEditor({ value, onChange, group = 'write' }: BypassEditorP
                         icon={<Delete20Regular />}
                         appearance="subtle"
                         size="small"
+                        aria-label={`Remove step ${id}`}
+                        title="Remove step"
                         onClick={() => removeStepId(i)}
                       />
                     </div>
@@ -260,8 +268,7 @@ export function BypassEditor({ value, onChange, group = 'write' }: BypassEditorP
             style={{ color: tokens.colorNeutralForeground2, display: 'block', marginBottom: 8 }}
           >
             Emits <code>MSCRM.SuppressCallbackRegistrationExpanderJob</code>. No privilege required,
-            but flow owners are <strong>not notified</strong>
-            that their logic was bypassed.
+            but flow owners are <strong>not notified</strong> that their logic was bypassed.
           </Caption1>
           <Switch
             checked={value.suppressFlows}

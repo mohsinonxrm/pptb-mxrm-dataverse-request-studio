@@ -26,6 +26,7 @@ import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { ActionPicker } from '../editors/ActionPicker';
 import { ActionParamForm } from '../editors/ActionParamForm';
 import { RequestBodyPreview } from '../editors/RequestBodyPreview';
@@ -50,7 +51,9 @@ import {
   hashState,
   type SavedRequest,
   type SerializedExecuteActionState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 export type ActionCategory = 'oob' | 'custom-api' | 'custom-action';
@@ -109,7 +112,10 @@ export interface ExecuteActionModeProps {
 export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProps) {
   const config = CONFIGS[category];
   const type = findRequestType(config.registryId);
-  const [state, setState] = useState(() => initialState(category));
+  const draft = useModeDraft(`exec-action:${category}`, deserializeExecuteAction, () =>
+    initialState(category),
+  );
+  const [state, setState] = useState(draft.state);
   const [activePath, setActivePath] = useState<string>('pick');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
@@ -155,8 +161,8 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
 
   // Save / Load tracking
   const { entities } = useScopedEntities();
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   // Bound-record name cache — populated when the user picks via TargetEditor.
   const [boundRecordName, setBoundRecordName] = useState<string>('');
 
@@ -220,6 +226,7 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: config.registryId,
           url: built.relativeUrl,
           method: 'POST',
@@ -240,6 +247,7 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
   // which sub-mode they belong to). Library entries can be loaded into any
   // of the three so the loader doesn't gatekeep on category.
   const currentSerialized = useMemo(() => serializeExecuteAction(state), [state]);
+  useStashModeDraft(`exec-action:${category}`, currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 
@@ -257,7 +265,7 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
       entities.length > 0 &&
       !entities.some((e) => e.logicalName === boundEntity)
     ) {
-      window.alert(
+      notify(
         `Can't load "${entry.name}": bound entity \`${boundEntity}\` ` +
           `isn't available in this environment.`,
       );
@@ -269,6 +277,19 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
     setResult(null);
     setBoundRecordName('');
     setActivePath('pick');
+  };
+
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'exec-action');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
   };
 
   usePublishSaveContext(
@@ -495,6 +516,7 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={

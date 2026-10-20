@@ -34,6 +34,7 @@ import type { ThemeMode } from '../theme/theme';
 import { getEnv } from '../mock/environment';
 import { useHostSession } from '../host/HostContext';
 import { useSaveContext } from '../state/SaveContext';
+import { useRegisterModeNavigator } from '../state/modeHandoff';
 import { SaveButton, SavedLibraryButton } from '../editors/SavedRequestsDialog';
 
 export function FrameHeader({
@@ -60,6 +61,9 @@ export function FrameHeader({
   // Register the open-settings callback so any component deep in the tree
   // (e.g. TargetEditor's guidance banner) can open the drawer without prop-drilling.
   useRegisterOpenSettings(() => setSettingsOpen(true));
+  // The mode picker lives here, so this is also where result cards switch
+  // modes from (e.g. WriteResultCard's "Retrieve this record", #3).
+  useRegisterModeNavigator(setActiveId);
   // The current mode (if any) publishes its save context into the
   // SaveContextRoot in App.tsx; we read it here so the top-right Save +
   // Saved-library buttons drive that mode's persistence. If no mode is
@@ -151,7 +155,12 @@ export function FrameHeader({
       )}
       <Menu>
         <MenuTrigger disableButtonEnhancement>
-          <Button icon={<MoreHorizontal20Regular />} appearance="subtle" />
+          <Button
+            icon={<MoreHorizontal20Regular />}
+            appearance="subtle"
+            aria-label="More actions"
+            title="More actions"
+          />
         </MenuTrigger>
         <MenuPopover>
           <MenuList>
