@@ -43,6 +43,37 @@ export interface DisplaySettings {
   selectedSolutionIds: string[];
 }
 
+/** Publisher / solution selection for one org — the GUIDs are per environment. */
+export interface OrgScopeSelection {
+  selectedPublisherIds: string[];
+  selectedSolutionIds: string[];
+}
+
+/**
+ * The persisted blob: the settings plus each org's own scope selection,
+ * keyed by org host (#52). The top-level `selected*` fields hold the
+ * selection last made in any org — older builds read those.
+ */
+export interface PersistedDisplaySettings extends DisplaySettings {
+  scopeByOrg?: Record<string, OrgScopeSelection>;
+}
+
+/**
+ * The settings as seen from one org: that org's scope selection, or an
+ * empty one if the org has none yet. Without an org (standalone, or no
+ * connection yet) the top-level selection applies.
+ */
+export function settingsForOrg(stored: PersistedDisplaySettings, org: string): DisplaySettings {
+  const { scopeByOrg, ...settings } = stored;
+  if (!org || !scopeByOrg) return settings;
+  const own = scopeByOrg[org];
+  return {
+    ...settings,
+    selectedPublisherIds: own?.selectedPublisherIds ?? [],
+    selectedSolutionIds: own?.selectedSolutionIds ?? [],
+  };
+}
+
 export const defaultDisplaySettings: DisplaySettings = {
   useLogicalNames: false,
   valueDisplayMode: 'formatted',
@@ -64,7 +95,9 @@ export const settingsKey = (name: string): string => `${SETTINGS_NAMESPACE}:${na
 export const DISPLAY_SETTINGS_KEY = settingsKey('displaySettings');
 
 /** Merge stored settings with defaults — graceful schema evolution. */
-export function mergeWithDefaults(stored: Partial<DisplaySettings> | undefined): DisplaySettings {
+export function mergeWithDefaults(
+  stored: Partial<PersistedDisplaySettings> | undefined,
+): PersistedDisplaySettings {
   if (!stored) return { ...defaultDisplaySettings };
   return { ...defaultDisplaySettings, ...stored };
 }
