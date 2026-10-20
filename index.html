@@ -265,6 +265,32 @@
           transform: rotate(360deg);
         }
       }
+      /* ─────────────────────────────────────────────────────────────
+         Batch group ($batch Request, ExecuteMultiple — #9, #11): berry,
+         distinct from Bulk's teal. Light #9b2b8f is 6.4:1 with white;
+         the dark tint is light, so on-brand text goes dark there.
+         ───────────────────────────────────────────────────────────── */
+      :root[data-theme='light'] {
+        --color-request-batch: #9b2b8f;
+      }
+      :root[data-theme='dark'] {
+        --color-request-batch: #e48ad9;
+      }
+      [data-mode-group='batch'] {
+        --colorBrandBackground: var(--color-request-batch);
+        --colorBrandBackgroundHover: var(--color-request-batch);
+        --colorBrandBackgroundPressed: var(--color-request-batch);
+        --colorBrandBackgroundSelected: var(--color-request-batch);
+        --colorBrandStroke1: var(--color-request-batch);
+        --colorBrandStroke2: var(--color-request-batch);
+        --colorBrandForeground1: var(--color-request-batch);
+        --colorBrandForeground2: var(--color-request-batch);
+        --colorCompoundBrandBackground: var(--color-request-batch);
+        --colorCompoundBrandStroke: var(--color-request-batch);
+      }
+      :root[data-theme='dark'] [data-mode-group='batch'] {
+        --colorNeutralForegroundOnBrand: #000000;
+      }
     </style>
   </head>
   <body>

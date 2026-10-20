@@ -313,6 +313,12 @@ const HEADER_PASS_THROUGH =
 export const hostSupportsAdditionalHeaders = (): boolean => HEADER_PASS_THROUGH;
 
 /**
+ * True when the host can send a Dataverse `$batch` (`executeBatch` /
+ * `executeTransaction`, PPTB 1.2.7+). Same probe as the header pass-through.
+ */
+export const hostSupportsBatch = (): boolean => HEADER_PASS_THROUGH;
+
+/**
  * The headers a dvHost call should pass as `additionalHeaders`. `undefined`
  * when there's nothing to send or the host can't send it — the call then
  * keeps the pre-1.2.7 shape and never triggers the consent prompt.
@@ -362,6 +368,25 @@ export const dvHost = {
     dv().createMultiple(entity, records),
   updateMultiple: (entity: string, records: Record<string, unknown>[]) =>
     dv().updateMultiple(entity, records),
+
+  // $batch (#9) — PPTB 1.2.7+. `executeBatch` sends independent requests,
+  // `executeTransaction` sends them as one change set. Check
+  // `hostSupportsBatch()` first; per-request headers and the outer
+  // `headers` go through the host's header consent prompt.
+  executeBatch: (
+    requests: DataverseAPI.BatchRequest[],
+    headers?: DataverseAPI.AdditionalHeaders,
+  ) =>
+    headers && Object.keys(headers).length > 0
+      ? dv().executeBatch(requests, undefined, headers)
+      : dv().executeBatch(requests),
+  executeTransaction: (
+    requests: DataverseAPI.BatchRequest[],
+    headers?: DataverseAPI.AdditionalHeaders,
+  ) =>
+    headers && Object.keys(headers).length > 0
+      ? dv().executeTransaction(requests, undefined, headers)
+      : dv().executeTransaction(requests),
 
   // Queries
   queryData: (odata: string) => dv().queryData(odata),

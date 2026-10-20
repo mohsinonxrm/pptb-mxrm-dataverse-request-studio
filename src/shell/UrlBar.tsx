@@ -42,6 +42,11 @@ export interface UrlBarProps {
   advisories?: Advisory[];
   /** Called when the user clicks "Open" on an advisory — focuses that node. */
   onAdvisoryFocus?: (nodeId: string) => void;
+  /**
+   * Request size shown in the byte counter, when it isn't the URL — e.g. the
+   * multipart body of a $batch (#198). Defaults to the URL length.
+   */
+  bytes?: number;
 }
 
 export function UrlBar({
@@ -54,6 +59,7 @@ export function UrlBar({
   loading,
   advisories,
   onAdvisoryFocus,
+  bytes,
 }: UrlBarProps) {
   const ExecIcon = executeIcon ?? Play20Filled;
   const s = useStudioStyles();
@@ -133,7 +139,7 @@ export function UrlBar({
           fontFamily: tokens.fontFamilyMonospace,
         }}
       >
-        {(url.length / 1024).toFixed(1)} KB
+        {((bytes ?? url.length) / 1024).toFixed(1)} KB
       </Caption1>
       {advisories && advisories.length > 0 && (
         <AdvisoryDrawer advisories={advisories} onFocusNode={onAdvisoryFocus} />

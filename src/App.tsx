@@ -33,6 +33,7 @@ import {
 } from './modes/lazyModes';
 import { CreateMode } from './modes/CreateMode';
 import { UpdateMode } from './modes/UpdateMode';
+import { BatchMode } from './modes/lazyBatchModes';
 import { UpsertMode } from './modes/UpsertMode';
 import { DeleteMode } from './modes/DeleteMode';
 import { ExecuteActionMode } from './modes/ExecuteActionMode';
@@ -286,6 +287,8 @@ function ModeSwitch({
       return <CreateMode themeMode={themeMode} />;
     case 'update':
       return <UpdateMode themeMode={themeMode} />;
+    case 'batch':
+      return <BatchMode themeMode={themeMode} />;
     case 'upsert':
       return <UpsertMode themeMode={themeMode} />;
     case 'delete':
