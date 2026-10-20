@@ -18,7 +18,8 @@ import {
   type Solution,
   type EntityMetadata,
 } from './pptbClient';
-import { metadataCache } from './cache';
+import { pinMetadataCache } from './cache';
+import { useActiveOrg } from './activeOrg';
 
 export function useSolutionFilter() {
   const [solutions, setSolutions] = useState<Solution[]>([]);
@@ -31,11 +32,17 @@ export function useSolutionFilter() {
   const [entitiesLoading, setEntitiesLoading] = useState(false);
   const [entitiesError, setEntitiesError] = useState<string | null>(null);
 
+  // Reload when the PPTB connection switches to another org (#52).
+  const org = useActiveOrg();
+
   // ── Load all solutions on mount ──
   useEffect(() => {
     let mounted = true;
 
     async function loadSolutions() {
+      // Pinned: a response that lands after a connection switch is cached
+      // under the org it came from (#52).
+      const metadataCache = pinMetadataCache();
       // Cache key: empty array = "all solutions"
       const cached = metadataCache.getSolutions([]);
       if (cached) {
@@ -62,7 +69,7 @@ export function useSolutionFilter() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [org]);
 
   // ── Cascade solution → entities ──
   useEffect(() => {
@@ -75,6 +82,9 @@ export function useSolutionFilter() {
     let mounted = true;
 
     async function loadEntities() {
+      // Pinned: a response that lands after a connection switch is cached
+      // under the org it came from (#52).
+      const metadataCache = pinMetadataCache();
       const cached = metadataCache.getFilteredEntities(selectedSolutionIds);
       if (cached) {
         setEntities(cached);
@@ -106,7 +116,7 @@ export function useSolutionFilter() {
     return () => {
       mounted = false;
     };
-  }, [selectedSolutionIds]);
+  }, [selectedSolutionIds, org]);
 
   const updateSelectedSolutions = useCallback((ids: string[]) => {
     setSelectedSolutionIds(ids);

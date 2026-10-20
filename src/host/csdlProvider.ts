@@ -25,9 +25,9 @@
 //      Type=mscrm.<entity> → bound-to-entity; Type=Collection(mscrm.<entity>)
 //      → bound-to-collection; otherwise unbound
 //   ✅ Composable functions (IsComposable="true")
-//   ✅ Custom API / Custom Action source classification (heuristic — custom
-//      messages have a publisher prefix like `new_` or `sample_`; OOB ones
-//      live under `Microsoft.Dynamics.CRM`)
+//   ✅ Custom API / Custom Action / OOB source classification — from the
+//      `customapis` + custom-process-action `workflows` rows, with a
+//      name-prefix heuristic only as a fallback (see `classifySource`)
 //
 // Things we intentionally DON'T parse here:
 //   ❌ EntityType / ComplexType / EnumType — those come from the regular
@@ -36,6 +36,7 @@
 //      metadata endpoint with cascade configuration
 
 import { dvHost } from './pptbBridge';
+import { activeOrg } from './activeOrg';
 import type {
   CsdlAction,
   ActionParam,
@@ -44,19 +45,35 @@ import type {
   EdmType,
 } from '../mock/actionsCsdl';
 
-// Tiny inline memoizer — CSDL is fetched at most twice per session (raw XML
-// + parsed actions). A 4-line cache is enough; we don't need the full
-// metadataCache machinery here.
+// Tiny inline memoizer — CSDL is fetched at most twice per org (raw XML
+// + parsed actions). A small cache is enough; we don't need the full
+// metadataCache machinery here. Concurrent calls share one in-flight
+// promise. A rejected fetch is never cached, and `shouldCache` can refuse a
+// resolved value too (a failed lookup reported as a value, e.g. `null`), so
+// the next call retries instead of pinning the failure for the session.
+//
+// Entries are keyed by org (#107), like the metadata caches (#52): after a
+// connection switch every lookup misses and refetches from the new
+// environment, and switching back finds the old org's catalog still warm.
+// Callers capture `activeOrg()` once when a load starts and pass it down, so
+// a fetch that started before a switch (and every nested lookup it makes)
+// lands under the org it ran against.
 const csdlCache = new Map<string, unknown>();
 const csdlInflight = new Map<string, Promise<unknown>>();
-async function memoize<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+async function memoize<T>(
+  org: string,
+  baseKey: string,
+  fetcher: () => Promise<T>,
+  shouldCache: (value: T) => boolean = () => true,
+): Promise<T> {
+  const key = `${org}|${baseKey}`;
   if (csdlCache.has(key)) return csdlCache.get(key) as T;
   const pending = csdlInflight.get(key);
   if (pending) return pending as Promise<T>;
   const promise = (async () => {
     try {
       const value = await fetcher();
-      csdlCache.set(key, value);
+      if (shouldCache(value)) csdlCache.set(key, value);
       return value;
     } finally {
       csdlInflight.delete(key);
@@ -67,7 +84,19 @@ async function memoize<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
 }
 
 const K_CSDL_RAW = 'csdl:raw';
+const K_CSDL_PARSED = 'csdl:parsed';
 const K_CSDL_ACTIONS = 'csdl:actions';
+const K_CUSTOM_APIS = 'csdl:source:customapis';
+const K_CUSTOM_ACTIONS = 'csdl:source:workflows';
+
+/**
+ * The most recently classified action list per org, for `findActionSync`.
+ * Kept outside `csdlCache` because a list classified with a failed lookup
+ * isn't cached (the next load re-classifies it) but must still be readable
+ * synchronously meanwhile. Keyed by org (#107) so a lookup after a
+ * connection switch never returns the previous environment's actions.
+ */
+const lastClassified = new Map<string, CsdlAction[]>();
 
 // ── Public surface ──────────────────────────────────────────────────────
 
@@ -75,13 +104,49 @@ const K_CSDL_ACTIONS = 'csdl:actions';
  * Fetch + parse the live CSDL into `CsdlAction[]`. Cached for the session.
  * The raw XML is cached separately so re-parsing (e.g. after a manual cache
  * clear) doesn't re-fetch.
+ *
+ * `source` (oob / custom-api / custom-action) comes from Dataverse data, not
+ * from the name (#54): the `customapis` and custom-process-action
+ * `workflows` lookups run in parallel with the CSDL download. If either
+ * lookup fails (missing read privilege, a transient error, or a call before
+ * the connection is ready), the name-prefix heuristic fills in for that half
+ * — see `classifySource` — and the classified list is NOT cached: the next
+ * load retries the failed lookup (the parsed CSDL stays cached, so only the
+ * lookup is re-sent) and re-classifies.
  */
 export async function fetchCsdlActions(): Promise<CsdlAction[]> {
-  return memoize(K_CSDL_ACTIONS, async () => {
-    // fetchCsdlDocument is itself memoized so a second-load skips the network.
-    const xml = await fetchCsdlDocument();
-    return parseCsdl(xml);
-  });
+  const org = activeOrg();
+  const res = await memoize(
+    org,
+    K_CSDL_ACTIONS,
+    async () => {
+      // Both are memoized, so a re-classification skips the CSDL download.
+      const [parsed, sources] = await Promise.all([fetchParsedCsdl(org), fetchMessageSources(org)]);
+      const list = parsed.map((a) => ({ ...a, source: classifySource(a.name, sources) }));
+      lastClassified.set(org, list);
+      return { list, complete: sources.customApis !== null && sources.customActions !== null };
+    },
+    (r) => r.complete,
+  );
+  return res.list;
+}
+
+/** Parsed `$metadata` actions/functions (source not yet classified). */
+function fetchParsedCsdl(org: string): Promise<CsdlAction[]> {
+  return memoize(org, K_CSDL_PARSED, async () => parseCsdl(await fetchRawCsdl(org)));
+}
+
+/**
+ * Which of the two classification lookups succeeded. `false` means that
+ * half of the classification fell back to the name heuristic — the Execute
+ * Custom API / Custom Action modes surface a notice in that case.
+ */
+export async function fetchSourceClassificationStatus(): Promise<{
+  customApis: boolean;
+  customActions: boolean;
+}> {
+  const s = await fetchMessageSources(activeOrg());
+  return { customApis: s.customApis !== null, customActions: s.customActions !== null };
 }
 
 // ── Optional: provider object matching the metadata provider's shape ────
@@ -123,9 +188,9 @@ export const actions: ActionsProvider = {
  * can't await an async fetch.
  *
  * The flow: when the user picks an action in the picker, the picker has
- * already kicked off `actions.loadAll()` which populates the `csdlCache`
- * entry under `K_CSDL_ACTIONS`. By the time `buildExecuteAction` runs,
- * the cache IS populated and this sync lookup hits.
+ * already kicked off `actions.loadAll()` which sets `lastClassified` for the
+ * active org. By the time `buildExecuteAction` runs, it IS populated and this
+ * sync lookup hits.
  *
  * Returns undefined when the cache is empty (cold session, not yet loaded)
  * or when the named action doesn't exist. Callers must handle undefined
@@ -133,8 +198,7 @@ export const actions: ActionsProvider = {
  */
 export function findActionSync(name: string): CsdlAction | undefined {
   if (!name) return undefined;
-  const cached = csdlCache.get(K_CSDL_ACTIONS) as CsdlAction[] | undefined;
-  return cached?.find((a) => a.name === name);
+  return lastClassified.get(activeOrg())?.find((a) => a.name === name);
 }
 
 /** Raw `$metadata` XML — exposed for debug/inspection. Rarely needed by app
@@ -142,7 +206,11 @@ export function findActionSync(name: string): CsdlAction | undefined {
  *  from the parsed result so a manual cache clear of the parsed actions
  *  doesn't trigger a re-download. */
 export async function fetchCsdlDocument(): Promise<string> {
-  return memoize(K_CSDL_RAW, () => dvHost.metadata.getCSDLDocument());
+  return fetchRawCsdl(activeOrg());
+}
+
+function fetchRawCsdl(org: string): Promise<string> {
+  return memoize(org, K_CSDL_RAW, () => dvHost.metadata.getCSDLDocument());
 }
 
 // ── XML parser ──────────────────────────────────────────────────────────
@@ -432,7 +500,8 @@ function parseActionOrFunction(
     parameters: params,
     returnType,
     isComposable: isComposable || undefined,
-    source: classifySource(namespace, name),
+    // Heuristic only — fetchCsdlActions re-classifies from Dataverse data.
+    source: classifySource(name, NO_MESSAGE_SOURCES),
     isQueryFunction: isQueryFunction || undefined,
   };
 }
@@ -579,22 +648,135 @@ function typeMetadataFromRaw(raw: string): Partial<ActionParam> {
 
 // ── Source classification ──────────────────────────────────────────────
 // We classify actions into custom-api / custom-action / oob buckets so the
-// Execute picker can scope by source. Heuristic:
+// Execute picker can scope by source (#54). Every message lives in the
+// Microsoft.Dynamics.CRM namespace, so the CSDL alone can't tell them apart
+// and the name can't either (`contoso_myapi` is a Custom API,
+// `msdyn_GetKAObjectFromTemplate` is a first-party message). So we ask
+// Dataverse:
 //
-//   - Namespace "Microsoft.Dynamics.CRM" + lowercase-publisher-prefixed name
-//     (e.g. `new_AddNoteToContact`, `sample_CustomApiSendNotification`)
-//     → custom (further split: custom-action if it's an Action *or* uses
-//       PascalCase verb, custom-api if it's a Function or has Output*
-//       response shape)
-//   - Else → oob
+//   - Custom API      → a row in `customapis` (uniquename = message name)
+//   - Custom Action   → a `workflows` row with category 3 (Action), type 1
+//                       (Definition); its message is the `sdkmessageid`
+//                       lookup, whose formatted value is the message name
+//   - Everything else → oob
+//
+// Each lookup is independent: one that fails (no read privilege on the
+// table, or not embedded) is `null` and the name heuristic covers that half.
 
-const CUSTOM_PREFIX_RE = /^[a-z][a-z0-9]+_[A-Z]/;
+interface MessageSources {
+  /** Lower-cased Custom API unique names; null when the lookup failed. */
+  customApis: Set<string> | null;
+  /** Lower-cased custom process action message names; null when failed. */
+  customActions: Set<string> | null;
+}
 
-function classifySource(_namespace: string, name: string): CsdlAction['source'] {
-  if (!CUSTOM_PREFIX_RE.test(name)) return 'oob';
-  // Custom messages — we can't tell custom-api from custom-action purely
-  // from name. Default to custom-api since that's the modern recommendation;
-  // the editor picker still surfaces all custom messages either way.
+const NO_MESSAGE_SOURCES: MessageSources = { customApis: null, customActions: null };
+
+// Each lookup is memoized on its own and only when it succeeded: a failed
+// one (null) is retried by the next load rather than pinning the name
+// heuristic for the whole session.
+async function fetchMessageSources(org: string): Promise<MessageSources> {
+  const notFailed = (v: Set<string> | null) => v !== null;
+  const [customApis, customActions] = await Promise.all([
+    memoize(
+      org,
+      K_CUSTOM_APIS,
+      () => queryNames('customapis?$select=uniquename', (r) => [r.uniquename]),
+      notFailed,
+    ),
+    memoize(org, K_CUSTOM_ACTIONS, fetchCustomActionNames, notFailed),
+  ]);
+  return { customApis, customActions };
+}
+
+/**
+ * Message names of custom process actions (workflows with category 3,
+ * type 1). The name lives on the `sdkmessage` row the workflow points at.
+ * PPTB's queryData doesn't return the lookup's FormattedValue annotation, and
+ * `workflow` exposes no navigation property for it, so collect the
+ * sdkmessage ids first and read their names in chunks of ids (#54).
+ */
+async function fetchCustomActionNames(): Promise<Set<string> | null> {
+  const ids = await queryNames(
+    'workflows?$select=_sdkmessageid_value&$filter=category eq 3 and type eq 1',
+    (r) => [r._sdkmessageid_value],
+  );
+  if (!ids) return null;
+  const names = new Set<string>();
+  const all = [...ids];
+  for (let i = 0; i < all.length; i += SDKMESSAGE_CHUNK) {
+    const filter = all
+      .slice(i, i + SDKMESSAGE_CHUNK)
+      .map((id) => `sdkmessageid eq ${id}`)
+      .join(' or ');
+    const chunk = await queryNames(
+      `sdkmessages?$select=name&$filter=${encodeURIComponent(filter)}`,
+      (r) => [r.name],
+    );
+    if (!chunk) return null;
+    for (const n of chunk) names.add(n);
+  }
+  return names;
+}
+
+/** sdkmessage ids per `$filter` — keeps the request URL well under limits. */
+const SDKMESSAGE_CHUNK = 50;
+
+/** Run an OData query (following `@odata.nextLink`) and collect the
+ *  lower-cased string names `pick` returns per row. Null on any failure. */
+async function queryNames(
+  path: string,
+  pick: (row: Record<string, unknown>) => unknown[],
+): Promise<Set<string> | null> {
+  try {
+    const names = new Set<string>();
+    let next: string | undefined = path;
+    // Page cap is a safety net; both tables are small in practice.
+    for (let page = 0; next && page < 50; page++) {
+      const res = (await dvHost.queryData(next)) as {
+        value?: Record<string, unknown>[];
+        '@odata.nextLink'?: string;
+      };
+      for (const row of res.value ?? []) {
+        for (const n of pick(row)) if (typeof n === 'string' && n) names.add(n.toLowerCase());
+      }
+      next = res['@odata.nextLink'] ? stripApiBase(res['@odata.nextLink']) : undefined;
+    }
+    return names;
+  } catch (e) {
+    console.warn(`[csdlProvider] message classification query failed (${path}):`, e);
+    return null;
+  }
+}
+
+/** queryData takes a path relative to /api/data/v9.x/ — strip the scheme,
+ *  host and version from an absolute nextLink. */
+function stripApiBase(url: string): string {
+  const i = url.indexOf('/api/data/');
+  if (i < 0) return url;
+  const rest = url.slice(i + '/api/data/'.length);
+  const slash = rest.indexOf('/');
+  return slash >= 0 ? rest.slice(slash + 1) : rest;
+}
+
+// Fallback when a lookup failed: a lower-case publisher prefix followed by
+// `_` reads as custom; Microsoft first-party prefixes (msdyn_, mscrm_,
+// msdynce_, adx_, …) read as OOB. The heuristic can't tell a Custom API from
+// a custom process action, so custom names default to custom-api.
+const CUSTOM_PREFIX_RE = /^[a-z][a-z0-9]*_[A-Za-z0-9]/;
+const FIRST_PARTY_PREFIX_RE = /^(ms[a-z0-9]*|adx)_/i;
+
+function classifySource(name: string, sources: MessageSources): CsdlAction['source'] {
+  const key = name.toLowerCase();
+  if (sources.customApis?.has(key)) return 'custom-api';
+  if (sources.customActions?.has(key)) return 'custom-action';
+  // Both lookups succeeded and neither matched → a platform message.
+  if (sources.customApis && sources.customActions) return 'oob';
+  const looksCustom = CUSTOM_PREFIX_RE.test(name) && !FIRST_PARTY_PREFIX_RE.test(name);
+  if (!looksCustom) return 'oob';
+  // Custom-looking and not a Custom API (that lookup worked) → only the
+  // custom-action half is unknown, so it's most likely a custom action.
+  if (sources.customApis) return 'custom-action';
   return 'custom-api';
 }
 
