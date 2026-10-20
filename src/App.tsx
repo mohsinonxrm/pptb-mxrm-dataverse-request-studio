@@ -1,12 +1,24 @@
-import { useEffect, useState } from 'react';
-import { FluentProvider } from '@fluentui/react-components';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import {
+  Button,
+  FluentProvider,
+  MessageBar,
+  MessageBarActions,
+  MessageBarBody,
+  MessageBarTitle,
+} from '@fluentui/react-components';
+import { Dismiss20Regular } from '@fluentui/react-icons';
 import { useStudioStyles } from './primitives/styles';
 import { studioLight, studioDark, applyThemeAttr, type ThemeMode } from './theme/theme';
 import { FrameHeader } from './shell/FrameHeader';
 import { AppDialogHost } from './shell/dialogs';
 import { SaveContextRoot, type SaveContextValue } from './state/SaveContext';
 import { findRequestType } from './registry/requestTypes';
+// Bulk Delete Job loads on first use (#10, #22).
+import { BulkDeleteMode } from './modes/BulkDeleteMode.lazy';
 import { RetrieveMultipleMode } from './modes/RetrieveMultipleMode';
+// Bulk Write loads on first use (#8, #22).
+import { BulkWriteMode } from './modes/BulkWriteMode.lazy';
 import { RetrieveSingleMode } from './modes/RetrieveSingleMode';
 // Less-used modes load on first use (#22).
 import {
@@ -34,9 +46,39 @@ import { _setTableLookup } from './editors/filter/filterTree';
 import { HostProvider, useHostSession } from './host/HostContext';
 import { SettingsProvider } from './host/usePersistedSettings';
 import { OpenSettingsProvider } from './host/useOpenSettings';
+import { activeOrg, onActiveOrgChange } from './host/activeOrg';
 
 // Wire metadata lookup into the filter-tree encoder (avoids a circular import).
 _setTableLookup(findTable);
+
+// ── Connection switch → fresh modes (#93) ─────────────────────────────
+//
+// PPTB can move a running tool to another connection, and every later host
+// call (queryData, delete, update, …) goes to the new environment. Mode
+// state — picked record ids, a ticked Delete confirmation, field values,
+// snapshots, results, recent runs — lives inside the mode components, so
+// without a reset a Delete or Update prepared against a sandbox would run
+// against Prod after the switch (sandbox copies share record GUIDs).
+//
+// The epoch below bumps whenever the org changes away from a connected org
+// (A → B, or A → disconnected). ModeRouter is keyed by it, so the active
+// mode remounts with its initial state. The first connection after boot
+// ('' → A) doesn't bump: nothing could have run before it, and a remount
+// there would only repeat the mode's start-up work.
+let orgEpoch = 0;
+let lastOrg = activeOrg();
+let lastSwitch: { from: string; to: string } | null = null;
+onActiveOrgChange((org) => {
+  if (lastOrg) {
+    orgEpoch++;
+    lastSwitch = { from: lastOrg, to: org };
+  }
+  lastOrg = org;
+});
+const getOrgEpoch = () => orgEpoch;
+function useOrgEpoch(): number {
+  return useSyncExternalStore(onActiveOrgChange, getOrgEpoch);
+}
 
 export function App() {
   return (
@@ -98,6 +140,11 @@ function Frame({
   // Mounted ABOVE both so the bridge stays alive across mode switches.
   const [saveCtx, setSaveCtx] = useState<SaveContextValue | null>(null);
 
+  // Remount the active mode (keeping which mode is selected) when the
+  // connection switches, and say why its inputs were cleared.
+  const orgEpoch = useOrgEpoch();
+  const [noticeDismissedAt, setNoticeDismissedAt] = useState(orgEpoch);
+
   return (
     // The active mode's group drives the v9 brand-color cascade defined
     // in index.html. Every primary button,
@@ -117,8 +164,76 @@ function Frame({
             was dead code. The default fallback (line below) still catches
             unknown IDs via StubMode. The `implemented` field is kept on the
             schema as a feature-flag for future modes added in WIP. */}
-        <ModeRouter modeId={activeId} themeMode={themeMode} setActiveId={setActiveId} />
+        <ModeRouter
+          key={orgEpoch}
+          modeId={activeId}
+          themeMode={themeMode}
+          setActiveId={setActiveId}
+        />
+        {orgEpoch !== noticeDismissedAt && lastSwitch && (
+          <ConnectionSwitchNotice
+            {...lastSwitch}
+            modeLabel={type.name}
+            onDismiss={() => setNoticeDismissedAt(orgEpoch)}
+          />
+        )}
       </SaveContextRoot>
+    </div>
+  );
+}
+
+function ConnectionSwitchNotice({
+  from,
+  to,
+  modeLabel,
+  onDismiss,
+}: {
+  from: string;
+  to: string;
+  modeLabel: string;
+  onDismiss: () => void;
+}) {
+  // Floats over the mode: the frame is a fixed three-row grid that the
+  // mode's own body and URL bar fill.
+  return (
+    <div
+      role="status"
+      style={{
+        position: 'fixed',
+        top: 56,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: 'min(640px, calc(100vw - 32px))',
+        zIndex: 1000,
+      }}
+    >
+      <MessageBar layout="multiline" intent="warning">
+        <MessageBarBody>
+          <MessageBarTitle>{to ? 'Connection switched' : 'Connection closed'}</MessageBarTitle>
+          {to ? (
+            <>
+              DRS is now connected to <code>{to}</code>. The {modeLabel} request was reset — record
+              ids, confirmations, field values and results from <code>{from}</code> were cleared so
+              nothing prepared there runs here. Saved requests are kept per connection.
+            </>
+          ) : (
+            <>
+              The connection to <code>{from}</code> is gone. The {modeLabel} request was reset so
+              nothing prepared there runs against the next connection.
+            </>
+          )}
+        </MessageBarBody>
+        <MessageBarActions
+          containerAction={
+            <Button
+              appearance="transparent"
+              icon={<Dismiss20Regular />}
+              aria-label="Dismiss"
+              onClick={onDismiss}
+            />
+          }
+        />
+      </MessageBar>
     </div>
   );
 }
@@ -175,18 +290,25 @@ function ModeSwitch({
       return <UpsertMode themeMode={themeMode} />;
     case 'delete':
       return <DeleteMode themeMode={themeMode} />;
+    case 'bulk-delete':
+      return <BulkDeleteMode themeMode={themeMode} />;
     case 'merge':
       return <MergeMode themeMode={themeMode} />;
+    case 'bulk-write':
+      return <BulkWriteMode themeMode={themeMode} />;
     case 'associate':
       return <AssociateMode themeMode={themeMode} />;
     case 'disassociate':
       return <DisassociateMode themeMode={themeMode} />;
+    // The three Execute Action sub-modes share one component at the same tree
+    // position. `key` forces a fresh mount per sub-mode so the selected
+    // action, params, result and recents don't leak between them (#56).
     case 'exec-action':
-      return <ExecuteActionMode themeMode={themeMode} category="oob" />;
+      return <ExecuteActionMode key={modeId} themeMode={themeMode} category="oob" />;
     case 'exec-customapi':
-      return <ExecuteActionMode themeMode={themeMode} category="custom-api" />;
+      return <ExecuteActionMode key={modeId} themeMode={themeMode} category="custom-api" />;
     case 'exec-customaction':
-      return <ExecuteActionMode themeMode={themeMode} category="custom-action" />;
+      return <ExecuteActionMode key={modeId} themeMode={themeMode} category="custom-action" />;
     case 'exec-function':
       return <ExecuteFunctionMode themeMode={themeMode} />;
     case 'exec-workflow':

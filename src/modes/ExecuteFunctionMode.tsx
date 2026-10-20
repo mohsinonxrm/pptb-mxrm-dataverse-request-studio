@@ -196,16 +196,19 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedId(saved.id);
     setLastSavedHash(hashState(saved.state));
   };
-  const onLoadSaved = (entry: SavedRequest) => {
+  const onLoadSaved = async (entry: SavedRequest) => {
     if (entry.modeId !== 'exec-function') return;
     const snap = entry.state as SerializedExecuteFunctionState;
-    if (
-      boundEntity &&
-      entities.length > 0 &&
-      !entities.some((e) => e.logicalName === boundEntity)
-    ) {
+    // Check the SNAPSHOT's function binding, not the currently selected one
+    // (#56). A CSDL load failure skips the guard; the picker surfaces it.
+    const snapFn = snap.functionName
+      ? await actionsProvider.find(snap.functionName).catch(() => undefined)
+      : undefined;
+    const snapEntity =
+      snapFn && snapFn.binding.kind !== 'unbound' ? snapFn.binding.entityType : null;
+    if (snapEntity && entities.length > 0 && !entities.some((e) => e.logicalName === snapEntity)) {
       notify(
-        `Can't load "${entry.name}": bound entity \`${boundEntity}\` ` +
+        `Can't load "${entry.name}": bound entity \`${snapEntity}\` ` +
           `isn't available in this environment.`,
       );
       return;

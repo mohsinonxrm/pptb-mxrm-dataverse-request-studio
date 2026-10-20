@@ -29,6 +29,9 @@ import {
   DocumentSearch20Regular,
   Open20Regular,
   BranchFork20Filled,
+  CheckmarkCircle16Filled,
+  ErrorCircle16Filled,
+  SubtractCircle16Regular,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../../primitives/styles';
 import { canOpenInMode, openInMode } from '../../state/modeHandoff';
@@ -39,7 +42,9 @@ import { findTable } from '../../mock/metadata';
 import {
   HEADER_CONSENT_DECLINED_CODE,
   HEADER_REJECTED_CODE,
+  relateTargetCounts,
   type ExecResult,
+  type RelateTargetResult,
 } from '../../engine/dataverseExecutor';
 
 export type WriteOperation =
@@ -81,6 +86,8 @@ export interface WriteResultContext {
   navProperty?: string;
   targetCount?: number;
   targetNames?: string[];
+  /** Primary names by target GUID, for the per-target result list (#99). */
+  targetNameById?: Record<string, string>;
   /**
    * Execute-group context — action / function / workflow.
    *   • operationName: the CSDL action name (e.g. 'WinOpportunity') or the
@@ -136,13 +143,16 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
     extractGuidFromOdataEntityId(odataEntityId) ??
     extractGuidFromBody(result.body, tbl?.primaryKey);
 
-  // Status family — drives icon + tone.
-  const family: 'success' | 'warning' | 'danger' =
-    result.status >= 200 && result.status < 300
-      ? 'success'
-      : result.status === 412 || result.status === 404 || result.status === 409
-        ? 'warning'
-        : 'danger';
+  // Status family — drives icon + tone. A multi-target Associate /
+  // Disassociate that partly succeeded is a warning, not a success.
+  const family: 'success' | 'warning' | 'danger' = result.ok
+    ? 'success'
+    : result.outcome === 'partial' ||
+        result.status === 412 ||
+        result.status === 404 ||
+        result.status === 409
+      ? 'warning'
+      : 'danger';
   const Icon =
     family === 'success'
       ? CheckmarkCircle20Filled
@@ -217,7 +227,8 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
               status={
                 family === 'success' ? 'success' : family === 'warning' ? 'warning' : 'danger'
               }
-              code={result.status || 'Error'}
+              // A partly-successful run has no single HTTP status (D2).
+              code={result.outcome === 'partial' ? 'Partial success' : result.status || 'Error'}
               ms={result.ms}
             />
             <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
@@ -316,6 +327,15 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
         )}
       </div>
 
+      {/* Multi-target Associate / Disassociate: what happened to each target. */}
+      {showTargetList(result) && (
+        <TargetResultList
+          targets={result.targets!}
+          operation={ctx.operation}
+          names={ctx.targetNameById ?? {}}
+        />
+      )}
+
       {/* If the server returned a representation, drill the full record card. */}
       {hasReturnedRecord && (
         <div>
@@ -354,6 +374,9 @@ function buildNarrative(
 ): { title: string; body: string | null } {
   const name = ctx.recordName?.trim() || null;
   const ok = result.ok;
+
+  const relate = relateNarrative(ctx, result, name, resolvedId, entityDisplay);
+  if (relate) return relate;
 
   // ── Failure framings — common error codes get specific copy ──
   if (!ok) {
@@ -622,6 +645,201 @@ function buildNarrative(
       };
     }
   }
+}
+
+// ──────────────────────────────────────────────────────────────
+// Multi-target Associate / Disassociate (#99)
+// ──────────────────────────────────────────────────────────────
+
+/** The per-target list is worth showing when there's more than one target,
+ *  or when the one target was skipped or failed. */
+function showTargetList(result: ExecResult): boolean {
+  const t = result.targets;
+  if (!t || t.length === 0) return false;
+  return t.length > 1 || t[0].state !== 'done';
+}
+
+/**
+ * Narrative for a collection-valued Associate / Disassociate whose targets
+ * didn't all simply succeed: partial success, skips, or every target
+ * failing. `null` falls through to the regular framings (plain success, a
+ * single failed target, a run that never reached the host).
+ */
+function relateNarrative(
+  ctx: WriteResultContext,
+  result: ExecResult,
+  name: string | null,
+  resolvedId: string | null,
+  entityDisplay: string,
+): { title: string; body: string } | null {
+  if (ctx.operation !== 'associate' && ctx.operation !== 'disassociate') return null;
+  if (!showTargetList(result)) return null;
+  const n = result.targets!.length;
+  const { done, skipped, failed } = relateTargetCounts(result);
+  // Every target linked / unlinked, or the single target failed: the
+  // regular framings say it best.
+  if ((failed === 0 && skipped === 0) || (failed === n && n === 1)) return null;
+  const assoc = ctx.operation === 'associate';
+  const plural = (k: number) => `${k} record${k === 1 ? '' : 's'}`;
+  const sourceFrag = name
+    ? `"${name}"`
+    : resolvedId
+      ? `id ${resolvedId.slice(0, 8)}…`
+      : `the ${entityDisplay} record`;
+  const navLabel = ctx.navProperty ? ` via ${ctx.navProperty}` : '';
+  const skippedFrag =
+    skipped > 0
+      ? ` ${skipped} ${skipped === 1 ? 'was' : 'were'} already ${assoc ? 'linked' : 'unlinked'}, so no request was sent for ${skipped === 1 ? 'it' : 'them'}.`
+      : '';
+  // Associate skips targets that are already linked; Disassociate sends
+  // every target's DELETE again, so a re-run should list only the failures.
+  const rerun = assoc
+    ? 'Fix the failures and Execute again: targets that are already linked are skipped.'
+    : 'Fix the failures, remove the targets that were unlinked, and Execute again: every listed target is sent again.';
+
+  if (failed === 0) {
+    const verb = assoc ? 'Linked' : 'Removed links to';
+    return {
+      title:
+        done === 0
+          ? assoc
+            ? `Already associated to ${entityDisplay}`
+            : `Already disassociated from ${entityDisplay}`
+          : assoc
+            ? `Associated ${plural(done)} to ${entityDisplay}`
+            : `Disassociated ${plural(done)} from ${entityDisplay}`,
+      body: (
+        (done > 0 ? `${verb} ${plural(done)} on ${sourceFrag}${navLabel}.` : '') + skippedFrag
+      ).trim(),
+    };
+  }
+  if (done === 0) {
+    // Nothing changed: every target either failed or was already linked.
+    return {
+      title:
+        failed === n
+          ? `${assoc ? 'Associate' : 'Disassociate'} failed for all ${n} targets`
+          : `${assoc ? 'Associate' : 'Disassociate'} failed for ${failed} of ${plural(n)}`,
+      body: (
+        `Nothing was changed on ${sourceFrag}.` +
+        skippedFrag +
+        ` Each failed target's error is listed below.`
+      ).trim(),
+    };
+  }
+  return {
+    title: `${assoc ? 'Associated' : 'Disassociated'} ${done} of ${plural(n)} — ${failed} failed`,
+    body: (
+      `${assoc ? 'Linked' : 'Removed links to'} ${plural(done)} on ${sourceFrag}${navLabel}; those changes are saved.` +
+      skippedFrag +
+      ` ${rerun}`
+    ).trim(),
+  };
+}
+
+function TargetResultList({
+  targets,
+  operation,
+  names,
+}: {
+  targets: RelateTargetResult[];
+  operation: WriteOperation;
+  names: Record<string, string>;
+}) {
+  const s = useStudioStyles();
+  const assoc = operation === 'associate';
+  const label = (t: RelateTargetResult): string =>
+    t.state === 'done'
+      ? assoc
+        ? 'Linked'
+        : 'Unlinked'
+      : t.state === 'skipped'
+        ? 'Already linked · skipped'
+        : t.status
+          ? `Failed · ${t.status} ${t.statusText ?? ''}`.trim()
+          : 'Failed';
+  return (
+    <div className={s.inlineCard} style={{ padding: 12 }}>
+      <Caption1
+        style={{
+          display: 'block',
+          marginBottom: 8,
+          color: tokens.colorNeutralForeground3,
+          fontWeight: 600,
+          textTransform: 'uppercase',
+          letterSpacing: '0.04em',
+          fontSize: 10,
+        }}
+      >
+        Targets
+      </Caption1>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {targets.map((t) => {
+          const Icon =
+            t.state === 'done'
+              ? CheckmarkCircle16Filled
+              : t.state === 'skipped'
+                ? SubtractCircle16Regular
+                : ErrorCircle16Filled;
+          const color =
+            t.state === 'done'
+              ? tokens.colorPaletteGreenForeground1
+              : t.state === 'skipped'
+                ? tokens.colorNeutralForeground3
+                : tokens.colorPaletteRedForeground1;
+          const name = names[t.targetId];
+          return (
+            <div key={t.targetId} style={{ display: 'flex', gap: 8, minWidth: 0 }}>
+              <Icon style={{ color, flexShrink: 0, marginTop: 2 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                  {name && <span style={{ fontWeight: 600 }}>{name}</span>}
+                  <code
+                    style={{
+                      fontFamily: tokens.fontFamilyMonospace,
+                      fontSize: 11,
+                      color: tokens.colorNeutralForeground3,
+                      overflowWrap: 'anywhere',
+                    }}
+                  >
+                    {t.targetId}
+                  </code>
+                  <Badge
+                    size="small"
+                    appearance="tint"
+                    color={
+                      t.state === 'done'
+                        ? 'success'
+                        : t.state === 'skipped'
+                          ? 'informative'
+                          : 'danger'
+                    }
+                  >
+                    {label(t)}
+                  </Badge>
+                </div>
+                {t.error && (
+                  <Caption1
+                    style={{
+                      display: 'block',
+                      marginTop: 2,
+                      color: tokens.colorNeutralForeground2,
+                      overflowWrap: 'anywhere',
+                    }}
+                  >
+                    {/* The host's message usually starts with the code already. */}
+                    {t.error.code && !t.error.message.includes(t.error.code)
+                      ? `${t.error.code}: ${t.error.message}`
+                      : t.error.message}
+                  </Caption1>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 /** Pulls the GUID out of an `OData-EntityId` header value:
