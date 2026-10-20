@@ -21,6 +21,7 @@ import type {
   StateColumnMeta,
   MultiSelectPicklistColumnMeta,
 } from '../../mock/metadata';
+import { parseDateTimeValue } from '../../editors/dateTimeValue';
 
 const useStyles = makeStyles({
   booleanCell: {
@@ -227,8 +228,11 @@ function DateTimeCellRenderer({
     return <span className={s.dateCell}>{String(formattedValue)}</span>;
   }
   if (!value) return <EmptyDash />;
-  const d = new Date(String(value));
-  if (Number.isNaN(d.getTime())) return <EmptyDash />;
+  // By behavior (#106): a DateOnly `YYYY-MM-DD` is that calendar day (not
+  // UTC midnight, which is the previous day west of UTC), and a time zone
+  // independent value shows the time as stored.
+  const d = parseDateTimeValue(String(value), col ?? {});
+  if (!d) return <EmptyDash />;
 
   const isDateOnly = col?.format === 'DateOnly' || col?.dateTimeBehavior === 'DateOnly';
   if (isDateOnly) {

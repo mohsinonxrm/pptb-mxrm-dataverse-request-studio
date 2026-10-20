@@ -968,6 +968,17 @@ function parseFilter(
   }
 }
 
+/**
+ * Inline child groups that share the parent's combinator (`a and (b and c)`
+ * → `a and b and c`). A *negated* child group is kept as-is: inlining it
+ * would drop its `not` and silently invert the query (#117).
+ */
+function flattenSame(children: FilterNode[], combinator: 'and' | 'or'): FilterNode[] {
+  return children.flatMap((c) =>
+    c.type === 'group' && c.combinator === combinator && !c.negated ? c.rules : [c],
+  );
+}
+
 /** orExpr := andExpr ('or' andExpr)* */
 function parseOrExpr(ctx: ParseFilterCtx): FilterNode {
   const left = parseAndExpr(ctx);
@@ -981,7 +992,7 @@ function parseOrExpr(ctx: ParseFilterCtx): FilterNode {
     id: newId('g'),
     type: 'group',
     combinator: 'or',
-    rules: children.flatMap((c) => (c.type === 'group' && c.combinator === 'or' ? c.rules : [c])),
+    rules: flattenSame(children, 'or'),
   };
 }
 
@@ -998,7 +1009,7 @@ function parseAndExpr(ctx: ParseFilterCtx): FilterNode {
     id: newId('g'),
     type: 'group',
     combinator: 'and',
-    rules: children.flatMap((c) => (c.type === 'group' && c.combinator === 'and' ? c.rules : [c])),
+    rules: flattenSame(children, 'and'),
   };
 }
 
@@ -1016,8 +1027,9 @@ function parseUnaryExpr(ctx: ParseFilterCtx): FilterNode {
  * Apply a `not` to the parsed inner node. The mapping mirrors what DRS's
  * filter model now supports (empirically locked):
  *
- *   • `not <contains/startswith/endswith>(…)` → `rule.negated = true`
- *     (test 3.4–3.6 → 200; legacy per-rule toggle).
+ *   • `not <contains/startswith/endswith>(…)` → toggle `rule.negated`
+ *     (test 3.4–3.6 → 200; legacy per-rule toggle). A second `not`
+ *     cancels the first, like groups and lambdas (#207).
  *   • `not <plain comparison>` → wrap the single rule in a `negated`
  *     group of one — same wire shape as `not (<comparison>)`, which is
  *     what Dataverse expects (test 3.3 / 3.7 → 200).
@@ -1031,7 +1043,7 @@ function applyNot(node: FilterNode, ctx: ParseFilterCtx): FilterNode {
   if (node.type === 'rule') {
     const op = findOperator(node.op);
     if (op && op.kind === 'odata-fn') {
-      return { ...node, negated: true };
+      return { ...node, negated: !node.negated };
     }
     // Wrap the comparison in a `not (…)` group of one — encoder emits
     // exactly `not (<col> <op> <val>)` which Dataverse accepts.

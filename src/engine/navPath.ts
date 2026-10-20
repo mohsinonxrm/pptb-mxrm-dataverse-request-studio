@@ -25,6 +25,7 @@ import type { FilterGroup } from '../editors/filter/filterTree';
 import type { ExpandSpec } from '../editors/ExpandEditor';
 import type { OrderbySpec } from '../editors/OrderbyEditor';
 import type { ApplySpec } from '../editors/ApplyEditor';
+import type { Advisory } from '../primitives/advisories';
 
 export interface ReferencedTreeInput {
   filter?: FilterGroup;
@@ -123,4 +124,40 @@ export function collectReferencedEntities(
 
   out.delete(rootTableLogical);
   return [...out];
+}
+
+/**
+ * Advisories for related tables whose metadata isn't in the registry (the
+ * `pending` / `failed` lists from `useWarmReferencedTables`). The encoders
+ * still emit every clause without it (#63), but lookup columns keep their
+ * stored name and literal types are inferred from the value, so the URL may
+ * change once the metadata arrives — worth knowing before Execute / Copy.
+ */
+export function relatedMetadataAdvisories(pending: string[], failed: string[]): Advisory[] {
+  const out: Advisory[] = [];
+  if (pending.length > 0) {
+    out.push({
+      id: 'related-metadata-pending',
+      severity: 'info',
+      source: 'validation',
+      title: 'Loading related-table metadata',
+      body:
+        `Still loading ${pending.join(', ')}. Clauses on these tables are already in the URL, ` +
+        'but lookup columns and literal types are finalised once the metadata arrives — ' +
+        'wait for this notice to clear before copying or executing.',
+    });
+  }
+  if (failed.length > 0) {
+    out.push({
+      id: 'related-metadata-failed',
+      severity: 'warning',
+      source: 'validation',
+      title: "Couldn't load related-table metadata",
+      body:
+        `Metadata for ${failed.join(', ')} failed to load. Clauses on these tables are sent ` +
+        'with lookup columns as typed and literal types inferred from the values — check the ' +
+        'URL before executing.',
+    });
+  }
+  return out;
 }

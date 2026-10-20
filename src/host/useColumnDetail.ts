@@ -217,6 +217,10 @@ function patchInto(tbl: TableMeta, columnLogical: string, raw: AttributeMetadata
       }));
       (patched as PicklistColumnMeta | MultiSelectPicklistColumnMeta | StateColumnMeta).options =
         opts;
+      if (patched.attributeType !== 'State' && typeof raw.DefaultFormValue === 'number') {
+        (patched as PicklistColumnMeta | MultiSelectPicklistColumnMeta).defaultFormValue =
+          raw.DefaultFormValue;
+      }
       break;
     }
     case 'Status': {
@@ -281,7 +285,7 @@ export function useColumnDetail(
 
     const run =
       which === 'optionset'
-        ? loadAttributeWithOptionSet(entityLogical, columnLogical)
+        ? loadAttributeWithOptionSet(entityLogical, columnLogical, col.attributeType)
         : loadAttributeDetailedMetadata(entityLogical, columnLogical, col.attributeType);
 
     run
