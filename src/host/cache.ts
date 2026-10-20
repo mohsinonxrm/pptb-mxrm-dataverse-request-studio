@@ -16,6 +16,12 @@
 // `AttributeMetadata`, `RelationshipMetadata`, `Publisher`, `Solution`.
 // Studio-shape transformations (`TableMeta`, `ColumnMeta`) live one layer
 // up in `metadataProvider.ts`.
+//
+// One cache per org (#52): `metadataCache` always reads and writes the
+// ACTIVE org's cache, so a PPTB connection switch can't serve the previous
+// environment's metadata, and switching back is free. Code that writes
+// after an `await` pins the cache first (`pinMetadataCache()`), so a
+// response from the old org lands in the old org's cache.
 
 import type {
   EntityMetadata,
@@ -27,6 +33,7 @@ import type {
   PublisherWithSolutions,
   SolutionComponent,
 } from './pptbClient';
+import { activeOrg } from './activeOrg';
 
 interface CacheEntry<T> {
   data?: T;
@@ -241,4 +248,24 @@ class MetadataCache {
   }
 }
 
-export const metadataCache = new MetadataCache();
+const cachesByOrg = new Map<string, MetadataCache>();
+
+/** The active org's cache. Capture it before an `await` you write after. */
+export function pinMetadataCache(): MetadataCache {
+  const org = activeOrg();
+  let cache = cachesByOrg.get(org);
+  if (!cache) {
+    cache = new MetadataCache();
+    cachesByOrg.set(org, cache);
+  }
+  return cache;
+}
+
+/** Facade over the active org's cache — resolved on every call. */
+export const metadataCache: MetadataCache = new Proxy({} as MetadataCache, {
+  get(_t, key: string | symbol) {
+    const cache = pinMetadataCache();
+    const value = (cache as unknown as Record<string | symbol, unknown>)[key];
+    return typeof value === 'function' ? value.bind(cache) : value;
+  },
+});

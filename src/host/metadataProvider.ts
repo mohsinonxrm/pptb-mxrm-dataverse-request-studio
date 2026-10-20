@@ -24,6 +24,7 @@ import type {
 } from '../mock/metadata';
 import type { EntityMetadata, AttributeMetadata, RelationshipMetadata } from './pptbClient';
 import { metadataCache } from './cache';
+import { activeOrg } from './activeOrg';
 
 // ── Public surface ──────────────────────────────────────────────────────
 
@@ -319,6 +320,8 @@ function mapEntityListItem(e: EntityMetadata): EntityListItem {
 
 // ── Provider impl ──────────────────────────────────────────────────────
 
+// Keyed by `${org}|${logical}` — a build for the same table in another org
+// (after a connection switch) is a different build.
 let buildInFlight = new Map<string, Promise<TableMeta | undefined>>();
 
 // Fired after a refresh / invalidate drops the caches, so lists held in hook
@@ -333,8 +336,12 @@ export function subscribeMetadataReset(cb: () => void): () => void {
 }
 
 async function buildTable(logical: string): Promise<TableMeta | undefined> {
+  // The org this build belongs to. The result is registered under it even if
+  // the connection switches mid-fetch, so it can't leak into another org.
+  const org = activeOrg();
+  const flightKey = `${org}|${logical}`;
   // Dedupe concurrent builds for the same entity.
-  const existing = buildInFlight.get(logical);
+  const existing = buildInFlight.get(flightKey);
   if (existing) return existing;
 
   const promise = (async () => {
@@ -431,7 +438,7 @@ async function buildTable(logical: string): Promise<TableMeta | undefined> {
       // ~22 editors that call `findTable(logical)` synchronously see the
       // live data (after a re-render triggered by mode-level
       // `useLiveTable`).
-      __registerLiveTable(built);
+      __registerLiveTable(built, org);
       return built;
     } catch (e) {
       console.error(`[metadataProvider] getTable('${logical}') failed:`, e);
@@ -439,10 +446,10 @@ async function buildTable(logical: string): Promise<TableMeta | undefined> {
     }
   })();
 
-  buildInFlight.set(logical, promise);
+  buildInFlight.set(flightKey, promise);
   // Only drop our own slot — a refresh may have swapped in a newer build.
   void promise.finally(() => {
-    if (buildInFlight.get(logical) === promise) buildInFlight.delete(logical);
+    if (buildInFlight.get(flightKey) === promise) buildInFlight.delete(flightKey);
   });
   return promise;
 }
@@ -466,7 +473,7 @@ export const metadata: MetadataProvider = {
 
   invalidateTable(logical: string): void {
     metadataCache.clearEntity(logical);
-    buildInFlight.delete(logical);
+    buildInFlight.delete(`${activeOrg()}|${logical}`);
   },
 
   invalidateAll(): void {

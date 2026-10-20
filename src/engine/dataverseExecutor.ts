@@ -46,7 +46,7 @@ import {
   buildAssociateRequests,
   buildDisassociateRequests,
 } from './urlBuilder';
-import { buildExecuteActionBody, buildExecuteFunction } from './executeBuilders';
+import { buildExecuteActionBody, buildExecuteFunctionWirePath } from './executeBuilders';
 import type {
   RetrieveMultipleState,
   RetrieveSingleState,
@@ -81,7 +81,7 @@ import { actions } from '../host/csdlProvider';
  *  that happens to return a populated body. Derived from `status` by
  *  `outcomeFor`; `'error'` covers every other failure (4xx, 5xx, 501, and
  *  host errors whose status is unknown). */
-export type ExecOutcome = 'ok' | '404' | '401' | '403' | 'error' | 'empty';
+export type ExecOutcome = 'ok' | '404' | '401' | '403' | 'error' | 'empty' | 'partial';
 
 /** Normalized execution result handed back to every mode. */
 export interface ExecResult {
@@ -97,6 +97,45 @@ export interface ExecResult {
    *  for every live result; the Headers tab says so instead of showing
    *  made-up values. */
   headers: Record<string, string>;
+  /** Associate / Disassociate on a collection-valued nav property: one
+   *  entry per target, in request order (#99). Absent for every other op. */
+  targets?: RelateTargetResult[];
+}
+
+/**
+ * What happened to one target of a multi-target Associate / Disassociate.
+ *   • `done`    — linked / unlinked by this run.
+ *   • `skipped` — Associate only: already linked, so no request was sent.
+ *                 Disassociate never skips (see executeDisassociate).
+ *   • `failed`  — the request failed; `status` / `error` come from the same
+ *                 mapping as every other failure.
+ */
+export interface RelateTargetResult {
+  targetId: string;
+  state: 'done' | 'skipped' | 'failed';
+  status?: number;
+  statusText?: string;
+  error?: { code?: string; message: string };
+}
+
+/** Per-state counts for a relate result's targets (all zero when absent). */
+export function relateTargetCounts(r: ExecResult | null | undefined): {
+  done: number;
+  skipped: number;
+  failed: number;
+} {
+  const c = { done: 0, skipped: 0, failed: 0 };
+  for (const t of r?.targets ?? []) c[t.state]++;
+  return c;
+}
+
+/** Requests that went through: the `done` targets of a per-target result,
+ *  otherwise `requested` when the run succeeded. `null` when nothing ran or
+ *  the whole run failed. */
+export function relateDoneCount(r: ExecResult | null, requested: number): number | null {
+  if (!r) return null;
+  const done = r.targets ? relateTargetCounts(r).done : r.ok ? requested : 0;
+  return r.ok || done > 0 ? done : null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -586,6 +625,114 @@ export async function executeMerge(
 
 // ── Relate group ─────────────────────────────────────────────────────────
 
+// Collection-valued Associate / Disassociate is one host call per target
+// (no batch), so a run can partly succeed. Each target gets its own result
+// and a failure doesn't stop the rest (#99).
+
+/** Max target GUIDs per "which are linked?" query, to keep the URL short. */
+const LINK_CHECK_CHUNK = 25;
+
+/**
+ * Of `targetIds`, the ones currently linked to the source row through a
+ * collection-valued nav property. `null` when it couldn't be determined
+ * (metadata missing, no read privilege, query error): the caller then
+ * sends every request as before. A missing host still throws, so standalone
+ * runs report 501 like every other mode.
+ */
+async function linkedTargets(
+  table: string,
+  sourceId: string,
+  navProperty: string,
+  targetEntity: string,
+  targetIds: string[],
+): Promise<Set<string> | null> {
+  try {
+    const src = metadata.peekTable(table) ?? (await metadata.getTable(table));
+    const tgt = metadata.peekTable(targetEntity) ?? (await metadata.getTable(targetEntity));
+    if (!src?.entitySetName || !tgt?.primaryKey) return null;
+    const linked = new Set<string>();
+    for (let i = 0; i < targetIds.length; i += LINK_CHECK_CHUNK) {
+      const chunk = targetIds.slice(i, i + LINK_CHECK_CHUNK);
+      const filter = chunk.map((id) => `${tgt.primaryKey} eq ${id}`).join(' or ');
+      const res = await dvHost.queryData(
+        `/${src.entitySetName}(${sourceId})/${navProperty}?$select=${tgt.primaryKey}&$filter=${filter}`,
+      );
+      for (const row of (res.value ?? []) as Record<string, unknown>[]) {
+        const id = row[tgt.primaryKey];
+        if (typeof id === 'string') linked.add(id.toLowerCase());
+      }
+    }
+    return linked;
+  } catch (e) {
+    if (e instanceof HostNotAvailableError) throw e;
+    return null;
+  }
+}
+
+/**
+ * Run `send` for each target in order, skipping the ones `skip` says are
+ * already in the requested state, and fold the per-target outcomes into one
+ * ExecResult:
+ *   • nothing failed       → 204, ok (skips included).
+ *   • nothing succeeded    → the first failure's status and error (skipped
+ *                            targets don't count as successes: nothing
+ *                            changed).
+ *   • some of each         → outcome 'partial', not ok. The status is the
+ *                            first failure's real HTTP status: Dataverse
+ *                            has no status for "some targets failed", so
+ *                            DRS doesn't invent one (D2, #99).
+ * `targets` and the body's `targets` list every target either way.
+ */
+async function runPerTarget(
+  targetIds: string[],
+  skip: (id: string) => boolean,
+  send: (id: string) => Promise<unknown>,
+  t0: number,
+): Promise<ExecResult> {
+  const targets: RelateTargetResult[] = [];
+  let firstFailure: ExecResult | null = null;
+  for (const targetId of targetIds) {
+    if (skip(targetId)) {
+      targets.push({ targetId, state: 'skipped' });
+      continue;
+    }
+    try {
+      await send(targetId);
+      targets.push({ targetId, state: 'done' });
+    } catch (e) {
+      const f = mapError(e, 0);
+      // Standalone: nothing can be sent, so don't report it N times.
+      if (e instanceof HostNotAvailableError)
+        return { ...f, ms: Math.round(performance.now() - t0) };
+      firstFailure ??= f;
+      targets.push({
+        targetId,
+        state: 'failed',
+        status: f.status,
+        statusText: f.statusText,
+        error: (f.body as { error: { code?: string; message: string } }).error,
+      });
+    }
+  }
+  const ms = Math.round(performance.now() - t0);
+  const succeeded = targets.filter((t) => t.state === 'done').length;
+  if (!firstFailure) return { ...ok(204, { targets }, ms), targets };
+  const error = (firstFailure.body as { error: unknown }).error;
+  const body = { error, targets };
+  if (succeeded === 0) {
+    return { ...firstFailure, ms, body, bytes: JSON.stringify(body).length, targets };
+  }
+  return {
+    ...firstFailure,
+    ms,
+    bytes: JSON.stringify(body).length,
+    ok: false,
+    outcome: 'partial',
+    body,
+    targets,
+  };
+}
+
 export async function executeAssociate(s: AssociateState): Promise<ExecResult> {
   const sourceId = s.sourceId;
   const navProperty = s.navProperty;
@@ -607,23 +754,31 @@ export async function executeAssociate(s: AssociateState): Promise<ExecResult> {
   const relatedEntity = nav?.targetEntity ?? '';
 
   const t0 = performance.now();
+  if (singleValued) {
+    // reqs has exactly one entry per buildAssociateRequests's single-
+    // valued branch. Body shape: `{ "<nav>@odata.bind": "<set>(<id>)" }`.
+    const r = reqs[0];
+    const res = await timed(() => dvHost.update(s.table, sourceId, r.body));
+    if (isExecResult(res)) return res;
+    return ok(204, null, res.ms);
+  }
+  // Per-target POST $ref. PPTB's .associate takes the GUID and emits the
+  // right URL + body internally. Targets that are already linked are
+  // skipped, so re-running after a partial failure only sends the rest (an
+  // N:N re-associate would otherwise fail on the duplicate link).
+  const ids = reqs.map((r) => r.targetId);
+  let linked: Set<string> | null;
   try {
-    if (singleValued) {
-      // reqs has exactly one entry per buildAssociateRequests's single-
-      // valued branch. Body shape: `{ "<nav>@odata.bind": "<set>(<id>)" }`.
-      const r = reqs[0];
-      await dvHost.update(s.table, sourceId, r.body);
-    } else {
-      // Per-target POST $ref. PPTB's .associate takes the GUID and emits
-      // the right URL + body internally.
-      for (const r of reqs) {
-        await dvHost.associate(s.table, sourceId, navProperty, relatedEntity, r.targetId);
-      }
-    }
-    return ok(204, null, Math.round(performance.now() - t0));
+    linked = await linkedTargets(s.table, sourceId, navProperty, relatedEntity, ids);
   } catch (e) {
     return mapError(e, Math.round(performance.now() - t0));
   }
+  return runPerTarget(
+    ids,
+    (id) => !!linked?.has(id.toLowerCase()),
+    (id) => dvHost.associate(s.table, sourceId, navProperty, relatedEntity, id),
+    t0,
+  );
 }
 
 export async function executeDisassociate(s: DisassociateState): Promise<ExecResult> {
@@ -639,25 +794,30 @@ export async function executeDisassociate(s: DisassociateState): Promise<ExecRes
     return mapError({ statusCode: 400, message: 'Pick at least one target.' }, 0);
 
   const t0 = performance.now();
-  try {
-    for (const r of reqs) {
-      if (r.method === 'PATCH') {
-        // Single-valued → PATCH /<source>(<id>) with { "<nav>@odata.bind": null }.
-        // Routes through dvHost.update which accepts arbitrary body shapes
-        // (including null values). Replaces the old "silently skip" branch
-        // that did nothing because PPTB's .disassociate requires a target id.
-        await dvHost.update(s.table, sourceId, r.body ?? {});
-      } else {
-        // Collection-valued → DELETE per target via PPTB's .disassociate.
-        // r.targetId is non-null by construction in this branch.
-        if (!r.targetId) continue;
-        await dvHost.disassociate(s.table, sourceId, navProperty, r.targetId);
-      }
-    }
-    return ok(204, null, Math.round(performance.now() - t0));
-  } catch (e) {
-    return mapError(e, Math.round(performance.now() - t0));
+  const patch = reqs.find((r) => r.method === 'PATCH');
+  if (patch) {
+    // Single-valued → PATCH /<source>(<id>) with { "<nav>@odata.bind": null }.
+    // Routes through dvHost.update which accepts arbitrary body shapes
+    // (including null values). Replaces the old "silently skip" branch
+    // that did nothing because PPTB's .disassociate requires a target id.
+    const res = await timed(() => dvHost.update(s.table, sourceId, patch.body ?? {}));
+    if (isExecResult(res)) return res;
+    return ok(204, null, res.ms);
   }
+  // Collection-valued → DELETE per target via PPTB's .disassociate. Every
+  // target's DELETE is sent: unlike Associate there's no "already in that
+  // state" pre-check, because the check's GET only returns related rows the
+  // caller can read at their privilege depth — a linked row outside that
+  // scope would look unlinked and its DELETE would never be sent. Dataverse
+  // has no documented error code for "this row isn't linked", so a failed
+  // DELETE is reported as the failure Dataverse returned.
+  const ids = reqs.map((r) => r.targetId).filter((id): id is string => !!id);
+  return runPerTarget(
+    ids,
+    () => false,
+    (id) => dvHost.disassociate(s.table, sourceId, navProperty, id),
+    t0,
+  );
 }
 
 // ── Execute group ────────────────────────────────────────────────────────
@@ -669,9 +829,23 @@ export async function executeAction(s: ExecuteActionState): Promise<ExecResult> 
 
   const params = buildExecuteActionBody(s);
   // Resolve binding from the action CSDL — the source state only stores the
-  // record id; the entity name lives on action.binding.entityType.
-  const boundEntity = action.binding.kind === 'entity' ? action.binding.entityType : undefined;
-  const boundEntityId = boundEntity ? (s.boundRecordId ?? undefined) : undefined;
+  // record id; the entity name lives on action.binding.entityType. The host
+  // maps the three binding shapes as (#55):
+  //   entityName + entityId → POST /<set>(<id>)/Microsoft.Dynamics.CRM.<op>
+  //   entityName only       → POST /<set>/Microsoft.Dynamics.CRM.<op>  (collection)
+  //   neither               → POST /<op>                               (unbound)
+  // Collection-bound actions used to fall through to the unbound form.
+  const boundEntity = action.binding.kind === 'unbound' ? undefined : action.binding.entityType;
+  let boundEntityId: string | undefined;
+  if (action.binding.kind === 'entity') {
+    if (!s.boundRecordId) {
+      return mapError(
+        { statusCode: 400, message: `Action '${action.name}' is bound — pick a source record.` },
+        0,
+      );
+    }
+    boundEntityId = s.boundRecordId;
+  }
 
   const res = await timed(() =>
     dvHost.execute({
@@ -691,22 +865,40 @@ export async function executeFunction(s: ExecuteFunctionState): Promise<ExecResu
   const action = await actions.find(s.functionName);
   if (!action)
     return mapError({ statusCode: 404, message: `Unknown function ${s.functionName}` }, 0);
-  void buildExecuteFunction;
+  if (action.binding.kind === 'entity' && !s.boundRecordId) {
+    return mapError(
+      { statusCode: 400, message: `Function '${action.name}' is bound — pick a source record.` },
+      0,
+    );
+  }
+  // Bound functions need the table's real entity set name for the URL; make
+  // sure its metadata is in the registry the builder reads from.
+  if (action.binding.kind !== 'unbound') {
+    await metadata.getTable(action.binding.entityType);
+  }
 
-  const boundEntity = action.binding.kind === 'entity' ? action.binding.entityType : undefined;
-  const boundEntityId = boundEntity ? (s.boundRecordId ?? undefined) : undefined;
-
-  // The host's execute() handles parameter encoding (URL-aliased for
-  // functions, JSON-body for actions) so we just pass the raw param map.
-  const res = await timed(() =>
-    dvHost.execute({
-      operationName: s.functionName!,
-      operationType: 'function',
-      entityName: boundEntity,
-      entityId: boundEntityId,
-      parameters: s.paramValues as Record<string, unknown>,
-    }),
-  );
+  // Send the exact URL the builder shows (#55). The host's execute() would
+  // re-encode the raw editor values itself — EntityReference objects and
+  // numeric enums came out differently from the URL bar, it ignored the
+  // parameter-alias toggle, and it guesses the entity set name by
+  // pluralizing. A function call is a plain GET, so route the builder's
+  // path through queryData instead: one source of truth for preview, Code
+  // tab and execution.
+  const path = buildExecuteFunctionWirePath(s);
+  if (!path) {
+    return mapError(
+      {
+        statusCode: 400,
+        message:
+          action.binding.kind === 'unbound'
+            ? `Couldn't build the URL for function '${action.name}'.`
+            : `Couldn't resolve the entity set for '${action.binding.entityType}' — ` +
+              `table metadata isn't available.`,
+      },
+      0,
+    );
+  }
+  const res = await timed(() => dvHost.queryData(path));
   if (isExecResult(res)) return res;
   return ok(200, res.value, res.ms);
 }
