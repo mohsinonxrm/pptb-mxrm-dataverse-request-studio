@@ -8,8 +8,12 @@ import {
   tokens,
   Tooltip,
   Spinner,
+  MessageBar,
+  MessageBarBody,
+  MessageBarActions,
 } from '@fluentui/react-components';
 import {
+  Dismiss20Regular,
   Copy20Regular,
   ArrowDownload20Regular,
   DocumentSearch20Regular,
@@ -19,9 +23,12 @@ import {
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import { StatusPill } from '../primitives/StatusPill';
+import { useAnnounceResult } from '../primitives/announce';
 import type { ExecResult } from '../engine/dataverseExecutor';
 import { ResultsGrid } from './results/ResultsGrid';
 import { ResultsCommandBar } from './results/ResultsCommandBar';
+import type { GridExportView } from './results/exportResults';
+import { usePersistedSettings } from '../host/usePersistedSettings';
 import { RecordDetailCard } from './detail/RecordDetailCard';
 import { WriteResultCard, type WriteResultContext } from './results/WriteResultCard';
 import type { ExpandSpec } from '../editors/ExpandEditor';
@@ -41,6 +48,10 @@ export function ResultsView({
   onRefresh,
   onLoadMore,
   onRetrieveAll,
+  onStopLoadingMore,
+  loadMoreError,
+  onRetryLoadMore,
+  onDismissLoadMoreError,
   writeContext,
   preferredColumnOrder,
 }: {
@@ -64,6 +75,13 @@ export function ResultsView({
   onLoadMore?: () => void;
   /** Walk every page until exhausted. */
   onRetrieveAll?: () => void;
+  /** Stop an in-flight next-page fetch / Retrieve all, keeping rows loaded so far. */
+  onStopLoadingMore?: () => void;
+  /** Last next-page failure; rendered as an error bar above the grid. */
+  loadMoreError?: string | null;
+  /** Retry the failed next page. */
+  onRetryLoadMore?: () => void;
+  onDismissLoadMoreError?: () => void;
   /**
    * Write-mode context. When supplied AND `mode === 'single'`, the
    * results pane renders WriteResultCard (operation-specific success /
@@ -84,8 +102,14 @@ export function ResultsView({
   // Grid-local UI state. We hoist it here (not inside ResultsGrid) so the
   // command bar can drive it without prop-drilling through the grid.
   const [searchQuery, setSearchQuery] = useState('');
-  const [density, setDensity] = useState<'cozy' | 'compact'>('cozy');
+  // Row density is a persisted display setting (#16).
+  const [settings, setSettings] = usePersistedSettings();
+  const density = settings.gridDensity;
+  // What the grid lists (columns + rows after search) — CSV export writes this.
+  const [gridView, setGridView] = useState<GridExportView | null>(null);
+  const [showFilterRow, setShowFilterRow] = useState(false);
   const s = useStudioStyles();
+  useAnnounceResult(result);
 
   if (!result) {
     return (
@@ -191,11 +215,36 @@ export function ResultsView({
           body={result.body}
           onRefresh={onRefresh ?? (() => {})}
           onRetrieveAll={onRetrieveAll}
+          onStopLoadingMore={onStopLoadingMore}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
+          showFilterRow={showFilterRow}
+          onShowFilterRowChange={setShowFilterRow}
           density={density}
-          onDensityChange={setDensity}
+          onDensityChange={(d) => setSettings({ ...settings, gridDensity: d })}
+          table={table}
+          exportView={gridView}
         />
+      )}
+
+      {loadMoreError && (
+        <MessageBar intent="error" layout="multiline">
+          <MessageBarBody>{loadMoreError} Rows already loaded are kept.</MessageBarBody>
+          <MessageBarActions
+            containerAction={
+              onDismissLoadMoreError && (
+                <Button
+                  appearance="transparent"
+                  aria-label="Dismiss"
+                  icon={<Dismiss20Regular />}
+                  onClick={onDismissLoadMoreError}
+                />
+              )
+            }
+          >
+            {onRetryLoadMore && <Button onClick={onRetryLoadMore}>Retry</Button>}
+          </MessageBarActions>
+        </MessageBar>
       )}
 
       <div
@@ -225,10 +274,13 @@ export function ResultsView({
               isLoadingMore={isLoadingMore}
               onLoadMore={onLoadMore}
               searchQuery={searchQuery}
+              onClearSearch={() => setSearchQuery('')}
+              showFilterRow={showFilterRow}
               density={density}
               status={{ code: result.status, ms: result.ms, bytes: result.bytes }}
               serverTotal={serverTotal}
               preferredColumnOrder={preferredColumnOrder}
+              onViewChange={setGridView}
             />
           ))}
         {tab === 'json' && <JsonPane body={result.body} />}
@@ -347,6 +399,14 @@ function HeadersPane({
   );
 }
 
+/**
+ * True when the host refused the response because of its per-response size
+ * cap ("... exceeds the maximum size", or the 16 MB Buffer limit) (#126).
+ */
+function isResponseSizeLimitError(message: string | undefined): boolean {
+  return !!message && /16777216|exceeds the maximum size/i.test(message);
+}
+
 function ErrorState({ result }: { result: ExecResult }) {
   const Icon =
     result.status === 401
@@ -355,6 +415,21 @@ function ErrorState({ result }: { result: ExecResult }) {
         ? ShieldDismiss20Regular
         : ErrorCircle20Regular;
   const err = (result.body as { error?: { code?: string; message?: string } } | null)?.error;
+  // #126 — the host caps response size; say how to shrink the response.
+  const sizeHint = isResponseSizeLimitError(err?.message)
+    ? 'The response is larger than the host allows. Narrow it: add $select on the table and ' +
+      'inside each $expand, filter the expanded rows, or set Prefer: odata.maxpagesize to ' +
+      'return fewer rows per page.'
+    : null;
+  // #126 — 0x80060888 (a generic OData code, so match on the message):
+  // top-level $top with a collection $expand that has a nested $expand.
+  const nestedExpandTopHint = /at top level while doing \$expand on nested one-to-many/i.test(
+    err?.message ?? '',
+  )
+    ? 'Dataverse rejects top-level $top when a 1:N or N:N $expand has its own nested ' +
+      '$expand. Remove $top and set Prefer: odata.maxpagesize instead to limit the rows ' +
+      'per page.'
+    : null;
   const title =
     result.status === 401
       ? 'Unauthorized · 401'
@@ -420,6 +495,16 @@ function ErrorState({ result }: { result: ExecResult }) {
         <Caption1 style={{ color: tokens.colorNeutralForeground2, maxWidth: 420 }}>
           {advice}
         </Caption1>
+        {sizeHint && (
+          <Caption1 style={{ color: tokens.colorNeutralForeground1, maxWidth: 420 }}>
+            {sizeHint}
+          </Caption1>
+        )}
+        {nestedExpandTopHint && (
+          <Caption1 style={{ color: tokens.colorNeutralForeground1, maxWidth: 420 }}>
+            {nestedExpandTopHint}
+          </Caption1>
+        )}
         {err && (
           // `whiteSpace: pre-wrap` keeps `\n` breaks but wraps the rest;
           // `wordBreak: break-word` + `overflowWrap: anywhere` break long

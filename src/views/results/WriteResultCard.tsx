@@ -26,6 +26,7 @@ import {
   ErrorCircle20Filled,
   Warning20Filled,
   Copy20Regular,
+  DocumentSearch20Regular,
   Open20Regular,
   BranchFork20Filled,
   CheckmarkCircle16Filled,
@@ -33,6 +34,7 @@ import {
   SubtractCircle16Regular,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../../primitives/styles';
+import { canOpenInMode, openInMode } from '../../state/modeHandoff';
 import { StatusPill } from '../../primitives/StatusPill';
 import { RecordDetailCard } from '../detail/RecordDetailCard';
 import { ENV } from '../../mock/environment';
@@ -105,6 +107,14 @@ export interface WriteResultContext {
   fileName?: string;
 }
 
+/** Writes after which the record still exists, so "Retrieve this record" makes sense. */
+const RETRIEVABLE_OPS: ReadonlySet<WriteOperation> = new Set<WriteOperation>([
+  'create',
+  'update',
+  'upsert',
+  'merge',
+]);
+
 export interface WriteResultCardProps {
   result: ExecResult;
   ctx: WriteResultContext;
@@ -157,6 +167,14 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
         : tokens.colorPaletteRedForeground1;
 
   const narrative = buildNarrative(ctx, result, resolvedId, entityDisplay);
+  // "Retrieve this record" (#3): after a write that leaves the record in
+  // place, jump to Retrieve Single with the table + id filled in and run it.
+  const canRetrieve =
+    family === 'success' &&
+    !!resolvedId &&
+    !!ctx.table &&
+    RETRIEVABLE_OPS.has(ctx.operation) &&
+    canOpenInMode();
   const recordUrl =
     resolvedId && tbl
       ? `https://${ENV.host}/api/data/v9.2/${tbl.entitySetName}(${resolvedId})`
@@ -282,6 +300,27 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
                   </Button>
                 </Tooltip>
               </>
+            )}
+            {canRetrieve && (
+              <Tooltip
+                content="Open this record in Retrieve Single and run the request"
+                relationship="description"
+              >
+                <Button
+                  size="small"
+                  appearance="subtle"
+                  icon={<DocumentSearch20Regular />}
+                  onClick={() =>
+                    openInMode('retrieve-single', {
+                      table: ctx.table,
+                      recordId: resolvedId,
+                      autoExecute: true,
+                    })
+                  }
+                >
+                  Retrieve this record
+                </Button>
+              </Tooltip>
             )}
           </div>
         )}
