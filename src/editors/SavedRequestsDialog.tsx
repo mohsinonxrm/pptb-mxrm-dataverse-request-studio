@@ -678,9 +678,10 @@ function SavedLibraryTransfer({
   modeId: SavedModeId;
 }) {
   const s = useStyles();
-  const { saved, importEntries } = useSavedRequests();
+  const { saved, importEntries, health, startNewLibrary } = useSavedRequests();
   const [status, setStatus] = useState<TransferStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmingReset, setConfirmingReset] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const fail = (title: string, e: unknown) =>
@@ -784,6 +785,43 @@ function SavedLibraryTransfer({
     }
   };
 
+  // Unreadable library (#220): write the stored text to a file as it is.
+  const onSaveUnreadable = async () => {
+    if (health.unreadableText === null) return;
+    setStatus(null);
+    setBusy(true);
+    try {
+      const scope = getOrgScope();
+      const fileName = `drs-saved-requests-unreadable-${scope.replace(/[^a-z0-9.-]+/gi, '_')}-${new Date()
+        .toISOString()
+        .slice(0, 10)}.txt`;
+      const path = await saveFileSafe(fileName, health.unreadableText, [
+        { name: 'Text', extensions: ['txt', 'json'] },
+      ]);
+      if (path || !isEmbedded()) {
+        setStatus({
+          intent: 'success',
+          title: 'Copy saved',
+          text: `The unreadable saved requests were written to ${path ?? fileName}.`,
+        });
+      }
+    } catch (e) {
+      fail("Couldn't save a copy", e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onStartNewLibrary = () => {
+    setConfirmingReset(false);
+    const r = startNewLibrary();
+    setStatus(
+      r.ok
+        ? { intent: 'success', title: 'New library started', text: 'You can save requests again.' }
+        : { intent: 'error', title: "Couldn't start a new library", text: r.error ?? '' },
+    );
+  };
+
   const onImport = async () => {
     setStatus(null);
     if (!isEmbedded() || !window.toolboxAPI) {
@@ -808,6 +846,57 @@ function SavedLibraryTransfer({
 
   return (
     <div className={s.transfer}>
+      {health.unreadable && (
+        <MessageBar layout="multiline" intent="error">
+          <MessageBarBody>
+            <MessageBarTitle>Saved requests couldn&apos;t be read</MessageBarTitle>
+            The saved requests stored for this connection are damaged, so they can&apos;t be listed
+            and nothing new is saved over them.{' '}
+            {health.backedUp
+              ? 'A copy is kept in this tool’s storage. '
+              : 'Save a copy before you start over: storage refused a backup. '}
+            Save a copy to a file, then start a new library.
+            {confirmingReset && (
+              <>
+                {' '}
+                <strong>Start a new, empty library?</strong> The damaged data isn&apos;t listed
+                again.
+              </>
+            )}
+          </MessageBarBody>
+          <MessageBarActions>
+            {confirmingReset ? (
+              <>
+                <Button size="small" appearance="primary" onClick={onStartNewLibrary}>
+                  Start new library
+                </Button>
+                <Button size="small" onClick={() => setConfirmingReset(false)}>
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button size="small" disabled={busy} onClick={() => void onSaveUnreadable()}>
+                  Save a copy…
+                </Button>
+                <Button size="small" disabled={busy} onClick={() => setConfirmingReset(true)}>
+                  Start a new library
+                </Button>
+              </>
+            )}
+          </MessageBarActions>
+        </MessageBar>
+      )}
+      {health.hidden > 0 && (
+        <MessageBar layout="multiline" intent="info">
+          <MessageBarBody>
+            {health.hidden === 1
+              ? "1 stored item can't be shown by this version of Dataverse Request Studio"
+              : `${health.hidden} stored items can't be shown by this version of Dataverse Request Studio`}{' '}
+            (saved by a newer version, or damaged). They&apos;re kept as they are.
+          </MessageBarBody>
+        </MessageBar>
+      )}
       <div className={s.transferActions}>
         <Tooltip
           content="Save every saved request for this connection (all modes) to a JSON file"
