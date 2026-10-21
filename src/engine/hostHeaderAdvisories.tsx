@@ -10,7 +10,8 @@
 // refuse to execute those requests and point the user at the Code tab.
 //
 // The Update default (`If-Match: *`, update-only) stays executable on older
-// hosts: it's the default for every Update.
+// hosts: it's the default for every Update. There `executeUpdate` reads the
+// record first and doesn't send the PATCH when it's missing (#218).
 
 import type { BypassOptions, ConcurrencyMode } from '../state/writeState';
 import { adv, type Advisory } from '../primitives/advisories';
