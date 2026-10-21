@@ -91,6 +91,17 @@ export function spreadsheetSafe(text: string, source?: unknown): string {
 }
 
 /**
+ * One cell of the "Copy as TSV" text: `spreadsheetSafe`, and also neutralised
+ * when it starts with a double quote — pasted TSV isn't escaped, and a
+ * spreadsheet takes a leading `"` as a text qualifier and parses what's
+ * inside (`"=HYPERLINK(…)"`). Tabs and line breaks become spaces.
+ */
+export function tsvCell(text: string, source?: unknown): string {
+  const safe = spreadsheetSafe(text, source);
+  return (/^\s*"/.test(safe) ? `'${safe}` : safe).replace(/[\t\n\r]+/g, ' ');
+}
+
+/**
  * CSV text for the given rows and columns: a header row, CRLF line breaks,
  * and a UTF-8 byte-order mark so Excel reads non-ASCII text correctly.
  * Headers and cells go through `spreadsheetSafe` before quoting.

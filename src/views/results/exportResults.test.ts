@@ -3,6 +3,7 @@ import {
   csvField,
   exportFileName,
   spreadsheetSafe,
+  tsvCell,
   toCsv,
   type ExportColumn,
 } from './exportResults';
@@ -135,6 +136,17 @@ describe('toCsv formula neutralising (#239)', () => {
 
   it('exports raw negative numbers unchanged', () => {
     expect(toCsv(data, cols, 'raw').slice(1).split('\r\n')[1]).toBe("'=1+2,-5");
+  });
+});
+
+describe('tsvCell (#239 review)', () => {
+  it('also neutralises a leading double quote, and flattens tabs and line breaks', () => {
+    expect(tsvCell('"=HYPERLINK(""x"")"')).toBe(`'"=HYPERLINK(""x"")"`);
+    expect(tsvCell('  "quoted"')).toBe(`'  "quoted"`);
+    expect(tsvCell('=1+2')).toBe("'=1+2");
+    expect(tsvCell('a\tb\nc')).toBe('a b c');
+    expect(tsvCell('-$5.00', -5)).toBe('-$5.00');
+    expect(tsvCell('say "hi"')).toBe('say "hi"');
   });
 });
 
