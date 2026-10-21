@@ -73,6 +73,7 @@ import type {
 } from '../state/binaryState';
 // Action lookup goes through the live CSDL provider. PPTB-only.
 import { actions } from '../host/csdlProvider';
+import { isCredentialHeader } from './sensitiveHeaders';
 
 // ── Public types ─────────────────────────────────────────────────────────
 
@@ -384,7 +385,8 @@ export function toWireHeaders(
   for (const [rawName, value] of Object.entries(headers)) {
     const name = rawName.trim();
     const key = name.toLowerCase();
-    if (!key || HOST_OWNED_HEADERS.has(key)) continue;
+    // Credential headers (Cookie, Proxy-Authorization, …) are never sent (#217).
+    if (!key || HOST_OWNED_HEADERS.has(key) || isCredentialHeader(key)) continue;
     byName.delete(key);
     byName.set(key, [name, value]);
   }

@@ -8,6 +8,7 @@ import {
 } from './sensitiveHeaders';
 import { buildCollection, type CollectionInput } from './collectionFormats';
 import { generateCode, type CodegenInputs } from './codeGenerators';
+import { toWireHeaders } from './dataverseExecutor';
 import { itemToWire, newItem } from './batch/batchModel';
 import { buildSavedExport, type SavedRequest } from '../state/savedRequests';
 
@@ -180,5 +181,37 @@ describe('Code tab and $batch parts', () => {
     expect(warnings).toEqual([
       "Authorization isn't sent: Power Platform ToolBox authenticates the batch.",
     ]);
+  });
+});
+
+describe('requests and OpenAPI', () => {
+  it('never hands a credential header to the host when a request runs', () => {
+    expect(
+      toWireHeaders({
+        Cookie: 'a=b',
+        'Proxy-Authorization': 'x',
+        Authorization: TOKEN,
+        'If-Match': '*',
+      }),
+    ).toEqual({ 'If-Match': '*' });
+    expect(toWireHeaders({ Cookie: 'a=b' })).toBeUndefined();
+  });
+
+  it("OpenAPI doesn't write the caller id as an example", () => {
+    const code = generateCode('openapi', {
+      method: 'GET',
+      built: {
+        relativeUrl: '/api/data/v9.2/accounts',
+        relativeNoBase: '/accounts',
+        bytes: 0,
+        queryParts: [],
+        entitySet: 'accounts',
+        entityLogical: 'account',
+      },
+      headers: { MSCRMCallerID: CALLER, Cookie: 'a=b' },
+    });
+    expect(code).toContain('MSCRMCallerID');
+    expect(code).not.toContain(CALLER);
+    expect(code).not.toContain('a=b');
   });
 });

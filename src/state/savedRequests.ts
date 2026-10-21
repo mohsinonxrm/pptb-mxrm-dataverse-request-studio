@@ -488,6 +488,45 @@ export function persistSaved(list: SavedRequest[]): void {
   }
 }
 
+/**
+ * Remove credential header rows already stored by an earlier build (#217),
+ * in every connection's library. Rewrites a bucket only when an entry's
+ * state changed, and keeps every other item exactly as stored (damaged
+ * items and entries of modes this build doesn't know included). Buckets
+ * that aren't a JSON array are left alone. Best-effort; never throws.
+ */
+export function scrubStoredCredentials(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const ls = window.localStorage;
+    const keys: string[] = [];
+    for (let i = 0; i < ls.length; i++) {
+      const k = ls.key(i);
+      if (k?.startsWith(`${SAVED_REQUESTS_KEY_PREFIX}:`)) keys.push(k);
+    }
+    for (const key of keys) {
+      let items: unknown;
+      try {
+        items = JSON.parse(ls.getItem(key) ?? '');
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(items)) continue;
+      let changed = false;
+      const next = items.map((e) => {
+        if (!e || typeof e !== 'object' || !('state' in e)) return e;
+        const state = stripCredentialRows((e as { state: unknown }).state);
+        if (state === (e as { state: unknown }).state) return e;
+        changed = true;
+        return { ...e, state };
+      });
+      if (changed) ls.setItem(key, JSON.stringify(next));
+    }
+  } catch {
+    // Storage unavailable or full: entries are still stripped when read.
+  }
+}
+
 // ── Other connections' libraries (#6) ─────────────────────────────────
 //
 // Every connection this browser profile has saved requests for has its own

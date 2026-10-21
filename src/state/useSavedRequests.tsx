@@ -38,11 +38,15 @@ import {
   getOrgScope,
   getSavedRequestsKey,
   hashState,
+  scrubStoredCredentials,
   type SavedRequest,
 } from './savedRequests';
 import { stripCredentialRows } from '../engine/sensitiveHeaders';
 
 // ── Module-level singleton store ────────────────────────────────────
+
+// Credentials saved by an earlier build leave storage once, at startup (#217).
+if (typeof window !== 'undefined') scrubStoredCredentials();
 
 let snapshot: SavedRequest[] = typeof window !== 'undefined' ? loadSaved() : [];
 const listeners = new Set<() => void>();

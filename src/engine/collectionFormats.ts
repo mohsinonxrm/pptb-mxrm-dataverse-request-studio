@@ -106,7 +106,7 @@ function exportedHeaders(r: CollectionRequest, ref: (v: string) => string): [str
 }
 
 /** Impersonation variables the collection's requests use, to declare them. */
-function impersonationVars(items: CollectionItem[]): string[] {
+export function impersonationVars(items: CollectionItem[]): string[] {
   const vars = new Set<string>();
   for (const r of flatSteps(items)) {
     for (const name of Object.keys(r.headers)) {
