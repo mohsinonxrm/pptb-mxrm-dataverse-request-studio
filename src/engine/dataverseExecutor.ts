@@ -50,6 +50,7 @@ import {
   buildMergeBody,
   buildAssociateRequests,
   buildDisassociateRequests,
+  PATCH_EXISTING_HEADERS,
 } from './urlBuilder';
 import { buildExecuteActionBody, buildExecuteFunctionWirePath } from './executeBuilders';
 import type {
@@ -545,6 +546,36 @@ async function requireExistingRecord(table: string, id: string): Promise<ExecRes
   );
 }
 
+/**
+ * PATCH a record that must already exist (#254): single-valued Associate /
+ * Disassociate set or clear the lookup with a PATCH of the source record,
+ * which Dataverse would otherwise treat as an upsert. Sends `If-Match: *`
+ * on hosts that pass headers (atomic; the user approves it once), and reads
+ * the record first on hosts that can't, as `executeUpdate` does (#218).
+ */
+async function patchExistingRecord(
+  table: string,
+  id: string,
+  body: Record<string, unknown>,
+): Promise<{ ms: number; value: void } | ExecResult> {
+  if (isEmbedded() && !hostSupportsAdditionalHeaders()) {
+    const stop = await requireExistingRecord(table, id);
+    if (stop) return stop;
+  }
+  const wire = sendable({ ...PATCH_EXISTING_HEADERS });
+  const res = await timed(() => dvHost.update(table, id, body, wire), wire);
+  // Declining the header prompt shouldn't block setting a lookup that
+  // worked without one before: fall back to reading the record first.
+  const declined =
+    isExecResult(res) &&
+    (res.body as { error?: { code?: string } } | null)?.error?.code ===
+      HEADER_CONSENT_DECLINED_CODE;
+  if (!declined) return res;
+  const stop = await requireExistingRecord(table, id);
+  if (stop) return stop;
+  return timed(() => dvHost.update(table, id, body));
+}
+
 export async function executeUpdate(
   s: UpdateState,
   headers?: Record<string, string>,
@@ -814,8 +845,9 @@ export async function executeAssociate(s: AssociateState): Promise<ExecResult> {
   if (singleValued) {
     // reqs has exactly one entry per buildAssociateRequests's single-
     // valued branch. Body shape: `{ "<nav>@odata.bind": "<set>(<id>)" }`.
+    // Must not create the source record when its id is wrong (#254).
     const r = reqs[0];
-    const res = await timed(() => dvHost.update(s.table, sourceId, r.body));
+    const res = await patchExistingRecord(s.table, sourceId, r.body);
     if (isExecResult(res)) return res;
     return ok(204, null, res.ms);
   }
@@ -857,7 +889,8 @@ export async function executeDisassociate(s: DisassociateState): Promise<ExecRes
     // Routes through dvHost.update which accepts arbitrary body shapes
     // (including null values). Replaces the old "silently skip" branch
     // that did nothing because PPTB's .disassociate requires a target id.
-    const res = await timed(() => dvHost.update(s.table, sourceId, patch.body ?? {}));
+    // Must not create the source record when its id is wrong (#254).
+    const res = await patchExistingRecord(s.table, sourceId, patch.body ?? {});
     if (isExecResult(res)) return res;
     return ok(204, null, res.ms);
   }

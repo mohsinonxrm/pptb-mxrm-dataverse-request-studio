@@ -27,6 +27,7 @@ import {
   buildMergeBody,
   buildAssociateRequests,
   buildDisassociateRequests,
+  relateRequestHeaders,
   buildExecuteAction,
   buildExecuteActionBody,
   buildExecuteFunction,
@@ -258,7 +259,7 @@ export function savedToCollectionItem(entry: SavedRequest): SavedConversion {
             name: `Associate ${r.targetId}`,
             method: r.method,
             path: r.relativeUrl,
-            headers,
+            headers: relateRequestHeaders(r.method, headers),
             body: r.body,
           })),
         );
@@ -272,7 +273,7 @@ export function savedToCollectionItem(entry: SavedRequest): SavedConversion {
             name: r.targetId ? `Disassociate ${r.targetId}` : 'Disassociate',
             method: r.method,
             path: r.relativeUrl,
-            headers,
+            headers: relateRequestHeaders(r.method, headers),
             body: r.body,
           })),
         );
