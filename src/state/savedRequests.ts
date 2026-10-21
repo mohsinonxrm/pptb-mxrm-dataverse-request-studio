@@ -166,25 +166,37 @@ export interface SavedRequest {
   schemaVersion?: number;
 }
 
-/** Runtime list of SavedModeId, for validating imported entries. */
-const SAVED_MODE_IDS: ReadonlySet<string> = new Set<SavedModeId>([
-  'retrieve-multiple',
-  'retrieve-single',
-  'predefined-query',
-  'delete',
-  'update',
-  'create',
-  'upsert',
-  'merge',
-  'associate',
-  'disassociate',
-  'exec-action',
-  'exec-function',
-  'exec-workflow',
-  'manage-file',
-  'manage-image',
-  'manage-attachment',
-]);
+/**
+ * Every SavedModeId, as a record so a mode added to the union but not here
+ * is a compile error. The 1.2.0 modes ($batch, ExecuteMultiple, Bulk Write,
+ * Bulk Delete Job) were once missing from this list, which made import and
+ * the other-connections view drop their entries (#220).
+ */
+const SAVED_MODES: Record<SavedModeId, true> = {
+  'retrieve-multiple': true,
+  'retrieve-single': true,
+  'predefined-query': true,
+  delete: true,
+  'bulk-delete': true,
+  update: true,
+  create: true,
+  upsert: true,
+  merge: true,
+  'bulk-write': true,
+  associate: true,
+  disassociate: true,
+  'exec-action': true,
+  'exec-function': true,
+  'exec-workflow': true,
+  'manage-file': true,
+  'manage-image': true,
+  'manage-attachment': true,
+  batch: true,
+  'execute-multiple': true,
+};
+
+/** Runtime list of SavedModeId, for validating stored and imported entries. */
+export const SAVED_MODE_IDS: ReadonlySet<string> = new Set(Object.keys(SAVED_MODES));
 
 // ── Per-mode serialized shapes ────────────────────────────────────────
 
@@ -434,28 +446,92 @@ export function deserializeManageAttachment(
 }
 
 // ── localStorage I/O ──────────────────────────────────────────────────
+//
+// Reading never loses data (#220). The stored value is classified once, by
+// `readLibrary`, for the current library, the other-connections view and
+// import alike:
+//   • entries    — what this build can list and load;
+//   • preserved  — array items it can't (damaged, an unknown mode, a newer
+//                  schema). Kept as the raw values and written back after
+//                  the entries on every write, so a newer DRS's entries
+//                  survive a round trip through an older one;
+//   • unreadable — the stored text isn't a JSON array at all. The store
+//                  refuses to write over it until the user keeps a copy or
+//                  starts a new library; a backup copy is kept in storage.
+
+/** A connection's library as read from storage. */
+export interface SavedLibrary {
+  entries: SavedRequest[];
+  preserved: unknown[];
+  /** The raw stored text when it isn't a JSON array, else null. */
+  unreadable: string | null;
+}
+
+/** True for an entry this build can list and load. */
+function isUsableEntry(e: unknown): e is SavedRequest {
+  return (
+    isSavedRequestShape(e) &&
+    SAVED_MODE_IDS.has(e.modeId) &&
+    (e.schemaVersion ?? 1) <= SAVED_SCHEMA_VERSION
+  );
+}
 
 /**
- * Read the full saved-requests list. Returns [] on any failure — never
- * throws (corruption shouldn't break the app's load path).
+ * Read a library bucket (default: the current connection's). Never throws.
+ * Entries saved before `orgScope` / `schemaVersion` existed are backfilled
+ * (tagged with the bucket's scope, schema 1).
  */
-export function loadSaved(): SavedRequest[] {
-  if (typeof window === 'undefined') return [];
+export function readLibrary(key = getSavedRequestsKey(), scope = getOrgScope()): SavedLibrary {
+  const empty: SavedLibrary = { entries: [], preserved: [], unreadable: null };
+  if (typeof window === 'undefined') return empty;
+  let raw: string | null;
   try {
-    const raw = window.localStorage.getItem(getSavedRequestsKey());
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    const scope = getOrgScope();
-    // Light shape-validate — drop entries missing required fields rather
-    // than nuking the whole array. Backfill `orgScope` for entries saved
-    // before the field existed (one-time migration; we tag them with the
-    // current host since we have no way to know the original).
-    return parsed
-      .filter(isSavedRequestShape)
-      .map((e) => ({ ...e, orgScope: e.orgScope || scope, schemaVersion: e.schemaVersion ?? 1 }));
+    raw = window.localStorage.getItem(key);
   } catch {
-    return [];
+    return empty;
+  }
+  if (!raw) return empty;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { ...empty, unreadable: raw };
+  }
+  if (!Array.isArray(parsed)) return { ...empty, unreadable: raw };
+  const entries: SavedRequest[] = [];
+  const preserved: unknown[] = [];
+  for (const e of parsed) {
+    if (isUsableEntry(e)) {
+      entries.push({ ...e, orgScope: e.orgScope || scope, schemaVersion: e.schemaVersion ?? 1 });
+    } else {
+      preserved.push(e);
+    }
+  }
+  return { entries, preserved, unreadable: null };
+}
+
+/** Prefix of the backup keys for unreadable libraries — outside the library prefix. */
+export const SAVED_BACKUP_KEY_PREFIX = 'drs:saved-requests-corrupt:v1';
+
+/**
+ * Keep a copy of an unreadable library under its own key (outside the
+ * library prefix, so no connection lists it). An identical copy is never
+ * written twice. Returns the backup key, or null when storage refused it.
+ */
+export function backupUnreadable(scope: string, raw: string): string | null {
+  if (typeof window === 'undefined') return null;
+  const prefix = `${SAVED_BACKUP_KEY_PREFIX}:${scope}:`;
+  try {
+    const ls = window.localStorage;
+    for (let i = 0; i < ls.length; i++) {
+      const k = ls.key(i);
+      if (k?.startsWith(prefix) && ls.getItem(k) === raw) return k;
+    }
+    const key = `${prefix}${Date.now()}`;
+    ls.setItem(key, raw);
+    return key;
+  } catch {
+    return null;
   }
 }
 
@@ -472,11 +548,15 @@ function isSavedRequestShape(e: unknown): e is SavedRequest {
   );
 }
 
-/** Overwrite the entire list. Best-effort — silently no-ops if storage fails. */
-export function persistSaved(list: SavedRequest[]): void {
+/**
+ * Overwrite the current connection's library with `list`, followed by the
+ * `preserved` raw items `readLibrary` couldn't use. Throws when storage
+ * can't be written.
+ */
+export function persistSaved(list: SavedRequest[], preserved: readonly unknown[] = []): void {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(getSavedRequestsKey(), JSON.stringify(list));
+    window.localStorage.setItem(getSavedRequestsKey(), JSON.stringify([...list, ...preserved]));
   } catch {
     // QuotaExceededError, privacy-mode, etc. — surface via the caller's
     // ok/error return so the UI can show "couldn't save" toast.
@@ -499,17 +579,7 @@ export interface OrgLibrary {
 }
 
 function readBucket(key: string, scope: string): SavedRequest[] {
-  try {
-    const raw = window.localStorage.getItem(key);
-    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(isSavedRequestShape)
-      .filter((e) => SAVED_MODE_IDS.has(e.modeId) && (e.schemaVersion ?? 1) <= SAVED_SCHEMA_VERSION)
-      .map((e) => ({ ...e, orgScope: e.orgScope || scope, schemaVersion: e.schemaVersion ?? 1 }));
-  } catch {
-    return [];
-  }
+  return readLibrary(key, scope).entries;
 }
 
 /**
@@ -616,12 +686,7 @@ export function parseSavedImport(text: string): { entries: SavedRequest[]; inval
   } else {
     throw new Error('The file is not a Dataverse Request Studio saved-requests export.');
   }
-  const entries = raw.filter(
-    (e): e is SavedRequest =>
-      isSavedRequestShape(e) &&
-      SAVED_MODE_IDS.has(e.modeId) &&
-      (e.schemaVersion ?? 1) <= SAVED_SCHEMA_VERSION,
-  );
+  const entries = raw.filter(isUsableEntry);
   return { entries, invalid: raw.length - entries.length };
 }
 
