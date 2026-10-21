@@ -57,7 +57,13 @@ import type { GridDensity } from '../../state/displaySettings';
 import { useState } from 'react';
 import { useHostSession } from '../../host/HostContext';
 import { saveFileSafe } from '../../host/pptbBridge';
-import { exportFileName, toCsv, type ExportValueMode, type GridExportView } from './exportResults';
+import {
+  exportFileName,
+  toCsv,
+  tsvCell,
+  type ExportValueMode,
+  type GridExportView,
+} from './exportResults';
 
 const useStyles = makeStyles({
   bar: {
@@ -163,7 +169,9 @@ export function ResultsCommandBar({
     const keys = Array.from(new Set(rows.flatMap((r) => Object.keys(r)))).filter(
       (k) => !k.includes('@'),
     );
-    const header = keys.join('\t');
+    // Same formula neutralising as the CSV export (#239): pasted into a
+    // spreadsheet, the text is parsed like a CSV cell.
+    const header = keys.map((k) => tsvCell(k)).join('\t');
     const lines = rows.map((r) =>
       keys
         .map((k) => {
@@ -172,7 +180,7 @@ export function ResultsCommandBar({
             (r as Record<string, unknown>)[`_${k}_value@OData.Community.Display.V1.FormattedValue`];
           const v = f ?? r[k];
           if (v == null) return '';
-          return String(v).replace(/[\t\n\r]+/g, ' ');
+          return tsvCell(String(v), r[k]);
         })
         .join('\t'),
     );
