@@ -114,3 +114,29 @@ describe('relateRequestHeaders', () => {
     expect(relateRequestHeaders('DELETE', {})).toEqual({});
   });
 });
+
+describe('review follow-ups (#254)', () => {
+  it('falls back to reading the source first when the header prompt is declined', async () => {
+    host.update
+      .mockReset()
+      .mockRejectedValueOnce(new Error('Dataverse additional headers were rejected by the user'))
+      .mockResolvedValueOnce(undefined);
+    const r = await executeAssociate(assoc);
+    expect(host.retrieve).toHaveBeenCalledWith('contact', SRC, ['contactid']);
+    expect(host.update).toHaveBeenLastCalledWith('contact', SRC, expect.any(Object));
+    expect(r.status).toBe(204);
+  });
+
+  it('declined + missing source: no PATCH without the header', async () => {
+    host.update.mockReset().mockRejectedValueOnce(new Error('header consent declined'));
+    host.retrieve.mockRejectedValue(missing());
+    const r = await executeDisassociate(disassoc);
+    expect(host.update).toHaveBeenCalledTimes(1);
+    expect(r.status).toBe(404);
+  });
+
+  it("keeps the user's own If-Match, in any case", () => {
+    expect(relateRequestHeaders('PATCH', { 'if-match': 'W/"5"' })).toEqual({ 'if-match': 'W/"5"' });
+    expect(relateRequestHeaders('PATCH', { 'If-Match': 'W/"5"' })).toEqual({ 'If-Match': 'W/"5"' });
+  });
+});

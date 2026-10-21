@@ -772,12 +772,18 @@ export interface AssociateRequest {
  */
 export const PATCH_EXISTING_HEADERS: Readonly<Record<string, string>> = { 'If-Match': '*' };
 
-/** `headers` for one Associate / Disassociate request: plus `If-Match: *` on the PATCH form. */
+/**
+ * `headers` for one Associate / Disassociate request: plus `If-Match: *` on
+ * the PATCH form. An If-Match the user added (any case, e.g. an ETag) is
+ * kept — it already prevents the create, and a second one would conflict.
+ */
 export function relateRequestHeaders(
   method: string,
   headers: Record<string, string>,
 ): Record<string, string> {
-  return method === 'PATCH' ? { ...headers, ...PATCH_EXISTING_HEADERS } : headers;
+  if (method !== 'PATCH') return headers;
+  if (Object.keys(headers).some((k) => k.trim().toLowerCase() === 'if-match')) return headers;
+  return { ...headers, ...PATCH_EXISTING_HEADERS };
 }
 
 /** Absolute URL used inside the @odata.id body — required by the spec for $ref endpoints. */

@@ -561,7 +561,17 @@ async function patchExistingRecord(
     if (stop) return stop;
   }
   const wire = sendable({ ...PATCH_EXISTING_HEADERS });
-  return timed(() => dvHost.update(table, id, body, wire), wire);
+  const res = await timed(() => dvHost.update(table, id, body, wire), wire);
+  // Declining the header prompt shouldn't block setting a lookup that
+  // worked without one before: fall back to reading the record first.
+  const declined =
+    isExecResult(res) &&
+    (res.body as { error?: { code?: string } } | null)?.error?.code ===
+      HEADER_CONSENT_DECLINED_CODE;
+  if (!declined) return res;
+  const stop = await requireExistingRecord(table, id);
+  if (stop) return stop;
+  return timed(() => dvHost.update(table, id, body));
 }
 
 export async function executeUpdate(
