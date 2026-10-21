@@ -6,7 +6,11 @@
 // Every URL is written against a `baseUrl` variable (https://<org host>)
 // and every request inherits bearer auth from an `accessToken` variable,
 // so a collection carries no secrets and can be pointed at another org by
-// changing one variable.
+// changing one variable. Credential headers (Authorization, Cookie, …) are
+// never written, and an impersonation header's value (a user id) becomes a
+// variable such as `callerId` (#217, see engine/sensitiveHeaders).
+
+import { impersonationVar, isCredentialHeader } from './sensitiveHeaders';
 
 /** One HTTP request in an exported collection. */
 export interface CollectionRequest {
@@ -88,6 +92,31 @@ function splitPath(path: string): { segments: string[]; query: { key: string; va
 const usesUploadUrl = (items: CollectionItem[]) =>
   flatSteps(items).some((r) => r.path === UPLOAD_URL_VAR);
 
+/**
+ * A request's headers as written to a collection (#217): credential headers
+ * dropped, impersonation values replaced by a variable reference built with
+ * `ref` (each format has its own syntax).
+ */
+function exportedHeaders(r: CollectionRequest, ref: (v: string) => string): [string, string][] {
+  return Object.entries(r.headers).flatMap(([name, value]): [string, string][] => {
+    if (isCredentialHeader(name)) return [];
+    const v = impersonationVar(name);
+    return [[name, v ? ref(v) : value]];
+  });
+}
+
+/** Impersonation variables the collection's requests use, to declare them. */
+function impersonationVars(items: CollectionItem[]): string[] {
+  const vars = new Set<string>();
+  for (const r of flatSteps(items)) {
+    for (const name of Object.keys(r.headers)) {
+      const v = impersonationVar(name);
+      if (v) vars.add(v);
+    }
+  }
+  return [...vars];
+}
+
 function bodyText(body: CollectionRequest['body']): string | undefined {
   if (body == null) return undefined;
   return typeof body === 'string' ? body : JSON.stringify(body, null, 2);
@@ -130,7 +159,11 @@ function postmanRequest(r: CollectionRequest) {
     name: r.name,
     request: {
       method: r.method,
-      header: Object.entries(r.headers).map(([key, value]) => ({ key, value, type: 'text' })),
+      header: exportedHeaders(r, (v) => `{{${v}}}`).map(([key, value]) => ({
+        key,
+        value,
+        type: 'text',
+      })),
       url:
         r.path === UPLOAD_URL_VAR
           ? { raw: UPLOAD_URL_VAR, host: [UPLOAD_URL_VAR] }
@@ -171,6 +204,7 @@ function toPostman(input: CollectionInput) {
       { key: 'baseUrl', value: input.baseUrl, type: 'string' },
       { key: 'accessToken', value: '', type: 'string' },
       ...(usesUploadUrl(input.items) ? [{ key: 'uploadUrl', value: '', type: 'string' }] : []),
+      ...impersonationVars(input.items).map((key) => ({ key, value: '', type: 'string' })),
     ],
     item: input.items.map((it) =>
       it.kind === 'folder'
@@ -199,6 +233,7 @@ function toInsomnia(input: CollectionInput) {
         baseUrl: input.baseUrl,
         accessToken: '',
         ...(usesUploadUrl(input.items) ? { uploadUrl: '' } : {}),
+        ...Object.fromEntries(impersonationVars(input.items).map((v) => [v, ''])),
       },
     },
   ];
@@ -213,7 +248,7 @@ function toInsomnia(input: CollectionInput) {
       description: r.description ?? '',
       method: r.method,
       url: r.path === UPLOAD_URL_VAR ? '{{ _.uploadUrl }}' : `{{ _.baseUrl }}${r.path}`,
-      headers: Object.entries(r.headers).map(([name, value]) => ({ name, value })),
+      headers: exportedHeaders(r, (v) => `{{ _.${v} }}`).map(([name, value]) => ({ name, value })),
       body:
         text != null
           ? { mimeType: isJsonBody(r.body) ? 'application/json' : 'text/plain', text }
@@ -261,7 +296,11 @@ function brunoRequest(r: CollectionRequest, seq: number) {
     request: {
       url: r.path === UPLOAD_URL_VAR ? UPLOAD_URL_VAR : `{{baseUrl}}${r.path}`,
       method: r.method,
-      headers: Object.entries(r.headers).map(([name, value]) => ({ name, value, enabled: true })),
+      headers: exportedHeaders(r, (v) => `{{${v}}}`).map(([name, value]) => ({
+        name,
+        value,
+        enabled: true,
+      })),
       params: query.map((q) => ({ name: q.key, value: q.value, type: 'query', enabled: true })),
       body:
         text == null
@@ -302,6 +341,13 @@ function toBruno(input: CollectionInput) {
           ...(usesUploadUrl(input.items)
             ? [{ name: 'uploadUrl', value: '', enabled: true, secret: false, type: 'text' }]
             : []),
+          ...impersonationVars(input.items).map((name) => ({
+            name,
+            value: '',
+            enabled: true,
+            secret: false,
+            type: 'text',
+          })),
         ],
       },
     ],

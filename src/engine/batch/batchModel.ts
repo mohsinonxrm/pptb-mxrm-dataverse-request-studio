@@ -15,6 +15,8 @@
 // set its own `executeTransaction`, each run of independent groups one
 // `executeBatch` — sent in order. A batch with one group is one call.
 
+import { isCredentialHeader } from '../sensitiveHeaders';
+
 export type BatchMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 export type BatchOpKind = 'create' | 'update' | 'delete' | 'retrieve' | 'associate' | 'custom';
 
@@ -269,6 +271,14 @@ export function itemToWire(
     // eslint-disable-next-line no-control-regex
     if (/[\x00-\x1f\x7f]/.test(h.value)) {
       err(`Header ${name} has a control character in its value.`);
+      continue;
+    }
+    // Never sent, saved or exported (#217): the host authenticates the batch.
+    if (isCredentialHeader(name)) {
+      problems.push({
+        severity: 'warning',
+        message: `${name} isn't sent: Power Platform ToolBox authenticates the batch.`,
+      });
       continue;
     }
     headers[name] = h.value;

@@ -47,6 +47,7 @@ import type {
 } from './executeState';
 import type { ManageFileState, ManageImageState, ManageAttachmentState } from './binaryState';
 import { getEnv } from '../mock/environment';
+import { stripCredentialRows } from '../engine/sensitiveHeaders';
 import {
   autoSuggestBatch,
   autoSuggestExecuteMultiple,
@@ -451,9 +452,12 @@ export function loadSaved(): SavedRequest[] {
     // than nuking the whole array. Backfill `orgScope` for entries saved
     // before the field existed (one-time migration; we tag them with the
     // current host since we have no way to know the original).
-    return parsed
-      .filter(isSavedRequestShape)
-      .map((e) => ({ ...e, orgScope: e.orgScope || scope, schemaVersion: e.schemaVersion ?? 1 }));
+    return parsed.filter(isSavedRequestShape).map((e) => ({
+      ...e,
+      state: stripCredentialRows(e.state),
+      orgScope: e.orgScope || scope,
+      schemaVersion: e.schemaVersion ?? 1,
+    }));
   } catch {
     return [];
   }
@@ -506,7 +510,12 @@ function readBucket(key: string, scope: string): SavedRequest[] {
     return parsed
       .filter(isSavedRequestShape)
       .filter((e) => SAVED_MODE_IDS.has(e.modeId) && (e.schemaVersion ?? 1) <= SAVED_SCHEMA_VERSION)
-      .map((e) => ({ ...e, orgScope: e.orgScope || scope, schemaVersion: e.schemaVersion ?? 1 }));
+      .map((e) => ({
+        ...e,
+        state: stripCredentialRows(e.state),
+        orgScope: e.orgScope || scope,
+        schemaVersion: e.schemaVersion ?? 1,
+      }));
   } catch {
     return [];
   }
@@ -580,7 +589,11 @@ export function buildSavedExport(entries: SavedRequest[], orgScope: string): str
     schemaVersion: SAVED_SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
     orgScope,
-    entries: entries.map((e) => ({ ...e, schemaVersion: e.schemaVersion ?? 1 })),
+    entries: entries.map((e) => ({
+      ...e,
+      state: stripCredentialRows(e.state),
+      schemaVersion: e.schemaVersion ?? 1,
+    })),
   };
   return JSON.stringify(file, null, 2);
 }

@@ -14,6 +14,7 @@
 import { ENV } from '../mock/environment';
 import { findTable, type ColumnMeta, type TableMeta } from '../mock/metadata';
 import type { CodegenInputs } from './codeGenerators';
+import { isCredentialHeader } from './sensitiveHeaders';
 
 type Schema = Record<string, unknown>;
 
@@ -207,11 +208,12 @@ function splitRequest(
   return { path, pathParams, queryParams };
 }
 
-const SKIP_HEADERS = new Set(['authorization', 'accept', 'content-type']);
+// Credential headers (#217) are covered by the security scheme.
+const SKIP_HEADERS = new Set(['accept', 'content-type']);
 
 function headerParams(headers: Record<string, string>): Schema[] {
   return Object.entries(headers)
-    .filter(([k, v]) => v && !SKIP_HEADERS.has(k.toLowerCase()))
+    .filter(([k, v]) => v && !SKIP_HEADERS.has(k.toLowerCase()) && !isCredentialHeader(k))
     .map(([name, value]) => ({
       name,
       in: 'header',

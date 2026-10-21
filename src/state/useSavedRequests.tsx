@@ -40,6 +40,7 @@ import {
   hashState,
   type SavedRequest,
 } from './savedRequests';
+import { stripCredentialRows } from '../engine/sensitiveHeaders';
 
 // ── Module-level singleton store ────────────────────────────────────
 
@@ -177,7 +178,12 @@ export function useSavedRequests(): UseSavedRequestsApi {
   //     one the user can't even see from the current mode's list.
   const save = useCallback(
     (input: SavedRequest, opts?: { replaceId?: string }): SaveResult => {
-      const entry: SavedRequest = { ...input, schemaVersion: SAVED_SCHEMA_VERSION };
+      // Credential headers are never stored (#217).
+      const entry: SavedRequest = {
+        ...input,
+        state: stripCredentialRows(input.state),
+        schemaVersion: SAVED_SCHEMA_VERSION,
+      };
       const idx = list.findIndex((e) => e.id === entry.id);
       let next: SavedRequest[];
       if (idx >= 0) {
@@ -242,6 +248,7 @@ export function useSavedRequests(): UseSavedRequestsApi {
       for (const raw of entries) {
         const entry: SavedRequest = {
           ...raw,
+          state: stripCredentialRows(raw.state),
           orgScope: scope,
           schemaVersion: raw.schemaVersion ?? 1,
         };

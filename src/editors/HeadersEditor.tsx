@@ -15,6 +15,7 @@ import { PaneHead } from './PaneHead';
 import type { RequestGroup } from '../registry/requestTypes';
 import { useHostSession } from '../host/HostContext';
 import { hostSupportsAdditionalHeaders } from '../host/pptbBridge';
+import { isCredentialHeader } from '../engine/sensitiveHeaders';
 
 export interface HeaderItem {
   id: string;
@@ -227,6 +228,17 @@ export function HeadersEditor({
             {it.hint && (
               <Caption1 style={{ gridColumn: '2 / span 2', color: tokens.colorNeutralForeground3 }}>
                 {it.hint}
+              </Caption1>
+            )}
+            {isCredentialHeader(it.name) && (
+              <Caption1
+                style={{
+                  gridColumn: '2 / span 2',
+                  color: tokens.colorPaletteDarkOrangeForeground1,
+                }}
+              >
+                Not sent, saved or exported. Power Platform ToolBox authenticates every request, and
+                the Code tab adds its own token placeholder.
               </Caption1>
             )}
           </div>

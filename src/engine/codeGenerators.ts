@@ -10,6 +10,7 @@
 import type { BuiltRequest } from './urlBuilder';
 import { ENV } from '../mock/environment';
 import { generateOpenApi } from './openApiGenerator';
+import { isCredentialHeader, withoutCredentialHeaders } from './sensitiveHeaders';
 
 export type CodeFormat =
   | 'fetch'
@@ -262,12 +263,12 @@ function xrmFunctionMembers(i: CodegenInputs, fn: FunctionCall, indent: string):
   return lines.join('\n');
 }
 
-/** Strip headers a generator already inserts elsewhere (e.g. Authorization). */
+/** Strip credential headers: each generator inserts its own token placeholder (#217). */
 function stripAuth(headers: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(headers)) {
     if (!v) continue;
-    if (k.toLowerCase() === 'authorization') continue;
+    if (isCredentialHeader(k)) continue;
     out[k] = v;
   }
   return out;
@@ -1887,7 +1888,7 @@ function genCsharp(i: CodegenInputs): string {
     const reqs = i.multiRequests;
     const headerLines = Object.entries(i.headers)
       .filter(([, v]) => v)
-      .filter(([k]) => k.toLowerCase() !== 'authorization')
+      .filter(([k]) => !isCredentialHeader(k))
       .map(
         ([k, v]) =>
           `http.DefaultRequestHeaders.TryAddWithoutValidation("${k}", "${v.replace(/"/g, '\\"')}");`,
@@ -1952,7 +1953,7 @@ Console.WriteLine($"{ok}/{requests.Length} requests succeeded");
   const hasBody = !isBodyless(i.method);
   const sendable = Object.entries(i.headers)
     .filter(([, v]) => v)
-    .filter(([k]) => k.toLowerCase() !== 'authorization');
+    .filter(([k]) => !isCredentialHeader(k));
   // Content-* headers can't go on DefaultRequestHeaders (TryAdd silently
   // fails) — set them on the content instead, when there is one.
   const headerLines = sendable
@@ -2041,7 +2042,7 @@ function genPowershell(i: CodegenInputs): string {
     const reqs = i.multiRequests;
     const headerLines = Object.entries(i.headers)
       .filter(([, v]) => v)
-      .filter(([k]) => k.toLowerCase() !== 'authorization')
+      .filter(([k]) => !isCredentialHeader(k))
       .map(([k, v]) => `  ${psQuote(k)} = ${psQuote(v)}`)
       .join('\n');
     const lines = reqs
@@ -2080,7 +2081,7 @@ ${lines}
   const hasBody = !isBodyless(i.method);
   const sendable = Object.entries(i.headers)
     .filter(([, v]) => v)
-    .filter(([k]) => k.toLowerCase() !== 'authorization');
+    .filter(([k]) => !isCredentialHeader(k));
   // Content-Type goes through -ContentType, not the -Headers table.
   const ctype = sendable.find(([k]) => k.toLowerCase() === 'content-type')?.[1];
   const headerLines = sendable
@@ -2174,12 +2175,12 @@ function genJson(i: CodegenInputs): string {
     return JSON.stringify(
       {
         mode: 'multi-request',
-        headers: i.headers,
+        headers: withoutCredentialHeaders(i.headers),
         requests: i.multiRequests.map((r) => ({
           method: r.method,
           url: multiUrl(r),
           relativeUrl: r.relativeUrl,
-          headers: r.headers,
+          headers: r.headers && withoutCredentialHeaders(r.headers),
           body: r.rawBody ?? r.body,
           description: r.description,
         })),
@@ -2194,7 +2195,7 @@ function genJson(i: CodegenInputs): string {
     relativeUrl: i.built.relativeUrl,
     entityLogical: i.built.entityLogical,
     entitySet: i.built.entitySet,
-    headers: i.headers,
+    headers: withoutCredentialHeaders(i.headers),
   };
   if (!isBodyless(i.method) && (i.rawBody || i.body)) out.body = i.rawBody ?? i.body;
   return JSON.stringify(out, null, 2);
