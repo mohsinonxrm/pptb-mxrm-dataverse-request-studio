@@ -47,6 +47,7 @@ import type {
 } from './executeState';
 import type { ManageFileState, ManageImageState, ManageAttachmentState } from './binaryState';
 import { getEnv } from '../mock/environment';
+import { stripCredentialRows } from '../engine/sensitiveHeaders';
 import {
   autoSuggestBatch,
   autoSuggestExecuteMultiple,
@@ -502,7 +503,12 @@ export function readLibrary(key = getSavedRequestsKey(), scope = getOrgScope()):
   const preserved: unknown[] = [];
   for (const e of parsed) {
     if (isUsableEntry(e)) {
-      entries.push({ ...e, orgScope: e.orgScope || scope, schemaVersion: e.schemaVersion ?? 1 });
+      entries.push({
+        ...e,
+        state: stripCredentialRows(e.state),
+        orgScope: e.orgScope || scope,
+        schemaVersion: e.schemaVersion ?? 1,
+      });
     } else {
       preserved.push(e);
     }
@@ -561,6 +567,45 @@ export function persistSaved(list: SavedRequest[], preserved: readonly unknown[]
     // QuotaExceededError, privacy-mode, etc. — surface via the caller's
     // ok/error return so the UI can show "couldn't save" toast.
     throw new Error('localStorage write failed (quota or privacy mode).');
+  }
+}
+
+/**
+ * Remove credential header rows already stored by an earlier build (#217),
+ * in every connection's library. Rewrites a bucket only when an entry's
+ * state changed, and keeps every other item exactly as stored (damaged
+ * items and entries of modes this build doesn't know included). Buckets
+ * that aren't a JSON array are left alone. Best-effort; never throws.
+ */
+export function scrubStoredCredentials(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const ls = window.localStorage;
+    const keys: string[] = [];
+    for (let i = 0; i < ls.length; i++) {
+      const k = ls.key(i);
+      if (k?.startsWith(`${SAVED_REQUESTS_KEY_PREFIX}:`)) keys.push(k);
+    }
+    for (const key of keys) {
+      let items: unknown;
+      try {
+        items = JSON.parse(ls.getItem(key) ?? '');
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(items)) continue;
+      let changed = false;
+      const next = items.map((e) => {
+        if (!e || typeof e !== 'object' || !('state' in e)) return e;
+        const state = stripCredentialRows((e as { state: unknown }).state);
+        if (state === (e as { state: unknown }).state) return e;
+        changed = true;
+        return { ...e, state };
+      });
+      if (changed) ls.setItem(key, JSON.stringify(next));
+    }
+  } catch {
+    // Storage unavailable or full: entries are still stripped when read.
   }
 }
 
@@ -650,7 +695,11 @@ export function buildSavedExport(entries: SavedRequest[], orgScope: string): str
     schemaVersion: SAVED_SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
     orgScope,
-    entries: entries.map((e) => ({ ...e, schemaVersion: e.schemaVersion ?? 1 })),
+    entries: entries.map((e) => ({
+      ...e,
+      state: stripCredentialRows(e.state),
+      schemaVersion: e.schemaVersion ?? 1,
+    })),
   };
   return JSON.stringify(file, null, 2);
 }

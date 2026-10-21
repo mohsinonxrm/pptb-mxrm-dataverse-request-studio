@@ -14,6 +14,7 @@
 import { ENV } from '../mock/environment';
 import { findTable, type ColumnMeta, type TableMeta } from '../mock/metadata';
 import type { CodegenInputs } from './codeGenerators';
+import { impersonationVar, isCredentialHeader } from './sensitiveHeaders';
 
 type Schema = Record<string, unknown>;
 
@@ -207,18 +208,25 @@ function splitRequest(
   return { path, pathParams, queryParams };
 }
 
-const SKIP_HEADERS = new Set(['authorization', 'accept', 'content-type']);
+// Credential headers (#217) are covered by the security scheme.
+const SKIP_HEADERS = new Set(['accept', 'content-type']);
 
 function headerParams(headers: Record<string, string>): Schema[] {
   return Object.entries(headers)
-    .filter(([k, v]) => v && !SKIP_HEADERS.has(k.toLowerCase()))
-    .map(([name, value]) => ({
-      name,
-      in: 'header',
-      required: false,
-      schema: { type: 'string' },
-      example: value,
-    }));
+    .filter(([k, v]) => v && !SKIP_HEADERS.has(k.toLowerCase()) && !isCredentialHeader(k))
+    .map(([name, value]) =>
+      // An impersonation header's value is a user id: not written into a
+      // file meant to be shared (#217).
+      impersonationVar(name)
+        ? {
+            name,
+            in: 'header',
+            required: false,
+            description: 'Id of the user to impersonate.',
+            schema: { type: 'string', format: 'uuid' },
+          }
+        : { name, in: 'header', required: false, schema: { type: 'string' }, example: value },
+    );
 }
 
 const ERROR_RESPONSE = {

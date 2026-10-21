@@ -47,10 +47,15 @@ import {
   getSavedRequestsKey,
   hashState,
   type SavedLibrary,
+  scrubStoredCredentials,
   type SavedRequest,
 } from './savedRequests';
+import { stripCredentialRows } from '../engine/sensitiveHeaders';
 
 // ── Module-level singleton store ────────────────────────────────────
+
+// Credentials saved by an earlier build leave storage once, at startup (#217).
+if (typeof window !== 'undefined') scrubStoredCredentials();
 
 interface StoreState extends SavedLibrary {
   /** Where the unreadable text was copied, or null (none, or storage refused). */
@@ -224,7 +229,12 @@ export function useSavedRequests(): UseSavedRequestsApi {
   //     one the user can't even see from the current mode's list.
   const save = useCallback(
     (input: SavedRequest, opts?: { replaceId?: string }): SaveResult => {
-      const entry: SavedRequest = { ...input, schemaVersion: SAVED_SCHEMA_VERSION };
+      // Credential headers are never stored (#217).
+      const entry: SavedRequest = {
+        ...input,
+        state: stripCredentialRows(input.state),
+        schemaVersion: SAVED_SCHEMA_VERSION,
+      };
       const idx = list.findIndex((e) => e.id === entry.id);
       let next: SavedRequest[];
       if (idx >= 0) {
@@ -289,6 +299,7 @@ export function useSavedRequests(): UseSavedRequestsApi {
       for (const raw of entries) {
         const entry: SavedRequest = {
           ...raw,
+          state: stripCredentialRows(raw.state),
           orgScope: scope,
           schemaVersion: raw.schemaVersion ?? 1,
         };

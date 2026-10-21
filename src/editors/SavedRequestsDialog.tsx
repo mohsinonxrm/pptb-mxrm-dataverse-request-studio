@@ -67,6 +67,7 @@ import {
   countRequests,
   COLLECTION_FORMAT_LABELS,
   type CollectionFormat,
+  impersonationVars,
 } from '../engine/collectionFormats';
 import { currentBaseUrl, loadTablesFor, savedToCollectionItem } from '../engine/savedToCollection';
 import {
@@ -776,7 +777,11 @@ function SavedLibraryTransfer({
           title: 'Exported',
           text:
             `${items.length} saved request(s) (${n} HTTP request(s)) written to ${path ?? fileName}. ` +
-            'Set the accessToken variable to a bearer token before sending.' +
+            'Set the accessToken variable to a bearer token' +
+            (impersonationVars(items).length
+              ? `, and ${impersonationVars(items).join(' / ')} to the user to impersonate,`
+              : '') +
+            ' before sending.' +
             (skipped.length ? ` Skipped: ${skipped.join('; ')}.` : ''),
         });
       }
