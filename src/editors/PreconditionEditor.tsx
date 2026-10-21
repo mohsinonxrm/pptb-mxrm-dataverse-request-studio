@@ -158,11 +158,10 @@ export function PreconditionEditor({
           <MessageBar layout="multiline" intent="info" style={{ marginBottom: 14 }}>
             <MessageBarBody>
               <MessageBarTitle>Checked before the update is sent</MessageBarTitle>
-              This version of Power Platform ToolBox can&apos;t send <code>If-Match: *</code>, so
-              Dataverse Request Studio first checks that the record exists. If it doesn&apos;t, the
-              update isn&apos;t sent and you get 404 Not Found, instead of Dataverse creating a new
-              record. Update Power Platform ToolBox (1.2.7 or later) to have Dataverse enforce it
-              directly.
+              This host can&apos;t send <code>If-Match: *</code>, so Dataverse Request Studio first
+              checks that the record exists. If it doesn&apos;t, the update isn&apos;t sent and you
+              get 404 Not Found, instead of Dataverse creating a new record. Power Platform ToolBox
+              Desktop 1.2.7 and later send the header, so Dataverse enforces it directly.
             </MessageBarBody>
           </MessageBar>
         )}

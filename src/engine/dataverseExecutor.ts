@@ -226,7 +226,9 @@ function dataverseCodeIn(message: string): string | undefined {
 /** Status recoverable from a host message: an explicit `HTTP <nnn>` wins,
  *  then a Dataverse code with a fixed status. */
 function statusFromMessage(message: string): number | undefined {
-  const http = /\bHTTP (\d{3})\b/.exec(message);
+  // "HTTP 404", or axios' "Request failed with status code 404" (the PPTB
+  // VS Code extension passes that text through).
+  const http = /\b(?:HTTP|status code) (\d{3})\b/.exec(message);
   if (http) return Number(http[1]);
   const code = dataverseCodeIn(message);
   return code ? STATUS_BY_DATAVERSE_CODE[code.toLowerCase()] : undefined;
@@ -513,7 +515,7 @@ async function requireExistingRecord(table: string, id: string): Promise<ExecRes
   );
   if (!isExecResult(res)) return null;
   const why =
-    "This version of Power Platform ToolBox can't send If-Match: *, so Dataverse Request Studio " +
+    "This host can't send If-Match: *, so Dataverse Request Studio " +
     'checks that the record exists before updating.';
   const err = (res.body as { error?: { code?: string; message?: string; rawMessage?: string } })
     ?.error;

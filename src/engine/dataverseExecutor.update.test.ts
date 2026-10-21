@@ -74,6 +74,20 @@ describe('executeUpdate on a host without header pass-through (PPTB < 1.2.7)', (
     expect(JSON.stringify(r.body)).toMatch(/No Account record has the id .*nothing was updated/);
   });
 
+  it.each([
+    [
+      'PPTB < 1.2.7',
+      "Error invoking remote method 'dataverse.retrieve': Error: 0x80040217: Entity 'account' With Id = x Does Not Exist",
+    ],
+    ['the PPTB VS Code extension', 'Request failed with status code 404'],
+  ])('reads 404 from the error text %s rejects with', async (_host, message) => {
+    host.retrieve.mockRejectedValue(new Error(message));
+    const r = await executeUpdate(state({ kind: 'update-only' }), IF_MATCH);
+    expect(host.update).not.toHaveBeenCalled();
+    expect(r.status).toBe(404);
+    expect(JSON.stringify(r.body)).toMatch(/nothing was updated/);
+  });
+
   it("doesn't send the PATCH when the check itself fails", async () => {
     host.retrieve.mockRejectedValue(Object.assign(new Error('Access denied'), { statusCode: 403 }));
     const r = await executeUpdate(state({ kind: 'update-only' }), IF_MATCH);
