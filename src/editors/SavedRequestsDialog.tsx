@@ -863,6 +863,8 @@ function SavedLibraryTransfer({
                 {' '}
                 <strong>Start a new, empty library?</strong> The damaged data isn&apos;t listed
                 again.
+                {!health.backedUp &&
+                  ' No backup copy could be kept: unless you saved a copy, it is lost.'}
               </>
             )}
           </MessageBarBody>

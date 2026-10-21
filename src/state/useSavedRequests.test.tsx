@@ -79,3 +79,33 @@ describe('useSavedRequests with items it cannot use', () => {
     expect(JSON.parse(localStorage.getItem(KEY)!)).toEqual([newer, unknownMode]);
   });
 });
+
+describe('useSavedRequests error after a new library (#220 review)', () => {
+  it("drops the 'couldn't be read' error once another consumer started a new library", async () => {
+    localStorage.setItem(KEY, 'not json');
+    vi.resetModules();
+    const { useSavedRequests } = await import('./useSavedRequests');
+    const apis: UseSavedRequestsApi[] = [];
+    function Probe({ i }: { i: number }) {
+      apis[i] = useSavedRequests();
+      return null;
+    }
+    const root = createRoot(document.createElement('div'));
+    await act(async () =>
+      root.render(
+        <>
+          <Probe i={0} />
+          <Probe i={1} />
+        </>,
+      ),
+    );
+    act(() => {
+      apis[0].save(entry('x'));
+    });
+    expect(apis[0].error).toMatch(/couldn't be read/);
+    act(() => {
+      apis[1].startNewLibrary();
+    });
+    expect(apis[0].error).toBeNull();
+  });
+});

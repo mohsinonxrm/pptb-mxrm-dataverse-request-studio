@@ -359,6 +359,8 @@ export function useSavedRequests(): UseSavedRequestsApi {
     findByName,
     health,
     startNewLibrary,
-    error,
+    // The refusal no longer applies once a new library was started from
+    // another consumer (the library popover) — don't keep showing it.
+    error: error === UNREADABLE_ERROR && snap.unreadable === null ? null : error,
   };
 }
