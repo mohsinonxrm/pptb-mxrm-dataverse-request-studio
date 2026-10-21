@@ -27,4 +27,11 @@ jobs:
       - run: npm run format:check
       - run: npm test
       - run: npm run build
+      # The tool must load from any path, e.g. the PPTB VS Code extension (#212).
+      - name: No root-absolute asset URLs in dist
+        run: |
+          if grep -rnE '"/assets/|url\(/assets/' dist; then
+            echo "::error::dist has root-absolute /assets/ URLs. Keep base: './' in vite.config.ts."
+            exit 1
+          fi
       - run: npm run validate
