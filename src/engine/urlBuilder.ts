@@ -764,6 +764,22 @@ export interface AssociateRequest {
   targetId: string;
 }
 
+/**
+ * A single-valued (N:1) link is set or cleared with a PATCH of the source
+ * record. Dataverse treats a PATCH to a missing id as an upsert, so
+ * `If-Match: *` makes a mistyped source id fail with 404 instead of creating
+ * a near-empty record (#254). Collection-valued requests are unaffected.
+ */
+export const PATCH_EXISTING_HEADERS: Readonly<Record<string, string>> = { 'If-Match': '*' };
+
+/** `headers` for one Associate / Disassociate request: plus `If-Match: *` on the PATCH form. */
+export function relateRequestHeaders(
+  method: string,
+  headers: Record<string, string>,
+): Record<string, string> {
+  return method === 'PATCH' ? { ...headers, ...PATCH_EXISTING_HEADERS } : headers;
+}
+
 /** Absolute URL used inside the @odata.id body — required by the spec for $ref endpoints. */
 function absoluteRefUrl(entitySet: string, id: string): string {
   return `https://${ENV.host}${ENV.apiBase}/${entitySet}(${id})`;

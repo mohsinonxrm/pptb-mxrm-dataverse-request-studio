@@ -52,7 +52,11 @@ import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { findTable } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
-import { buildDisassociate, buildDisassociateRequests } from '../engine/urlBuilder';
+import {
+  buildDisassociate,
+  buildDisassociateRequests,
+  relateRequestHeaders,
+} from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
 import { relateDoneCount } from '../engine/dataverseExecutor';
 import type { DisassociateState } from '../state/relateState';
@@ -486,7 +490,8 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
       break;
   }
 
-  const headersMap = headerItemsToObject(state.headers, null);
+  // Single-valued: the PATCH carries If-Match: *, as DRS sends it (#254).
+  const headersMap = relateRequestHeaders(method, headerItemsToObject(state.headers, null));
   // First request drives the URL bar + Code-tab "primary" snippet; the
   // multiRequests payload carries the rest for the collection-valued
   // multi-target case (one DELETE per target).

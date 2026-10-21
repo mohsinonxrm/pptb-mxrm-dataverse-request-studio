@@ -25,6 +25,7 @@ import {
   buildMergeBody,
   buildAssociateRequests,
   buildDisassociateRequests,
+  relateRequestHeaders,
   buildExecuteAction,
   buildExecuteActionBody,
   buildExecuteFunction,
@@ -215,7 +216,14 @@ export function snapshotToItems(snap: RequestSnapshot): SnapshotConversion {
         return {
           ok: true,
           items: reqs.map((r) =>
-            toItem(`${name} → ${r.targetId}`, name, r.method, r.relativeUrl, headers, r.body),
+            toItem(
+              `${name} → ${r.targetId}`,
+              name,
+              r.method,
+              r.relativeUrl,
+              relateRequestHeaders(r.method, headers),
+              r.body,
+            ),
           ),
         };
       }
@@ -232,7 +240,7 @@ export function snapshotToItems(snap: RequestSnapshot): SnapshotConversion {
               name,
               r.method,
               r.relativeUrl,
-              headers,
+              relateRequestHeaders(r.method, headers),
               r.body,
             ),
           ),

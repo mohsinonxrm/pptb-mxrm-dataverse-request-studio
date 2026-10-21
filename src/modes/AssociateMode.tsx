@@ -51,7 +51,12 @@ import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { findTable } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
-import { buildAssociate, buildAssociateBody, buildAssociateRequests } from '../engine/urlBuilder';
+import {
+  buildAssociate,
+  buildAssociateBody,
+  buildAssociateRequests,
+  relateRequestHeaders,
+} from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
 import { relateDoneCount } from '../engine/dataverseExecutor';
 import type { AssociateState } from '../state/relateState';
@@ -380,7 +385,9 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
                 request per target. <strong>Single-valued</strong> (N:1) →{' '}
                 <code>PATCH /source(id)</code> with body{' '}
                 <code>{'{ "<nav>@odata.bind": "<target-set>(<id>)" }'}</code> (one target). This is
-                the docs-preferred shape — the URL bar verb updates automatically.{' '}
+                the docs-preferred shape — the URL bar verb updates automatically. The PATCH is sent
+                with <code>If-Match: *</code>, so a wrong source id fails with 404 instead of
+                creating a record; Power Platform ToolBox asks you to approve that header once.{' '}
                 <a
                   href="https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/associate-disassociate-entities-using-web-api"
                   target="_blank"
@@ -423,7 +430,8 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
       break;
   }
 
-  const headersMap = headerItemsToObject(state.headers, null);
+  // Single-valued: the PATCH carries If-Match: *, as DRS sends it (#254).
+  const headersMap = relateRequestHeaders(method, headerItemsToObject(state.headers, null));
   const codeInputs = {
     method,
     built,
