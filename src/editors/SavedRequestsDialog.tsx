@@ -379,7 +379,7 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
               <MessageBar layout="multiline" intent="error" style={{ marginTop: 12 }}>
                 <MessageBarBody>
                   <MessageBarTitle>Couldn&apos;t save</MessageBarTitle>
-                  <code>{error}</code>
+                  {error}
                 </MessageBarBody>
               </MessageBar>
             )}
@@ -430,7 +430,7 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
   const [open, setOpen] = useState(false);
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
-  const { saved, rename, remove } = useSavedRequests();
+  const { saved, rename, remove, health } = useSavedRequests();
   const askConfirm = useConfirm();
   // Keeps the popover open while the in-app delete confirm is up: clicks on
   // that dialog land outside the popover and would otherwise dismiss it.
@@ -500,9 +500,11 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
           <Caption1
             style={{ display: 'block', padding: '6px 10px', color: tokens.colorNeutralForeground3 }}
           >
-            {list.length === 0
-              ? 'No saved requests yet — click Save to create one.'
-              : `${list.length} saved · click to load, hover for rename/delete`}
+            {health.unreadable
+              ? "Saved requests couldn't be read — see below."
+              : list.length === 0
+                ? 'No saved requests yet — click Save to create one.'
+                : `${list.length} saved · click to load, hover for rename/delete`}
           </Caption1>
           <div style={{ display: 'flex', alignItems: 'center' }}>
             <Switch
@@ -521,7 +523,7 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
             </Tooltip>
           </div>
         </div>
-        {list.length === 0 ? (
+        {health.unreadable ? null : list.length === 0 ? (
           <div className={s.libraryEmpty}>
             <BookmarkMultiple20Regular style={{ width: 32, height: 32, opacity: 0.4 }} />
             <div style={{ marginTop: 8 }}>Nothing here yet.</div>
