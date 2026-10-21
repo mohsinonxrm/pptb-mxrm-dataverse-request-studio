@@ -31,7 +31,12 @@
 //      so `ResultsView` rendering doesn't need to know which executor
 //      ran.
 
-import { dvHost, HostNotAvailableError, hostSupportsAdditionalHeaders } from '../host/pptbBridge';
+import {
+  dvHost,
+  HostNotAvailableError,
+  hostSupportsAdditionalHeaders,
+  isEmbedded,
+} from '../host/pptbBridge';
 import { metadata } from '../host/metadataProvider';
 import { cleanHostMessage } from './hostErrorText';
 import {
@@ -222,7 +227,9 @@ function dataverseCodeIn(message: string): string | undefined {
 /** Status recoverable from a host message: an explicit `HTTP <nnn>` wins,
  *  then a Dataverse code with a fixed status. */
 function statusFromMessage(message: string): number | undefined {
-  const http = /\bHTTP (\d{3})\b/.exec(message);
+  // "HTTP 404", or axios' "Request failed with status code 404" (the PPTB
+  // VS Code extension passes that text through).
+  const http = /\b(?:HTTP|status code) (\d{3})\b/.exec(message);
   if (http) return Number(http[1]);
   const code = dataverseCodeIn(message);
   return code ? STATUS_BY_DATAVERSE_CODE[code.toLowerCase()] : undefined;
@@ -494,6 +501,50 @@ export async function executeCreate(
   return ok(201, res.value, res.ms);
 }
 
+/**
+ * Update's "Require existing record" (`If-Match: *`) on a host that can't send
+ * headers (PPTB < 1.2.7, #218). Its `update()` is a plain PATCH, which
+ * Dataverse treats as an upsert, so a mistyped or stale GUID would create a
+ * record. Read the record first and stop unless it exists. A record deleted
+ * between this read and the PATCH would still be re-created: only the header
+ * closes that window of milliseconds. Returns the result to show when the
+ * update must not be sent, or `null` to go ahead.
+ */
+async function requireExistingRecord(table: string, id: string): Promise<ExecResult | null> {
+  const meta = metadata.peekTable(table) ?? (await metadata.getTable(table));
+  const res = await timed(() =>
+    dvHost.retrieve(table, id, meta?.primaryKey ? [meta.primaryKey] : undefined),
+  );
+  if (!isExecResult(res)) return null;
+  const why =
+    "This host can't send If-Match: *, so Dataverse Request Studio " +
+    'checks that the record exists before updating.';
+  const err = (res.body as { error?: { code?: string; message?: string; rawMessage?: string } })
+    ?.error;
+  if (res.status === 404) {
+    return failure(
+      404,
+      {
+        code: err?.code,
+        message: `No ${meta?.displayName ?? table} record has the id ${id}, so nothing was updated. ${why}`,
+      },
+      res.ms,
+    );
+  }
+  return failure(
+    res.status,
+    {
+      code: err?.code,
+      message:
+        `Nothing was updated: the check that the record exists failed (${err?.message ?? res.statusText}). ` +
+        why,
+      ...(err?.rawMessage ? { rawMessage: err.rawMessage } : {}),
+    },
+    res.ms,
+    res.statusText,
+  );
+}
+
 export async function executeUpdate(
   s: UpdateState,
   headers?: Record<string, string>,
@@ -521,6 +572,10 @@ export async function executeUpdate(
   const body = buildUpdateBody(s);
   // The host's `update()` is PATCH semantics. For Upsert-via-Update (when
   // concurrency is `none`) the server still does the right thing.
+  if (s.concurrency.kind === 'update-only' && isEmbedded() && !hostSupportsAdditionalHeaders()) {
+    const stop = await requireExistingRecord(s.table, s.recordId);
+    if (stop) return stop;
+  }
   const wire = sendable(headers);
   const res = await timed(() => dvHost.update(s.table, s.recordId!, body, wire), wire);
   if (isExecResult(res)) return res;

@@ -7,6 +7,10 @@
 // when the grid is in raw mode); "raw" exports the underlying values
 // (GUIDs, numbers, ISO dates). JSON exports the OData envelope as-is.
 //
+// Cells that a spreadsheet would run as a formula are neutralised for the
+// CSV file and the "Copy as TSV" clipboard text alike (`spreadsheetSafe`,
+// #239): Dataverse text often comes from outside the organisation.
+//
 // Pure functions only — the toolbar wires them to `saveFileSafe`.
 
 import { getFormattedValue } from './FormattedValueUtils';
@@ -61,9 +65,46 @@ export function csvField(text: string): string {
   return /[",\r\n]|^\s|\s$/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
+// A spreadsheet runs a cell as a formula when it starts with `=`, `+`, `-` or
+// `@` (leading spaces are skipped), or with a tab or carriage return.
+const FORMULA_START = /^(?:[\t\r]|\s*[=+\-@])/;
+// For text derived from a number only `=` and `@` count: Dataverse formats
+// negatives as "-5", "-$1,234.00" or "-1.234,50 €".
+const FORMULA_START_NUMERIC = /^(?:[\t\r]|\s*[=@])/;
+// Plain numeric text ("-5", "+1.5e3") is a number to a spreadsheet, not a formula.
+const PLAIN_NUMBER = /^\s*[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?\s*$/;
+
+/**
+ * `text` as a spreadsheet cell that can't run as a formula (CSV / formula
+ * injection, #239). Text that starts like a formula gets a leading `'`, as
+ * OWASP recommends; the spreadsheet then shows the stored text with that
+ * mark in front. `source` is the underlying Dataverse value: when it's a
+ * number or boolean, the text is Dataverse's own formatting of it, so a
+ * leading sign is left alone (a choice label starting with `=` or `@` is
+ * still neutralised).
+ */
+export function spreadsheetSafe(text: string, source?: unknown): string {
+  const numeric = typeof source === 'number' || typeof source === 'boolean';
+  const start = numeric ? FORMULA_START_NUMERIC : FORMULA_START;
+  if (!start.test(text) || PLAIN_NUMBER.test(text)) return text;
+  return `'${text}`;
+}
+
+/**
+ * One cell of the "Copy as TSV" text: `spreadsheetSafe`, and also neutralised
+ * when it starts with a double quote — pasted TSV isn't escaped, and a
+ * spreadsheet takes a leading `"` as a text qualifier and parses what's
+ * inside (`"=HYPERLINK(…)"`). Tabs and line breaks become spaces.
+ */
+export function tsvCell(text: string, source?: unknown): string {
+  const safe = spreadsheetSafe(text, source);
+  return (/^\s*"/.test(safe) ? `'${safe}` : safe).replace(/[\t\n\r]+/g, ' ');
+}
+
 /**
  * CSV text for the given rows and columns: a header row, CRLF line breaks,
  * and a UTF-8 byte-order mark so Excel reads non-ASCII text correctly.
+ * Headers and cells go through `spreadsheetSafe` before quoting.
  */
 export function toCsv(
   rows: Record<string, unknown>[],
@@ -71,8 +112,14 @@ export function toCsv(
   mode: ExportValueMode,
 ): string {
   const cols = exportColumnsFor(columns, mode);
-  const lines = [cols.map((c) => csvField(c.header)).join(',')];
-  for (const r of rows) lines.push(cols.map((c) => csvField(exportCellText(r, c, mode))).join(','));
+  const lines = [cols.map((c) => csvField(spreadsheetSafe(c.header))).join(',')];
+  for (const r of rows) {
+    lines.push(
+      cols
+        .map((c) => csvField(spreadsheetSafe(exportCellText(r, c, mode), r[c.sourceCol])))
+        .join(','),
+    );
+  }
   return '﻿' + lines.join('\r\n') + '\r\n';
 }
 

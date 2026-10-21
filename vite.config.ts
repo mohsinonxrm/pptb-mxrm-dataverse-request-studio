@@ -152,6 +152,13 @@ function bundleReport(): Plugin {
 // Monaco entirely through the same-origin chunks the iframe is allowed
 // to load.
 export default defineConfig({
+  // Relative asset URLs (#212). PPTB Desktop serves the tool at the root of
+  // its own origin, but the PPTB VS Code extension serves `dist/` from a
+  // nested webview resource URL: a root-absolute `/assets/…` built at runtime
+  // (lazy chunks and their preloads, Monaco's workers) or written in CSS
+  // (the codicon font) resolves outside the tool and fails. CI checks the
+  // build for root-absolute asset URLs.
+  base: './',
   plugins: [react(), toolIcon(), bundleReport()],
   server: { port: 5173, open: true },
   optimizeDeps: {

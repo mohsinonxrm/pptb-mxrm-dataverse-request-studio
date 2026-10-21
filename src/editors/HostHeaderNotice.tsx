@@ -26,7 +26,8 @@ export function HostHeaderNotice({
         <MessageBarBody>
           <MessageBarTitle>Sent by Power Platform ToolBox after you approve it</MessageBarTitle>
           Power Platform ToolBox sends {header} with the request. If you haven&apos;t approved
-          additional request headers for this tool yet, it asks you first. If you reject, the
+          additional request headers for this tool yet, it asks you first. Choose{' '}
+          <strong>Approve for this tool</strong> so it doesn&apos;t ask again. If you reject, the
           request isn&apos;t sent. You can revoke an approval in ToolBox&apos;s Consent Review.
         </MessageBarBody>
       </MessageBar>

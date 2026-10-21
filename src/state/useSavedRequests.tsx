@@ -14,6 +14,11 @@
 // `storage` events. Writes go through `persistSaved` then notify all
 // subscribers via the same broadcast path.
 //
+// Nothing read from storage is lost by a write (#220): items this build
+// can't use are written back unchanged after the entries, and a library
+// that can't be read at all is never written over — every write is refused
+// until the user keeps a copy (`unreadableText`) or starts a new library.
+//
 // Returned API:
 //   • `saved`              — current list, newest first
 //   • `save(entry, opts)`  — upsert by id (insert if new, overwrite if id matches);
@@ -22,15 +27,18 @@
 //   • `capacity`           — { max, full, oldest } for the library-full prompt
 //   • `rename(id, name)`   — set the name field
 //   • `remove(id)`         — drop one entry by id
-//   • `clearAll()`         — wipe the entire store (used by a "reset" affordance)
+//   • `clearAll()`         — wipe the entries (items this build can't read stay)
 //   • `importEntries(list)`— merge entries from an export file (newer wins by id)
 //   • `findById(id)`       — read a single entry
 //   • `findByName(name)`   — case-insensitive name lookup, for collision detection
+//   • `health`             — unreadable library / hidden items, for the library banner
+//   • `startNewLibrary()`  — replace an unreadable library with an empty one
 //   • `error`              — last write error message, null if clean
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import {
-  loadSaved,
+  readLibrary,
+  backupUnreadable,
   persistSaved,
   MAX_SAVED,
   SAVED_REQUESTS_KEY_PREFIX,
@@ -38,6 +46,7 @@ import {
   getOrgScope,
   getSavedRequestsKey,
   hashState,
+  type SavedLibrary,
   scrubStoredCredentials,
   type SavedRequest,
 } from './savedRequests';
@@ -48,15 +57,30 @@ import { stripCredentialRows } from '../engine/sensitiveHeaders';
 // Credentials saved by an earlier build leave storage once, at startup (#217).
 if (typeof window !== 'undefined') scrubStoredCredentials();
 
-let snapshot: SavedRequest[] = typeof window !== 'undefined' ? loadSaved() : [];
+interface StoreState extends SavedLibrary {
+  /** Where the unreadable text was copied, or null (none, or storage refused). */
+  backupKey: string | null;
+}
+
+const EMPTY: StoreState = { entries: [], preserved: [], unreadable: null, backupKey: null };
+
+/** Read the current connection's library; back up an unreadable one. */
+function readStore(): StoreState {
+  const lib = readLibrary();
+  const backupKey =
+    lib.unreadable !== null ? backupUnreadable(getOrgScope(), lib.unreadable) : null;
+  return { ...lib, backupKey };
+}
+
+let store: StoreState = typeof window !== 'undefined' ? readStore() : EMPTY;
 const listeners = new Set<() => void>();
 
 function notify(): void {
   for (const l of listeners) l();
 }
 
-function setSnapshot(next: SavedRequest[]): void {
-  snapshot = next;
+function setStore(next: StoreState): void {
+  store = next;
   notify();
 }
 
@@ -67,21 +91,25 @@ function subscribe(cb: () => void): () => void {
   };
 }
 
-function getSnapshot(): SavedRequest[] {
-  return snapshot;
+function getSnapshot(): StoreState {
+  return store;
 }
+
+const UNREADABLE_ERROR =
+  "The saved requests for this connection couldn't be read, so nothing was saved over them. " +
+  'Open Saved requests to keep a copy, or start a new library.';
 
 // Cross-tab sync — when another tab writes ANY saved-requests bucket
 // (any org scope), our `storage` listener reloads the snapshot for the
 // active org and notifies every local consumer. We match on the prefix
 // so writes against the current scope trigger a refresh, and writes
 // against other scopes are correctly ignored after the reload.
-// Same-tab writes go directly through `setSnapshot` (no `storage` event
+// Same-tab writes go directly through `setStore` (no `storage` event
 // fires for same-tab localStorage writes per the spec).
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (e) => {
     if (e.key && e.key.startsWith(SAVED_REQUESTS_KEY_PREFIX) && e.key === getSavedRequestsKey()) {
-      snapshot = loadSaved();
+      store = readStore();
       notify();
     }
   });
@@ -95,8 +123,7 @@ if (typeof window !== 'undefined') {
  */
 export function reloadSavedFromStorage(): void {
   if (typeof window === 'undefined') return;
-  const next = loadSaved();
-  setSnapshot(next);
+  setStore(readStore());
 }
 
 export interface SaveResult {
@@ -127,6 +154,18 @@ export interface SavedCapacity {
   oldest: SavedRequest | undefined;
 }
 
+/** What the library banner needs to know about the stored data (#220). */
+export interface SavedLibraryHealth {
+  /** The stored library isn't readable; every write is refused. */
+  unreadable: boolean;
+  /** The unreadable stored text, for "Save a copy". */
+  unreadableText: string | null;
+  /** Whether a backup copy of the unreadable text is in storage. */
+  backedUp: boolean;
+  /** Stored items this build can't show (damaged, newer version); kept as they are. */
+  hidden: number;
+}
+
 export interface UseSavedRequestsApi {
   saved: SavedRequest[];
   save: (entry: SavedRequest, opts?: { replaceId?: string }) => SaveResult;
@@ -137,6 +176,8 @@ export interface UseSavedRequestsApi {
   importEntries: (entries: SavedRequest[]) => ImportResult;
   findById: (id: string) => SavedRequest | undefined;
   findByName: (name: string) => SavedRequest | undefined;
+  health: SavedLibraryHealth;
+  startNewLibrary: () => SaveResult;
   /** Last localStorage write error, if any. Cleared on next successful write. */
   error: string | null;
 }
@@ -145,7 +186,8 @@ export function useSavedRequests(): UseSavedRequestsApi {
   // Subscribe to the singleton store. Every consumer gets the same
   // snapshot; saving in one component immediately renders the new entry
   // in any other component that's also using this hook.
-  const list = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const snap = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const list = snap.entries;
   // `error` is per-consumer — only the component that triggered a failed
   // write needs to surface it. Successful writes clear it (next call).
   const [error, setError] = useState<string | null>(null);
@@ -161,9 +203,14 @@ export function useSavedRequests(): UseSavedRequestsApi {
   }, [activeKey]);
 
   const writeBack = useCallback((next: SavedRequest[]): SaveResult => {
+    // Never write over a library that couldn't be read (#220).
+    if (store.unreadable !== null) {
+      setError(UNREADABLE_ERROR);
+      return { ok: false, error: UNREADABLE_ERROR };
+    }
     try {
-      persistSaved(next);
-      setSnapshot(next); // broadcasts to every subscribed consumer
+      persistSaved(next, store.preserved);
+      setStore({ ...store, entries: next }); // broadcasts to every subscribed consumer
       setError(null);
       return { ok: true };
     } catch (e) {
@@ -280,6 +327,31 @@ export function useSavedRequests(): UseSavedRequestsApi {
     [list, writeBack],
   );
 
+  // Replace an unreadable library with an empty one. The unreadable text
+  // stays in its backup key (when storage allowed one).
+  const startNewLibrary = useCallback((): SaveResult => {
+    try {
+      persistSaved([]);
+      setStore({ ...EMPTY });
+      setError(null);
+      return { ok: true };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      return { ok: false, error: msg };
+    }
+  }, []);
+
+  const health = useMemo<SavedLibraryHealth>(
+    () => ({
+      unreadable: snap.unreadable !== null,
+      unreadableText: snap.unreadable,
+      backedUp: snap.backupKey !== null,
+      hidden: snap.preserved.length,
+    }),
+    [snap],
+  );
+
   const findById = useCallback((id: string) => list.find((e) => e.id === id), [list]);
   const findByName = useCallback(
     (name: string) => list.find((e) => e.name.toLowerCase() === name.toLowerCase()),
@@ -296,6 +368,10 @@ export function useSavedRequests(): UseSavedRequestsApi {
     importEntries,
     findById,
     findByName,
-    error,
+    health,
+    startNewLibrary,
+    // The refusal no longer applies once a new library was started from
+    // another consumer (the library popover) — don't keep showing it.
+    error: error === UNREADABLE_ERROR && snap.unreadable === null ? null : error,
   };
 }

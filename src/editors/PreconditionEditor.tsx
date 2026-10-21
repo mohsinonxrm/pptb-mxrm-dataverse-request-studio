@@ -30,6 +30,9 @@ import {
   Input,
   Button,
   Caption1,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
   Radio,
   RadioGroup,
   tokens,
@@ -43,6 +46,7 @@ import type { RequestGroup } from '../registry/requestTypes';
 import { HostHeaderNotice } from './HostHeaderNotice';
 import { isConcurrencyEnforcementRequired } from '../engine/hostHeaderAdvisories';
 import { hostSupportsAdditionalHeaders } from '../host/pptbBridge';
+import { useHostSession } from '../host/HostContext';
 
 export type PreconditionKind = ConcurrencyMode['kind'];
 
@@ -101,6 +105,7 @@ export function PreconditionEditor({
   group = 'write',
 }: PreconditionEditorProps) {
   const s = useStudioStyles();
+  const host = useHostSession();
   const selected = mode.kind;
 
   const onPick = (kind: PreconditionKind) => {
@@ -142,6 +147,24 @@ export function PreconditionEditor({
           elsewhere.
         </HostHeaderNotice>
       )}
+
+      {/* Update's "Require existing record" on a host that can't send it:
+          the executor reads the record first instead (#218). Only Update
+          offers update-only without create-only (Delete offers None/ETag). */}
+      {host.embedded &&
+        !hostSupportsAdditionalHeaders() &&
+        mode.kind === 'update-only' &&
+        !available.includes('create-only') && (
+          <MessageBar layout="multiline" intent="info" style={{ marginBottom: 14 }}>
+            <MessageBarBody>
+              <MessageBarTitle>Checked before the update is sent</MessageBarTitle>
+              This host can&apos;t send <code>If-Match: *</code>, so Dataverse Request Studio first
+              checks that the record exists. If it doesn&apos;t, the update isn&apos;t sent and you
+              get 404 Not Found, instead of Dataverse creating a new record. Power Platform ToolBox
+              Desktop 1.2.7 and later send the header, so Dataverse enforces it directly.
+            </MessageBarBody>
+          </MessageBar>
+        )}
 
       <div style={{ maxWidth: 720 }}>
         <RadioGroup value={selected} onChange={(_, d) => onPick(d.value as PreconditionKind)}>
