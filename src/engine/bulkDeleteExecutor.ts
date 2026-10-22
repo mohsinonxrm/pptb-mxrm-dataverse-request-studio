@@ -4,7 +4,7 @@
 // self-contained (lazy-loaded) addition.
 
 import { dvHost } from '../host/pptbBridge';
-import type { ExecResult } from './dataverseExecutor';
+import { mapError, type ExecResult } from './dataverseExecutor';
 import {
   COUNT_CAP,
   buildBulkDeleteBody,
@@ -26,21 +26,6 @@ const errMessage = (e: unknown) => {
   const h: HostError = typeof e === 'object' && e !== null ? (e as HostError) : {};
   return h.message ?? h.innererror?.message ?? String(e);
 };
-
-function failure(err: unknown, ms: number): ExecResult {
-  const e: HostError = typeof err === 'object' && err !== null ? (err as HostError) : {};
-  const status = e.statusCode ?? e.status ?? 500;
-  return {
-    status,
-    statusText: status === 400 ? 'Bad Request' : status === 403 ? 'Forbidden' : 'Error',
-    ms,
-    bytes: 0,
-    ok: false,
-    outcome: status === 401 ? '401' : status === 403 ? '403' : '404',
-    body: { error: { code: e.code ?? '', message: errMessage(err) } },
-    headers: {},
-  };
-}
 
 export type MatchCount =
   | { ok: true; count: number; capped: boolean }
@@ -65,7 +50,7 @@ export async function countMatching(s: BulkDeleteState): Promise<MatchCount> {
 export async function executeBulkDelete(s: BulkDeleteState): Promise<ExecResult> {
   const { body, problems } = buildBulkDeleteBody(s, new Date());
   if (!body || problems.length) {
-    return failure({ statusCode: 400, message: problems[0] ?? 'Request incomplete.' }, 0);
+    return mapError({ statusCode: 400, message: problems[0] ?? 'Request incomplete.' }, 0);
   }
   const t0 = performance.now();
   try {
@@ -86,7 +71,7 @@ export async function executeBulkDelete(s: BulkDeleteState): Promise<ExecResult>
       headers: { 'OData-Version': '4.0' },
     };
   } catch (e) {
-    return failure(e, Math.round(performance.now() - t0));
+    return mapError(e, Math.round(performance.now() - t0));
   }
 }
 

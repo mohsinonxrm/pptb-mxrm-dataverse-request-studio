@@ -3,7 +3,7 @@
 // the mode stays a self-contained (lazy-loaded) addition.
 
 import { dvHost } from '../host/pptbBridge';
-import type { ExecResult } from './dataverseExecutor';
+import { mapError, sendable, type ExecResult } from './dataverseExecutor';
 import {
   buildBulkWriteBody,
   supportMessagesFor,
@@ -13,30 +13,6 @@ import {
   type BulkSupport,
   type BulkWriteState,
 } from './bulkWrite';
-
-interface HostError {
-  message?: string;
-  code?: string;
-  statusCode?: number;
-  status?: number;
-  innererror?: { message?: string };
-}
-
-function failure(err: unknown, ms: number): ExecResult {
-  const e: HostError = typeof err === 'object' && err !== null ? (err as HostError) : {};
-  const status = e.statusCode ?? e.status ?? 500;
-  const message = e.message ?? e.innererror?.message ?? String(err);
-  return {
-    status,
-    statusText: status === 400 ? 'Bad Request' : status === 403 ? 'Forbidden' : 'Error',
-    ms,
-    bytes: 0,
-    ok: false,
-    outcome: status === 401 ? '401' : status === 403 ? '403' : '404',
-    body: { error: { code: e.code ?? '', message } },
-    headers: {},
-  };
-}
 
 /**
  * Check `sdkmessagefilters` for the operation's message(s) on this table.
@@ -63,23 +39,34 @@ export async function checkBulkSupport(table: string, op: BulkOperation): Promis
 /**
  * POST /<set>/Microsoft.Dynamics.CRM.<op> with { Targets }. PPTB's execute()
  * posts to the entity set when given entityName without entityId (#55).
+ *
+ * `headers` is the mode's composed header map (user rows + bypass), the same
+ * one the Code tab shows. PPTB 1.2.7+ sends it as `additionalHeaders` after
+ * the user approves it (#257); older hosts block bypass via the advisory.
  */
-export async function executeBulkWrite(s: BulkWriteState): Promise<ExecResult> {
+export async function executeBulkWrite(
+  s: BulkWriteState,
+  headers?: Record<string, string>,
+): Promise<ExecResult> {
   const { body, issues } = buildBulkWriteBody(s);
   if (issues.length > 0) {
-    return failure(
+    return mapError(
       { statusCode: 400, message: `Row ${issues[0].rowIndex + 1}: ${issues[0].message}` },
       0,
     );
   }
+  const wire = sendable(headers);
   const t0 = performance.now();
   try {
-    const value = await dvHost.execute({
-      operationName: s.operation,
-      operationType: 'action',
-      entityName: s.table,
-      parameters: body,
-    });
+    const value = await dvHost.execute(
+      {
+        operationName: s.operation,
+        operationType: 'action',
+        entityName: s.table,
+        parameters: body,
+      },
+      wire,
+    );
     const ms = Math.round(performance.now() - t0);
     const out = value && Object.keys(value).length > 0 ? value : null;
     return {
@@ -93,7 +80,7 @@ export async function executeBulkWrite(s: BulkWriteState): Promise<ExecResult> {
       headers: { 'OData-Version': '4.0' },
     };
   } catch (e) {
-    return failure(e, Math.round(performance.now() - t0));
+    return mapError(e, Math.round(performance.now() - t0), wire);
   }
 }
 
