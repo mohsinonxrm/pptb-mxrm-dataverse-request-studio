@@ -149,7 +149,7 @@ modes have their own HTTP / fetch / C# / PPTB outputs.
   org with in-flight promise dedup. Switching the PPTB connection resets the
   prepared request and reloads metadata for the new environment.
 - **Request headers through PPTB 1.2.7+** — Create / Update / Upsert /
-  Delete / Merge headers (preconditions, `MSCRM.*` bypass, duplicate detection, impersonation) are
+  Delete / Merge / Bulk Write headers (preconditions, `MSCRM.*` bypass, duplicate detection, impersonation) are
   sent as additional headers after you approve them once in ToolBox. On older
   hosts, requests that depend on a header are blocked with an explanation.
   `Authorization` / `Cookie` headers are never sent, saved or exported.

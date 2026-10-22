@@ -33,7 +33,7 @@ Dataverse environments.
   continue-on-error, on the `$batch` engine, with SDK
   `ExecuteMultipleRequest` (C#), raw `$batch` and PPTB `dataverseAPI` code.
 - **Request headers through Power Platform ToolBox 1.2.7+** ([#43], [#23]):
-  Create, Update, Upsert, Delete and Merge now send their preconditions (`If-Match` / `If-None-Match`), `MSCRM.*`
+  Create, Update, Upsert, Delete, Merge and Bulk Write now send their preconditions (`If-Match` / `If-None-Match`), `MSCRM.*`
   bypass headers, duplicate detection and impersonation are now sent. ToolBox
   asks you to approve additional headers once; choose **Approve for this
   tool** so it doesn't ask again. On older hosts, requests that depend on a
@@ -97,6 +97,9 @@ Dataverse environments.
   ([#220]); damaged or newer-version items are kept as they are. Import and the
   other-connections view no longer drop `$batch`, ExecuteMultiple and Bulk
   requests.
+- **Bulk Write sends its bypass and other headers** on ToolBox 1.2.7+, so
+  "bypass custom business logic" really skips plug-ins ([#257]). Bulk Write
+  and Bulk Delete Job errors show the real status.
 - **The library never evicts a request silently** at its 200-request cap
   ([#100]).
 
@@ -191,9 +194,6 @@ Dataverse environments.
 - **Tool icon:** ToolBox draws SVG tool icons as a single-colour mask until
   [PowerPlatformToolBox/desktop-app#738](https://github.com/PowerPlatformToolBox/desktop-app/pull/738)
   ships ([#25]).
-- **Bulk Write doesn't send its headers yet** ([#257]): its Headers and
-  Bypass panes affect the Code tab, but Execute doesn't pass them to ToolBox,
-  so a bypass option is ignored and plug-ins still run.
 - **Impersonation on reads:** `MSCRMCallerID` / `CallerObjectId` are only
   sent by the write modes; read, relate and execute requests run as you
   ([#219]).
