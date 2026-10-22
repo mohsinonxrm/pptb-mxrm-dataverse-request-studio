@@ -158,6 +158,8 @@ Dataverse environments.
 **Code, copy and accessibility**
 
 - Code tab generator correctness across formats ([#60]).
+- C# snippets escape backslashes, quotes and line breaks in header values
+  ([#244]).
 - Copy fixes: bypass wording, 201 / 204 badges, single name in Disassociate
   ([#123]).
 - Prefer and Precondition help say what ToolBox actually sends ([#108]).
@@ -292,6 +294,7 @@ Dataverse environments.
 [#220]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/220
 [#239]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/239
 [#243]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/243
+[#244]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/244
 [#246]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/246
 [#254]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/254
 [#255]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/255

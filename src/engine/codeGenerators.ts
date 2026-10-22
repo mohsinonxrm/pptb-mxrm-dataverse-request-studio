@@ -1891,7 +1891,7 @@ function genCsharp(i: CodegenInputs): string {
       .filter(([k]) => !isCredentialHeader(k))
       .map(
         ([k, v]) =>
-          `http.DefaultRequestHeaders.TryAddWithoutValidation("${k}", "${v.replace(/"/g, '\\"')}");`,
+          `http.DefaultRequestHeaders.TryAddWithoutValidation("${csharpString(k)}", "${csharpString(v)}");`,
       )
       .join('\n');
     // One tuple type for every row so `new[] { … }` has a best type — the
@@ -1960,7 +1960,7 @@ Console.WriteLine($"{ok}/{requests.Length} requests succeeded");
     .filter(([k]) => !CONTENT_HEADERS.has(k.toLowerCase()))
     .map(
       ([k, v]) =>
-        `http.DefaultRequestHeaders.TryAddWithoutValidation("${k}", "${v.replace(/"/g, '\\"')}");`,
+        `http.DefaultRequestHeaders.TryAddWithoutValidation("${csharpString(k)}", "${csharpString(v)}");`,
     )
     .join('\n');
   const contentHeaderLines = hasBody
@@ -1968,7 +1968,7 @@ Console.WriteLine($"{ok}/{requests.Length} requests succeeded");
         .filter(([k]) => CONTENT_HEADERS.has(k.toLowerCase()))
         .map(
           ([k, v]) =>
-            `req.Content.Headers.Remove("${k}");\nreq.Content.Headers.TryAddWithoutValidation("${k}", "${v.replace(/"/g, '\\"')}");\n`,
+            `req.Content.Headers.Remove("${csharpString(k)}");\nreq.Content.Headers.TryAddWithoutValidation("${csharpString(k)}", "${csharpString(v)}");\n`,
         )
         .join('')
     : '';
@@ -1994,6 +1994,21 @@ res.EnsureSuccessStatusCode();
 var json = await res.Content.ReadAsStringAsync();
 Console.WriteLine(json);
 `;
+}
+
+/**
+ * Escape text for a regular C# string literal ("…"): backslash first, then
+ * the quote and control characters, so a header value like `C:\\x"y` can't
+ * end the literal or change its meaning (#244).
+ */
+function csharpString(s: string): string {
+  return s
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/\t/g, '\\t')
+    .replace(/[\u0000-\u001f]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
 }
 
 /** Escape a JSON string for inclusion inside a C# verbatim string literal (@"…"). */
