@@ -1,0 +1,96 @@
+name: Release
+
+# Pushing a vX.Y.Z (or vX.Y.Z-beta.N / -rc.N) tag publishes the package to npm through
+# trusted publishing (no npm token) and creates the GitHub Release. See RELEASING.md.
+# Same workflow as FetchXML Studio and Command Bar Studio (#90).
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # create the GitHub Release
+  id-token: write # npm trusted publishing + provenance
+
+jobs:
+  release:
+    runs-on: ubuntu-latest # trusted publishing requires a GitHub-hosted runner
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # choosing the channel needs main's and support/*'s history
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - name: Use the latest npm (trusted publishing needs npm >= 11.5.1)
+        run: npm install -g npm@latest
+      - name: Check the tag matches package.json
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          fi
+      - name: Choose the release channel
+        id: channel
+        run: |
+          # RELEASING.md: -beta.N / -rc.N -> npm "beta" (GitHub pre-release). A stable tag on
+          # main -> "latest". A stable tag on support/X.Y -> "support-X.Y", never "latest".
+          # Anything else fails here, so a stray tag can't replace "latest".
+          version="${GITHUB_REF_NAME#v}"
+          case "$version" in
+            *-beta.*|*-rc.*)
+              dist_tag=beta; latest=false; prerelease=true ;;
+            *-*)
+              echo "::error::Unsupported pre-release $GITHUB_REF_NAME. Use -beta.N or -rc.N (RELEASING.md)."
+              exit 1 ;;
+            *)
+              prerelease=false
+              line="${version%.*}"
+              if git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+                dist_tag=latest; latest=true
+              elif git rev-parse --verify --quiet "origin/support/$line" >/dev/null &&
+                   git merge-base --is-ancestor "$GITHUB_SHA" "origin/support/$line"; then
+                dist_tag="support-$line"; latest=false
+              else
+                echo "::error::Stable tag $GITHUB_REF_NAME is on neither main nor support/$line. Tag the release → main merge commit (RELEASING.md)."
+                exit 1
+              fi ;;
+          esac
+          echo "Publishing $GITHUB_REF_NAME to npm \"$dist_tag\" (GitHub latest: $latest, pre-release: $prerelease)"
+          {
+            echo "dist_tag=$dist_tag"
+            echo "latest=$latest"
+            echo "prerelease=$prerelease"
+          } >> "$GITHUB_OUTPUT"
+      - run: npm ci
+      - run: npm test
+      - run: npm run validate
+      - run: npm run build
+      - name: Publish to npm
+        env:
+          DIST_TAG: ${{ steps.channel.outputs.dist_tag }}
+        run: npm publish --provenance --access public --tag "$DIST_TAG"
+      - name: Release notes from CHANGELOG.md
+        id: notes
+        run: |
+          # The version's "## [X.Y.Z…]" section, up to the next "## [" heading (link
+          # definitions included, so its [#n] references resolve).
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ -s release-notes.md ]; then echo "file=release-notes.md" >> "$GITHUB_OUTPUT"; fi
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LATEST: ${{ steps.channel.outputs.latest }}
+          PRERELEASE: ${{ steps.channel.outputs.prerelease }}
+          NOTES_FILE: ${{ steps.notes.outputs.file }}
+        run: |
+          if [ -n "$NOTES_FILE" ]; then notes=(--notes-file "$NOTES_FILE"); else notes=(--generate-notes); fi
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" "${notes[@]}" --latest="$LATEST" --prerelease="$PRERELEASE"
