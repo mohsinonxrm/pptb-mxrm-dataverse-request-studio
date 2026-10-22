@@ -442,3 +442,18 @@ describe('Power Automate classification (#51)', () => {
     });
   });
 });
+
+describe('C# header strings (#244, CodeQL js/incomplete-sanitization)', () => {
+  it('escapes backslashes, quotes and line breaks in header values', () => {
+    const code = generateCode(
+      'csharp',
+      inputs('GET', built('/accounts'), {
+        // Header values C:\temp\x"y and a<LF>b.
+        headers: { 'X-Path': String.raw`C:\temp\x"y`, 'X-Lines': 'a\nb' },
+      }),
+    );
+    // C# literals "C:\\temp\\x\"y" and "a\nb".
+    expect(code).toContain(String.raw`TryAddWithoutValidation("X-Path", "C:\\temp\\x\"y");`);
+    expect(code).toContain(String.raw`TryAddWithoutValidation("X-Lines", "a\nb");`);
+  });
+});
