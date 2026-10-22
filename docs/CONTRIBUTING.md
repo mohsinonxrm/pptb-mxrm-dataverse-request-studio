@@ -12,7 +12,7 @@ For bug reports and feature requests, please use the GitHub issue templates.
 
 ### Prerequisites
 
-- **Node.js** 22.22+, 24.15+ or 26+ (`engines` in `package.json`)
+- **Node.js** 22.22.2+, 24.15+ or 26+ (`engines` in `package.json`)
 - **npm** (bundled with Node)
 - A modern browser (Edge, Chrome, Firefox, or Safari)
 

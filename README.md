@@ -22,10 +22,11 @@ React 18, Fluent UI v9, TypeScript, and live Dataverse metadata integration.
 ## ✨ Features
 
 DRS ships with **23 request modes** in 7 groups. Every mode is
-metadata-driven, generates the correct OData / Web API shape, and emits
-ready-to-copy code in ten formats: `fetch`, `Xrm.WebApi`,
+metadata-driven and generates the correct OData / Web API shape. The
+single-request modes emit ready-to-copy code in ten formats: `fetch`, `Xrm.WebApi`,
 `Xrm.WebApi.executeMultiple`, `XMLHttpRequest`, Power Automate, C#, PowerShell,
-cURL, JSON, and an OpenAPI 3 document.
+cURL, JSON, and an OpenAPI 3 document; the `$batch` and ExecuteMultiple
+modes have their own HTTP / fetch / C# / PPTB outputs.
 
 ### 📖 Read group
 
@@ -52,14 +53,15 @@ cURL, JSON, and an OpenAPI 3 document.
   optional `$select` return list, duplicate detection and the `MSCRM.*`
   bypass-header family. **Retrieve this record** from the result card.
 - **Update Record** — `PATCH /<set>(<id>)` multi-field OR
-  `PUT /<set>(<id>)/<col>` single-column, with a before → after diff.
+  `PUT /<set>(<id>)/<col>` single-column (Code tab only), with a before →
+  after diff.
   **Require existing record** (`If-Match: *`) is the default, so a wrong GUID
   returns 404 instead of creating a record.
 - **Upsert Record** — full upsert / create-only / update-only / ETag-guarded
-  variants, by GUID or alternate key.
+  variants, by GUID or alternate key (alternate key: Code tab only).
 - **Delete Record** — `DELETE /<set>(<id>)` with a typed-confirmation safety
   affordance + cascade-impact preview. Single-property delete via
-  `DELETE /<set>(<id>)/<col>` also supported.
+  `DELETE /<set>(<id>)/<col>` is composed for the Code tab.
 - **Merge Records** — `POST /Merge` for `account` / `contact` / `lead` /
   `incident` with target + subordinate record cards, field-override matrix,
   and PerformParentingChecks / SuppressDuplicateDetection settings.
@@ -95,7 +97,8 @@ cURL, JSON, and an OpenAPI 3 document.
 - **Execute Custom API** / **Execute Custom Action** — the same composer,
   listing every Custom API and every custom process action, Microsoft's own
   included. Classification comes from Dataverse data (`customapi`,
-  `workflow` + `sdkmessage`), not from the name.
+  `workflow` + `sdkmessage`); the name is only a fallback when those lookups
+  fail.
 - **Execute Function** — OData function calls with parameter aliasing
   (`?@p1=...`) vs inline literals, valid OData literals and escaping, run from
   the built URL.
@@ -107,11 +110,14 @@ cURL, JSON, and an OpenAPI 3 document.
 
 - **`$batch` Request** — compose a `$batch` from groups of requests: change
   sets (atomic, with `$n` Content-ID references) or independent requests, with
-  continue-on-error. Add any mode's last request; per-part results with
-  status and body. Needs PPTB 1.2.7+.
+  continue-on-error. Add the last request of a read, write, relate or execute
+  mode; per-part results with
+  status and body. A batch that mixes change sets and independent requests
+  is sent as consecutive ToolBox calls. Needs PPTB 1.2.7+.
 - **ExecuteMultiple** — the ExecuteMultiple pattern (independent requests,
-  continue-on-error, return responses) on the `$batch` engine, with C# /
-  `Xrm.WebApi.executeMultiple` code. Needs PPTB 1.2.7+.
+  continue-on-error, return responses) on the `$batch` engine, with SDK
+  `ExecuteMultipleRequest` (C#), raw `$batch` and PPTB code. Needs PPTB
+  1.2.7+.
 
 ### 💾 Binary group
 
@@ -142,8 +148,8 @@ cURL, JSON, and an OpenAPI 3 document.
   / function CSDL all fetched lazily from the host's `dataverseAPI`, cached per
   org with in-flight promise dedup. Switching the PPTB connection resets the
   prepared request and reloads metadata for the new environment.
-- **Request headers through PPTB 1.2.7+** — the write modes' headers
-  (preconditions, `MSCRM.*` bypass, duplicate detection, impersonation) are
+- **Request headers through PPTB 1.2.7+** — Create / Update / Upsert /
+  Delete / Merge headers (preconditions, `MSCRM.*` bypass, duplicate detection, impersonation) are
   sent as additional headers after you approve them once in ToolBox. On older
   hosts, requests that depend on a header are blocked with an explanation.
   `Authorization` / `Cookie` headers are never sent, saved or exported.
@@ -155,7 +161,7 @@ cURL, JSON, and an OpenAPI 3 document.
 - **Polymorphic lookup support** — Customer, Owner, and multi-target lookups
   (`regardingobjectid`) emit the correct target-disambiguated
   `<navName>@odata.bind` binding shape automatically.
-- **Code generators** — Every mode emits the same request as `fetch`,
+- **Code generators** — Every single-request mode emits the same request as `fetch`,
   `Xrm.WebApi` (CRUD helpers or `Xrm.WebApi.online.execute`),
   `Xrm.WebApi.online.executeMultiple`, `XMLHttpRequest`, C# `HttpClient`,
   PowerShell `Invoke-RestMethod`, cURL, a JSON description and an OpenAPI 3
@@ -170,8 +176,8 @@ cURL, JSON, and an OpenAPI 3 document.
   its unsaved request when you switch modes.
 - **Results** — CSV export (formulas neutralised for spreadsheets), JSON
   export, Copy as TSV, and response-size hints.
-- **Accessibility** — labelled inputs, keyboard-reachable panes, readable
-  badges, and live-region announcements; render errors are contained per pane.
+- **Accessibility** — labelled inputs, readable badges and live-region
+  announcements; render errors are contained per pane.
 
 ---
 
@@ -215,7 +221,7 @@ cURL, JSON, and an OpenAPI 3 document.
   recommended: it sends the write modes' request headers and is required for
   the `$batch` and ExecuteMultiple modes.
 - A connection to a Dataverse environment
-- For local development: **Node.js 22.22+, 24.15+ or 26+** and **npm** (see
+- For local development: **Node.js 22.22.2+, 24.15+ or 26+** and **npm** (see
   `engines` in `package.json`)
 
 ### Installation
@@ -246,8 +252,14 @@ npm run dev
 # TypeScript-only check (fast)
 npm run typecheck
 
+# Unit tests (Vitest)
+npm test
+
 # Production build
 npm run build
+
+# Bundle size report
+npm run build:analyze
 
 # Preview the production build locally
 npm run preview
@@ -266,7 +278,7 @@ DRS runs in two modes:
 - **Standalone** (`npm run dev`) — opens in a regular browser tab. Useful
   for UI iteration only: without the host bridge no live metadata loads, and
   Execute returns `501 Not Implemented` ("Running standalone: Execute needs
-  the PPTB host").
+  the PPTB host"); the Bulk modes report it as an error result.
 - **Embedded in PPTB** — loads inside the PPTB iframe. The host injects
   `window.dataverseAPI` (typed) and `window.toolboxAPI`. Execute runs
   against the active Dataverse connection.
@@ -401,7 +413,7 @@ Dataverse API)
 | `$expand` (single + collection, nested) | ✅ |
 | Polymorphic lookups (Customer, Owner, regardingobjectid) | ✅ |
 | Create / Update / Upsert / Delete | ✅ |
-| `Prefer: return=representation` | ✅ |
+| `Prefer: return=representation` | ✅ (ToolBox always sends it on writes) |
 | Optimistic concurrency (`If-Match` / `If-None-Match`) | ✅ 1.2.7+ |
 | `MSCRM.*` bypass family (custom plug-ins, flows, async) | ✅ 1.2.7+ |
 | Single-property PUT / DELETE | 📝 |

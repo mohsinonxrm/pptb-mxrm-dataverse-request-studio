@@ -37,8 +37,9 @@ in a browser. Vulnerability reports of interest:
 ## Out of scope
 
 - **Mistakes the user makes against their own environment** — DRS lets you
-  Delete, Update, and Merge records. Destructive operations require typed
-  confirmation; beyond that, the user is responsible for what they send.
+  Delete, Update, and Merge records. Delete and Bulk Delete Job require typed
+  confirmation; bulk and batch deletes and Merge don't. Beyond that, the user
+  is responsible for what they send.
 - **Standalone-mode Execute errors** — the standalone build (`npm run dev`)
   has no host bridge, so Execute returns `501 Not Implemented` ("Running
   standalone: Execute needs the PPTB host"). This is by design, not a bug.

@@ -10,8 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 The biggest release so far: four new modes (Bulk Write, Bulk Delete Job,
 `$batch`, ExecuteMultiple), request headers sent through Power Platform ToolBox
 1.2.7+, a reworked results grid, a portable saved-request library, and dozens of
-fixes. Everything planned for v1.2.0, v1.3.0 and v1.4.0 ships
-together, so there are no separate 1.2.x or 1.3.x releases.
+fixes. The work planned for v1.2.0, v1.3.0 and v1.4.0 ships together, so
+there are no separate 1.2.x or 1.3.x releases; the few items still open move
+to later milestones.
 
 This is a **prerelease** on the npm `beta` tag. It uses the gold Insider icon.
 Every change was verified end-to-end in Power Platform ToolBox against live
@@ -26,17 +27,17 @@ Dataverse environments.
   query, started now or scheduled, with live job status.
 - **`$batch` Request mode** ([#9]): change sets (atomic, with `$n` Content-ID
   references) and independent requests, continue-on-error, "Add last request"
-  from any mode, and per-part results. Recent runs show the batch status and
+  from the read, write, relate and execute modes, and per-part results. Recent runs show the batch status and
   a per-part summary ([#204]).
 - **ExecuteMultiple mode** ([#11]): independent requests with
-  continue-on-error, on the `$batch` engine, with C# and
-  `Xrm.WebApi.executeMultiple` code.
+  continue-on-error, on the `$batch` engine, with SDK
+  `ExecuteMultipleRequest` (C#), raw `$batch` and PPTB `dataverseAPI` code.
 - **Request headers through Power Platform ToolBox 1.2.7+** ([#43], [#23]):
-  the write modes' preconditions (`If-Match` / `If-None-Match`), `MSCRM.*`
+  Create, Update, Upsert, Delete and Merge now send their preconditions (`If-Match` / `If-None-Match`), `MSCRM.*`
   bypass headers, duplicate detection and impersonation are now sent. ToolBox
   asks you to approve additional headers once; choose **Approve for this
   tool** so it doesn't ask again. On older hosts, requests that depend on a
-  header are blocked with an explanation ([#45]).
+  header stay blocked with an explanation, as in 1.1.4.
 - **Results grid** ([#12], [#15], [#16], [#17]): CSV (as shown or raw) and
   JSON export, persisted column widths, extra-small / small / medium density,
   a per-column filter row, and an indexed row search.
@@ -47,7 +48,8 @@ Dataverse environments.
   - an "All modes" view, and clearer name-clash messages ([#125]).
 - **OpenAPI 3 document** for the current request in the Code tab ([#28]).
 - **Click a recent run to restore it** into its mode ([#2]).
-- **Retrieve this record** from the Create / Update result card ([#3]).
+- **Retrieve this record** from the Create, Update, Upsert and Merge result
+  card ([#3]).
 - **Execute Workflow shows the workflow's declared input arguments** ([#4]).
 - **Predefined Query over a row's related records** ([#5]).
 - **Address shortcut chips** in the `$filter` builder ([#7]).
@@ -59,8 +61,9 @@ Dataverse environments.
 ### 🔄 Changed
 
 - **Execute Custom API / Custom Action list every operation by type**,
-  Microsoft's own included, classified from Dataverse data instead of the
-  name ([#54]).
+  Microsoft's own included, classified from Dataverse data (`customapi`,
+  `workflow` + `sdkmessage`); the name is only a fallback when those lookups
+  fail ([#54]).
 - **Update sends `If-Match: *` by default** on ToolBox 1.2.7+, so an Update of
   a record that doesn't exist returns 404 instead of creating it ([#43]). The
   first Update shows ToolBox's header approval prompt.
@@ -177,10 +180,10 @@ Dataverse environments.
 ### ⚠️ Known issues
 
 - **`$batch` continue-on-error:** ToolBox's `$batch` response parser fails when
-  a failing request sits between two successful ones. DRS explains it and
-  suggests putting requests that might fail last ([#198]).
-- **Execute modes on very large environments:** ToolBox 1.2.7 can't load a
-  `$metadata` document over 16 MB. Fixed in ToolBox
+  a failed request is followed by more requests. DRS explains it and suggests
+  putting requests that might fail last ([#198]).
+- **Execute modes on very large environments:** ToolBox 1.2.7 and 1.2.8 can't
+  load a `$metadata` document over 16 MB. Fixed in ToolBox
   ([PowerPlatformToolBox/desktop-app#737](https://github.com/PowerPlatformToolBox/desktop-app/pull/737));
   until that ships, DRS explains the limit ([#79]).
 - **ToolBox VS Code extension:** Monaco's workers may run on the main thread,
@@ -188,6 +191,14 @@ Dataverse environments.
 - **Tool icon:** ToolBox draws SVG tool icons as a single-colour mask until
   [PowerPlatformToolBox/desktop-app#738](https://github.com/PowerPlatformToolBox/desktop-app/pull/738)
   ships ([#25]).
+- **Bulk Write doesn't send its headers yet** ([#257]): its Headers and
+  Bypass panes affect the Code tab, but Execute doesn't pass them to ToolBox,
+  so a bypass option is ignored and plug-ins still run.
+- **Impersonation on reads:** `MSCRMCallerID` / `CallerObjectId` are only
+  sent by the write modes; read, relate and execute requests run as you
+  ([#219]).
+- **Sidebar keyboard navigation:** the clause tree has no arrow-key model yet
+  ([#243]).
 - **Binary modes** (file / image / attachment) compose the request and its
   code, but Execute returns 501 because ToolBox doesn't expose those
   operations.
@@ -217,7 +228,6 @@ Dataverse environments.
 [#27]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/27
 [#28]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/28
 [#43]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/43
-[#45]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/45
 [#52]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/52
 [#53]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/53
 [#54]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/54
@@ -278,11 +288,14 @@ Dataverse environments.
 [#212]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/212
 [#217]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/217
 [#218]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/218
+[#219]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/219
 [#220]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/220
 [#239]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/239
+[#243]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/243
 [#246]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/246
 [#254]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/254
 [#255]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/255
+[#257]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/257
 
 ## [1.1.4] - 2026-10-17
 
