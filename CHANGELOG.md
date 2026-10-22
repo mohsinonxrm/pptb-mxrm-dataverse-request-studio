@@ -5,6 +5,285 @@ All notable changes to Dataverse Request Studio will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0-beta.1] - 2026-10-21
+
+The biggest release so far: four new modes (Bulk Write, Bulk Delete Job,
+`$batch`, ExecuteMultiple), request headers sent through Power Platform ToolBox
+1.2.7+, a reworked results grid, a portable saved-request library, and dozens of
+fixes. Everything planned for v1.2.0, v1.3.0 and v1.4.0 ships
+together, so there are no separate 1.2.x or 1.3.x releases.
+
+This is a **prerelease** on the npm `beta` tag. It uses the gold Insider icon.
+Every change was verified end-to-end in Power Platform ToolBox against live
+Dataverse environments.
+
+### ✨ Added
+
+- **Bulk Write mode** ([#8]): `CreateMultiple` / `UpdateMultiple` /
+  `UpsertMultiple` / `DeleteMultiple` over a grid of rows, with a per-table
+  support check.
+- **Bulk Delete Job mode** ([#10]): a `BulkDelete` system job built from a
+  query, started now or scheduled, with live job status.
+- **`$batch` Request mode** ([#9]): change sets (atomic, with `$n` Content-ID
+  references) and independent requests, continue-on-error, "Add last request"
+  from any mode, and per-part results. Recent runs show the batch status and
+  a per-part summary ([#204]).
+- **ExecuteMultiple mode** ([#11]): independent requests with
+  continue-on-error, on the `$batch` engine, with C# and
+  `Xrm.WebApi.executeMultiple` code.
+- **Request headers through Power Platform ToolBox 1.2.7+** ([#43], [#23]):
+  the write modes' preconditions (`If-Match` / `If-None-Match`), `MSCRM.*`
+  bypass headers, duplicate detection and impersonation are now sent. ToolBox
+  asks you to approve additional headers once; choose **Approve for this
+  tool** so it doesn't ask again. On older hosts, requests that depend on a
+  header are blocked with an explanation ([#45]).
+- **Results grid** ([#12], [#15], [#16], [#17]): CSV (as shown or raw) and
+  JSON export, persisted column widths, extra-small / small / medium density,
+  a per-column filter row, and an indexed row search.
+- **Saved-request library**:
+  - versioned, with Export / Import to a JSON file ([#105]);
+  - export as a Postman, Insomnia or Bruno collection ([#27]);
+  - copy or move saved requests from other connections ([#6]);
+  - an "All modes" view, and clearer name-clash messages ([#125]).
+- **OpenAPI 3 document** for the current request in the Code tab ([#28]).
+- **Click a recent run to restore it** into its mode ([#2]).
+- **Retrieve this record** from the Create / Update result card ([#3]).
+- **Execute Workflow shows the workflow's declared input arguments** ([#4]).
+- **Predefined Query over a row's related records** ([#5]).
+- **Address shortcut chips** in the `$filter` builder ([#7]).
+- **EntitySpecific parameters** can reference an existing record or build a
+  new instance ([#1]).
+- **Response-size hint**, and outer `$top` with a nested collection `$expand`
+  no longer blocks ([#126]).
+
+### 🔄 Changed
+
+- **Execute Custom API / Custom Action list every operation by type**,
+  Microsoft's own included, classified from Dataverse data instead of the
+  name ([#54]).
+- **Update sends `If-Match: *` by default** on ToolBox 1.2.7+, so an Update of
+  a record that doesn't exist returns 404 instead of creating it ([#43]). The
+  first Update shows ToolBox's header approval prompt.
+- **Each mode keeps its unsaved request** when you switch modes ([#101]).
+- **Switching the ToolBox connection resets the prepared request** and
+  reloads metadata, caches and lists for the new environment ([#52], [#93],
+  [#107]).
+- **In-app dialogs** replace the browser's native confirm / alert boxes
+  ([#111]).
+- **Errors show the real status** and no made-up response headers ([#59]);
+  Electron's IPC wrapper is stripped from host messages ([#188]).
+- **Multi-target Associate / Disassociate report each target**, including
+  "Partial success" ([#99]).
+- **Faster startup:** Monaco and the less-used modes load on demand ([#22]);
+  long picker lists are capped and filtered lazily ([#21]).
+- **Render errors are contained** to the mode or pane that failed ([#19]).
+
+### 🛡️ Security and data safety
+
+- **Credential headers are never sent, saved or exported** ([#217]):
+  `Authorization`, `Proxy-Authorization` and `Cookie` are stripped from saved
+  requests (including ones saved by earlier versions), library exports, the
+  Code tab, OpenAPI and `$batch` parts. Impersonation ids become variables in
+  Postman / Insomnia / Bruno exports.
+- **CSV export and Copy as TSV neutralise spreadsheet formulas** ([#239]).
+- **Update can't create a record on ToolBox < 1.2.7** ([#218]): DRS checks the
+  record exists first.
+- **Single-valued Associate / Disassociate can't create the source record**
+  ([#254]).
+- **The saved-request library is never overwritten when it can't be read**
+  ([#220]); damaged or newer-version items are kept as they are. Import and the
+  other-connections view no longer drop `$batch`, ExecuteMultiple and Bulk
+  requests.
+- **The library never evicts a request silently** at its 200-request cap
+  ([#100]).
+
+### 🐛 Fixed
+
+**Queries**
+
+- `$orderby` on a lookup uses `_<col>_value` ([#62]).
+- `$expand` always emits an inner `$filter` and nested `$expand` ([#63]).
+- `not` is kept on negated groups when parsing a `$filter` ([#117]), and a
+  double `not` on `contains` / `startswith` / `endswith` cancels out ([#207]).
+- Record search text is percent-encoded and wildcards match literally ([#95]).
+- Stale paging no longer overwrites newer results; page errors are shown
+  ([#98]).
+- The footer and Recent runs count the same rows for `$expand` queries
+  ([#122]).
+- Date filters and grid cells show the picked date west of UTC ([#106]).
+
+**Writes**
+
+- DateTime fields keep the date and time you pick for each behaviour ([#92]).
+- The JSON body editor keeps what you type, including nulls and unknown keys
+  ([#91]).
+- One required-field rule for Form and JSON mode; the required count matches
+  the list ([#124], [#199]).
+- A choice column without a default isn't pre-filled ([#203]).
+- Update's Field set no longer uses Create wording or warns about unset
+  required fields ([#80]).
+- Merge lists its tables from the unscoped entity list, adds `lead`, and reads
+  lookups from `_<col>_value` ([#97], [#96]).
+- Disassociate reads the current single-valued lookup correctly ([#57]).
+- By GUID entries are normalised, an invalid one drops the picked record, and
+  the mode and text survive pane switches ([#94], [#189]).
+- The previous saved request isn't overwritten after switching tables
+  ([#58]).
+- Record-picker names refresh after DRS writes to the record ([#81]).
+- The record picker can't get stuck on "Searching…" ([#104], [#121]).
+- The Execute spinner clears when a request throws ([#102]).
+- Settings aren't saved before they load, and earlier changes are kept
+  ([#103]).
+- Metadata refreshes in place and re-enriches refreshed columns ([#53]).
+
+**Execute**
+
+- Collection-bound operations run on the entity set, and functions run from
+  the built URL ([#55]).
+- Execute Action sub-modes reset on switch; a loaded snapshot's binding is
+  checked ([#56]).
+- Valid OData literals and escaping in Function URLs ([#61], [#110]).
+- Alternate-key Upsert URL literals and encoding ([#64]).
+- Parameter collections clear after Enter; an empty number isn't added as 0;
+  an untyped reference starts empty ([#246]).
+- The `$metadata` size-limit message no longer names a ToolBox version
+  ([#113]).
+
+**Code, copy and accessibility**
+
+- Code tab generator correctness across formats ([#60]).
+- Copy fixes: bypass wording, 201 / 204 badges, single name in Disassociate
+  ([#123]).
+- Prefer and Precondition help say what ToolBox actually sends ([#108]).
+- The Field set's Send-as-null switch stays clear of the value input at narrow
+  widths ([#112]).
+- Accessibility: labelled inputs, mode-picker state, readable sidebar badges,
+  live-region reset ([#20], [#120], [#200]).
+- DRS asks you to reopen it when a lazily loaded part is missing after an
+  update ([#187]).
+- Relative asset URLs, so the editor loads under the ToolBox VS Code extension
+  ([#212]).
+
+### 🧰 Developer
+
+- Vitest suite for the request engine, code generators, storage and exporters
+  ([#18]); CI on pull requests and pushes to `dev` / `main`, with Prettier
+  and a check for root-absolute asset URLs ([#65], [#212]).
+- `@pptb/types` 1.2.7 and `features.connections` declared ([#43]).
+- Opt-in bundle report: `npm run build:analyze` ([#22]).
+- README, CONTRIBUTING, SECURITY and templates brought up to date ([#66]).
+- Dependency security updates (Vite, esbuild, PostCSS, Babel and others).
+
+### ⚠️ Known issues
+
+- **`$batch` continue-on-error:** ToolBox's `$batch` response parser fails when
+  a failing request sits between two successful ones. DRS explains it and
+  suggests putting requests that might fail last ([#198]).
+- **Execute modes on very large environments:** ToolBox 1.2.7 can't load a
+  `$metadata` document over 16 MB. Fixed in ToolBox
+  ([PowerPlatformToolBox/desktop-app#737](https://github.com/PowerPlatformToolBox/desktop-app/pull/737));
+  until that ships, DRS explains the limit ([#79]).
+- **ToolBox VS Code extension:** Monaco's workers may run on the main thread,
+  so JSON IntelliSense may not work there ([#255]).
+- **Tool icon:** ToolBox draws SVG tool icons as a single-colour mask until
+  [PowerPlatformToolBox/desktop-app#738](https://github.com/PowerPlatformToolBox/desktop-app/pull/738)
+  ships ([#25]).
+- **Binary modes** (file / image / attachment) compose the request and its
+  code, but Execute returns 501 because ToolBox doesn't expose those
+  operations.
+
+[#1]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/1
+[#2]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/2
+[#3]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/3
+[#4]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/4
+[#5]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/5
+[#6]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/6
+[#7]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/7
+[#8]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/8
+[#9]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/9
+[#10]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/10
+[#11]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/11
+[#12]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/12
+[#15]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/15
+[#16]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/16
+[#17]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/17
+[#18]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/18
+[#19]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/19
+[#20]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/20
+[#21]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/21
+[#22]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/22
+[#23]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/23
+[#25]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/25
+[#27]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/27
+[#28]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/28
+[#43]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/43
+[#45]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/45
+[#52]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/52
+[#53]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/53
+[#54]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/54
+[#55]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/55
+[#56]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/56
+[#57]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/57
+[#58]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/58
+[#59]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/59
+[#60]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/60
+[#61]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/61
+[#62]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/62
+[#63]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/63
+[#64]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/64
+[#65]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/65
+[#66]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/66
+[#79]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/79
+[#80]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/80
+[#81]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/81
+[#91]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/91
+[#92]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/92
+[#93]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/93
+[#94]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/94
+[#95]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/95
+[#96]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/96
+[#97]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/97
+[#98]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/98
+[#99]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/99
+[#100]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/100
+[#101]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/101
+[#102]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/102
+[#103]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/103
+[#104]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/104
+[#105]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/105
+[#106]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/106
+[#107]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/107
+[#108]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/108
+[#110]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/110
+[#111]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/111
+[#112]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/112
+[#113]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/113
+[#117]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/117
+[#120]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/120
+[#121]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/121
+[#122]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/122
+[#123]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/123
+[#124]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/124
+[#125]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/125
+[#126]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/126
+[#187]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/187
+[#188]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/188
+[#189]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/189
+[#198]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/198
+[#199]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/199
+[#200]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/200
+[#203]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/203
+[#204]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/204
+[#207]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/207
+[#212]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/212
+[#217]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/217
+[#218]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/218
+[#220]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/220
+[#239]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/239
+[#246]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/246
+[#254]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/254
+[#255]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/255
+
 ## [1.1.4] - 2026-10-17
 
 Bug-fix release. Every fix below was verified end-to-end in Power Platform

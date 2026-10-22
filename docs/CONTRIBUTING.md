@@ -12,7 +12,7 @@ For bug reports and feature requests, please use the GitHub issue templates.
 
 ### Prerequisites
 
-- **Node.js** 20.19+ or 22.12+ (Vite 7 requirement)
+- **Node.js** 22.22+, 24.15+ or 26+ (`engines` in `package.json`)
 - **npm** (bundled with Node)
 - A modern browser (Edge, Chrome, Firefox, or Safari)
 
@@ -142,7 +142,7 @@ src/
   engine/             — URL builders, code generators, runtime dispatch
   host/               — PPTB bridge + live metadata loaders + cache
   mock/               — type definitions + live registry (no fixtures)
-  modes/              — request-mode components (19 modes; Execute Action /
+  modes/              — request-mode components (23 modes; Execute Action /
                         Custom API / Custom Action share one component)
   primitives/         — small UI building blocks (pickers, pills, advisories)
   registry/           — request-type catalogue + group definitions

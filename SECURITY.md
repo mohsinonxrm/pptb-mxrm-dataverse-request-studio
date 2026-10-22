@@ -40,8 +40,8 @@ in a browser. Vulnerability reports of interest:
   Delete, Update, and Merge records. Destructive operations require typed
   confirmation; beyond that, the user is responsible for what they send.
 - **Standalone-mode Execute errors** — the standalone build (`npm run dev`)
-  has no host bridge, so Execute returns an error result (HTTP 500, "PPTB
-  host method … is not available"). This is by design, not a bug.
+  has no host bridge, so Execute returns `501 Not Implemented` ("Running
+  standalone: Execute needs the PPTB host"). This is by design, not a bug.
 - **Antipattern advisories** — the studio surfaces guidance per the
   Microsoft query-antipatterns doc, but it's advisory only; the request
   still goes through if the user proceeds.

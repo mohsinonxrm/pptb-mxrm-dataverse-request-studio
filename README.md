@@ -1,88 +1,117 @@
 # Dataverse Request Studio for Power Platform ToolBox
 
 A metadata-driven studio for composing, previewing, and executing Microsoft
-Dataverse Web API requests — covering OData reads, record writes, table
-associations, bound and unbound action/function invocation, on-demand workflows,
-and file / image / attachment operations.
+Dataverse Web API requests — covering OData reads, record writes, bulk writes
+and bulk-delete jobs, table associations, bound and unbound action/function
+invocation, on-demand workflows, `$batch` / ExecuteMultiple envelopes, and
+file / image / attachment operations.
 
 Built for [Power Platform ToolBox](https://www.powerplatformtoolbox.com/) with
 React 18, Fluent UI v9, TypeScript, and live Dataverse metadata integration.
 
 [![npm](https://img.shields.io/npm/v/@mohsinonxrm/pptb-dataverse-request-studio?label=npm)](https://www.npmjs.com/package/@mohsinonxrm/pptb-dataverse-request-studio)
+[![npm beta](https://img.shields.io/npm/v/@mohsinonxrm/pptb-dataverse-request-studio/beta?label=beta&color=orange)](https://www.npmjs.com/package/@mohsinonxrm/pptb-dataverse-request-studio?activeTab=versions)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript)
 ![Fluent UI](https://img.shields.io/badge/Fluent%20UI-v9-0078D4?logo=microsoft)
-![PPTB Types](https://img.shields.io/badge/%40pptb%2Ftypes-1.2.1-orange)
+![PPTB Types](https://img.shields.io/badge/%40pptb%2Ftypes-1.2.7-orange)
 ![License](https://img.shields.io/badge/license-AGPL--3.0--only-green)
 
 ---
 
 ## ✨ Features
 
-DRS ships with **19 request modes** organized into 5 functional groups. Every
-mode is metadata-driven, generates the correct OData / Web API shape, and
-emits ready-to-copy code in nine formats: `fetch`, `Xrm.WebApi`,
+DRS ships with **23 request modes** in 7 groups. Every mode is
+metadata-driven, generates the correct OData / Web API shape, and emits
+ready-to-copy code in ten formats: `fetch`, `Xrm.WebApi`,
 `Xrm.WebApi.executeMultiple`, `XMLHttpRequest`, Power Automate, C#, PowerShell,
-cURL, and JSON.
+cURL, JSON, and an OpenAPI 3 document.
 
 ### 📖 Read group
 
 - **Retrieve Multiple** — full OData query composer with `$select`, `$filter`,
-  `$orderby`, `$expand`, `$top`, `$count`, `$apply` (groupby / aggregate), and
-  a virtualized results grid with infinite scroll via `@odata.nextLink`.
+  `$orderby`, `$expand` (nested, with inner `$filter` / `$orderby` / `$top`),
+  `$top`, `$count`, `$apply` (groupby / aggregate), and a virtualized results
+  grid with infinite scroll via `@odata.nextLink`, **Retrieve all**, CSV / JSON
+  export, per-column filters, row search, density and persisted column widths.
+  Address shortcut chips in the `$filter` builder; paste any OData URL to load
+  it into the builder.
 - **Retrieve Single** — one record by primary key (GUID), with `$select` /
   `$expand`.
 - **Retrieve NextLink** — paste a `@odata.nextLink` URL to continue paging
   any query.
 - **Predefined Query** — execute saved-query (`?savedQuery=<id>`) and
-  user-query (`?userQuery=<id>`) URLs against an entity set; layout-aware
-  results grid that matches the source view's column order.
+  user-query (`?userQuery=<id>`) URLs against an entity set, or over a row's
+  related records; layout-aware results grid that matches the source view's
+  column order.
 
 ### ✏️ Write group
 
-- **Create Record** — `POST /<set>` with metadata-driven field-set editor.
-  Required-field guard with red `req` badges, `Prefer: return=representation`
-  toggle, optional `$select` return list, `MSCRM.*` bypass-header family.
+- **Create Record** — `POST /<set>` with a metadata-driven field-set editor or
+  a raw JSON body. Required-field guard, `Prefer: return=representation`,
+  optional `$select` return list, duplicate detection and the `MSCRM.*`
+  bypass-header family. **Retrieve this record** from the result card.
 - **Update Record** — `PATCH /<set>(<id>)` multi-field OR
-  `PUT /<set>(<id>)/<col>` single-column. Diff view (before → after) with
-  per-row drill-down to switch to PUT mode.
-- **Upsert Record** — full upsert / create-only / update-only / etag-guarded
-  variants. By GUID OR alternate key.
+  `PUT /<set>(<id>)/<col>` single-column, with a before → after diff.
+  **Require existing record** (`If-Match: *`) is the default, so a wrong GUID
+  returns 404 instead of creating a record.
+- **Upsert Record** — full upsert / create-only / update-only / ETag-guarded
+  variants, by GUID or alternate key.
 - **Delete Record** — `DELETE /<set>(<id>)` with a typed-confirmation safety
   affordance + cascade-impact preview. Single-property delete via
   `DELETE /<set>(<id>)/<col>` also supported.
-- **Merge Records** — `POST /Merge` for `account` / `contact` / `incident`
-  with target + subordinate record cards, field-override matrix, and
-  PerformParentingChecks / SuppressDuplicateDetection settings.
+- **Merge Records** — `POST /Merge` for `account` / `contact` / `lead` /
+  `incident` with target + subordinate record cards, field-override matrix,
+  and PerformParentingChecks / SuppressDuplicateDetection settings.
+
+### 📦 Bulk group
+
+- **Bulk Write** — `CreateMultiple` / `UpdateMultiple` / `UpsertMultiple` /
+  `DeleteMultiple` over a grid of rows, with a per-table support check.
+- **Bulk Delete Job** — a `BulkDelete` system job built from a query, with a
+  scheduled or immediate start and live job-status polling.
 
 ### 🔗 Relate group
 
 - **Associate** — links related records via `POST /<set>(<id>)/<nav>/$ref`
-  for collection-valued navs, or `PATCH @odata.bind` for single-valued.
-  Cardinality detected from metadata; verb auto-flips with the picker.
-  Polymorphic lookups (Customer / Owner / `regardingobjectid`) fully
-  supported with target-disambiguated nav properties.
+  for collection-valued navs (one request per target, already-linked targets
+  skipped), or `PATCH @odata.bind` for single-valued. Cardinality detected
+  from metadata; verb auto-flips with the picker. Polymorphic lookups
+  (Customer / Owner / `regardingobjectid`) fully supported.
 - **Disassociate** — `DELETE /$ref` for collection-valued, `PATCH @odata.bind: null`
   for single-valued. Same polymorphism story.
+- Single-valued PATCHes carry `If-Match: *`, so a wrong source id can't create
+  a record. Multi-target results are reported per target.
 
 ### ⚡ Execute group
 
 - **Execute Action** — OOB action invocation via bound
-  `POST /<set>(<id>)/Microsoft.Dynamics.CRM.<Action>` OR unbound
-  `POST /<Action>`. CSDL-driven parameter form with type-aware controls:
-  required-first UX, Form ↔ JSON toggle, EntityReference / EntityCollection
-  / Edm primitives / Enum / Status-code OptionSet enrichment.
+  `POST /<set>(<id>)/Microsoft.Dynamics.CRM.<Action>`, collection-bound, OR
+  unbound `POST /<Action>`. CSDL-driven parameter form with type-aware
+  controls: required-first UX, Form ↔ JSON toggle, EntityReference (existing
+  record) or EntitySpecific (existing record or new instance) /
+  EntityCollection / Edm primitives / collections / Enum / OptionSet
+  enrichment.
 - **Execute Custom API** / **Execute Custom Action** — the same composer,
-  with the picker filtered by message source. The source is currently
-  inferred from the message name (a publisher prefix such as `new_` reads as
-  custom), so custom messages are listed under Custom API.
+  listing every Custom API and every custom process action, Microsoft's own
+  included. Classification comes from Dataverse data (`customapi`,
+  `workflow` + `sdkmessage`), not from the name.
 - **Execute Function** — OData function calls with parameter aliasing
-  (`?@p1=...`) vs inline literal toggle. CSDL-driven param form with the
-  same type-aware controls as actions.
+  (`?@p1=...`) vs inline literals, valid OData literals and escaping, run from
+  the built URL.
 - **Execute Workflow** — runs on-demand workflows via
   `POST /workflows(<id>)/Microsoft.Dynamics.CRM.ExecuteWorkflow` with the
-  bound record id. Live picker over activated, on-demand process workflows
-  (`statecode eq 1 and type eq 1 and ondemand eq true and category eq 0`).
+  bound record id, showing the workflow's declared input arguments.
+
+### 🧺 Batch group
+
+- **`$batch` Request** — compose a `$batch` from groups of requests: change
+  sets (atomic, with `$n` Content-ID references) or independent requests, with
+  continue-on-error. Add any mode's last request; per-part results with
+  status and body. Needs PPTB 1.2.7+.
+- **ExecuteMultiple** — the ExecuteMultiple pattern (independent requests,
+  continue-on-error, return responses) on the `$batch` engine, with C# /
+  `Xrm.WebApi.executeMultiple` code. Needs PPTB 1.2.7+.
 
 ### 💾 Binary group
 
@@ -110,10 +139,14 @@ cURL, and JSON.
 ### 🔍 Cross-cutting capabilities
 
 - **Live metadata** — Tables, columns, relationships, alternate keys, action
-  / function CSDL all fetched lazily from the host's `dataverseAPI`. Per-org
-  TTL cache with in-flight promise dedup. Type-specific column properties
-  (Targets, OptionSet, MaxLength, MinValue/MaxValue, Format) loaded on-demand
-  by the editor that needs them.
+  / function CSDL all fetched lazily from the host's `dataverseAPI`, cached per
+  org with in-flight promise dedup. Switching the PPTB connection resets the
+  prepared request and reloads metadata for the new environment.
+- **Request headers through PPTB 1.2.7+** — the write modes' headers
+  (preconditions, `MSCRM.*` bypass, duplicate detection, impersonation) are
+  sent as additional headers after you approve them once in ToolBox. On older
+  hosts, requests that depend on a header are blocked with an explanation.
+  `Authorization` / `Cookie` headers are never sent, saved or exported.
 - **Antipattern advisories** — Surfaces real-time guidance per the
   [Microsoft query-antipatterns doc](https://learn.microsoft.com/en-us/power-apps/developer/data-platform/query-antipatterns):
   `FilteringOnCalculatedColumns`, `LargeAmountOfLogicalAttributes`, large-text
@@ -125,18 +158,20 @@ cURL, and JSON.
 - **Code generators** — Every mode emits the same request as `fetch`,
   `Xrm.WebApi` (CRUD helpers or `Xrm.WebApi.online.execute`),
   `Xrm.WebApi.online.executeMultiple`, `XMLHttpRequest`, C# `HttpClient`,
-  PowerShell `Invoke-RestMethod`, cURL, and a JSON description, plus a
-  field-by-field Power Automate (Dataverse connector) sheet. Multi-request
-  pipelines (chunked uploads, message-based binary ops) render as full
-  ordered sequences.
-- **Saved-request library** — Per-org localStorage persistence with
-  auto-suggested names (`account · 3 sel · 2 flt · 2026-05-23`),
-  rename / delete / overwrite, dirty-state detection, and cross-tab sync.
-- **PPTB host integration** — `isEmbedded()`-aware UI: theme sync,
-  environment-aware URLs, and host-stripped header advisories. PPTB's
-  Dataverse API doesn't send custom request headers, so Execute is blocked
-  when a request depends on a precondition (`If-Match` / `If-None-Match`) or
-  `MSCRM.*` bypass header — copy it from the Code tab to run it elsewhere.
+  PowerShell `Invoke-RestMethod`, cURL, a JSON description and an OpenAPI 3
+  document, plus a field-by-field Power Automate (Dataverse connector) sheet.
+  Multi-request pipelines render as full ordered sequences.
+- **Saved-request library** — per-connection, versioned, up to 200 requests
+  across all modes, with auto-suggested names, rename / delete / overwrite and
+  dirty-state detection. Export / import as JSON, export as a Postman /
+  Insomnia / Bruno collection, and copy or move requests from other
+  connections. A library that can't be read is never overwritten.
+- **Recent runs** — click a run to restore it into its mode. Each mode keeps
+  its unsaved request when you switch modes.
+- **Results** — CSV export (formulas neutralised for spreadsheets), JSON
+  export, Copy as TSV, and response-size hints.
+- **Accessibility** — labelled inputs, keyboard-reachable panes, readable
+  badges, and live-region announcements; render errors are contained per pane.
 
 ---
 
@@ -176,14 +211,19 @@ cURL, and JSON.
 ### Prerequisites
 
 - [Power Platform ToolBox](https://www.powerplatformtoolbox.com/) **1.2.0 or
-  later** (the tool declares `minAPI: 1.2.0`)
+  later** (the tool declares `minAPI: 1.2.0`). **1.2.7 or later** is
+  recommended: it sends the write modes' request headers and is required for
+  the `$batch` and ExecuteMultiple modes.
 - A connection to a Dataverse environment
-- For local development: **Node.js 20.19+ or 22.12+** (Vite 7) and **npm**
+- For local development: **Node.js 22.22+, 24.15+ or 26+** and **npm** (see
+  `engines` in `package.json`)
 
 ### Installation
 
 Dataverse Request Studio is available as a tool in Power Platform ToolBox.
-Install it from the tool gallery or load it as a custom tool.
+Install it from the tool gallery or load it as a custom tool. Prereleases are
+published to npm under the `beta` tag (for example `1.4.0-beta.1`) and use the
+gold Insider icon.
 
 ---
 
@@ -225,8 +265,8 @@ DRS runs in two modes:
 
 - **Standalone** (`npm run dev`) — opens in a regular browser tab. Useful
   for UI iteration only: without the host bridge no live metadata loads, and
-  Execute returns an error result (HTTP 500, "PPTB host method … is not
-  available — running standalone").
+  Execute returns `501 Not Implemented` ("Running standalone: Execute needs
+  the PPTB host").
 - **Embedded in PPTB** — loads inside the PPTB iframe. The host injects
   `window.dataverseAPI` (typed) and `window.toolboxAPI`. Execute runs
   against the active Dataverse connection.
@@ -247,7 +287,8 @@ commit style, code style, and PR guidance.
 | **Monaco Editor** | 0.54 | JSON / code editor for body authoring and Code tab |
 | **@fluentui-contrib/react-data-grid-react-window** | 1.4 | Virtualized results grid |
 | **@dnd-kit** | 6.3 | Drag-reordering for filter / orderby / select clauses |
-| **@pptb/types** | 1.2.1 | Power Platform ToolBox host API types |
+| **@pptb/types** | 1.2.7 | Power Platform ToolBox host API types |
+| **Vitest** | 5 | Unit tests (request engine, code generators, storage) |
 
 ---
 
@@ -258,7 +299,7 @@ src/
   App.tsx                    — root, ThemedApp, Frame, mode router
   main.tsx                   — Vite entry point
 
-  modes/                     — request-mode components (19 modes)
+  modes/                     — request-mode components (23 modes)
     RetrieveMultipleMode.tsx
     RetrieveSingleMode.tsx
     RetrieveNextLinkMode.tsx
@@ -269,6 +310,8 @@ src/
     ExecuteActionMode.tsx    — Execute Action / Custom API / Custom Action
     ExecuteFunctionMode.tsx / ExecuteWorkflowMode.tsx
     ManageFileMode.tsx / ManageImageMode.tsx / ManageAttachmentMode.tsx
+    BulkWriteMode.tsx / BulkDeleteMode.tsx
+    BatchMode.tsx + batch/   — $batch Request and ExecuteMultiple
     StubMode.tsx             — fallback for an unknown mode id
 
   editors/                   — clause editors shared across modes
@@ -288,6 +331,12 @@ src/
     binaryBuilders.ts        — file / image / attachment pipelines
     codeGenerators.ts        — fetch, Xrm.WebApi (+ executeMultiple), XHR,
                                Power Automate, C#, PowerShell, cURL, JSON
+    openApiGenerator.ts      — OpenAPI 3 document for the current request
+    collectionFormats.ts, savedToCollection.ts
+                             — Postman / Insomnia / Bruno collection export
+    bulkWrite*.ts, bulkDelete*.ts, batch/
+                             — Bulk Write, Bulk Delete Job, $batch engine
+    sensitiveHeaders.ts      — credential / impersonation header policy
     runtime.ts               — single dispatch point for execute
     dataverseExecutor.ts     — live executor over the host's dataverseAPI
     odataParser.ts           — round-trips OData URL strings ↔ state
@@ -314,12 +363,14 @@ src/
   state/                     — per-mode state shapes + persistence
     readState.ts, writeState.ts, relateState.ts, executeState.ts, binaryState.ts
     savedRequests.ts         — localStorage persistence (per-org scope)
+    useSavedRequests.tsx     — shared saved-request store
+    modeDrafts.ts            — unsaved request per mode (this session)
     SaveContext.tsx          — cross-mode save/load context
     validateRequest.tsx      — pre-execute request validation
     displaySettings.ts       — display preferences
 
   registry/                  — request-type catalogue
-    requestTypes.ts          — 19 request types grouped into 5 groups
+    requestTypes.ts          — 23 request types grouped into 7 groups
 
   views/                     — output panes
     CodeView.tsx             — Code tab: one sub-tab per code format
@@ -335,37 +386,38 @@ src/
 
 ## 📋 Web API coverage
 
-✅ = compose + Execute in PPTB · 📝 = compose + Code tab only (Execute is
-blocked or not available through the PPTB Dataverse API)
+✅ = compose + Execute in PPTB · ✅ 1.2.7+ = Execute needs PPTB 1.2.7 or
+later · 📝 = compose + Code tab only (not available through the PPTB
+Dataverse API)
 
 | Operation | Status |
 |---|---|
 | Retrieve Multiple (full OData) | ✅ |
 | Retrieve Single (by GUID) | ✅ |
-| `@odata.nextLink` paging | ✅ |
-| Predefined / user queries | ✅ |
+| `@odata.nextLink` paging, Retrieve all | ✅ |
+| Predefined / user queries (incl. over related records) | ✅ |
 | `$apply` (groupby / aggregate) | ✅ |
 | Lambda filter (`any` / `all`) | ✅ |
 | `$expand` (single + collection, nested) | ✅ |
 | Polymorphic lookups (Customer, Owner, regardingobjectid) | ✅ |
 | Create / Update / Upsert / Delete | ✅ |
 | `Prefer: return=representation` | ✅ |
-| Optimistic concurrency (`If-Match` ETag) | 📝 |
-| `MSCRM.*` bypass family (custom plug-ins, flows, async) | 📝 |
-| Single-property PUT / DELETE | ✅ |
-| Alternate-key upsert | ✅ |
+| Optimistic concurrency (`If-Match` / `If-None-Match`) | ✅ 1.2.7+ |
+| `MSCRM.*` bypass family (custom plug-ins, flows, async) | ✅ 1.2.7+ |
+| Single-property PUT / DELETE | 📝 |
+| Alternate-key upsert | 📝 |
 | Associate / Disassociate (collection + single-valued) | ✅ |
-| Merge (account / contact / incident) | ✅ |
+| Merge (account / contact / lead / incident) | ✅ |
 | Execute Action (OOB / Custom API / Custom Action) | ✅ |
 | Execute Function | ✅ |
 | Execute Workflow | ✅ |
+| `CreateMultiple` / `UpdateMultiple` / `UpsertMultiple` / `DeleteMultiple` | ✅ |
+| `BulkDelete` async job | ✅ |
+| `$batch` (change sets + independent requests) | ✅ 1.2.7+ |
+| `ExecuteMultiple` pattern | ✅ 1.2.7+ |
 | File column (upload / download / delete) | 📝 |
 | Image column (thumbnail / full-size) | 📝 |
 | Attachment / Note (inline + message-based) | 📝 |
-| `$batch` envelope composer | ⏳ (see roadmap) |
-| `CreateMultiple` / `UpdateMultiple` / `DeleteMultiple` | ⏳ |
-| `BulkDelete` async job | ⏳ |
-| `ExecuteMultiple` envelope | ⏳ |
 
 ---
 
@@ -378,18 +430,18 @@ commit style, code style, repo layout, and PR guidance.
 
 ## 📋 Roadmap
 
-- `$batch` envelope composer mode
-- Bulk-write modes (`CreateMultiple`, `UpdateMultiple`, `DeleteMultiple`)
-- `BulkDelete` async-job composer
-- `ExecuteMultiple` request envelope
-- Recent-runs click-to-reload
-- WriteResultCard "Retrieve this record" cross-mode jump
-- EntitySpecific param — reference vs new-instance toggle
-- Workflow input parameters (parse XAML `InArgument`)
-- Predefined Query — apply to related collection
-- CSV / JSON export from results grid
-- Column resize with persisted widths
-- Smoke-test suite covering URL builders + code generators
+Planned work is tracked in the repository's
+[milestones](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/milestones)
+and [issues](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues).
+Ideas under consideration include:
+
+- Request variables (`{{var}}`) and persistent request history
+- FetchXML and Dataverse Search API modes
+- A metadata browser mode
+- Comparing responses across runs or environments
+- Importing Postman / Insomnia collections and cURL commands
+- More code-generation targets (C# ServiceClient / IOrganizationService,
+  Python, the PowerShell Dataverse module)
 
 ---
 
