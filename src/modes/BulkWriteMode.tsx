@@ -490,6 +490,7 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
             items={state.headers}
             setItems={(h) => set('headers', h, 'headers')}
             group={GROUP}
+            sendsHeaders
           />
         );
         break;

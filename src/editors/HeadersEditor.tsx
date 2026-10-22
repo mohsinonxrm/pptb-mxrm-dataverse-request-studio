@@ -105,10 +105,14 @@ export function HeadersEditor({
   items,
   setItems,
   group = 'read',
+  sendsHeaders,
 }: {
   items: HeaderItem[];
   setItems: (items: HeaderItem[]) => void;
   group?: RequestGroup;
+  /** Execute sends these headers on PPTB 1.2.7+. Defaults to the write group;
+   *  Bulk Write sends them too (#257). */
+  sendsHeaders?: boolean;
 }) {
   const s = useStudioStyles();
   const host = useHostSession();
@@ -132,7 +136,7 @@ export function HeadersEditor({
           (minus the ones its Dataverse client builds itself); every other
           group still runs with the host's own headers. The values below are
           always emitted into the Code tab. */}
-      {group === 'write' && host.embedded && hostSupportsAdditionalHeaders() ? (
+      {(sendsHeaders ?? group === 'write') && host.embedded && hostSupportsAdditionalHeaders() ? (
         <MessageBar layout="multiline" intent="info" style={{ marginBottom: 14 }}>
           <MessageBarBody>
             <MessageBarTitle>

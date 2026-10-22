@@ -24,7 +24,11 @@ import {
 import { useStudioStyles } from '../primitives/styles';
 import { StatusPill } from '../primitives/StatusPill';
 import { useAnnounceResult } from '../primitives/announce';
-import type { ExecResult } from '../engine/dataverseExecutor';
+import {
+  HEADER_CONSENT_DECLINED_CODE,
+  HEADER_REJECTED_CODE,
+  type ExecResult,
+} from '../engine/dataverseExecutor';
 import { ResultsGrid } from './results/ResultsGrid';
 import { ResultsCommandBar } from './results/ResultsCommandBar';
 import type { GridExportView } from './results/exportResults';
@@ -430,8 +434,24 @@ function ErrorState({ result }: { result: ExecResult }) {
       '$expand. Remove $top and set Prefer: odata.maxpagesize instead to limit the rows ' +
       'per page.'
     : null;
-  const title =
-    result.status === 401
+  // Never sent: ToolBox refused the headers before calling Dataverse, so the
+  // 403 / 400 isn't a privilege or request problem (#257).
+  const notSent =
+    err?.code === HEADER_CONSENT_DECLINED_CODE
+      ? {
+          title: 'Not sent — headers not approved',
+          advice:
+            "Power Platform ToolBox didn't send the request because its headers weren't approved, so nothing changed in Dataverse. Execute again and approve the headers when ToolBox asks.",
+        }
+      : err?.code === HEADER_REJECTED_CODE
+        ? {
+            title: 'Not sent — header rejected',
+            advice: 'Power Platform ToolBox rejected a request header. Fix it in the Headers pane.',
+          }
+        : null;
+  const title = notSent
+    ? notSent.title
+    : result.status === 401
       ? 'Unauthorized · 401'
       : result.status === 403
         ? 'Forbidden · 403'
@@ -442,8 +462,9 @@ function ErrorState({ result }: { result: ExecResult }) {
             : result.status === 0
               ? 'Request failed'
               : `Error · ${result.status}`;
-  const advice =
-    result.status === 401
+  const advice = notSent
+    ? notSent.advice
+    : result.status === 401
       ? 'Sign in to refresh your access token, then re-run.'
       : result.status === 403
         ? 'Caller is missing a required privilege. Check role assignments.'
