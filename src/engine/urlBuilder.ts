@@ -2,9 +2,19 @@
 // rendered relative URL plus an estimated byte length for validation.
 
 import { ENV } from '../mock/environment';
-import { findTable, findColumn, isLookupLike, type TableMeta } from '../mock/metadata';
+import {
+  altKeyColumnType,
+  findTable,
+  findColumn,
+  isLookupLike,
+  type AlternateKeyDef,
+  type AttributeTypeCode,
+  type TableMeta,
+} from '../mock/metadata';
+import { bindPropertyFor, encodeFieldBody, parseRawBody } from './fieldBody';
 import { groupToOData } from '../editors/filter/filterTree';
 import { attrRefByName } from './odataAttr';
+import { readRowLookup } from './recordSnapshot';
 import { orderbyToOData } from '../editors/OrderbyEditor';
 import { expandToOData } from '../editors/ExpandEditor';
 import { applyToOData } from '../editors/ApplyEditor';
@@ -133,7 +143,8 @@ export function buildRetrieveMultiple(s: RetrieveMultipleState): BuiltRequest {
     }
     if (s.expand.length)
       parts.push({ key: '$expand', value: enc(expandToOData(s.expand, s.table)) });
-    if (s.orderby.length) parts.push({ key: '$orderby', value: enc(orderbyToOData(s.orderby)) });
+    if (s.orderby.length)
+      parts.push({ key: '$orderby', value: enc(orderbyToOData(s.orderby, tbl)) });
   }
   if (s.top != null && s.top > 0 && (s.prefer.maxpagesize == null || s.prefer.maxpagesize === 0)) {
     parts.push({ key: '$top', value: String(s.top) });
@@ -253,125 +264,23 @@ export function buildCreate(s: CreateState): BuiltRequest {
 }
 
 /**
- * Serialize CreateState.fieldValues into the JSON shape Dataverse expects.
+ * Serialize a CreateState into the JSON body Dataverse expects.
  *
- * Per https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/create-entity-web-api:
- *
- *   • Lookup-like columns (Lookup / Customer / Owner) → `<col>@odata.bind`
- *     with value `/<entitySetName>(<guid>)`. The Customer/Owner polymorphic
- *     case uses the user-picked target's entity set (caller-picked at the
- *     LookupFieldInput level).
- *   • MultiSelectPicklist → comma-separated string of integer values.
- *   • Everything else → the literal as-is. The serializer doesn't quote
- *     numbers/booleans — JSON.stringify does that at the call site.
- *
- * Unset fields (`null`, `undefined`, `''` for strings, empty arrays, empty
- * lookup with no id) are dropped — only what the user explicitly populated
- * goes on the wire.
+ * In JSON mode (`rawBody` non-null) the typed text is the body: it is sent
+ * as parsed, without re-encoding, so nulls, annotations and keys the form
+ * doesn't know survive. An unparseable body yields `{}` (the modes block
+ * Execute with the parse error). Otherwise the body is encoded from
+ * fieldValues + nullFields — see engine/fieldBody.encodeFieldBody for the
+ * per-type rules.
  */
-/**
- * Resolve the `@odata.bind` property name for a lookup-like column.
- *
- * For SINGLE-target lookups (most plain Lookup columns), Dataverse exposes
- * one nav-property whose name == the attribute logical name. Both
- * `<col>@odata.bind` and `<navProp>@odata.bind` work because they're the
- * same string.
- *
- * For POLYMORPHIC lookups (Customer, multi-target Lookup like
- * `regardingobjectid` on activities), the bare attribute name is NOT a
- * declared nav-property. The server returns:
- *   "An undeclared property '<attr>' which only has property annotations
- *    in the payload but no property value was found in the payload."
- *
- * The right name is the target-disambiguated nav-property — e.g.,
- * `customerid_account`, `customerid_contact`, `regardingobjectid_account_task`.
- * We look that up by matching the ManyToOne nav whose `referencingAttribute`
- * equals our column AND whose `targetEntity` equals the user's picked target.
- *
- * For OWNER columns (`ownerid` on most tables), Dataverse special-cases
- * the bare attribute name — it accepts both `/systemusers(...)` and
- * `/teams(...)` via a single nav. Empirically `ownerid@odata.bind` works
- * regardless of target; using the disambiguated form ALSO works. We use
- * the disambiguated form when we can find it, and fall back to the bare
- * name otherwise.
- *
- * Falls back to `<col>@odata.bind` when metadata can't resolve the nav —
- * single-target lookups always work this way, and the server will produce
- * the same clear error as before if the lookup happens to be polymorphic.
- */
-function bindPropertyFor(
-  parentTbl: TableMeta,
-  col: { logicalName: string },
-  targetEntity: string,
-): string {
-  const nav = parentTbl.navigationProperties.find(
-    (n) =>
-      n.cardinality === 'ManyToOne' &&
-      n.referencingAttribute === col.logicalName &&
-      n.targetEntity === targetEntity,
-  );
-  return `${nav?.name ?? col.logicalName}@odata.bind`;
-}
-
 export function buildCreateBody(s: CreateState): Record<string, unknown> {
   const tbl = findTable(s.table);
   if (!tbl) return {};
-  const body: Record<string, unknown> = {};
-
-  // ── 1) Explicit-null entries from nullFields ──────────────────────────
-  //
-  // Emitted BEFORE the regular fieldValues loop so that if a column ends up
-  // in BOTH (the user typed a value AND flagged it for null), the regular
-  // value wins — most consistent with "the last thing the user did" UX,
-  // and the UI prevents the conflict anyway (clear-to-null swaps the input).
-  // For lookups we need the `<nav>@odata.bind: null` shape per docs:
-  //   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/associate-disassociate-entities-using-web-api#disassociate-by-using-a-single-valued-navigation-property
-  // We don't know which target entity the user "would have" picked, so the
-  // bind-property resolves via the first available target (it doesn't
-  // matter for null — the server clears the column regardless of which
-  // disambiguated form we use).
-  for (const field of s.nullFields ?? []) {
-    const col = findColumn(tbl, field);
-    if (!col) continue;
-    if (isLookupLike(col)) {
-      const target = col.targets?.[0] ?? '';
-      const bindProp = target ? bindPropertyFor(tbl, col, target) : `${col.logicalName}@odata.bind`;
-      body[bindProp] = null;
-    } else {
-      body[col.logicalName] = null;
-    }
+  if (s.rawBody != null) {
+    const parsed = parseRawBody(s.rawBody);
+    return parsed.ok ? parsed.body : {};
   }
-
-  // ── 2) Regular fieldValues — same as before ───────────────────────────
-  for (const [field, raw] of Object.entries(s.fieldValues)) {
-    if (raw == null) continue;
-    if ((s.nullFields ?? []).includes(field)) continue; // null wins; UI prevents this
-    const col = findColumn(tbl, field);
-    if (!col) continue;
-
-    if (isLookupLike(col)) {
-      const lk = raw as LookupFieldValue;
-      if (!lk?.id) continue;
-      const targetTbl = findTable(lk.targetEntity);
-      if (!targetTbl) continue;
-      // Polymorphic-safe: resolves to e.g. `regardingobjectid_account_task`
-      // for activity → account lookups, or `customerid_contact` for
-      // contact-Customer lookups. Falls back to bare attribute name for
-      // single-target Lookups (same string).
-      const bindProp = bindPropertyFor(tbl, col, lk.targetEntity);
-      body[bindProp] = `/${targetTbl.entitySetName}(${lk.id})`;
-      continue;
-    }
-    if (col.attributeType === 'MultiSelectPicklist') {
-      const arr = raw as number[];
-      if (!Array.isArray(arr) || arr.length === 0) continue;
-      body[col.logicalName] = arr.join(',');
-      continue;
-    }
-    if (typeof raw === 'string' && raw === '') continue;
-    body[col.logicalName] = raw;
-  }
-  return body;
+  return encodeFieldBody(tbl, s.fieldValues, s.nullFields ?? []);
 }
 
 // ────────────────────────────────────────────────────────────
@@ -445,6 +354,7 @@ export function buildUpdateBody(s: UpdateState): Record<string, unknown> {
     table: s.table,
     fieldValues: s.fieldValues,
     nullFields: s.nullFields ?? [],
+    rawBody: s.rawBody ?? null,
     prefer: s.prefer,
     headers: s.headers,
     returnSelect: s.returnSelect,
@@ -464,12 +374,31 @@ export function buildUpdateBody(s: UpdateState): Record<string, unknown> {
 //   • Composite alt-key: PATCH /sample_things(sample_key1=1,sample_key2=1)
 //
 // Alternate-key values follow OData literal rules: strings get single-quoted,
-// numbers / GUIDs / booleans are bare. We dispatch on the column metadata to
-// pick the right literal form.
+// numbers / GUIDs / booleans / date-times are bare. We dispatch on the column
+// metadata to pick the right literal form. The key segment is part of the
+// URL path, so every value is percent-encoded (`#`, `?`, `%`, spaces, … would
+// otherwise truncate or corrupt the URL when it's copied out) — MS Learn's own
+// example is `new_skts(new_name='M%26M')`. A lookup key column is addressed by
+// its lookup property, `_<name>_value` (MS Learn: "Use an alternate key to
+// reference a record").
 
-function odataLiteral(value: string, col: ReturnType<typeof findColumn>): string {
-  if (!col) return `'${value.replace(/'/g, "''")}'`;
-  switch (col.attributeType) {
+/** Placeholder for a key part the user hasn't filled in yet (preview only —
+ *  Execute is gated on every part being set). Mirrors the `(<id>)` placeholder. */
+const UNSET_KEY_PART = '<value>';
+
+/**
+ * Characters Dataverse rejects inside an alternate-key value even when
+ * percent-encoded (MS Learn: "Alternate keys with special character values").
+ * `#` is listed on the maker-portal page for PATCH.
+ */
+const ALT_KEY_RESERVED_CHARS = /[/<>*%&:\\?+#]/;
+
+const quoteKeyString = (value: string) => `'${encodeURIComponent(value.replace(/'/g, "''"))}'`;
+
+function odataLiteral(value: string, type: AttributeTypeCode | undefined): string {
+  // Unknown type → quoted as a string (the Upsert UI flags it, #64).
+  if (!type) return quoteKeyString(value);
+  switch (type) {
     case 'Integer':
     case 'BigInt':
     case 'Decimal':
@@ -480,31 +409,73 @@ function odataLiteral(value: string, col: ReturnType<typeof findColumn>): string
     case 'State':
     case 'Status':
     case 'EntityName':
-      return value === '' ? '0' : value;
-    case 'Boolean':
-      return value === 'true' || value === '1' ? 'true' : 'false';
     case 'Uniqueidentifier':
     case 'Lookup':
     case 'Customer':
-    case 'Owner':
-      return value;
+    case 'Owner': {
+      const v = value.trim();
+      return v === '' ? UNSET_KEY_PART : encodeURIComponent(v);
+    }
+    case 'DateTime': {
+      // Edm.DateTimeOffset / Edm.Date literals are unquoted:
+      // `(new_effectivedate=2024-05-01T00:00:00Z)`. `:` is a legal path
+      // character and part of the literal, so keep it readable; `+` in an
+      // offset (`+05:30`) must be encoded or it can read as a space.
+      const v = value.trim();
+      return v === '' ? UNSET_KEY_PART : encodeURIComponent(v).replace(/%3A/gi, ':');
+    }
+    case 'Boolean':
+      return value === 'true' || value === '1' ? 'true' : 'false';
     default:
-      return `'${value.replace(/'/g, "''")}'`;
+      return quoteKeyString(value);
   }
 }
 
 function altKeySegment(
   table: string,
-  keyColumns: string[],
+  def: AlternateKeyDef,
   keyValues: Record<string, string>,
 ): string {
   const tbl = findTable(table);
-  const parts = keyColumns.map((col) => {
-    const c = tbl ? findColumn(tbl, col) : undefined;
+  const parts = def.columns.map((col) => {
+    const type = altKeyColumnType(tbl, def, col);
     const raw = keyValues[col] ?? '';
-    return `${col}=${odataLiteral(raw, c)}`;
+    // A lookup key column missing from the loaded columns still needs the
+    // `_<name>_value` property name.
+    const loaded = tbl?.columns.some((c) => c.logicalName === col);
+    const name =
+      !loaded && (type === 'Lookup' || type === 'Customer' || type === 'Owner')
+        ? `_${col}_value`
+        : attrRefByName(tbl, col);
+    return `${name}=${odataLiteral(raw, type)}`;
   });
   return `(${parts.join(',')})`;
+}
+
+/** Key columns whose AttributeType is unknown — quoted as strings (#64). */
+export function altKeyUnknownTypeColumns(table: string, def: AlternateKeyDef): string[] {
+  const tbl = findTable(table);
+  return def.columns.filter((col) => !altKeyColumnType(tbl, def, col));
+}
+
+/**
+ * Key columns whose string value contains a character Dataverse rejects in
+ * an alternate-key URL even when encoded. Drives the Upsert advisory that
+ * points at the `$filter` workaround. Only parts emitted as quoted strings
+ * are checked (String / Memo, or unknown type, which is quoted as a string)
+ * — the `:` in a date-time literal is syntax, not data.
+ */
+export function altKeyReservedCharColumns(
+  table: string,
+  def: AlternateKeyDef,
+  keyValues: Record<string, string>,
+): string[] {
+  const tbl = findTable(table);
+  return def.columns.filter((col) => {
+    const type = altKeyColumnType(tbl, def, col);
+    if (type && type !== 'String' && type !== 'Memo') return false;
+    return ALT_KEY_RESERVED_CHARS.test(keyValues[col] ?? '');
+  });
 }
 
 export function buildUpsert(s: UpsertState): BuiltRequest {
@@ -530,7 +501,7 @@ export function buildUpsert(s: UpsertState): BuiltRequest {
   } else {
     const def = tbl.alternateKeys?.find((k) => k.name === key.keyName);
     if (def) {
-      idSegment = altKeySegment(s.table, def.columns, key.keyValues);
+      idSegment = altKeySegment(s.table, def, key.keyValues);
     }
   }
 
@@ -560,6 +531,7 @@ export function buildUpsertBody(s: UpsertState): Record<string, unknown> {
     table: s.table,
     fieldValues: s.fieldValues,
     nullFields: s.nullFields ?? [],
+    rawBody: s.rawBody ?? null,
     prefer: s.prefer,
     headers: s.headers,
     returnSelect: s.returnSelect,
@@ -675,16 +647,20 @@ export function buildMergeBody(s: MergeState): Record<string, unknown> {
     if (!col) continue;
     if (choice === 'subordinate') {
       if (!subRow) continue;
-      const raw = subRow[field];
-      if (raw == null) continue;
       if (isLookupLike(col)) {
-        // For lookup-like fields, the subordinate's _<col>_value holds the GUID.
-        const id = (subRow as Record<string, unknown>)[`_${field}_value`];
-        if (typeof id === 'string' && id) {
-          update[field] = { id, targetEntity: col.targets[0] };
+        // The row carries lookups only as `_<col>_value` (never under the
+        // logical name), so this must run before the generic null check.
+        // Bind to the entity the annotation names — for polymorphic
+        // lookups (customer / owner / regarding) `targets[0]` may be the
+        // wrong entity set (#96). Unknown target → skip rather than guess.
+        const lk = readRowLookup(subRow, col);
+        if (lk?.targetEntity) {
+          update[field] = { id: lk.id, targetEntity: lk.targetEntity };
         }
         continue;
       }
+      const raw = subRow[field];
+      if (raw == null) continue;
       if (col.attributeType === 'MultiSelectPicklist') {
         if (typeof raw === 'string' && raw) {
           update[field] = raw
@@ -786,6 +762,28 @@ export interface AssociateRequest {
   body: Record<string, unknown>;
   /** Target row id this request points at (for display). */
   targetId: string;
+}
+
+/**
+ * A single-valued (N:1) link is set or cleared with a PATCH of the source
+ * record. Dataverse treats a PATCH to a missing id as an upsert, so
+ * `If-Match: *` makes a mistyped source id fail with 404 instead of creating
+ * a near-empty record (#254). Collection-valued requests are unaffected.
+ */
+export const PATCH_EXISTING_HEADERS: Readonly<Record<string, string>> = { 'If-Match': '*' };
+
+/**
+ * `headers` for one Associate / Disassociate request: plus `If-Match: *` on
+ * the PATCH form. An If-Match the user added (any case, e.g. an ETag) is
+ * kept — it already prevents the create, and a second one would conflict.
+ */
+export function relateRequestHeaders(
+  method: string,
+  headers: Record<string, string>,
+): Record<string, string> {
+  if (method !== 'PATCH') return headers;
+  if (Object.keys(headers).some((k) => k.trim().toLowerCase() === 'if-match')) return headers;
+  return { ...headers, ...PATCH_EXISTING_HEADERS };
 }
 
 /** Absolute URL used inside the @odata.id body — required by the spec for $ref endpoints. */
@@ -1046,6 +1044,19 @@ export function buildDisassociateRequests(s: DisassociateState): DisassociateReq
   }));
 }
 
+/**
+ * Collection a predefined query runs against when it targets a related
+ * collection (#5): `<sourceSet>(<id>)/<nav>`. Null for the entity-set form,
+ * or while the source table / nav aren't picked or loaded yet.
+ */
+export function predefinedCollectionPath(s: PredefinedQueryState): string | null {
+  const r = s.related;
+  if (!r || !r.sourceTable || !r.navProperty) return null;
+  const src = findTable(r.sourceTable);
+  if (!src) return null;
+  return `${src.entitySetName}(${r.recordId || '<record-id>'})/${r.navProperty}`;
+}
+
 export function buildPredefinedQuery(s: PredefinedQueryState): BuiltRequest {
   const tbl = findTable(s.table);
   if (!tbl)
@@ -1062,10 +1073,11 @@ export function buildPredefinedQuery(s: PredefinedQueryState): BuiltRequest {
   if (s.top != null && s.top > 0 && (s.prefer.maxpagesize == null || s.prefer.maxpagesize === 0)) {
     parts.push({ key: '$top', value: String(s.top) });
   }
-  const path = `${ENV.apiBase}/${tbl.entitySetName}`;
+  const collection = predefinedCollectionPath(s) ?? tbl.entitySetName;
+  const path = `${ENV.apiBase}/${collection}`;
   const qs = joinQuery(parts);
   const relativeUrl = qs ? `${path}?${qs}` : path;
-  const noBase = `/${tbl.entitySetName}${qs ? `?${qs}` : ''}`;
+  const noBase = `/${collection}${qs ? `?${qs}` : ''}`;
   return {
     relativeUrl,
     relativeNoBase: noBase,

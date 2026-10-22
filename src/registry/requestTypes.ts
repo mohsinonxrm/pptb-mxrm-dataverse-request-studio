@@ -5,6 +5,7 @@ import {
   ChevronRight20Regular,
   Edit20Regular,
   Delete20Regular,
+  DeleteLines20Regular,
   BranchFork20Regular,
   Link20Regular,
   Flash20Regular,
@@ -12,10 +13,11 @@ import {
   Flowchart20Regular,
   Image20Regular,
   Attach20Regular,
+  Stack20Regular,
 } from '@fluentui/react-icons';
 import type { FC } from 'react';
 
-export type RequestGroup = 'read' | 'write' | 'relate' | 'execute' | 'binary';
+export type RequestGroup = 'read' | 'write' | 'relate' | 'execute' | 'binary' | 'bulk' | 'batch';
 export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE' | 'BATCH';
 
 export interface RequestType {
@@ -132,6 +134,17 @@ export const REQ_TYPES: RequestType[] = [
     implemented: true,
     executeVerb: 'Send',
   },
+  // Bulk — BulkDelete asynchronous system job from a query (#10).
+  {
+    id: 'bulk-delete',
+    name: 'Bulk Delete Job',
+    method: 'POST',
+    group: 'bulk',
+    icon: DeleteLines20Regular,
+    sub: 'Async BulkDelete from a query',
+    implemented: true,
+    executeVerb: 'Send',
+  },
   {
     id: 'merge',
     name: 'Merge Records',
@@ -139,6 +152,18 @@ export const REQ_TYPES: RequestType[] = [
     group: 'write',
     icon: BranchFork20Regular,
     sub: 'Two records into one',
+    implemented: true,
+    executeVerb: 'Send',
+  },
+  // Bulk — CreateMultiple / UpdateMultiple / UpsertMultiple / DeleteMultiple
+  // (collection-bound actions with a Targets array, #8).
+  {
+    id: 'bulk-write',
+    name: 'Bulk Write',
+    method: 'POST',
+    group: 'bulk',
+    icon: Stack20Regular,
+    sub: 'Create/Update/Upsert/DeleteMultiple',
     implemented: true,
     executeVerb: 'Send',
   },
@@ -255,6 +280,28 @@ export const REQ_TYPES: RequestType[] = [
     implemented: true,
     executeVerb: 'Run',
   },
+
+  // Batch
+  {
+    id: 'batch',
+    name: '$batch Request',
+    method: 'BATCH',
+    group: 'batch',
+    icon: Stack20Regular,
+    sub: 'Change sets & multiple requests',
+    implemented: true,
+    executeVerb: 'Send',
+  },
+  {
+    id: 'execute-multiple',
+    name: 'ExecuteMultiple',
+    method: 'BATCH',
+    group: 'batch',
+    icon: Stack20Regular,
+    sub: 'SDK-style bulk requests via $batch',
+    implemented: true,
+    executeVerb: 'Send',
+  },
 ];
 
 export const GROUPS: { id: RequestGroup; label: string }[] = [
@@ -262,7 +309,9 @@ export const GROUPS: { id: RequestGroup; label: string }[] = [
   { id: 'write', label: 'Write' },
   { id: 'relate', label: 'Relate' },
   { id: 'execute', label: 'Execute' },
+  { id: 'batch', label: 'Batch' },
   { id: 'binary', label: 'Binary' },
+  { id: 'bulk', label: 'Bulk' },
 ];
 
 export const findRequestType = (id: string): RequestType =>

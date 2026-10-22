@@ -24,13 +24,16 @@
         --color-request-relate: #8764b8;
         --color-request-execute: #ca5010;
         --color-request-binary: #9d432c;
+        --color-request-bulk: #03787c;
 
         --color-method-get: #005a9e;
         --color-method-post: #107c10;
-        --color-method-patch: #ca5010;
+        --color-method-patch: #bc4a0e; /* 5.1:1 with white (was #ca5010, 4.50:1 — #120) */
         --color-method-put: #9d432c;
         --color-method-delete: #a4262c;
         --color-method-batch: #8764b8;
+        /* Text on a method pill (≥ 4.5:1 on every method color). */
+        --color-method-fg: #ffffff;
 
         --canvas-bg: #f0eee9;
       }
@@ -40,6 +43,7 @@
         --color-request-relate: #b4a0ff;
         --color-request-execute: #f7894a;
         --color-request-binary: #d69c8b;
+        --color-request-bulk: #4bc2c5;
 
         --color-method-get: #62b1f8;
         --color-method-post: #6ccb5f;
@@ -47,6 +51,9 @@
         --color-method-put: #d69c8b;
         --color-method-delete: #f1707b;
         --color-method-batch: #b4a0ff;
+        /* The dark-theme method colors are light tints: white text on them
+           is 2.0–2.9:1, black is 7.3:1 or better (WCAG 1.4.3, #20). */
+        --color-method-fg: #000000;
 
         --canvas-bg: #1a1a1a;
       }
@@ -76,6 +83,23 @@
          IS blue, so we only override for non-read groups. This avoids
          a no-op cascade for the most common mode group.
          ───────────────────────────────────────────────────────────── */
+      /* Bulk group (Bulk Write / Bulk Delete). Dark theme: the teal tint is
+         light, so on-brand text goes dark there. */
+      [data-mode-group='bulk'] {
+        --colorBrandBackground: var(--color-request-bulk);
+        --colorBrandBackgroundHover: var(--color-request-bulk);
+        --colorBrandBackgroundPressed: var(--color-request-bulk);
+        --colorBrandBackgroundSelected: var(--color-request-bulk);
+        --colorBrandStroke1: var(--color-request-bulk);
+        --colorBrandStroke2: var(--color-request-bulk);
+        --colorBrandForeground1: var(--color-request-bulk);
+        --colorBrandForeground2: var(--color-request-bulk);
+        --colorCompoundBrandBackground: var(--color-request-bulk);
+        --colorCompoundBrandStroke: var(--color-request-bulk);
+      }
+      :root[data-theme='dark'] [data-mode-group='bulk'] {
+        --colorNeutralForegroundOnBrand: #000000;
+      }
       [data-mode-group='write'] {
         --colorBrandBackground: var(--color-request-write);
         --colorBrandBackgroundHover: var(--color-request-write);
@@ -123,6 +147,15 @@
         --colorBrandForeground2: var(--color-request-binary);
         --colorCompoundBrandBackground: var(--color-request-binary);
         --colorCompoundBrandStroke: var(--color-request-binary);
+      }
+      /* Dark theme: the remapped group colors are light tints, so white
+         on-brand text (the primary Execute button label) would be ~2:1.
+         Use dark text there instead (WCAG 1.4.3, #20). */
+      :root[data-theme='dark'] [data-mode-group='write'],
+      :root[data-theme='dark'] [data-mode-group='relate'],
+      :root[data-theme='dark'] [data-mode-group='execute'],
+      :root[data-theme='dark'] [data-mode-group='binary'] {
+        --colorNeutralForegroundOnBrand: #000000;
       }
 
       /* ─────────────────────────────────────────────────────────────
@@ -231,6 +264,32 @@
         to {
           transform: rotate(360deg);
         }
+      }
+      /* ─────────────────────────────────────────────────────────────
+         Batch group ($batch Request, ExecuteMultiple — #9, #11): berry,
+         distinct from Bulk's teal. Light #9b2b8f is 6.4:1 with white;
+         the dark tint is light, so on-brand text goes dark there.
+         ───────────────────────────────────────────────────────────── */
+      :root[data-theme='light'] {
+        --color-request-batch: #9b2b8f;
+      }
+      :root[data-theme='dark'] {
+        --color-request-batch: #e48ad9;
+      }
+      [data-mode-group='batch'] {
+        --colorBrandBackground: var(--color-request-batch);
+        --colorBrandBackgroundHover: var(--color-request-batch);
+        --colorBrandBackgroundPressed: var(--color-request-batch);
+        --colorBrandBackgroundSelected: var(--color-request-batch);
+        --colorBrandStroke1: var(--color-request-batch);
+        --colorBrandStroke2: var(--color-request-batch);
+        --colorBrandForeground1: var(--color-request-batch);
+        --colorBrandForeground2: var(--color-request-batch);
+        --colorCompoundBrandBackground: var(--color-request-batch);
+        --colorCompoundBrandStroke: var(--color-request-batch);
+      }
+      :root[data-theme='dark'] [data-mode-group='batch'] {
+        --colorNeutralForegroundOnBrand: #000000;
       }
     </style>
   </head>

@@ -40,6 +40,7 @@ import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from '../editors/PaneHead';
 import { NavPropertyPicker } from '../editors/NavPropertyPicker';
@@ -50,8 +51,14 @@ import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { findTable } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
-import { buildAssociate, buildAssociateBody, buildAssociateRequests } from '../engine/urlBuilder';
+import {
+  buildAssociate,
+  buildAssociateBody,
+  buildAssociateRequests,
+  relateRequestHeaders,
+} from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
+import { relateDoneCount } from '../engine/dataverseExecutor';
 import type { AssociateState } from '../state/relateState';
 import { isSingleValuedNav } from '../state/relateState';
 import type { RecentRun } from '../state/readState';
@@ -64,7 +71,9 @@ import {
   hashState,
   type SavedRequest,
   type SerializedAssociateState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 // Empty initial state. The user picks a table → record → nav property →
@@ -84,7 +93,8 @@ type RootClauseId = 'source' | 'nav' | 'targets' | 'preview' | 'headers';
 
 export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('associate');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('associate', deserializeAssociate, initialState);
+  const [state, setState] = useState(draft.state);
   // Live-metadata subscription so child editors re-render when columns/relationships land.
   // The live table is a memo dependency below: build*() reads metadata via
   // findTable(), which is empty until the fetch lands — keying on `state`
@@ -98,8 +108,8 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
   // Save / Load tracking
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
 
   // Source-record primary-name cache. Populated when the user picks via
   // TargetEditor (the RecordPicker hands back the primary name); used for
@@ -155,13 +165,14 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: 'associate',
           url: built.relativeUrl,
           method,
           ts: Date.now(),
           status: res.status,
           ms: res.ms,
-          rowCount: res.ok ? requests.length : 0,
+          rowCount: relateDoneCount(res, requests.length) ?? 0,
         },
         ...rs,
       ].slice(0, 8),
@@ -171,6 +182,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeAssociate(state), [state]);
+  useStashModeDraft('associate', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 
@@ -183,7 +195,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
     if (entry.modeId !== 'associate') return;
     const snap = entry.state as SerializedAssociateState;
     if (entities.length > 0 && !entities.some((e) => e.logicalName === snap.table)) {
-      window.alert(
+      notify(
         `Can't load "${entry.name}": entity \`${snap.table}\` ` +
           `isn't available in this environment. The solution may have been ` +
           `removed or you may be connected to a different org.`,
@@ -196,6 +208,19 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(null);
     setSourceName('');
     setActivePath('source');
+  };
+
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'associate');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
   };
 
   usePublishSaveContext(
@@ -322,6 +347,10 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
             }));
             setSourceName('');
             setResult(null);
+            // New table → fresh draft. Forget the last save so Save can't
+            // overwrite an entry that belongs to the old table (#58).
+            setLastSavedId(undefined);
+            setLastSavedHash(null);
           }}
           recordId={state.sourceId}
           onRecordChange={(id, primary) => {
@@ -356,7 +385,9 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
                 request per target. <strong>Single-valued</strong> (N:1) →{' '}
                 <code>PATCH /source(id)</code> with body{' '}
                 <code>{'{ "<nav>@odata.bind": "<target-set>(<id>)" }'}</code> (one target). This is
-                the docs-preferred shape — the URL bar verb updates automatically.{' '}
+                the docs-preferred shape — the URL bar verb updates automatically. The PATCH is sent
+                with <code>If-Match: *</code>, so a wrong source id fails with 404 instead of
+                creating a record; Power Platform ToolBox asks you to approve that header once.{' '}
                 <a
                   href="https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/associate-disassociate-entities-using-web-api"
                   target="_blank"
@@ -399,7 +430,8 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
       break;
   }
 
-  const headersMap = headerItemsToObject(state.headers, null);
+  // Single-valued: the PATCH carries If-Match: *, as DRS sends it (#254).
+  const headersMap = relateRequestHeaders(method, headerItemsToObject(state.headers, null));
   const codeInputs = {
     method,
     built,
@@ -431,6 +463,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={
@@ -444,7 +477,11 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
         />
       }
     >
-      <MainTabs tab={tab} onTabChange={setTab} resultCount={result?.ok ? requests.length : null}>
+      <MainTabs
+        tab={tab}
+        onTabChange={setTab}
+        resultCount={relateDoneCount(result, requests.length)}
+      >
         {tab === 'builder' && pane}
         {tab === 'code' && <CodeView themeMode={themeMode} inputs={codeInputs} />}
         {tab === 'results' && (
@@ -462,6 +499,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
               targetNames: state.targets
                 .map((id) => state.targetNames[id])
                 .filter((n): n is string => !!n),
+              targetNameById: state.targetNames,
             }}
           />
         )}

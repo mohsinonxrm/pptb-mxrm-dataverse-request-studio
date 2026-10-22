@@ -2,8 +2,21 @@
 //
 // Persistence layers:
 //   • In-memory recents      — last 8 runs per mode, lost on reload
-//   • localStorage saves     — this module, up to 50 entries per org scope
-//   • Export/Import to disk  — future, via the host's filesystem API
+//   • localStorage saves     — this module, up to MAX_SAVED entries per org scope
+//   • Export/Import to disk  — a versioned JSON file (buildSavedExport /
+//                              parseSavedImport), via the host's file dialogs
+//
+// Durability (#105, checked against the PPTB v1.2.7 source): a tool runs in
+// a BrowserView with no `partition` (toolWindowManager.ts:458), i.e. in
+// Electron's default persistent session under userData, and loads from
+// `pptb-webview://<toolId>/` (browserviewProtocolManager.ts:236), so the
+// localStorage origin is keyed by the tool id alone — not by version or
+// install path. Updates keep the same id and nothing in PPTB clears
+// storage data on update or uninstall, so the library survives both.
+// `toolboxAPI.settings` is keyed by the same tool id (settingsManager.ts:244),
+// so moving there would not be more durable. What does change the id is the
+// install source (registry id vs `npm-<pkg>` vs `local-<pkg>`), which is
+// what Export/Import is for.
 //
 // One saved entry = a named snapshot of a mode's state shape. Each mode
 // plugs in by:
@@ -19,7 +32,12 @@
 // of the request — it tracks "has the user edited since last execute".
 // We strip it on serialize and re-init it as `new Set()` on deserialize.
 
-import type { RetrieveMultipleState, RetrieveSingleState, PredefinedQueryState } from './readState';
+import type {
+  RetrieveMultipleState,
+  RetrieveSingleState,
+  PredefinedQueryState,
+  RecentRun,
+} from './readState';
 import type { DeleteState, UpdateState, CreateState, UpsertState, MergeState } from './writeState';
 import type { AssociateState, DisassociateState } from './relateState';
 import type {
@@ -29,6 +47,12 @@ import type {
 } from './executeState';
 import type { ManageFileState, ManageImageState, ManageAttachmentState } from './binaryState';
 import { getEnv } from '../mock/environment';
+import { stripCredentialRows } from '../engine/sensitiveHeaders';
+import {
+  autoSuggestBatch,
+  autoSuggestExecuteMultiple,
+  type SerializedBatchState,
+} from '../engine/batch/batchModel';
 
 // ── Storage shape ─────────────────────────────────────────────────────
 //
@@ -44,7 +68,21 @@ import { getEnv } from '../mock/environment';
 // the live env host via `getSavedRequestsKey()`.
 
 export const SAVED_REQUESTS_KEY_PREFIX = 'drs:saved-requests:v1';
-export const MAX_SAVED = 50;
+/**
+ * Version of the SavedRequest entry shape, stamped on every entry and on
+ * export files. Entries written before the field existed read as 1. The
+ * stored value stays a plain array so older builds can still read it.
+ * Bump when an entry's shape changes in a way a reader must know about.
+ */
+export const SAVED_SCHEMA_VERSION = 1;
+/**
+ * Library size per org scope, shared by every mode. A bound, not a target:
+ * an entry is a few KB of JSON, so 200 stays far below the browser's
+ * localStorage quota (a quota failure is reported by `persistSaved`
+ * anyway). At the cap, saving a NEW request is refused until the user
+ * deletes or replaces one — nothing is evicted silently (#100).
+ */
+export const MAX_SAVED = 200;
 
 /**
  * The localStorage key for the CURRENT connection. Recomputed at every
@@ -79,10 +117,14 @@ export type SavedModeId =
   | 'retrieve-single'
   | 'predefined-query'
   | 'delete'
+  // Bulk Delete job (#10) — query + schedule; see engine/bulkDelete.
+  | 'bulk-delete'
   | 'update'
   | 'create'
   | 'upsert'
   | 'merge'
+  // Bulk Write (#8) — rows + operation; see engine/bulkWrite.
+  | 'bulk-write'
   | 'associate'
   | 'disassociate'
   // Execute group — exec-action covers OOB / Custom API / Custom Action
@@ -95,7 +137,11 @@ export type SavedModeId =
   // be loaded into manage-image and vice versa (different state shapes).
   | 'manage-file'
   | 'manage-image'
-  | 'manage-attachment';
+  | 'manage-attachment'
+  // $batch composer (#9) — a list of raw requests grouped into change sets.
+  | 'batch'
+  // ExecuteMultiple-style mode (#11) — same state shape, one independent group.
+  | 'execute-multiple';
 
 export interface SavedRequest {
   /** Stable random id — never reused across renames; survives content edits. */
@@ -117,7 +163,41 @@ export interface SavedRequest {
   savedAt: number;
   /** Optional epoch ms — set when the user runs the loaded request. */
   lastRunAt?: number;
+  /** Entry shape version (SAVED_SCHEMA_VERSION); missing on pre-#105 entries = 1. */
+  schemaVersion?: number;
 }
+
+/**
+ * Every SavedModeId, as a record so a mode added to the union but not here
+ * is a compile error. The 1.2.0 modes ($batch, ExecuteMultiple, Bulk Write,
+ * Bulk Delete Job) were once missing from this list, which made import and
+ * the other-connections view drop their entries (#220).
+ */
+const SAVED_MODES: Record<SavedModeId, true> = {
+  'retrieve-multiple': true,
+  'retrieve-single': true,
+  'predefined-query': true,
+  delete: true,
+  'bulk-delete': true,
+  update: true,
+  create: true,
+  upsert: true,
+  merge: true,
+  'bulk-write': true,
+  associate: true,
+  disassociate: true,
+  'exec-action': true,
+  'exec-function': true,
+  'exec-workflow': true,
+  'manage-file': true,
+  'manage-image': true,
+  'manage-attachment': true,
+  batch: true,
+  'execute-multiple': true,
+};
+
+/** Runtime list of SavedModeId, for validating stored and imported entries. */
+export const SAVED_MODE_IDS: ReadonlySet<string> = new Set(Object.keys(SAVED_MODES));
 
 // ── Per-mode serialized shapes ────────────────────────────────────────
 
@@ -237,7 +317,12 @@ export function serializeUpdate(state: UpdateState): SerializedUpdateState {
 export function deserializeUpdate(snap: SerializedUpdateState): UpdateState {
   // `nullFields` backfill — entries saved before the field existed default
   // to []. The serializer always emits the field going forward.
-  return { ...snap, nullFields: snap.nullFields ?? [], dirty: new Set<string>() };
+  return {
+    ...snap,
+    nullFields: snap.nullFields ?? [],
+    rawBody: snap.rawBody ?? null,
+    dirty: new Set<string>(),
+  };
 }
 
 export function serializeCreate(state: CreateState): SerializedCreateState {
@@ -246,7 +331,12 @@ export function serializeCreate(state: CreateState): SerializedCreateState {
 }
 
 export function deserializeCreate(snap: SerializedCreateState): CreateState {
-  return { ...snap, nullFields: snap.nullFields ?? [], dirty: new Set<string>() };
+  return {
+    ...snap,
+    nullFields: snap.nullFields ?? [],
+    rawBody: snap.rawBody ?? null,
+    dirty: new Set<string>(),
+  };
 }
 
 export function serializeUpsert(state: UpsertState): SerializedUpsertState {
@@ -255,7 +345,12 @@ export function serializeUpsert(state: UpsertState): SerializedUpsertState {
 }
 
 export function deserializeUpsert(snap: SerializedUpsertState): UpsertState {
-  return { ...snap, nullFields: snap.nullFields ?? [], dirty: new Set<string>() };
+  return {
+    ...snap,
+    nullFields: snap.nullFields ?? [],
+    rawBody: snap.rawBody ?? null,
+    dirty: new Set<string>(),
+  };
 }
 
 export function serializeMerge(state: MergeState): SerializedMergeState {
@@ -352,50 +447,296 @@ export function deserializeManageAttachment(
 }
 
 // ── localStorage I/O ──────────────────────────────────────────────────
+//
+// Reading never loses data (#220). The stored value is classified once, by
+// `readLibrary`, for the current library, the other-connections view and
+// import alike:
+//   • entries    — what this build can list and load;
+//   • preserved  — array items it can't (damaged, an unknown mode, a newer
+//                  schema). Kept as the raw values and written back after
+//                  the entries on every write, so a newer DRS's entries
+//                  survive a round trip through an older one;
+//   • unreadable — the stored text isn't a JSON array at all. The store
+//                  refuses to write over it until the user keeps a copy or
+//                  starts a new library; a backup copy is kept in storage.
+
+/** A connection's library as read from storage. */
+export interface SavedLibrary {
+  entries: SavedRequest[];
+  preserved: unknown[];
+  /** The raw stored text when it isn't a JSON array, else null. */
+  unreadable: string | null;
+}
+
+/** True for an entry this build can list and load. */
+function isUsableEntry(e: unknown): e is SavedRequest {
+  return (
+    isSavedRequestShape(e) &&
+    SAVED_MODE_IDS.has(e.modeId) &&
+    (e.schemaVersion ?? 1) <= SAVED_SCHEMA_VERSION
+  );
+}
 
 /**
- * Read the full saved-requests list. Returns [] on any failure — never
- * throws (corruption shouldn't break the app's load path).
+ * Read a library bucket (default: the current connection's). Never throws.
+ * Entries saved before `orgScope` / `schemaVersion` existed are backfilled
+ * (tagged with the bucket's scope, schema 1).
  */
-export function loadSaved(): SavedRequest[] {
-  if (typeof window === 'undefined') return [];
+export function readLibrary(key = getSavedRequestsKey(), scope = getOrgScope()): SavedLibrary {
+  const empty: SavedLibrary = { entries: [], preserved: [], unreadable: null };
+  if (typeof window === 'undefined') return empty;
+  let raw: string | null;
   try {
-    const raw = window.localStorage.getItem(getSavedRequestsKey());
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    const scope = getOrgScope();
-    // Light shape-validate — drop entries missing required fields rather
-    // than nuking the whole array. Backfill `orgScope` for entries saved
-    // before the field existed (one-time migration; we tag them with the
-    // current host since we have no way to know the original).
-    return parsed
-      .filter(
-        (e): e is SavedRequest =>
-          e != null &&
-          typeof e === 'object' &&
-          typeof (e as SavedRequest).id === 'string' &&
-          typeof (e as SavedRequest).name === 'string' &&
-          typeof (e as SavedRequest).modeId === 'string' &&
-          typeof (e as SavedRequest).state === 'object' &&
-          typeof (e as SavedRequest).savedAt === 'number',
-      )
-      .map((e) => ({ ...e, orgScope: e.orgScope || scope }));
+    raw = window.localStorage.getItem(key);
   } catch {
-    return [];
+    return empty;
+  }
+  if (!raw) return empty;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { ...empty, unreadable: raw };
+  }
+  if (!Array.isArray(parsed)) return { ...empty, unreadable: raw };
+  const entries: SavedRequest[] = [];
+  const preserved: unknown[] = [];
+  for (const e of parsed) {
+    if (isUsableEntry(e)) {
+      entries.push({
+        ...e,
+        state: stripCredentialRows(e.state),
+        orgScope: e.orgScope || scope,
+        schemaVersion: e.schemaVersion ?? 1,
+      });
+    } else {
+      preserved.push(e);
+    }
+  }
+  return { entries, preserved, unreadable: null };
+}
+
+/** Prefix of the backup keys for unreadable libraries — outside the library prefix. */
+export const SAVED_BACKUP_KEY_PREFIX = 'drs:saved-requests-corrupt:v1';
+
+/**
+ * Keep a copy of an unreadable library under its own key (outside the
+ * library prefix, so no connection lists it). An identical copy is never
+ * written twice. Returns the backup key, or null when storage refused it.
+ */
+export function backupUnreadable(scope: string, raw: string): string | null {
+  if (typeof window === 'undefined') return null;
+  const prefix = `${SAVED_BACKUP_KEY_PREFIX}:${scope}:`;
+  try {
+    const ls = window.localStorage;
+    for (let i = 0; i < ls.length; i++) {
+      const k = ls.key(i);
+      if (k?.startsWith(prefix) && ls.getItem(k) === raw) return k;
+    }
+    const key = `${prefix}${Date.now()}`;
+    ls.setItem(key, raw);
+    return key;
+  } catch {
+    return null;
   }
 }
 
-/** Overwrite the entire list. Best-effort — silently no-ops if storage fails. */
-export function persistSaved(list: SavedRequest[]): void {
+function isSavedRequestShape(e: unknown): e is SavedRequest {
+  return (
+    e != null &&
+    typeof e === 'object' &&
+    typeof (e as SavedRequest).id === 'string' &&
+    typeof (e as SavedRequest).name === 'string' &&
+    typeof (e as SavedRequest).modeId === 'string' &&
+    typeof (e as SavedRequest).state === 'object' &&
+    (e as SavedRequest).state !== null &&
+    typeof (e as SavedRequest).savedAt === 'number'
+  );
+}
+
+/**
+ * Overwrite the current connection's library with `list`, followed by the
+ * `preserved` raw items `readLibrary` couldn't use. Throws when storage
+ * can't be written.
+ */
+export function persistSaved(list: SavedRequest[], preserved: readonly unknown[] = []): void {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(getSavedRequestsKey(), JSON.stringify(list));
+    window.localStorage.setItem(getSavedRequestsKey(), JSON.stringify([...list, ...preserved]));
   } catch {
     // QuotaExceededError, privacy-mode, etc. — surface via the caller's
     // ok/error return so the UI can show "couldn't save" toast.
     throw new Error('localStorage write failed (quota or privacy mode).');
   }
+}
+
+/**
+ * Remove credential header rows already stored by an earlier build (#217),
+ * in every connection's library. Rewrites a bucket only when an entry's
+ * state changed, and keeps every other item exactly as stored (damaged
+ * items and entries of modes this build doesn't know included). Buckets
+ * that aren't a JSON array are left alone. Best-effort; never throws.
+ */
+export function scrubStoredCredentials(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const ls = window.localStorage;
+    const keys: string[] = [];
+    for (let i = 0; i < ls.length; i++) {
+      const k = ls.key(i);
+      if (k?.startsWith(`${SAVED_REQUESTS_KEY_PREFIX}:`)) keys.push(k);
+    }
+    for (const key of keys) {
+      let items: unknown;
+      try {
+        items = JSON.parse(ls.getItem(key) ?? '');
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(items)) continue;
+      let changed = false;
+      const next = items.map((e) => {
+        if (!e || typeof e !== 'object' || !('state' in e)) return e;
+        const state = stripCredentialRows((e as { state: unknown }).state);
+        if (state === (e as { state: unknown }).state) return e;
+        changed = true;
+        return { ...e, state };
+      });
+      if (changed) ls.setItem(key, JSON.stringify(next));
+    }
+  } catch {
+    // Storage unavailable or full: entries are still stripped when read.
+  }
+}
+
+// ── Other connections' libraries (#6) ─────────────────────────────────
+//
+// Every connection this browser profile has saved requests for has its own
+// `drs:saved-requests:v1:<host>` key. These read / write those buckets
+// directly so the library can list another connection's entries and copy or
+// move them into the current one.
+
+/** One other connection's saved-request library. */
+export interface OrgLibrary {
+  /** Org scope (the Dataverse host, or `default` outside PPTB). */
+  scope: string;
+  entries: SavedRequest[];
+}
+
+function readBucket(key: string, scope: string): SavedRequest[] {
+  return readLibrary(key, scope).entries;
+}
+
+/**
+ * Libraries of every connection except the current one that hold at least
+ * one valid entry, largest first. Never throws.
+ */
+export function listOtherOrgLibraries(): OrgLibrary[] {
+  if (typeof window === 'undefined') return [];
+  const current = getSavedRequestsKey();
+  const prefix = `${SAVED_REQUESTS_KEY_PREFIX}:`;
+  const out: OrgLibrary[] = [];
+  try {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (!key || !key.startsWith(prefix) || key === current) continue;
+      const scope = key.slice(prefix.length);
+      const entries = readBucket(key, scope);
+      if (entries.length) out.push({ scope, entries });
+    }
+  } catch {
+    return out;
+  }
+  return out.sort((a, b) => b.entries.length - a.entries.length || a.scope.localeCompare(b.scope));
+}
+
+/**
+ * Drop entries from another connection's library (the second half of a
+ * move). Throws when storage can't be written, like `persistSaved`.
+ */
+export function removeFromOrgLibrary(scope: string, ids: ReadonlySet<string>): void {
+  const key = `${SAVED_REQUESTS_KEY_PREFIX}:${scope}`;
+  if (key === getSavedRequestsKey()) return;
+  try {
+    const raw = window.localStorage.getItem(key);
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    if (!Array.isArray(parsed)) return;
+    // Filter the raw array so entries this build can't read are kept as-is.
+    const kept = parsed.filter(
+      (e) => !(e && typeof e === 'object' && ids.has((e as { id?: unknown }).id as string)),
+    );
+    if (kept.length) window.localStorage.setItem(key, JSON.stringify(kept));
+    else window.localStorage.removeItem(key);
+  } catch {
+    throw new Error('localStorage write failed (quota or privacy mode).');
+  }
+}
+
+// ── Export / Import file ──────────────────────────────────────────────
+//
+// A self-describing JSON envelope. Import also accepts a bare array (a raw
+// copy of the localStorage value). Entries are re-tagged with the importing
+// org scope by the store; their original scope stays in the file only.
+
+export const SAVED_EXPORT_FORMAT = 'drs-saved-requests';
+
+export interface SavedRequestsExport {
+  format: typeof SAVED_EXPORT_FORMAT;
+  schemaVersion: number;
+  exportedAt: string;
+  orgScope: string;
+  entries: SavedRequest[];
+}
+
+/** Serialize a library (one org scope) to the export file text. */
+export function buildSavedExport(entries: SavedRequest[], orgScope: string): string {
+  const file: SavedRequestsExport = {
+    format: SAVED_EXPORT_FORMAT,
+    schemaVersion: SAVED_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    orgScope,
+    entries: entries.map((e) => ({
+      ...e,
+      state: stripCredentialRows(e.state),
+      schemaVersion: e.schemaVersion ?? 1,
+    })),
+  };
+  return JSON.stringify(file, null, 2);
+}
+
+/**
+ * Parse an export file. Throws an Error with a user-facing message when the
+ * file isn't a saved-requests export at all; otherwise returns the valid
+ * entries and how many were dropped (bad shape, unknown mode, newer schema).
+ */
+export function parseSavedImport(text: string): { entries: SavedRequest[]; invalid: number } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
+  } catch {
+    throw new Error('The file is not valid JSON.');
+  }
+  let raw: unknown[];
+  if (Array.isArray(parsed)) {
+    raw = parsed;
+  } else if (
+    parsed &&
+    typeof parsed === 'object' &&
+    (parsed as SavedRequestsExport).format === SAVED_EXPORT_FORMAT &&
+    Array.isArray((parsed as SavedRequestsExport).entries)
+  ) {
+    const v = (parsed as SavedRequestsExport).schemaVersion;
+    if (typeof v === 'number' && v > SAVED_SCHEMA_VERSION) {
+      throw new Error(
+        `The file was exported by a newer version of Dataverse Request Studio (schema ${v}). Update the tool and try again.`,
+      );
+    }
+    raw = (parsed as SavedRequestsExport).entries;
+  } else {
+    throw new Error('The file is not a Dataverse Request Studio saved-requests export.');
+  }
+  const entries = raw.filter(isUsableEntry);
+  return { entries, invalid: raw.length - entries.length };
 }
 
 // ── Hash + dirty detection ────────────────────────────────────────────
@@ -441,6 +782,13 @@ export function autoSuggestName(modeId: SavedModeId, state: unknown): string {
       return autoSuggestPredefinedQuery(state as SerializedPredefinedQueryState);
     case 'delete':
       return autoSuggestDelete(state as SerializedDeleteState);
+    case 'bulk-delete': {
+      // Format: "bulk delete · account · 2026-10-17"
+      const b = state as { table?: string };
+      return ['bulk delete', b.table || 'untitled', new Date().toISOString().slice(0, 10)].join(
+        ' · ',
+      );
+    }
     case 'update':
       return autoSuggestUpdate(state as SerializedUpdateState);
     case 'create':
@@ -449,6 +797,17 @@ export function autoSuggestName(modeId: SavedModeId, state: unknown): string {
       return autoSuggestUpsert(state as SerializedUpsertState);
     case 'merge':
       return autoSuggestMerge(state as SerializedMergeState);
+    case 'bulk-write': {
+      // Format: "CreateMultiple · account · 12 rows · 2026-10-17"
+      const b = state as { operation?: string; table?: string; rows?: unknown[] };
+      const n = b.rows?.length ?? 0;
+      return [
+        b.operation || 'bulk',
+        b.table || 'untitled',
+        `${n} row${n === 1 ? '' : 's'}`,
+        new Date().toISOString().slice(0, 10),
+      ].join(' · ');
+    }
     case 'associate':
       return autoSuggestAssociate(state as SerializedAssociateState);
     case 'disassociate':
@@ -465,6 +824,10 @@ export function autoSuggestName(modeId: SavedModeId, state: unknown): string {
       return autoSuggestManageImage(state as SerializedManageImageState);
     case 'manage-attachment':
       return autoSuggestManageAttachment(state as SerializedManageAttachmentState);
+    case 'batch':
+      return autoSuggestBatch(state as SerializedBatchState);
+    case 'execute-multiple':
+      return autoSuggestExecuteMultiple(state as SerializedBatchState);
   }
 }
 
@@ -642,6 +1005,10 @@ function autoSuggestPredefinedQuery(state: SerializedPredefinedQueryState): stri
   const parts: string[] = [state.queryType === 'userQuery' ? 'userQuery' : 'savedQuery'];
   parts.push(state.table || 'untitled');
   if (state.queryId) parts.push(`#${state.queryId.replace(/[{}-]/g, '').slice(0, 8)}`);
+  // Related collection (#5): name the source table + nav.
+  if (state.related?.navProperty) {
+    parts.push(`via ${state.related.sourceTable}/${state.related.navProperty}`);
+  }
   if (state.top && state.top !== 50) parts.push(`top:${state.top}`);
   parts.push(new Date().toISOString().slice(0, 10));
   return parts.join(' · ');
@@ -679,7 +1046,50 @@ export function tableNameFromState(state: unknown): string {
   return '—';
 }
 
+// ── Same-target check (silent-overwrite guard) ────────────────────────
+//
+// State keys that pick WHAT a request targets. Changing one of them
+// (switching the table, the action, the workflow, …) starts a different
+// request, so a save made before the switch must not be silently
+// overwritten by the new draft. Keys absent from both states are ignored,
+// so each mode is compared on whichever of these it carries.
+const TARGET_KEYS = ['table', 'actionName', 'functionName', 'workflowId'] as const;
+
+function targetKeyValue(state: unknown, key: string): string {
+  if (!state || typeof state !== 'object') return '';
+  const v = (state as Record<string, unknown>)[key];
+  return typeof v === 'string' ? v : '';
+}
+
+/**
+ * True when two serialized snapshots point at the same target (same table /
+ * action / function / workflow). The SaveButton uses this to decide whether
+ * a remembered `lastSavedId` still belongs to the current draft before it
+ * pre-fills that entry's name or overwrites it without asking (#58).
+ */
+export function sameSaveTarget(a: unknown, b: unknown): boolean {
+  return TARGET_KEYS.every((k) => targetKeyValue(a, k) === targetKeyValue(b, k));
+}
+
 // ── id generation ─────────────────────────────────────────────────────
+
+/**
+ * Wrap a Recent-runs snapshot as a transient SavedRequest so a mode can
+ * restore it through its existing `onLoadSaved` validator + hydrator (#2).
+ * Never persisted. Returns null when the run was recorded without a
+ * snapshot (nothing to restore).
+ */
+export function recentRunAsSavedEntry(run: RecentRun, modeId: SavedModeId): SavedRequest | null {
+  if (run.snapshot === undefined || run.snapshot === null) return null;
+  return {
+    id: run.id,
+    name: `Recent run (${run.method} · ${run.status})`,
+    modeId,
+    orgScope: getOrgScope(),
+    state: run.snapshot,
+    savedAt: run.ts,
+  };
+}
 
 export function newSavedId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useStudioStyles } from '../primitives/styles';
 import { MethodPill } from '../primitives/MethodPill';
 import { AdvisoryDrawer } from '../primitives/AdvisoryDrawer';
+import { announce } from '../primitives/announce';
 import type { Advisory } from '../primitives/advisories';
 import { ENV } from '../mock/environment';
 import { UrlTokens } from './UrlTokens';
@@ -41,6 +42,11 @@ export interface UrlBarProps {
   advisories?: Advisory[];
   /** Called when the user clicks "Open" on an advisory — focuses that node. */
   onAdvisoryFocus?: (nodeId: string) => void;
+  /**
+   * Request size shown in the byte counter, when it isn't the URL — e.g. the
+   * multipart body of a $batch (#198). Defaults to the URL length.
+   */
+  bytes?: number;
 }
 
 export function UrlBar({
@@ -53,6 +59,7 @@ export function UrlBar({
   loading,
   advisories,
   onAdvisoryFocus,
+  bytes,
 }: UrlBarProps) {
   const ExecIcon = executeIcon ?? Play20Filled;
   const s = useStudioStyles();
@@ -63,13 +70,18 @@ export function UrlBar({
   // second execute — a duplicate write for Create and friends (#47). The ref
   // is set synchronously before `onExecute` runs and released when its
   // promise settles (every mode's onExecute is async), so it never depends
-  // on render timing and can't stay stuck.
+  // on render timing and can't stay stuck. `runtime` never rejects (#102),
+  // so a throw here is a bug in the mode's own code; log it rather than
+  // leave an unhandled rejection.
   const busyRef = useRef(false);
   const execute = useCallback(() => {
     if (busyRef.current || loading || disabledReason) return;
     busyRef.current = true;
     Promise.resolve()
       .then(onExecute)
+      .catch((e: unknown) => {
+        console.error('Execute failed', e);
+      })
       .finally(() => {
         busyRef.current = false;
       });
@@ -86,6 +98,12 @@ export function UrlBar({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [execute]);
+
+  // Screen-reader feedback that Execute started; ResultsView announces the
+  // outcome (#20).
+  useEffect(() => {
+    if (loading) announce('Running request…');
+  }, [loading]);
 
   return (
     <footer className={s.footer}>
@@ -121,7 +139,7 @@ export function UrlBar({
           fontFamily: tokens.fontFamilyMonospace,
         }}
       >
-        {(url.length / 1024).toFixed(1)} KB
+        {((bytes ?? url.length) / 1024).toFixed(1)} KB
       </Caption1>
       {advisories && advisories.length > 0 && (
         <AdvisoryDrawer advisories={advisories} onFocusNode={onAdvisoryFocus} />

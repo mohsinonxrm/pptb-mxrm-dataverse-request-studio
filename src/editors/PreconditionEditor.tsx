@@ -10,7 +10,7 @@
 // `If-Match` / `If-None-Match` "preconditions". The four kinds:
 //
 //   • none         → no header emitted; server proceeds regardless
-//   • update-only  → If-Match: *           → 412 if record doesn't exist
+//   • update-only  → If-Match: *           → 404 if record doesn't exist (not 412)
 //   • create-only  → If-None-Match: *      → 412 if record exists (Upsert-only)
 //   • etag         → If-Match: "<etag>"    → 412 unless current version matches
 //
@@ -30,6 +30,9 @@ import {
   Input,
   Button,
   Caption1,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
   Radio,
   RadioGroup,
   tokens,
@@ -42,6 +45,8 @@ import type { ConcurrencyMode } from '../state/writeState';
 import type { RequestGroup } from '../registry/requestTypes';
 import { HostHeaderNotice } from './HostHeaderNotice';
 import { isConcurrencyEnforcementRequired } from '../engine/hostHeaderAdvisories';
+import { hostSupportsAdditionalHeaders } from '../host/pptbBridge';
+import { useHostSession } from '../host/HostContext';
 
 export type PreconditionKind = ConcurrencyMode['kind'];
 
@@ -76,7 +81,7 @@ const KIND_META: Record<PreconditionKind, { title: string; header: string; body:
   'update-only': {
     title: 'Require existing record',
     header: 'If-Match: *',
-    body: "Fail with 412 Precondition Failed if no record matches the addressed key. Use to guarantee you're updating an existing row.",
+    body: "Fail with 404 Not Found if no record matches the addressed key, instead of creating one. Use to guarantee you're updating an existing row.",
   },
   'create-only': {
     title: 'Require absent record',
@@ -100,6 +105,7 @@ export function PreconditionEditor({
   group = 'write',
 }: PreconditionEditorProps) {
   const s = useStudioStyles();
+  const host = useHostSession();
   const selected = mode.kind;
 
   const onPick = (kind: PreconditionKind) => {
@@ -121,18 +127,44 @@ export function PreconditionEditor({
         group={group}
       />
 
-      {isConcurrencyEnforcementRequired(
-        // Only Upsert offers create-only; Update and Delete share the same rules.
-        available.includes('create-only') ? 'upsert' : 'update',
-        mode,
-      ) && (
-        <HostHeaderNotice>
+      {(hostSupportsAdditionalHeaders()
+        ? mode.kind !== 'none'
+        : isConcurrencyEnforcementRequired(
+            // Only Upsert offers create-only; Update and Delete share the same rules.
+            available.includes('create-only') ? 'upsert' : 'update',
+            mode,
+          )) && (
+        <HostHeaderNotice
+          header={
+            <>
+              the <code>{mode.kind === 'create-only' ? 'If-None-Match' : 'If-Match'}</code> header
+            </>
+          }
+        >
           The <code>If-Match</code> / <code>If-None-Match</code> header is dropped at execute time,
           so this condition wouldn't be enforced and <strong>Execute</strong> is disabled. Pick a
           different precondition to run the request here, or copy it from the Code tab to run it
           elsewhere.
         </HostHeaderNotice>
       )}
+
+      {/* Update's "Require existing record" on a host that can't send it:
+          the executor reads the record first instead (#218). Only Update
+          offers update-only without create-only (Delete offers None/ETag). */}
+      {host.embedded &&
+        !hostSupportsAdditionalHeaders() &&
+        mode.kind === 'update-only' &&
+        !available.includes('create-only') && (
+          <MessageBar layout="multiline" intent="info" style={{ marginBottom: 14 }}>
+            <MessageBarBody>
+              <MessageBarTitle>Checked before the update is sent</MessageBarTitle>
+              This host can&apos;t send <code>If-Match: *</code>, so Dataverse Request Studio first
+              checks that the record exists. If it doesn&apos;t, the update isn&apos;t sent and you
+              get 404 Not Found, instead of Dataverse creating a new record. Power Platform ToolBox
+              Desktop 1.2.7 and later send the header, so Dataverse enforces it directly.
+            </MessageBarBody>
+          </MessageBar>
+        )}
 
       <div style={{ maxWidth: 720 }}>
         <RadioGroup value={selected} onChange={(_, d) => onPick(d.value as PreconditionKind)}>

@@ -4,19 +4,31 @@
 // active publisher / solution selections sourced from the Settings drawer.
 // Persisted across reloads so the user's scope sticks.
 //
+// Results-grid column widths (#12) are stored here too, keyed per table —
+// see views/results/columnWidths.ts.
+//
 // Storage namespace: `pptb-dataverse-request-studio:displaySettings` so the
 // blob doesn't collide with other PPTB tools that persist their own
 // preferences in localStorage.
+
+import type { ColumnWidthStore } from '../views/results/columnWidths';
 
 export type ValueDisplayMode = 'formatted' | 'raw' | 'both';
 
 export type EntityScopeMode = 'publisher-solution' | 'solution-only' | 'all';
 
+/** Results-grid row density — Fluent DataGrid's `size` values (#16). */
+export type GridDensity = 'extra-small' | 'small' | 'medium';
+
 export interface DisplaySettings {
   useLogicalNames: boolean;
   valueDisplayMode: ValueDisplayMode;
+  /** Results-grid column widths the user dragged, per table + column (#12). */
+  columnWidths: ColumnWidthStore;
   entityScopeMode: EntityScopeMode;
   advancedFindOnly: boolean;
+  /** Results-grid row density (#16). */
+  gridDensity: GridDensity;
   /**
    * Selected publisher ids (publisherid GUIDs). Used when
    * entityScopeMode === 'publisher-solution' to narrow the solution list.
@@ -31,11 +43,79 @@ export interface DisplaySettings {
   selectedSolutionIds: string[];
 }
 
+/** Publisher / solution selection for one org — the GUIDs are per environment. */
+export interface OrgScopeSelection {
+  selectedPublisherIds: string[];
+  selectedSolutionIds: string[];
+}
+
+/**
+ * The persisted blob: the settings plus each org's own scope selection,
+ * keyed by org host (#52). The top-level `selected*` fields hold the
+ * selection last made in any org — older builds read those.
+ */
+export interface PersistedDisplaySettings extends DisplaySettings {
+  scopeByOrg?: Record<string, OrgScopeSelection>;
+}
+
+/**
+ * The settings as seen from one org: that org's scope selection, or an
+ * empty one if the org has none yet. Without an org (standalone, or no
+ * connection yet) the top-level selection applies.
+ */
+export function settingsForOrg(stored: PersistedDisplaySettings, org: string): DisplaySettings {
+  const { scopeByOrg, ...settings } = stored;
+  if (!org || !scopeByOrg) return settings;
+  const own = scopeByOrg[org];
+  return {
+    ...settings,
+    selectedPublisherIds: own?.selectedPublisherIds ?? [],
+    selectedSolutionIds: own?.selectedSolutionIds ?? [],
+  };
+}
+
+/**
+ * `stored` after the settings were changed to `next` while connected to
+ * `org`: the shared fields, plus that org's scope selection (#52). Without
+ * an org only the top-level selection changes.
+ */
+export function withSettingsChange(
+  stored: PersistedDisplaySettings,
+  next: DisplaySettings,
+  org: string,
+): PersistedDisplaySettings {
+  const result: PersistedDisplaySettings = { ...stored, ...next };
+  if (org) {
+    result.scopeByOrg = {
+      ...stored.scopeByOrg,
+      [org]: {
+        selectedPublisherIds: next.selectedPublisherIds,
+        selectedSolutionIds: next.selectedSolutionIds,
+      },
+    };
+  }
+  return result;
+}
+
+/** The fields of `next` that differ from `prev` (compared by reference). */
+export function changedSettings(
+  prev: DisplaySettings,
+  next: DisplaySettings,
+): Partial<DisplaySettings> {
+  const changed: Partial<DisplaySettings> = {};
+  for (const key of Object.keys(next) as (keyof DisplaySettings)[]) {
+    if (next[key] !== prev[key]) Object.assign(changed, { [key]: next[key] });
+  }
+  return changed;
+}
+
 export const defaultDisplaySettings: DisplaySettings = {
   useLogicalNames: false,
   valueDisplayMode: 'formatted',
+  columnWidths: {},
   entityScopeMode: 'publisher-solution',
   advancedFindOnly: true,
+  gridDensity: 'medium',
   selectedPublisherIds: [],
   selectedSolutionIds: [],
 };
@@ -50,7 +130,9 @@ export const settingsKey = (name: string): string => `${SETTINGS_NAMESPACE}:${na
 export const DISPLAY_SETTINGS_KEY = settingsKey('displaySettings');
 
 /** Merge stored settings with defaults — graceful schema evolution. */
-export function mergeWithDefaults(stored: Partial<DisplaySettings> | undefined): DisplaySettings {
+export function mergeWithDefaults(
+  stored: Partial<PersistedDisplaySettings> | undefined,
+): PersistedDisplaySettings {
   if (!stored) return { ...defaultDisplaySettings };
   return { ...defaultDisplaySettings, ...stored };
 }

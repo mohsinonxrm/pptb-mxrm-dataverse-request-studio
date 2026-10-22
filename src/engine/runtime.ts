@@ -3,7 +3,8 @@
 // PPTB-only. Every `runtime.X(state)` call routes to the matching live
 // executor in `dataverseExecutor.ts`. When called outside PPTB the
 // `dvHost.*` helpers throw `HostNotAvailableError` — that's the correct
-// behavior for a PPTB-targeted product.
+// behavior for a PPTB-targeted product. No dispatch rejects: a throw comes
+// back as a failed `ExecResult` (see `neverThrow`).
 
 import {
   executeRetrieveMultiple as liveRetrieveMultiple,
@@ -24,6 +25,7 @@ import {
   executeManageFile as liveManageFile,
   executeManageImage as liveManageImage,
   executeManageAttachment as liveManageAttachment,
+  execFailure,
   type ExecResult,
 } from './dataverseExecutor';
 
@@ -52,28 +54,69 @@ import type {
   ManageAttachmentState,
 } from '../state/binaryState';
 import { isEmbedded } from '../host/pptbBridge';
+import { invalidateLookupRecords } from '../host/useLookupRecords';
+
+// Writes go through `afterWrite`, which drops cached record-picker searches
+// once the request settles, so pickers re-query instead of showing a
+// record's old name (#81). It runs even when the call fails, since a
+// failed or timed-out response doesn't prove nothing was written.
+// `table` is the table written to; `undefined` drops every table — a delete
+// can cascade, a create can deep-insert related rows, and actions and
+// workflows can touch anything.
+// Trailing arguments (the write group's request headers, #43) pass through
+// unchanged.
+function afterWrite<S, Rest extends unknown[]>(
+  run: (s: S, ...rest: Rest) => Promise<ExecResult>,
+  table: (s: S) => string | undefined,
+): (s: S, ...rest: Rest) => Promise<ExecResult> {
+  return async (s, ...rest) => {
+    try {
+      return await run(s, ...rest);
+    } finally {
+      invalidateLookupRecords(table(s));
+    }
+  };
+}
+const everyTable = () => undefined;
+const ownTable = (s: { table: string }) => s.table;
 
 // One dispatch wrapper per executor method.
-export const runtime = {
+export const runtime = neverThrow({
   retrieveMultiple: (s: RetrieveMultipleState) => liveRetrieveMultiple(s),
   retrieveSingle: (s: RetrieveSingleState) => liveRetrieveSingle(s),
   nextLink: (s: RetrieveNextLinkState) => liveNextLink(s),
   absoluteUrl: (url: string) => liveAbsoluteUrl(url),
   predefined: (s: PredefinedQueryState) => livePredefined(s),
-  create: (s: CreateState) => liveCreate(s),
-  update: (s: UpdateState) => liveUpdate(s),
-  upsert: (s: UpsertState) => liveUpsert(s),
-  delete: (s: DeleteState) => liveDelete(s),
-  merge: (s: MergeState) => liveMerge(s),
-  associate: (s: AssociateState) => liveAssociate(s),
-  disassociate: (s: DisassociateState) => liveDisassociate(s),
-  action: (s: ExecuteActionState) => liveAction(s),
+  create: afterWrite(
+    (s: CreateState, headers?: Record<string, string>) => liveCreate(s, headers),
+    everyTable,
+  ),
+  update: afterWrite(
+    (s: UpdateState, headers?: Record<string, string>) => liveUpdate(s, headers),
+    ownTable,
+  ),
+  upsert: afterWrite(
+    (s: UpsertState, headers?: Record<string, string>) => liveUpsert(s, headers),
+    ownTable,
+  ),
+  delete: afterWrite(
+    (s: DeleteState, headers?: Record<string, string>) => liveDelete(s, headers),
+    everyTable,
+  ),
+  merge: afterWrite(
+    (s: MergeState, headers?: Record<string, string>) => liveMerge(s, headers),
+    ownTable,
+  ),
+  associate: afterWrite((s: AssociateState) => liveAssociate(s), ownTable),
+  disassociate: afterWrite((s: DisassociateState) => liveDisassociate(s), ownTable),
+  action: afterWrite((s: ExecuteActionState) => liveAction(s), everyTable),
+  // Functions are side-effect free by definition — nothing to invalidate.
   function: (s: ExecuteFunctionState) => liveFunction(s),
-  workflow: (s: ExecuteWorkflowState) => liveWorkflow(s),
+  workflow: afterWrite((s: ExecuteWorkflowState) => liveWorkflow(s), everyTable),
   manageFile: (s: ManageFileState) => liveManageFile(s),
   manageImage: (s: ManageImageState) => liveManageImage(s),
   manageAttachment: (s: ManageAttachmentState) => liveManageAttachment(s),
-};
+});
 
 export type { ExecResult };
 
@@ -83,3 +126,28 @@ export type { ExecResult };
  * (e.g. surface a "running standalone — Execute will fail" hint).
  */
 export const isLiveRuntime = (): boolean => isEmbedded();
+
+/**
+ * Turns anything a dispatch throws into a failed `ExecResult` (same mapping
+ * as a host error). Modes `await runtime.X(...)` and then clear their
+ * spinner, so a throw there (e.g. `$metadata` failing to load while
+ * resolving an action) used to leave Execute spinning and the rejection
+ * unhandled (#102).
+ */
+function neverThrow<T extends Record<string, (...args: never[]) => Promise<ExecResult>>>(
+  dispatch: T,
+): T {
+  const guarded: Record<string, (...args: unknown[]) => Promise<ExecResult>> = {};
+  for (const [name, run] of Object.entries(dispatch)) {
+    const call = run as unknown as (...args: unknown[]) => Promise<ExecResult>;
+    guarded[name] = async (...args) => {
+      const t0 = performance.now();
+      try {
+        return await call(...args);
+      } catch (e) {
+        return execFailure(e, Math.round(performance.now() - t0));
+      }
+    };
+  }
+  return guarded as unknown as T;
+}

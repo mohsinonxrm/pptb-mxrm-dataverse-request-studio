@@ -3,6 +3,7 @@
 // Per docs:
 //   • Unbound:    GET /WhoAmI                or GET /F(p1=@p1)?@p1=...
 //   • Bound:      GET /<set>(<id>)/Microsoft.Dynamics.CRM.<function>(...)
+//   • Collection: GET /<set>/Microsoft.Dynamics.CRM.<function>(...)
 //   • Composable: append $select / $filter for collection-returning functions
 //   • Prefer parameter aliases to avoid URL-length issues + DateTimeOffset bugs.
 //
@@ -34,6 +35,7 @@ import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
+import { notify } from '../shell/dialogs';
 import { PaneHead } from '../editors/PaneHead';
 import { ActionPicker } from '../editors/ActionPicker';
 import { ActionParamForm } from '../editors/ActionParamForm';
@@ -52,13 +54,16 @@ import type { ExecuteFunctionState } from '../state/executeState';
 import type { RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { useScopedEntities } from '../host/useScopedEntities';
+import { useLiveTable } from '../host/useLiveMetadata';
 import {
   serializeExecuteFunction,
   deserializeExecuteFunction,
   hashState,
   type SavedRequest,
   type SerializedExecuteFunctionState,
+  recentRunAsSavedEntry,
 } from '../state/savedRequests';
+import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 
 // Empty initial state — no pre-seeded function. User picks from the live
@@ -77,14 +82,13 @@ type RootClauseId = 'pick' | 'target' | 'params' | 'options' | 'headers';
 
 export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('exec-function');
-  const [state, setState] = useState(initialState);
+  const draft = useModeDraft('exec-function', deserializeExecuteFunction, initialState);
+  const [state, setState] = useState(draft.state);
   const [activePath, setActivePath] = useState<string>('pick');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [recents, setRecents] = useState<RecentRun[]>([]);
-
-  const built = useMemo(() => buildExecuteFunction(state), [state]);
 
   // Async live function lookup. actionsProvider caches the parsed CSDL.
   const [fn, setFn] = useState<CsdlAction | undefined>(undefined);
@@ -102,10 +106,21 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
     };
   }, [state.functionName]);
 
+  // Bound functions (entity OR collection) need the binding table's metadata
+  // for the real entity set name. Load it and rebuild the URL when it (or
+  // the function) resolves. The executor sends this same URL (#55).
+  const bindingEntity = fn && fn.binding.kind !== 'unbound' ? fn.binding.entityType : null;
+  const { table: bindingTable } = useLiveTable(bindingEntity);
+  const built = useMemo(
+    () => buildExecuteFunction(state),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state, fn, bindingTable],
+  );
+
   // Save / Load
   const { entities } = useScopedEntities();
-  const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
-  const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
+  const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
+  const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const [boundRecordName, setBoundRecordName] = useState<string>('');
 
   const markDirty = (id: string) =>
@@ -138,11 +153,13 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
     ? 'Pick a function.'
     : requiresBoundRecord && !state.boundRecordId
       ? `Function '${fn.name}' is bound to ${boundEntity} — supply a source record.`
-      : missingRequired.length > 0
-        ? `${missingRequired.length} required param${missingRequired.length === 1 ? '' : 's'} unset.`
-        : state.headers.some((h) => h.enabled && !h.name)
-          ? 'Fix empty header name.'
-          : null;
+      : bindingEntity && !bindingTable
+        ? `Can't build the URL yet — ${bindingEntity} table metadata isn't loaded.`
+        : missingRequired.length > 0
+          ? `${missingRequired.length} required param${missingRequired.length === 1 ? '' : 's'} unset.`
+          : state.headers.some((h) => h.enabled && !h.name)
+            ? 'Fix empty header name.'
+            : null;
 
   const onExecute = async () => {
     setLoading(true);
@@ -154,6 +171,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
       [
         {
           id: `r-${Date.now()}`,
+          snapshot: currentSerialized,
           modeId: 'exec-function',
           url: built.relativeUrl,
           method: 'GET',
@@ -170,6 +188,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeExecuteFunction(state), [state]);
+  useStashModeDraft('exec-function', currentSerialized, lastSavedId, lastSavedHash);
   const currentHash = useMemo(() => hashState(currentSerialized), [currentSerialized]);
   const isDirty = lastSavedHash === null ? true : currentHash !== lastSavedHash;
 
@@ -177,16 +196,19 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedId(saved.id);
     setLastSavedHash(hashState(saved.state));
   };
-  const onLoadSaved = (entry: SavedRequest) => {
+  const onLoadSaved = async (entry: SavedRequest) => {
     if (entry.modeId !== 'exec-function') return;
     const snap = entry.state as SerializedExecuteFunctionState;
-    if (
-      boundEntity &&
-      entities.length > 0 &&
-      !entities.some((e) => e.logicalName === boundEntity)
-    ) {
-      window.alert(
-        `Can't load "${entry.name}": bound entity \`${boundEntity}\` ` +
+    // Check the SNAPSHOT's function binding, not the currently selected one
+    // (#56). A CSDL load failure skips the guard; the picker surfaces it.
+    const snapFn = snap.functionName
+      ? await actionsProvider.find(snap.functionName).catch(() => undefined)
+      : undefined;
+    const snapEntity =
+      snapFn && snapFn.binding.kind !== 'unbound' ? snapFn.binding.entityType : null;
+    if (snapEntity && entities.length > 0 && !entities.some((e) => e.logicalName === snapEntity)) {
+      notify(
+        `Can't load "${entry.name}": bound entity \`${snapEntity}\` ` +
           `isn't available in this environment.`,
       );
       return;
@@ -197,6 +219,19 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(null);
     setBoundRecordName('');
     setActivePath('pick');
+  };
+
+  // Recent runs (#2) — restore a run's snapshot through the same loader as
+  // the Saved library, but keep the current save baseline: a run isn't a
+  // saved entry, so Save keeps targeting whatever it targeted before.
+  const onRecentClick = (run: RecentRun) => {
+    const entry = recentRunAsSavedEntry(run, 'exec-function');
+    if (!entry) return;
+    const keepId = lastSavedId;
+    const keepHash = lastSavedHash;
+    onLoadSaved(entry);
+    setLastSavedId(keepId);
+    setLastSavedHash(keepHash);
   };
 
   usePublishSaveContext(
@@ -221,7 +256,9 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
       meta: fn
         ? fn.binding.kind === 'unbound'
           ? 'unbound'
-          : `bound to ${boundEntity}`
+          : fn.binding.kind === 'collection'
+            ? `bound to ${bindingEntity} collection`
+            : `bound to ${boundEntity}`
         : 'pick one',
       items: [
         {
@@ -371,7 +408,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
             setBoundRecordName(primary ?? '');
           }}
           group="execute"
-          sub={`Pick the ${boundEntity} record. The id slots into the URL: /${boundEntity}s(<id>)/Microsoft.Dynamics.CRM.${fn?.name}.`}
+          sub={`Pick the ${boundEntity} record. The id slots into the URL: /${bindingTable?.entitySetName ?? `${boundEntity}s`}(<id>)/Microsoft.Dynamics.CRM.${fn?.name}.`}
         />
       ) : null;
       break;
@@ -449,12 +486,16 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
                 {state.useParamAliases ? (
                   <>
                     Each param becomes <code>p=@pN</code> in the URL path, with values in the query
-                    string. Strings stay single-quoted; numbers/booleans/GUIDs go bare.
+                    string. Strings stay single-quoted; numbers/booleans/GUIDs/date-times go bare;
+                    collections are JSON arrays; enums are{' '}
+                    <code>Namespace.Type&apos;Member&apos;</code>.
                   </>
                 ) : (
                   <>
                     Params are written inline like <code>(p='val',q=42)</code>. Faster to read but
-                    breaks for long URLs and DateTimeOffset.
+                    breaks for long URLs, and Dataverse rejects inline values containing{' '}
+                    <code>/ &lt; &gt; * % &amp; : \ ? +</code> — which includes every
+                    DateTimeOffset. Use aliases for those.
                   </>
                 )}
               </MessageBarBody>
@@ -495,6 +536,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
             setTab('builder');
           }}
           recents={recents}
+          onRecentClick={onRecentClick}
         />
       }
       urlBar={

@@ -12,7 +12,7 @@
 // persistable state).
 
 import { createContext, useContext, useEffect, type ReactNode } from 'react';
-import type { SavedRequest, SavedModeId } from './savedRequests';
+import { getOrgScope, type SavedRequest, type SavedModeId } from './savedRequests';
 
 export interface SaveContextValue {
   /**
@@ -75,10 +75,24 @@ export function SaveContextRoot({
 export function usePublishSaveContext(value: SaveContextValue | null): void {
   const setter = useContext(SaveSetterContext);
   useEffect(() => {
+    if (value && value.modeId !== 'batch' && value.modeId !== 'execute-multiple') {
+      lastPublished = { modeId: value.modeId, state: value.state, orgScope: getOrgScope() };
+    }
     if (!setter) return;
     setter(value);
     return () => setter(null);
   }, [setter, value]);
+}
+
+// The last request any (non-batch) mode published, kept after that mode
+// unmounts so the $batch composer can offer "Add last request" (#9).
+// Scoped to the connection it was built on.
+let lastPublished: { modeId: SavedModeId; state: unknown; orgScope: string } | null = null;
+
+/** The last request a mode published on the current connection, if any. */
+export function lastPublishedRequest(): { modeId: SavedModeId; state: unknown } | null {
+  if (!lastPublished || lastPublished.orgScope !== getOrgScope()) return null;
+  return { modeId: lastPublished.modeId, state: lastPublished.state };
 }
 
 /**

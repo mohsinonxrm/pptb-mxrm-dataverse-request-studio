@@ -33,6 +33,8 @@
 //   • AttributeMetadata.SourceType (SDK reference for the SourceType values)
 //     https://learn.microsoft.com/en-us/dotnet/api/microsoft.xrm.sdk.metadata.attributemetadata.sourcetype
 
+import { activeOrg, onActiveOrgChange } from '../host/activeOrg';
+
 // ============================================================
 // Attribute type code (subset that's relevant to filter UX)
 // ============================================================
@@ -214,11 +216,14 @@ export interface PicklistColumnMeta extends BaseColumnMeta {
   attributeType: 'Picklist';
   options: { value: number; label: string }[];
   isGlobal?: boolean;
+  /** Metadata DefaultFormValue; -1 or missing means no default. */
   defaultFormValue?: number;
 }
 export interface MultiSelectPicklistColumnMeta extends BaseColumnMeta {
   attributeType: 'MultiSelectPicklist';
   options: { value: number; label: string }[];
+  /** Metadata DefaultFormValue; -1 or missing means no default. */
+  defaultFormValue?: number;
 }
 export interface StateColumnMeta extends BaseColumnMeta {
   attributeType: 'State';
@@ -483,6 +488,27 @@ export interface AlternateKeyDef {
   displayName: string;
   /** Column logical names that make up the key (order matters in the URL). */
   columns: string[];
+  /**
+   * AttributeType of key columns that aren't in the table's loaded `columns`
+   * (the basic load is filtered to IsValidForAdvancedFind, so e.g.
+   * `canvasapp.componentstate` / `overwritetime` are missing). Filled by the
+   * live metadata provider so key literals are typed correctly (#64).
+   */
+  columnTypes?: Record<string, AttributeTypeCode>;
+}
+
+/**
+ * AttributeType of an alternate-key column: the loaded column's type, else
+ * the type fetched for the key definition, else `undefined` (unknown — the
+ * URL builder quotes it as a string and the UI says so).
+ */
+export function altKeyColumnType(
+  table: TableMeta | undefined,
+  def: AlternateKeyDef,
+  column: string,
+): AttributeTypeCode | undefined {
+  const col = table?.columns.find((c) => c.logicalName === column);
+  return col?.attributeType ?? def.columnTypes?.[column];
 }
 
 export interface TableMeta {
@@ -495,7 +521,7 @@ export interface TableMeta {
   navigationProperties: NavProperty[];
   /** Alternate keys defined on the table (optional — used by Upsert). */
   alternateKeys?: AlternateKeyDef[];
-  /** True if this table is one of the Merge-supported types (account / contact / incident). */
+  /** True if this table is one of the Merge-supported types (account / contact / lead / incident). */
   supportsMerge?: boolean;
 }
 
@@ -512,28 +538,53 @@ export interface TableMeta {
 // depend on `findTable()` return undefined and render their "pick a table"
 // state. There is NO mock-data fallback — DRS is now a live-Dataverse-only
 // tool, matching the user's directive.
+//
+// One registry per org (#52). Reads go to the active org's tables; when the
+// PPTB connection switches, listeners fire so `useLiveTable` refetches its
+// table from the new environment. Switching back finds the old org's tables
+// still registered.
 
-const __liveTables = new Map<string, TableMeta>();
+const __liveTablesByOrg = new Map<string, Map<string, TableMeta>>();
 const __liveListeners = new Set<() => void>();
 
-export function __registerLiveTable(t: TableMeta): void {
-  __liveTables.set(t.logicalName, t);
+function liveTablesOf(org: string = activeOrg()): Map<string, TableMeta> {
+  let tables = __liveTablesByOrg.get(org);
+  if (!tables) {
+    tables = new Map();
+    __liveTablesByOrg.set(org, tables);
+  }
+  return tables;
+}
+function notifyLiveTables(): void {
   for (const l of __liveListeners) l();
 }
+onActiveOrgChange(notifyLiveTables);
+
+/**
+ * Register a built table. `org` defaults to the active org; builders pass
+ * the org they started in, so a response that lands after a connection
+ * switch is filed under the org it came from.
+ */
+export function __registerLiveTable(t: TableMeta, org: string = activeOrg()): void {
+  liveTablesOf(org).set(t.logicalName, t);
+  if (org === activeOrg()) notifyLiveTables();
+}
 export function __registerLiveTables(list: TableMeta[]): void {
-  for (const t of list) __liveTables.set(t.logicalName, t);
-  for (const l of __liveListeners) l();
+  const tables = liveTablesOf();
+  for (const t of list) tables.set(t.logicalName, t);
+  notifyLiveTables();
 }
 export function __subscribeLiveTables(cb: () => void): () => void {
   __liveListeners.add(cb);
   return () => __liveListeners.delete(cb);
 }
+/** Clears the active org's tables. */
 export function __clearLiveTables(): void {
-  __liveTables.clear();
-  for (const l of __liveListeners) l();
+  liveTablesOf().clear();
+  notifyLiveTables();
 }
 export function __hasLiveTables(): boolean {
-  return __liveTables.size > 0;
+  return liveTablesOf().size > 0;
 }
 
 /**
@@ -544,7 +595,7 @@ export function __hasLiveTables(): boolean {
  * actually wants).
  */
 export function getLiveTables(): TableMeta[] {
-  return Array.from(__liveTables.values());
+  return Array.from(liveTablesOf().values());
 }
 
 /**
@@ -554,17 +605,17 @@ export function getLiveTables(): TableMeta[] {
  */
 export const TABLES: TableMeta[] = new Proxy([] as TableMeta[], {
   get(_t, key: string | symbol) {
-    const arr = Array.from(__liveTables.values());
+    const arr = Array.from(liveTablesOf().values());
     return arr[key as keyof typeof arr];
   },
   has(_t, key) {
-    return key in Array.from(__liveTables.values());
+    return key in Array.from(liveTablesOf().values());
   },
   ownKeys() {
-    return Reflect.ownKeys(Array.from(__liveTables.values()));
+    return Reflect.ownKeys(Array.from(liveTablesOf().values()));
   },
   getOwnPropertyDescriptor(_t, key) {
-    return Object.getOwnPropertyDescriptor(Array.from(__liveTables.values()), key);
+    return Object.getOwnPropertyDescriptor(Array.from(liveTablesOf().values()), key);
   },
 });
 
@@ -575,7 +626,7 @@ export const TABLES: TableMeta[] = new Proxy([] as TableMeta[], {
  * editors re-render when a fetch resolves.
  */
 export const findTable = (logicalName: string): TableMeta | undefined =>
-  __liveTables.get(logicalName);
+  liveTablesOf().get(logicalName);
 
 export const findColumn = (table: TableMeta, logicalName: string): ColumnMeta | undefined =>
   table.columns.find((c) => c.logicalName === logicalName);

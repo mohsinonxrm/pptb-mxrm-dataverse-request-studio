@@ -6,7 +6,10 @@
 //   • Standalone in modes that pick a relationship target (Associate /
 //     Disassociate).
 //
-// Two modes, toggled by the user (and remembered locally):
+// Two modes, toggled by the user. A picker given a `memoryKey` remembers the
+// toggle and the raw GUID text in the enclosing RecordPickerMemoryScope
+// (one per mode, in ModeShell), so switching sidebar panes — which unmounts
+// the pane — doesn't reset it to Search (#189):
 //
 //   ┌── Search ──┬── By GUID ──┐
 //   ┌──────────────────────────┐
@@ -30,7 +33,15 @@
 // for lookup-column typeaheads. `contains(<primaryName>, …)`, 250 ms debounce,
 // capped at 50 rows, cached per (entity, query).
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   Combobox,
   Option,
@@ -45,8 +56,13 @@ import {
   Tooltip,
 } from '@fluentui/react-components';
 import { Dismiss16Regular, Warning20Filled, CheckmarkCircle16Filled } from '@fluentui/react-icons';
+import { parseGuid } from './guid';
 import { findTable } from '../mock/metadata';
-import { useLookupRecords } from '../host/useLookupRecords';
+import {
+  fetchRecordName,
+  useLookupRecords,
+  useLookupRecordsVersion,
+} from '../host/useLookupRecords';
 
 export interface PickedRecord {
   id: string; // primary key value
@@ -55,32 +71,65 @@ export interface PickedRecord {
 
 type PickerMode = 'search' | 'guid';
 
-const GUID_RE =
-  /^[{(]?[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}[)}]?$/;
-const isValidGuid = (s: string): boolean => GUID_RE.test(s.trim());
-const normalizeGuid = (s: string): string =>
-  s
-    .replace(/[{}()]/g, '')
-    .trim()
-    .toLowerCase();
+// ── Per-mode memory (#189) ───────────────────────────────────────────
+//
+// Sidebar panes unmount when the user switches between them, so local state
+// is lost. ModeShell stays mounted for the life of a mode, so it holds this
+// map; switching modes drops it, the same as the mode's own state.
+
+interface PickerMemory {
+  mode?: PickerMode;
+  /** GUID-mode text as typed (may be invalid or not yet resolved). */
+  raw?: string;
+}
+
+const PickerMemoryContext = createContext<Map<string, PickerMemory> | null>(null);
+
+export function RecordPickerMemoryScope({ children }: { children: ReactNode }) {
+  const [memory] = useState(() => new Map<string, PickerMemory>());
+  return <PickerMemoryContext.Provider value={memory}>{children}</PickerMemoryContext.Provider>;
+}
+
+/** useState that also writes through to the scope's memory when keyed. */
+function useRemembered<K extends keyof PickerMemory>(
+  memoryKey: string | undefined,
+  field: K,
+  initial: (stored: PickerMemory[K] | undefined) => NonNullable<PickerMemory[K]>,
+) {
+  const memory = useContext(PickerMemoryContext);
+  const entry = memoryKey && memory ? memory.get(memoryKey) : undefined;
+  const [value, setValue] = useState(() => initial(entry?.[field]));
+  const set = (next: NonNullable<PickerMemory[K]>) => {
+    setValue(next);
+    if (memoryKey && memory) memory.set(memoryKey, { ...memory.get(memoryKey), [field]: next });
+  };
+  return [value, set] as const;
+}
+
+// For comparing ids from different sources (picked row vs. saved request).
+const normalizeGuid = (s: string): string => parseGuid(s) ?? s.trim().toLowerCase();
 
 export function RecordPicker({
   table,
   selectedId,
   onPick,
   placeholder = 'Search records by name…',
+  memoryKey,
 }: {
   table: string; // logical name
   selectedId: string | null;
   onPick: (rec: PickedRecord | null) => void;
   placeholder?: string;
+  /** Remember the Search / By GUID toggle and GUID text across pane
+   *  switches under this key (unique within the mode). */
+  memoryKey?: string;
 }) {
   const tbl = findTable(table);
 
   // The mode toggle defaults to 'search'. If a caller hydrates with just
   // a GUID (e.g. a saved request that only has the id, no name), they
   // can hit "By GUID" to see the raw value and edit it.
-  const [mode, setMode] = useState<PickerMode>('search');
+  const [mode, setMode] = useRemembered(memoryKey, 'mode', (stored) => stored ?? 'search');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -102,7 +151,7 @@ export function RecordPicker({
           placeholder={placeholder}
         />
       ) : (
-        <GuidPicker selectedId={selectedId} onPick={onPick} />
+        <GuidPicker selectedId={selectedId} onPick={onPick} memoryKey={memoryKey} />
       )}
     </div>
   );
@@ -167,6 +216,30 @@ function SearchPicker({
       lastResolvedRef.current = null;
     }
   }, [matchedRow, selectedId]);
+
+  // After DRS writes records (#81) the selected record may have a new name.
+  // The refreshed rows relabel it when it's on the current page; otherwise
+  // re-read its name directly so the field doesn't keep the old one.
+  const lookupVersion = useLookupRecordsVersion();
+  const [, setRelabeled] = useState(0);
+  useEffect(() => {
+    if (lookupVersion === 0 || !selectedId || !tbl) return;
+    let cancelled = false;
+    fetchRecordName(tbl, selectedId)
+      .then((name) => {
+        if (cancelled || name === null) return;
+        lastResolvedRef.current = { id: selectedId, primary: name };
+        setRelabeled((n) => n + 1);
+      })
+      .catch(() => {
+        // Best effort — e.g. the record was just deleted. Keep the label.
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Only on invalidation; selection changes resolve through the rows.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lookupVersion]);
 
   // Reset search state whenever the parent clears the selection externally
   // (e.g. switching tables, loading a saved request that targets a
@@ -289,40 +362,53 @@ function SearchPicker({
 
 // ── GUID mode ────────────────────────────────────────────────────────
 //
-// Plain Input. Validates inline. Emits onPick(null) when invalid OR empty.
-// No metadata queries fire — this mode is for users who already have an
-// id and just want to paste it.
+// Plain Input. Validates inline. Emits onPick(null) when invalid OR empty,
+// so the mode never keeps targeting the previously picked record while the
+// field shows a different (invalid) value (#94). Valid input is emitted in
+// the dashed 8-4-4-4-12 form the OData key needs — braces and the 32-digit
+// dash-less form are accepted and normalized. No metadata queries fire —
+// this mode is for users who already have an id and just want to paste it.
 
 function GuidPicker({
   selectedId,
   onPick,
+  memoryKey,
 }: {
   selectedId: string | null;
   onPick: (rec: PickedRecord | null) => void;
+  memoryKey?: string;
 }) {
-  // Local string so the user can type freely; we only commit upstream
-  // when the value parses as a GUID (or clears).
-  const [raw, setRaw] = useState(selectedId ?? '');
+  // Local string so the user can type freely; only a parsed GUID (or
+  // null) goes upstream. Remembered text is reused only while it still
+  // agrees with the selection (an invalid entry ↔ no selection); if the
+  // selection changed while the pane was closed, start from the selection.
+  const [raw, setRaw] = useRemembered(memoryKey, 'raw', (stored) =>
+    stored !== undefined &&
+    parseGuid(stored) === (selectedId ? (parseGuid(selectedId) ?? selectedId) : null)
+      ? stored
+      : (selectedId ?? ''),
+  );
+  // The id we last sent up. When the parent echoes it back we keep the
+  // user's text as typed — otherwise emitting null for an invalid entry
+  // would wipe the field mid-typing.
+  const lastEmittedRef = useRef<string | null>(selectedId);
   // If the parent's selectedId changes from elsewhere (mode switch,
-  // saved-request load), sync our local state.
+  // saved-request load, table switch), sync our local state.
   useEffect(() => {
+    if (selectedId === lastEmittedRef.current) return;
+    lastEmittedRef.current = selectedId;
     setRaw(selectedId ?? '');
   }, [selectedId]);
 
-  const valid = !raw || isValidGuid(raw);
-  const normalized = useMemo(() => (valid && raw ? normalizeGuid(raw) : null), [raw, valid]);
+  const normalized = useMemo(() => parseGuid(raw), [raw]);
+  const valid = !raw.trim() || normalized !== null;
 
   const onChange = (next: string) => {
     setRaw(next);
-    if (!next) {
-      onPick(null);
-      return;
-    }
-    if (isValidGuid(next)) {
-      onPick({ id: normalizeGuid(next), primary: '' });
-    }
-    // Invalid intermediate state — don't propagate yet. The mode shell
-    // surfaces an advisory via the regular validation path.
+    const id = parseGuid(next);
+    if (id === lastEmittedRef.current) return;
+    lastEmittedRef.current = id;
+    onPick(id ? { id, primary: '' } : null);
   };
 
   return (
@@ -342,7 +428,8 @@ function GuidPicker({
       />
       {raw && !valid && (
         <Caption1 style={{ color: tokens.colorPaletteRedForeground1 }}>
-          Not a valid GUID — Dataverse record ids are 36-char UUIDs (braces optional).
+          Not a valid GUID — use the 8-4-4-4-12 form (braces optional) or 32 hex digits. No record
+          is targeted until this is fixed.
         </Caption1>
       )}
       {raw && valid && normalized && (

@@ -9,41 +9,48 @@
 //      the result on resolve, clear the in-flight slot.
 //
 // Errors bubble up to the caller — the cache only stores successful reads.
+//
+// Each loader pins the active org's cache before its first `await`, so a
+// response that lands after a connection switch is stored under the org
+// it came from, never the new one (#52).
 
 import * as pptbClient from './pptbClient';
-import { metadataCache } from './cache';
+import { metadataCache, pinMetadataCache } from './cache';
+import { activeOrg } from './activeOrg';
 import type { EntityMetadata, AttributeMetadata, RelationshipMetadata } from './pptbClient';
 
 /** All entities — always fetched with `advancedFindOnly=false`. Callers
  *  apply the AF filter at the display layer so the toggle is instant. */
 export async function loadAllEntities(): Promise<EntityMetadata[]> {
-  const cached = metadataCache.getAllEntities();
+  const cache = pinMetadataCache();
+  const cached = cache.getAllEntities();
   if (cached) return cached;
 
-  const inFlight = metadataCache.getAllEntitiesPromise();
+  const inFlight = cache.getAllEntitiesPromise();
   if (inFlight) return inFlight;
 
   const promise = pptbClient.getAllEntities(false);
-  metadataCache.setAllEntitiesPromise(promise);
+  cache.setAllEntitiesPromise(promise);
 
   try {
     const entities = await promise;
-    metadataCache.setAllEntities(entities);
-    metadataCache.clearAllEntitiesPromise();
+    cache.setAllEntities(entities);
+    cache.clearAllEntitiesPromise();
     return entities;
   } catch (error) {
     console.error('loadAllEntities: API error:', error);
-    metadataCache.clearAllEntitiesPromise();
+    cache.clearAllEntitiesPromise();
     throw error;
   }
 }
 
 /** Single-entity metadata. */
 export async function loadEntityMetadata(logicalName: string): Promise<EntityMetadata> {
-  const cached = metadataCache.getEntityMetadata(logicalName);
+  const cache = pinMetadataCache();
+  const cached = cache.getEntityMetadata(logicalName);
   if (cached) return cached;
   const metadata = await pptbClient.getEntityMetadata(logicalName);
-  metadataCache.setEntityMetadata(logicalName, metadata);
+  cache.setEntityMetadata(logicalName, metadata);
   return metadata;
 }
 
@@ -52,23 +59,24 @@ export async function loadEntityAttributes(
   logicalName: string,
   advancedFindOnly: boolean = true,
 ): Promise<AttributeMetadata[]> {
+  const cache = pinMetadataCache();
   const cacheKey = `${logicalName}_${advancedFindOnly}`;
-  const cached = metadataCache.getEntityAttributes(cacheKey);
+  const cached = cache.getEntityAttributes(cacheKey);
   if (cached) return cached;
 
-  const inFlight = metadataCache.getAttributesPromise(cacheKey);
+  const inFlight = cache.getAttributesPromise(cacheKey);
   if (inFlight) return inFlight;
 
   const promise = pptbClient.getEntityAttributes(logicalName, advancedFindOnly);
-  metadataCache.setAttributesPromise(cacheKey, promise);
+  cache.setAttributesPromise(cacheKey, promise);
 
   try {
     const attributes = await promise;
-    metadataCache.setEntityAttributes(cacheKey, attributes);
-    metadataCache.clearAttributesPromise(cacheKey);
+    cache.setEntityAttributes(cacheKey, attributes);
+    cache.clearAttributesPromise(cacheKey);
     return attributes;
   } catch (error) {
-    metadataCache.clearAttributesPromise(cacheKey);
+    cache.clearAttributesPromise(cacheKey);
     throw error;
   }
 }
@@ -77,16 +85,19 @@ export async function loadEntityAttributes(
 export async function loadAttributeWithOptionSet(
   entityLogicalName: string,
   attributeLogicalName: string,
+  knownAttributeType?: string,
 ): Promise<AttributeMetadata> {
+  const cache = pinMetadataCache();
   const cacheKey = `${entityLogicalName}_${attributeLogicalName}_optionset`;
-  const cached = metadataCache.getEntityAttributes(cacheKey);
+  const cached = cache.getEntityAttributes(cacheKey);
   if (cached && cached.length > 0) return cached[0];
 
   const attribute = await pptbClient.getAttributeWithOptionSet(
     entityLogicalName,
     attributeLogicalName,
+    knownAttributeType,
   );
-  metadataCache.setEntityAttributes(cacheKey, [attribute]);
+  cache.setEntityAttributes(cacheKey, [attribute]);
   return attribute;
 }
 
@@ -105,11 +116,12 @@ export async function loadAttributesByTypeCast(
   selectProps: string,
   expandProps?: string,
 ): Promise<AttributeMetadata[]> {
+  const cache = pinMetadataCache();
   const cacheKey = `${entityLogicalName}__cast__${typeCast}__${selectProps}__${expandProps ?? ''}`;
-  const cached = metadataCache.getEntityAttributes(cacheKey);
+  const cached = cache.getEntityAttributes(cacheKey);
   if (cached) return cached;
 
-  const inFlight = metadataCache.getAttributesPromise(cacheKey);
+  const inFlight = cache.getAttributesPromise(cacheKey);
   if (inFlight) return inFlight;
 
   const promise = pptbClient.getAttributesByTypeCast(
@@ -118,14 +130,14 @@ export async function loadAttributesByTypeCast(
     selectProps,
     expandProps,
   );
-  metadataCache.setAttributesPromise(cacheKey, promise);
+  cache.setAttributesPromise(cacheKey, promise);
   try {
     const list = await promise;
-    metadataCache.setEntityAttributes(cacheKey, list);
-    metadataCache.clearAttributesPromise(cacheKey);
+    cache.setEntityAttributes(cacheKey, list);
+    cache.clearAttributesPromise(cacheKey);
     return list;
   } catch (error) {
-    metadataCache.clearAttributesPromise(cacheKey);
+    cache.clearAttributesPromise(cacheKey);
     throw error;
   }
 }
@@ -136,8 +148,9 @@ export async function loadAttributeDetailedMetadata(
   attributeLogicalName: string,
   attributeType: string,
 ): Promise<AttributeMetadata> {
+  const cache = pinMetadataCache();
   const cacheKey = `${entityLogicalName}_${attributeLogicalName}_detailed`;
-  const cached = metadataCache.getEntityAttributes(cacheKey);
+  const cached = cache.getEntityAttributes(cacheKey);
   if (cached && cached.length > 0) return cached[0];
 
   const attribute = await pptbClient.getAttributeDetailedMetadata(
@@ -145,7 +158,7 @@ export async function loadAttributeDetailedMetadata(
     attributeLogicalName,
     attributeType,
   );
-  metadataCache.setEntityAttributes(cacheKey, [attribute]);
+  cache.setEntityAttributes(cacheKey, [attribute]);
   return attribute;
 }
 
@@ -158,13 +171,21 @@ export async function loadEntityRelationships(
   manyToOne: RelationshipMetadata[];
   manyToMany: RelationshipMetadata[];
 }> {
+  const cache = pinMetadataCache();
   const cacheKey = `${logicalName}_${advancedFindOnly}`;
-  const cached = metadataCache.getEntityRelationships(cacheKey);
+  const cached = cache.getEntityRelationships(cacheKey);
   if (cached) return cached;
 
   const relationships = await pptbClient.getEntityRelationships(logicalName, advancedFindOnly);
-  metadataCache.setEntityRelationships(cacheKey, relationships);
+  cache.setEntityRelationships(cacheKey, relationships);
   return relationships;
+}
+
+/** AttributeType of specific attributes (alternate-key columns the basic
+ *  attribute load leaves out, #64). Not cached: only called once per table
+ *  build, which is itself cached. */
+export function loadAttributeTypes(logicalName: string, attributeNames: string[]) {
+  return pptbClient.getAttributeTypes(logicalName, attributeNames);
 }
 
 /** Entity alternate keys (EntityKeyMetadata). Cached per entity logical name.
@@ -172,10 +193,11 @@ export async function loadEntityRelationships(
  *  the picker would always be empty for entities that DO have alt keys
  *  defined. */
 export async function loadEntityKeys(logicalName: string) {
-  const cached = metadataCache.getEntityKeys(logicalName);
+  const cache = pinMetadataCache();
+  const cached = cache.getEntityKeys(logicalName);
   if (cached) return cached;
   const keys = await pptbClient.getEntityKeys(logicalName);
-  metadataCache.setEntityKeys(logicalName, keys);
+  cache.setEntityKeys(logicalName, keys);
   return keys;
 }
 
@@ -186,20 +208,21 @@ export async function loadEntityKeys(logicalName: string) {
 const solutionNamesInFlight = new Map<string, Promise<string[]>>();
 
 export async function loadSolutionEntityNames(solutionIds: string[]): Promise<string[]> {
+  const cache = pinMetadataCache();
   const toNames = (components: pptbClient.SolutionComponent[]) =>
     Array.from(new Set(components.map((c) => c.msdyn_name).filter(Boolean)));
 
-  const cached = metadataCache.getSolutionComponents(solutionIds);
+  const cached = cache.getSolutionComponents(solutionIds);
   if (cached) return toNames(cached);
 
-  const key = solutionIds.slice().sort().join(',');
+  const key = `${activeOrg()}|${solutionIds.slice().sort().join(',')}`;
   const inFlight = solutionNamesInFlight.get(key);
   if (inFlight) return inFlight;
 
   const promise = pptbClient
     .getSolutionComponents(solutionIds)
     .then((components) => {
-      metadataCache.setSolutionComponents(solutionIds, components);
+      cache.setSolutionComponents(solutionIds, components);
       return toNames(components);
     })
     .finally(() => solutionNamesInFlight.delete(key));

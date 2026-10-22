@@ -16,7 +16,7 @@
 //
 // Reference: https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/use-web-api-actions
 
-import { useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import {
   Input,
   SpinButton,
@@ -57,8 +57,9 @@ import {
   FormNew20Filled,
   Code20Regular,
   Open20Regular,
+  Link20Regular,
 } from '@fluentui/react-icons';
-import Editor from '@monaco-editor/react';
+import Editor from '../monaco/MonacoEditor';
 import { SegmentedToggle } from '../primitives/SegmentedToggle';
 import type { ThemeMode } from '../theme/theme';
 import { FieldSetEditor } from './FieldSetEditor';
@@ -70,6 +71,7 @@ import { RecordPicker } from '../primitives/RecordPicker';
 import { useScopedEntities } from '../host/useScopedEntities';
 import type { ActionParam, CsdlAction } from '../mock/actionsCsdl';
 import type { ExecParamValue } from '../state/executeState';
+import { defaultEntitySpecificMode, isEntitySpecificRef } from '../engine/executeBuilders';
 import type { RequestGroup } from '../registry/requestTypes';
 // Live-metadata warmer — kicks off the fetch for the entity's
 // AttributeMetadata so findTable() returns a populated TableMeta on the
@@ -477,7 +479,19 @@ function ParamRow({
 // ──────────────────────────────────────────────────────────────
 // Per-type input dispatch
 // ──────────────────────────────────────────────────────────────
-function ParamInput({
+// Accessible name (the parameter name) for value controls that don't get
+// `param` (#120). Nested complex-type fields override it with their own.
+const ParamLabelContext = createContext('Parameter value');
+
+function ParamInput(props: Parameters<typeof ParamInputBody>[0]) {
+  return (
+    <ParamLabelContext.Provider value={props.param.name}>
+      <ParamInputBody {...props} />
+    </ParamLabelContext.Provider>
+  );
+}
+
+function ParamInputBody({
   action,
   param,
   value,
@@ -499,6 +513,7 @@ function ParamInput({
     case 'Edm.String':
       return (
         <Input
+          aria-label={param.name}
           size="small"
           value={(value as string) ?? ''}
           onChange={(_, d) => onChange(d.value)}
@@ -508,6 +523,7 @@ function ParamInput({
     case 'Edm.Guid':
       return (
         <Input
+          aria-label={param.name}
           size="small"
           value={(value as string) ?? ''}
           onChange={(_, d) => onChange(d.value)}
@@ -524,6 +540,7 @@ function ParamInput({
       // commits as 3, matching Edm.Int32 semantics.
       return (
         <SpinButton
+          aria-label={param.name}
           size="small"
           value={Number.isFinite(value as number) ? (value as number) : 0}
           step={1}
@@ -539,6 +556,7 @@ function ParamInput({
     case 'Edm.Double':
       return (
         <SpinButton
+          aria-label={param.name}
           size="small"
           value={Number(value ?? 0)}
           step={0.01}
@@ -576,15 +594,10 @@ function ParamInput({
         />
       );
     case 'EntitySpecific':
-      // EntitySpecific → NEW entity instance constructed inline. Renders a
-      // metadata-driven entity form (e.g. WinOpportunity.OpportunityClose).
-      return (
-        <EntitySpecificInput
-          param={param}
-          value={value as Record<string, unknown> | undefined}
-          onChange={onChange}
-        />
-      );
+      // EntitySpecific → either an existing record (reference) or a NEW
+      // entity instance built inline (e.g. WinOpportunity.OpportunityClose).
+      // The user picks which (#1).
+      return <EntitySpecificParamInput param={param} value={value} onChange={onChange} />;
     case 'EntityCollection':
       return (
         <EntityCollectionInput
@@ -604,6 +617,7 @@ function ParamInput({
     case 'Edm.Binary':
       return (
         <Input
+          aria-label={param.name}
           size="small"
           value={(value as string) ?? ''}
           onChange={(_, d) => onChange(d.value)}
@@ -616,6 +630,7 @@ function ParamInput({
 
 // ── DateTime composite picker ──
 function DateTimeInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const paramLabel = useContext(ParamLabelContext);
   const parsed = value ? new Date(value) : null;
   const valid = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
   const write = (d: Date | null | undefined) => {
@@ -636,6 +651,7 @@ function DateTimeInput({ value, onChange }: { value: string; onChange: (v: strin
   return (
     <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
       <DatePicker
+        aria-label={`${paramLabel} (date)`}
         size="small"
         value={valid}
         onSelectDate={write}
@@ -645,6 +661,7 @@ function DateTimeInput({ value, onChange }: { value: string; onChange: (v: strin
         style={{ minWidth: 130 }}
       />
       <TimePicker
+        aria-label={`${paramLabel} (time)`}
         size="small"
         freeform
         selectedTime={valid}
@@ -671,6 +688,7 @@ function OptionSetInput({
   const cur = options.find((o) => o.value === value);
   return (
     <Combobox
+      aria-label={param.name}
       size="small"
       value={cur?.label ?? (value != null ? String(value) : '')}
       selectedOptions={value != null ? [String(value)] : []}
@@ -706,6 +724,10 @@ function StringArrayInput({
   onChange: (v: string[]) => void;
   mono?: boolean;
 }) {
+  const paramLabel = useContext(ParamLabelContext);
+  // Controlled: Fluent's Input keeps its own state, so clearing the DOM value
+  // after an add didn't stick and the next item was appended to it (#246).
+  const [draft, setDraft] = useState('');
   return (
     <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
       {value.map((v, i) => (
@@ -720,18 +742,21 @@ function StringArrayInput({
         </Tag>
       ))}
       <Input
+        aria-label={`${paramLabel} item to add`}
         size="small"
         placeholder="add… (Enter)"
         style={{
           width: 160,
           fontFamily: mono ? tokens.fontFamilyMonospace : tokens.fontFamilyBase,
         }}
+        value={draft}
+        onChange={(_, d) => setDraft(d.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
-            const v = (e.target as HTMLInputElement).value.trim();
+            const v = draft.trim();
             if (v) {
               onChange([...value, v]);
-              (e.target as HTMLInputElement).value = '';
+              setDraft('');
             }
             e.preventDefault();
           }
@@ -748,6 +773,8 @@ function NumberArrayInput({
   value: number[];
   onChange: (v: number[]) => void;
 }) {
+  const paramLabel = useContext(ParamLabelContext);
+  const [draft, setDraft] = useState('');
   return (
     <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
       {value.map((v, i) => (
@@ -761,16 +788,20 @@ function NumberArrayInput({
         </Tag>
       ))}
       <Input
+        aria-label={`${paramLabel} item to add`}
         size="small"
         type="number"
         placeholder="add… (Enter)"
         style={{ width: 120 }}
+        value={draft}
+        onChange={(_, d) => setDraft(d.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
-            const v = Number((e.target as HTMLInputElement).value);
-            if (Number.isFinite(v)) {
+            const t = draft.trim();
+            const v = Number(t);
+            if (t !== '' && Number.isFinite(v)) {
               onChange([...value, v]);
-              (e.target as HTMLInputElement).value = '';
+              setDraft('');
             }
             e.preventDefault();
           }
@@ -797,8 +828,11 @@ function EntityReferenceInput({
   param: ActionParam;
   polymorphic: boolean;
 }) {
+  const paramLabel = useContext(ParamLabelContext);
   const { entities } = useScopedEntities();
-  const entityType = value?.entityType ?? param.entityType ?? entities[0]?.logicalName ?? '';
+  // No fallback to the first table: an untyped reference (crmbaseentity) starts
+  // empty so the user picks the table (#246).
+  const entityType = value?.entityType ?? param.entityType ?? '';
   // Warm the chosen entity's metadata so RecordPicker can display the
   // primaryName column when results arrive.
   warmTableMetadata(entityType || null);
@@ -808,6 +842,7 @@ function EntityReferenceInput({
     <span style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
       {polymorphic && (
         <Combobox
+          aria-label={`${paramLabel} (table)`}
           size="small"
           value={tbl?.displayName ?? entityType}
           selectedOptions={[entityType]}
@@ -852,12 +887,14 @@ function EntityReferenceInput({
           placeholder={`Search ${tbl?.displayName ?? entityType} records…`}
         />
       )}
-      <Caption1 style={{ color: tokens.colorNeutralForeground3, fontSize: 10 }}>
-        Emitted as{' '}
-        <code style={{ fontFamily: tokens.fontFamilyMonospace }}>
-          @odata.type=Microsoft.Dynamics.CRM.{entityType}
-        </code>
-      </Caption1>
+      {entityType && (
+        <Caption1 style={{ color: tokens.colorNeutralForeground3, fontSize: 10 }}>
+          Emitted as{' '}
+          <code style={{ fontFamily: tokens.fontFamilyMonospace }}>
+            @odata.type=Microsoft.Dynamics.CRM.{entityType}
+          </code>
+        </Caption1>
+      )}
     </span>
   );
 }
@@ -951,6 +988,79 @@ function EntityCollectionInput({
 }
 
 // ──────────────────────────────────────────────────────────────
+// EntitySpecific — existing record vs new instance (#1).
+//
+// The CSDL types the parameter as `mscrm.<entity>` without saying whether
+// the action wants a reference to an existing row (AddToQueue.Target,
+// AssignUser.Target) or a new instance (WinOpportunity.OpportunityClose).
+// A segmented toggle lets the user choose; params named like Target /
+// Source / Subject / Owner default to "Existing record". The choice is
+// read from the value's shape (`{ '@ref': id }` vs a field map); with
+// nothing entered yet it lives in local state. Switching clears the value
+// since the two shapes don't convert.
+// ──────────────────────────────────────────────────────────────
+function EntitySpecificParamInput({
+  param,
+  value,
+  onChange,
+}: {
+  param: ActionParam;
+  value: ExecParamValue;
+  onChange: (v: ExecParamValue) => void;
+}) {
+  const [pickedMode, setPickedMode] = useState<'reference' | 'instance' | null>(null);
+  const mode: 'reference' | 'instance' = isEntitySpecificRef(value)
+    ? 'reference'
+    : value != null && typeof value === 'object' && Object.keys(value).length > 0
+      ? 'instance'
+      : (pickedMode ?? defaultEntitySpecificMode(param));
+  const switchTo = (next: 'reference' | 'instance') => {
+    if (next === mode) return;
+    setPickedMode(next);
+    onChange(undefined);
+  };
+  const entityType = param.entityType ?? '';
+  const refId = isEntitySpecificRef(value) ? value['@ref'] : '';
+
+  return (
+    <span style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+      <SegmentedToggle ariaLabel={`${param.name}: existing record or new instance`}>
+        <ToggleButton
+          size="small"
+          checked={mode === 'reference'}
+          icon={<Link20Regular />}
+          onClick={() => switchTo('reference')}
+        >
+          Existing record
+        </ToggleButton>
+        <ToggleButton
+          size="small"
+          checked={mode === 'instance'}
+          icon={<FormNew20Regular />}
+          onClick={() => switchTo('instance')}
+        >
+          New instance
+        </ToggleButton>
+      </SegmentedToggle>
+      {mode === 'reference' ? (
+        <EntityReferenceInput
+          value={entityType ? { id: refId, entityType } : undefined}
+          onChange={(r) => onChange(r?.id ? { '@ref': r.id } : undefined)}
+          param={param}
+          polymorphic={false}
+        />
+      ) : (
+        <EntitySpecificInput
+          param={param}
+          value={value as Record<string, unknown> | undefined}
+          onChange={onChange}
+        />
+      )}
+    </span>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────
 // EntitySpecific — a NEW entity instance constructed inline.
 //
 // Per docs (e.g. WinOpportunity.OpportunityClose), the user supplies a
@@ -971,6 +1081,7 @@ function EntitySpecificInput({
   value: Record<string, unknown> | undefined;
   onChange: (v: Record<string, CreateFieldValue>) => void;
 }) {
+  const paramLabel = useContext(ParamLabelContext);
   const entityType = param.entityType ?? '';
   // Warm the entity's live AttributeMetadata. The fetch runs in the
   // background via the live-metadata registry; once it lands findTable()
@@ -1014,6 +1125,7 @@ function EntitySpecificInput({
           environment. For now, edit the JSON inline:
         </MessageBarBody>
         <Input
+          aria-label={`${paramLabel} (JSON)`}
           size="small"
           value={JSON.stringify(v)}
           onChange={(_, d) => {
@@ -1091,6 +1203,7 @@ function ComplexTypeInput({
           </Caption1>
         </div>
         <Input
+          aria-label={`${param.name} (JSON)`}
           size="small"
           value={JSON.stringify(v)}
           onChange={(_, d) => {

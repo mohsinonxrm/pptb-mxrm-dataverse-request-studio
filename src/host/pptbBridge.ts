@@ -108,19 +108,49 @@ async function fetchInitialTheme(
   }
 }
 
-async function fetchInitialConnection(api: NonNullable<Window['toolboxAPI']>): Promise<{
+interface ConnectionSnapshot {
   connected: boolean;
   environmentUrl: string;
   environment: string;
-}> {
+}
+
+/**
+ * Id of the connection the last successful `getActiveConnection` returned
+ * (null when none / not yet known). Used to tell whether a
+ * `connection:deleted` event concerns the connection this tool is bound to.
+ */
+let activeConnectionId: string | null = null;
+
+/**
+ * Read the tool's active connection. Resolves to `null` when the host call
+ * FAILED (timeout, IPC error, a hiccup mid token-refresh) — distinct from a
+ * successful "no connection" answer — so callers can keep the last known
+ * session instead of reporting a disconnect that never happened.
+ */
+async function fetchActiveConnection(
+  api: NonNullable<Window['toolboxAPI']>,
+): Promise<ConnectionSnapshot | null> {
   try {
     const c = await api.connections?.getActiveConnection?.();
-    if (!c) return { connected: false, environmentUrl: '', environment: '' };
+    if (!c) {
+      activeConnectionId = null;
+      return { connected: false, environmentUrl: '', environment: '' };
+    }
+    activeConnectionId = typeof c.id === 'string' && c.id ? c.id : null;
     return { connected: true, environmentUrl: c.url ?? '', environment: c.environment ?? '' };
   } catch (e) {
     console.warn('[pptbBridge] getActiveConnection failed', e);
-    return { connected: false, environmentUrl: '', environment: '' };
+    return null;
   }
+}
+
+/** The `id` carried by a `connection:deleted` payload (`{ id }` in PPTB 1.2.7), if any. */
+function deletedConnectionId(data: unknown): string | null {
+  if (data && typeof data === 'object' && 'id' in data) {
+    const id = (data as { id: unknown }).id;
+    if (typeof id === 'string' && id) return id;
+  }
+  return null;
 }
 
 function hookEvents(api: NonNullable<Window['toolboxAPI']>): void {
@@ -149,9 +179,18 @@ function hookEvents(api: NonNullable<Window['toolboxAPI']>): void {
       case 'connection:created':
         void refetchConnection(api);
         break;
-      case 'connection:deleted':
-        emit({ ...session, connected: false, environmentUrl: '', environment: '' });
+      case 'connection:deleted': {
+        // PPTB forwards CONNECTION_DELETED to EVERY tool window and refuses
+        // to delete a connection an open tool is bound to, so this event is
+        // almost always about some other connection. Ignore it when the
+        // deleted id is known and isn't ours; otherwise re-read the active
+        // connection rather than assuming we lost it.
+        const deletedId = deletedConnectionId(payload.data);
+        if (deletedId && activeConnectionId && deletedId !== activeConnectionId) break;
+        // Our own connection was deleted: if the re-read fails, treat it as gone.
+        void refetchConnection(api, deletedId !== null && deletedId === activeConnectionId);
         break;
+      }
     }
   };
 
@@ -162,8 +201,23 @@ async function refetchTheme(api: NonNullable<Window['toolboxAPI']>): Promise<voi
   const theme = await fetchInitialTheme(api);
   emit({ ...session, theme });
 }
-async function refetchConnection(api: NonNullable<Window['toolboxAPI']>): Promise<void> {
-  const conn = await fetchInitialConnection(api);
+async function refetchConnection(
+  api: NonNullable<Window['toolboxAPI']>,
+  disconnectOnFailure = false,
+): Promise<void> {
+  const conn = await fetchActiveConnection(api);
+  // A failed read keeps the last known session: a transient host error (e.g.
+  // during a token-refresh `connection:updated`) must not look like a
+  // disconnect, which would wipe org-scoped state.
+  if (!conn) {
+    if (disconnectOnFailure) {
+      activeConnectionId = null;
+      emit({ ...session, connected: false, environmentUrl: '', environment: '' });
+      return;
+    }
+    console.warn('[pptbBridge] keeping the last known connection after a failed refetch');
+    return;
+  }
   emit({ ...session, ...conn });
 }
 
@@ -173,7 +227,13 @@ if (EMBEDDED && typeof window !== 'undefined' && window.toolboxAPI) {
   // Theme first (controls boot paint), then connection.
   void (async () => {
     const theme = await fetchInitialTheme(api);
-    const conn = await fetchInitialConnection(api);
+    // No last-known session exists yet, so a failed initial read is reported
+    // as "not connected"; a later connection event re-reads it.
+    const conn = (await fetchActiveConnection(api)) ?? {
+      connected: false,
+      environmentUrl: '',
+      environment: '',
+    };
     emit({ ...session, theme, ...conn, handshakeDone: true });
     hookEvents(api);
   })();
@@ -215,10 +275,11 @@ export async function dataverseQuery(odataQuery: string): Promise<DataverseQuery
 //
 // Every consumer in the studio goes through these helpers. They:
 //   - throw `HostNotAvailableError` when called outside PPTB
-//   - preserve the exact dataverseAPI signature (no re-arranging args)
-//   - never inject custom headers (the host strips most of them anyway;
-//     studio-composed headers like `MSCRM.*` bypass and `Prefer` are
-//     surfaced via the Code tab for external execution)
+//   - preserve the exact dataverseAPI argument order
+//   - take an optional `headers` map on the write methods. PPTB 1.2.7+
+//     forwards it as `additionalHeaders` (after the user approves it in the
+//     host); older hosts have no header parameter, so the map is dropped
+//     there and `hostHeaderAdvisories` blocks requests that depend on it.
 
 export class HostNotAvailableError extends Error {
   constructor(method: string) {
@@ -234,6 +295,41 @@ function dv(): DataverseAPI.API {
   return window.dataverseAPI;
 }
 
+// PPTB 1.2.7 added the trailing `additionalHeaders` parameter to every
+// dataverseAPI method in the same release as `executeBatch`. Extra arguments
+// can't be feature-detected on a function, and an older host silently ignores
+// them, so `executeBatch` is the probe. The preload bridge is fixed for the
+// life of the page, so we check once.
+const HEADER_PASS_THROUGH =
+  EMBEDDED &&
+  typeof window !== 'undefined' &&
+  typeof window.dataverseAPI?.executeBatch === 'function';
+
+/**
+ * True when the host sends `additionalHeaders` on Dataverse requests
+ * (PPTB 1.2.7+). The user approves the headers in a host prompt the first
+ * time; if they decline, the host rejects the call without sending it.
+ */
+export const hostSupportsAdditionalHeaders = (): boolean => HEADER_PASS_THROUGH;
+
+/**
+ * True when the host can send a Dataverse `$batch` (`executeBatch` /
+ * `executeTransaction`, PPTB 1.2.7+). Same probe as the header pass-through.
+ */
+export const hostSupportsBatch = (): boolean => HEADER_PASS_THROUGH;
+
+/**
+ * The headers a dvHost call should pass as `additionalHeaders`. `undefined`
+ * when there's nothing to send or the host can't send it — the call then
+ * keeps the pre-1.2.7 shape and never triggers the consent prompt.
+ */
+function sendHeaders(
+  headers?: DataverseAPI.AdditionalHeaders,
+): DataverseAPI.AdditionalHeaders | undefined {
+  if (!HEADER_PASS_THROUGH || !headers || Object.keys(headers).length === 0) return undefined;
+  return headers;
+}
+
 function tb(): ToolBoxAPI.API {
   if (!EMBEDDED || typeof window === 'undefined' || !window.toolboxAPI) {
     throw new HostNotAvailableError('window.toolboxAPI');
@@ -244,11 +340,28 @@ function tb(): ToolBoxAPI.API {
 // ── Dataverse host surface ───────────────────────────────────────────────
 export const dvHost = {
   // CRUD
-  create: (entity: string, body: Record<string, unknown>) => dv().create(entity, body),
+  create: (
+    entity: string,
+    body: Record<string, unknown>,
+    headers?: DataverseAPI.AdditionalHeaders,
+  ) => {
+    const h = sendHeaders(headers);
+    return h ? dv().create(entity, body, undefined, h) : dv().create(entity, body);
+  },
   retrieve: (entity: string, id: string, columns?: string[]) => dv().retrieve(entity, id, columns),
-  update: (entity: string, id: string, body: Record<string, unknown>) =>
-    dv().update(entity, id, body),
-  delete: (entity: string, id: string) => dv().delete(entity, id),
+  update: (
+    entity: string,
+    id: string,
+    body: Record<string, unknown>,
+    headers?: DataverseAPI.AdditionalHeaders,
+  ) => {
+    const h = sendHeaders(headers);
+    return h ? dv().update(entity, id, body, undefined, h) : dv().update(entity, id, body);
+  },
+  delete: (entity: string, id: string, headers?: DataverseAPI.AdditionalHeaders) => {
+    const h = sendHeaders(headers);
+    return h ? dv().delete(entity, id, undefined, h) : dv().delete(entity, id);
+  },
 
   // Batch
   createMultiple: (entity: string, records: Record<string, unknown>[]) =>
@@ -256,18 +369,43 @@ export const dvHost = {
   updateMultiple: (entity: string, records: Record<string, unknown>[]) =>
     dv().updateMultiple(entity, records),
 
+  // $batch (#9) — PPTB 1.2.7+. `executeBatch` sends independent requests,
+  // `executeTransaction` sends them as one change set. Check
+  // `hostSupportsBatch()` first; per-request headers and the outer
+  // `headers` go through the host's header consent prompt.
+  executeBatch: (
+    requests: DataverseAPI.BatchRequest[],
+    headers?: DataverseAPI.AdditionalHeaders,
+  ) =>
+    headers && Object.keys(headers).length > 0
+      ? dv().executeBatch(requests, undefined, headers)
+      : dv().executeBatch(requests),
+  executeTransaction: (
+    requests: DataverseAPI.BatchRequest[],
+    headers?: DataverseAPI.AdditionalHeaders,
+  ) =>
+    headers && Object.keys(headers).length > 0
+      ? dv().executeTransaction(requests, undefined, headers)
+      : dv().executeTransaction(requests),
+
   // Queries
   queryData: (odata: string) => dv().queryData(odata),
   fetchXmlQuery: (xml: string) => dv().fetchXmlQuery(xml),
 
   // Actions / Functions
-  execute: (req: {
-    operationName: string;
-    operationType: 'action' | 'function';
-    entityName?: string;
-    entityId?: string;
-    parameters?: Record<string, unknown>;
-  }) => dv().execute(req),
+  execute: (
+    req: {
+      operationName: string;
+      operationType: 'action' | 'function';
+      entityName?: string;
+      entityId?: string;
+      parameters?: Record<string, unknown>;
+    },
+    headers?: DataverseAPI.AdditionalHeaders,
+  ) => {
+    const h = sendHeaders(headers);
+    return h ? dv().execute(req, undefined, h) : dv().execute(req);
+  },
 
   // Relationships
   associate: (primary: string, id: string, rel: string, target: string, targetId: string) =>

@@ -34,6 +34,7 @@
 //   isn't a real problem in practice.
 
 import { useEffect, useState } from 'react';
+import { activeOrg, useActiveOrg } from './activeOrg';
 
 export type CascadeBehavior =
   | 'NoCascade'
@@ -70,8 +71,10 @@ interface OneToManyMeta {
   ReferencingEntity?: string;
 }
 
-// Module-level cache. Map keyed by entity logical name → array of rows.
+// Module-level cache. Map keyed by `${org}|${entity logical name}` → array
+// of rows, so a PPTB connection switch never serves another org's (#52).
 const __cache = new Map<string, CascadeRow[]>();
+const cacheKey = (entity: string, org: string = activeOrg()) => `${org}|${entity}`;
 
 /**
  * Fetch (with cache) the cascade-delete behavior for every 1:N
@@ -84,8 +87,9 @@ export function useCascadeConfiguration(entityLogical: string | null): {
   loading: boolean;
   error: string | null;
 } {
+  const org = useActiveOrg();
   const [rows, setRows] = useState<CascadeRow[]>(() =>
-    entityLogical ? (__cache.get(entityLogical) ?? []) : [],
+    entityLogical ? (__cache.get(cacheKey(entityLogical)) ?? []) : [],
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,7 +100,7 @@ export function useCascadeConfiguration(entityLogical: string | null): {
       setError(null);
       return;
     }
-    const cached = __cache.get(entityLogical);
+    const cached = __cache.get(cacheKey(entityLogical, org));
     if (cached) {
       setRows(cached);
       setError(null);
@@ -134,7 +138,7 @@ export function useCascadeConfiguration(entityLogical: string | null): {
           deleteBehavior: (r.CascadeConfiguration?.Delete ?? 'NoCascade') as CascadeBehavior,
           full: r.CascadeConfiguration as Record<string, CascadeBehavior> | undefined,
         }));
-        __cache.set(entityLogical, mapped);
+        __cache.set(cacheKey(entityLogical, org), mapped);
         setRows(mapped);
         setLoading(false);
       })
@@ -147,7 +151,7 @@ export function useCascadeConfiguration(entityLogical: string | null): {
     return () => {
       cancelled = true;
     };
-  }, [entityLogical]);
+  }, [entityLogical, org]);
 
   return { rows, loading, error };
 }

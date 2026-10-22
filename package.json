@@ -1,6 +1,6 @@
 {
   "name": "@mohsinonxrm/pptb-dataverse-request-studio",
-  "version": "1.1.4",
+  "version": "1.4.0-beta.1",
   "publishConfig": {
     "access": "public"
   },
@@ -47,7 +47,7 @@
     "microsoft"
   ],
   "features": {
-    "multiConnection": "none",
+    "connections": 1,
     "minAPI": "1.2.0"
   },
   "configurations": {
@@ -63,11 +63,17 @@
     "CHANGELOG.md",
     "SECURITY.md"
   ],
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:analyze": "vite build --mode analyze",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "validate": "pptb-validate",
@@ -88,12 +94,14 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@pptb/types": "^1.2.1",
+    "@pptb/types": "^1.2.7",
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^5.2.0",
+    "jsdom": "^30.1.3",
     "prettier": "^3.8.4",
     "typescript": "~5.9.3",
-    "vite": "^7.3.3"
+    "vite": "^7.3.3",
+    "vitest": "^5.0.5"
   }
 }
