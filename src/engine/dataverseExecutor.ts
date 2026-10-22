@@ -264,7 +264,11 @@ function failure(
  * `additionalHeaders` map the call carried, if any, so a host-side consent or
  * header-validation rejection reads as "not sent" instead of a Dataverse error.
  */
-function mapError(err: unknown, ms: number, sentHeaders?: Record<string, string>): ExecResult {
+export function mapError(
+  err: unknown,
+  ms: number,
+  sentHeaders?: Record<string, string>,
+): ExecResult {
   // Outside PPTB there is no host to send the request to. Report it as
   // 501 Not Implemented (README → "Standalone vs PPTB-embedded").
   if (err instanceof HostNotAvailableError) {
@@ -403,7 +407,7 @@ export function toWireHeaders(
 
 /** `toWireHeaders`, but only when the host can actually send them — so the
  *  consent-declined mapping never fires on a host that dropped them. */
-function sendable(headers?: Record<string, string>): Record<string, string> | undefined {
+export function sendable(headers?: Record<string, string>): Record<string, string> | undefined {
   return hostSupportsAdditionalHeaders() ? toWireHeaders(headers) : undefined;
 }
 

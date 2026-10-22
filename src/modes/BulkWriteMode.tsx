@@ -227,7 +227,8 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
   const onExecute = async () => {
     setLoading(true);
     const op = state.operation;
-    const res = await executeBulkWrite(state);
+    // The same headers the Code tab shows, bypass included (#257).
+    const res = await executeBulkWrite(state, headerItemsToObject(headers, null));
     setResult(res);
     setResultOp(op);
     setLoading(false);
@@ -489,6 +490,7 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
             items={state.headers}
             setItems={(h) => set('headers', h, 'headers')}
             group={GROUP}
+            sendsHeaders
           />
         );
         break;
