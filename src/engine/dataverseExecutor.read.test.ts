@@ -33,7 +33,7 @@ vi.mock('../host/metadataProvider', () => ({
 }));
 
 const QUERY_ID = '00000000-0000-0000-0000-0000000000b1';
-const PAGE_50 = { Prefer: 'odata.maxpagesize=50,odata.include-annotations="*"' };
+const PAGE_50 = { Prefer: 'odata.include-annotations="*",odata.maxpagesize=50' };
 
 const paged = (top: number | null, maxpagesize: number | null) =>
   retrieveMultipleState({ top, prefer: { ...emptyPrefer(), maxpagesize } });

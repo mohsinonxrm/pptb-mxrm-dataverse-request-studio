@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     grid renders as before.
   - On older ToolBox versions, Execute keeps `$top`, and the hints suggest
     `$top` instead of a page size that can't be sent.
+  - The Code tab's `Prefer` header now puts `odata.maxpagesize` last.
+    Dataverse rejects it before `odata.include-annotations` with
+    `0x80060888` "Invalid prefer header", so exported requests with both
+    used to fail.
 
 ## [1.4.0-beta.1] - 2026-10-21
 

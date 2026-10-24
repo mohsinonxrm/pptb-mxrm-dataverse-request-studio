@@ -252,11 +252,13 @@ export function PreferEditor({
   );
 }
 
+/**
+ * The Prefer preferences, page size last: Dataverse rejects
+ * `odata.maxpagesize=N, odata.include-annotations="…"` with 0x80060888
+ * "Invalid prefer header", but accepts the reverse order (confirmed live, #219).
+ */
 export function preferToHeaderValues(spec: PreferSpec): string[] {
   const out: string[] = [];
-  if (spec.maxpagesize != null && spec.maxpagesize > 0) {
-    out.push(`odata.maxpagesize=${spec.maxpagesize}`);
-  }
   if (spec.allAnnotations) {
     out.push('odata.include-annotations="*"');
   } else {
@@ -272,6 +274,9 @@ export function preferToHeaderValues(spec: PreferSpec): string[] {
     if (annos.length) out.push(`odata.include-annotations="${annos.join(',')}"`);
   }
   if (spec.returnRepresentation) out.push('return=representation');
+  if (spec.maxpagesize != null && spec.maxpagesize > 0) {
+    out.push(`odata.maxpagesize=${spec.maxpagesize}`);
+  }
   return out;
 }
 

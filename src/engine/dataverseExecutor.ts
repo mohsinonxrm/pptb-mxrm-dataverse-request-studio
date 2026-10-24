@@ -422,14 +422,16 @@ function isExecResult(x: unknown): x is ExecResult {
  * size is set and the host can send headers (1.2.7+), so other reads stay
  * header-free and never prompt. A custom Prefer replaces the host's own
  * `odata.include-annotations="*"` (desktop-app dataverseManager), so it's
- * sent again here; the grid needs those annotations. Pages after the first
- * must carry the same page size (Dataverse "Page results").
+ * sent again here; the grid needs those annotations. The page size goes
+ * last: Dataverse rejects it ahead of `include-annotations` (0x80060888
+ * "Invalid prefer header", confirmed live). Pages after the first must
+ * carry the same page size (Dataverse "Page results").
  */
 export function readPreferHeaders(
   maxpagesize: number | null | undefined,
 ): Record<string, string> | undefined {
   if (!maxpagesize || maxpagesize <= 0 || !hostSupportsAdditionalHeaders()) return undefined;
-  return { Prefer: `odata.maxpagesize=${maxpagesize},odata.include-annotations="*"` };
+  return { Prefer: `odata.include-annotations="*",odata.maxpagesize=${maxpagesize}` };
 }
 
 export async function executeRetrieveMultiple(s: RetrieveMultipleState): Promise<ExecResult> {
