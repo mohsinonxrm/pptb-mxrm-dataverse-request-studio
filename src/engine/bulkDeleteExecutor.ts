@@ -5,6 +5,7 @@
 
 import { dvHost } from '../host/pptbBridge';
 import { mapError, type ExecResult } from './dataverseExecutor';
+import { jsonBytes } from './byteSize';
 import {
   COUNT_CAP,
   buildBulkDeleteBody,
@@ -64,7 +65,7 @@ export async function executeBulkDelete(s: BulkDeleteState): Promise<ExecResult>
       status: 200,
       statusText: 'OK',
       ms,
-      bytes: JSON.stringify(value ?? {}).length,
+      bytes: jsonBytes(value ?? {}),
       ok: true,
       outcome: 'ok',
       body: value ?? {},

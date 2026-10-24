@@ -5,6 +5,22 @@ All notable changes to Dataverse Request Studio will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### 🐛 Fixed
+
+- **Retrieve all stays responsive on large tables** ([#223]).
+  - Pages reach the grid in batches. The size is added up page by page,
+    instead of re-measuring everything loaded after every page, which slowed
+    down with every page.
+  - It pauses every 50,000 rows (or 1,000 pages) and says how many rows are
+    loaded. **Continue** loads the next batch. It used to stop silently after
+    200 pages, so the grid and exports could look complete when they weren't.
+  - Response sizes are counted in UTF-8 bytes, so text in other scripts is
+    no longer undercounted.
+- **Recent runs keeps up with paging** ([#211]): after scrolling or Retrieve
+  all, the entry shows the rows loaded, with "more available" or "all pages".
+
 ## [1.4.0-beta.1] - 2026-10-21
 
 The biggest release so far: four new modes (Bulk Write, Bulk Delete Job,
@@ -287,11 +303,13 @@ Dataverse environments.
 [#203]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/203
 [#204]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/204
 [#207]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/207
+[#211]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/211
 [#212]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/212
 [#217]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/217
 [#218]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/218
 [#219]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/219
 [#220]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/220
+[#223]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/223
 [#239]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/239
 [#243]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/243
 [#244]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/244
