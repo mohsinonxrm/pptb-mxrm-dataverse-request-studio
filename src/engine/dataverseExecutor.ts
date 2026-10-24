@@ -417,9 +417,27 @@ function isExecResult(x: unknown): x is ExecResult {
 
 // ── Read group ───────────────────────────────────────────────────────────
 
+/**
+ * The `Prefer` a read sends for `odata.maxpagesize` (#219): only when a page
+ * size is set and the host can send headers (1.2.7+), so other reads stay
+ * header-free and never prompt. A custom Prefer replaces the host's own
+ * `odata.include-annotations="*"` (desktop-app dataverseManager), so it's
+ * sent again here; the grid needs those annotations. Pages after the first
+ * must carry the same page size (Dataverse "Page results").
+ */
+export function readPreferHeaders(
+  maxpagesize: number | null | undefined,
+): Record<string, string> | undefined {
+  if (!maxpagesize || maxpagesize <= 0 || !hostSupportsAdditionalHeaders()) return undefined;
+  return { Prefer: `odata.maxpagesize=${maxpagesize},odata.include-annotations="*"` };
+}
+
 export async function executeRetrieveMultiple(s: RetrieveMultipleState): Promise<ExecResult> {
-  const built = buildRetrieveMultiple(s);
-  const res = await timed(() => dvHost.queryData(built.relativeNoBase));
+  const headers = readPreferHeaders(s.prefer.maxpagesize);
+  // Without the page size on the wire, dropping `$top` (as the Code tab
+  // does) would leave the query uncapped: up to 5,000 rows (#219).
+  const built = buildRetrieveMultiple(s, { keepTop: !headers });
+  const res = await timed(() => dvHost.queryData(built.relativeNoBase, headers), headers);
   if (isExecResult(res)) return res;
   return ok(200, res.value, res.ms);
 }
@@ -439,7 +457,7 @@ export async function executeRetrieveSingle(s: RetrieveSingleState): Promise<Exe
 }
 
 export async function executeNextLink(s: RetrieveNextLinkState): Promise<ExecResult> {
-  return executeAbsoluteUrl(s.url);
+  return executeAbsoluteUrl(s.url, s.prefer.maxpagesize);
 }
 
 /**
@@ -447,9 +465,14 @@ export async function executeNextLink(s: RetrieveNextLinkState): Promise<ExecRes
  * pulled out of a previous response). The host's `queryData` takes a path
  * relative to `/api/data/v9.2/`, so we strip the scheme/host/api/version
  * prefix before calling. Used by ResultsGrid's infinite scroll +
- * Retrieve-All command.
+ * Retrieve-All command. `maxpagesize` is the page size the first page was
+ * requested with; Dataverse wants it on every later page too (#219).
  */
-export async function executeAbsoluteUrl(url: string): Promise<ExecResult> {
+export async function executeAbsoluteUrl(
+  url: string,
+  maxpagesize?: number | null,
+): Promise<ExecResult> {
+  const headers = readPreferHeaders(maxpagesize);
   let path = url;
   const apiIdx = path.indexOf('/api/data/');
   if (apiIdx >= 0) {
@@ -457,7 +480,7 @@ export async function executeAbsoluteUrl(url: string): Promise<ExecResult> {
     const slash = path.indexOf('/');
     if (slash >= 0) path = path.slice(slash + 1);
   }
-  const res = await timed(() => dvHost.queryData(path));
+  const res = await timed(() => dvHost.queryData(path, headers), headers);
   if (isExecResult(res)) return res;
   return ok(200, res.value, res.ms);
 }
@@ -472,7 +495,10 @@ export async function executePredefined(s: PredefinedQueryState): Promise<ExecRe
   const tbl = metadata.peekTable(s.table) ?? (await metadata.getTable(s.table));
   if (!tbl) return mapError({ statusCode: 404, message: `Unknown table ${s.table}` }, 0);
   const param = s.queryType === 'savedQuery' ? 'savedQuery' : 'userQuery';
-  const top = s.top ? `&$top=${s.top}` : '';
+  const headers = readPreferHeaders(s.prefer.maxpagesize);
+  // Dataverse ignores `$top` next to a page size, so it's only sent when the
+  // page size isn't (#219); that matches the URL bar whenever it can.
+  const top = s.top && !headers ? `&$top=${s.top}` : '';
   // Related collection (#5): /<sourceSet>(<id>)/<nav>?savedQuery=<id>
   let collection = tbl.entitySetName;
   if (s.related) {
@@ -488,7 +514,7 @@ export async function executePredefined(s: PredefinedQueryState): Promise<ExecRe
     collection = `${src.entitySetName}(${r.recordId})/${r.navProperty}`;
   }
   const path = `${collection}?${param}=${s.queryId}${top}`;
-  const res = await timed(() => dvHost.queryData(path));
+  const res = await timed(() => dvHost.queryData(path, headers), headers);
   if (isExecResult(res)) return res;
   return ok(200, res.value, res.ms);
 }

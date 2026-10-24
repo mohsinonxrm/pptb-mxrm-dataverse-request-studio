@@ -14,6 +14,7 @@ import {
 import { Settings20Filled } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
 import { useHostSession } from '../host/HostContext';
+import { hostSupportsAdditionalHeaders } from '../host/pptbBridge';
 import type { RequestGroup } from '../registry/requestTypes';
 
 export interface PreferSpec {
@@ -45,13 +46,17 @@ export function PreferEditor({
   spec,
   setSpec,
   group = 'read',
+  sendsPageSize = false,
 }: {
   spec: PreferSpec;
   setSpec: (s: PreferSpec) => void;
   group?: RequestGroup;
+  /** The mode's Execute sends `odata.maxpagesize` on PPTB 1.2.7+ (#219). */
+  sendsPageSize?: boolean;
 }) {
   const set = <K extends keyof PreferSpec>(k: K, v: PreferSpec[K]) => setSpec({ ...spec, [k]: v });
   const host = useHostSession();
+  const pageSizeSent = sendsPageSize && hostSupportsAdditionalHeaders();
 
   return (
     <div>
@@ -63,15 +68,29 @@ export function PreferEditor({
       />
 
       {/* Prefer is host-owned: PPTB sets it on every request itself, and DRS
-          never passes this pane's value to the host (it's left out of the
-          1.2.7 `additionalHeaders`, see HOST_OWNED_HEADERS). On reads the
-          host's default Prefer carries the common annotations (FormattedValue
-          / lookup logical name), so the grid renders, and the page size is
+          doesn't pass this pane's value to the host (it's left out of the
+          1.2.7 `additionalHeaders`, see HOST_OWNED_HEADERS). The exception is
+          the page size of the paging reads on 1.2.7+ (`readPreferHeaders`,
+          #219), sent with all annotations so the grid still renders. On
+          reads the host's default Prefer carries the common annotations
+          (FormattedValue / lookup logical name), and the page size is
           Dataverse's 5,000. On create / update the host always sends
           `return=representation` (desktop-app dataverseManager), whatever
           the toggle says; `create()` returns the row, `update()` resolves
           to nothing (#108). The values still go into the Code tab samples. */}
-      {host.embedded && (
+      {host.embedded && pageSizeSent && (
+        <MessageBar layout="multiline" intent="info" style={{ marginBottom: 14, maxWidth: 720 }}>
+          <MessageBarBody>
+            <MessageBarTitle>Execute sends the page size, not the annotations</MessageBarTitle>
+            When you set <code>odata.maxpagesize</code>, Execute sends it, and ToolBox asks you to
+            approve the <code>Prefer</code> header the first time. Execute always asks for all
+            annotations, whatever you pick here, so the grid renders correctly.{' '}
+            <strong>The values you set here are emitted into the Code tab</strong> — export to
+            Postman / curl / fetch to test the full request shape.
+          </MessageBarBody>
+        </MessageBar>
+      )}
+      {host.embedded && !pageSizeSent && (
         <MessageBar layout="multiline" intent="info" style={{ marginBottom: 14, maxWidth: 720 }}>
           <MessageBarBody>
             <MessageBarTitle>

@@ -12,6 +12,7 @@ import {
 import { NumberSymbol20Filled, Tag20Filled } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
 import { ApplyOverridesBanner } from './ApplyOverridesBanner';
+import { pageSizeIsSent } from '../host/pptbBridge';
 import type { RequestGroup } from '../registry/requestTypes';
 
 export function TopEditor({
@@ -39,7 +40,14 @@ export function TopEditor({
         <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 12 }}>
           <MessageBarBody>
             <strong>$top and Prefer: odata.maxpagesize are mutually exclusive</strong> — when both
-            are set, <code>$top</code> is silently ignored.
+            are set, Dataverse ignores <code>$top</code>, so the request leaves it out.
+            {!pageSizeIsSent() && (
+              <>
+                {' '}
+                This ToolBox version can&apos;t send <code>Prefer</code>, so Execute keeps{' '}
+                <code>$top</code> instead and ignores the page size (ToolBox 1.2.7+ sends it).
+              </>
+            )}
           </MessageBarBody>
         </MessageBar>
       )}

@@ -5,6 +5,21 @@ All notable changes to Dataverse Request Studio will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### 🐛 Fixed
+
+- **A page size no longer turns `$top` into "up to 5,000 rows"** ([#219]).
+  Retrieve Multiple used to drop `$top` whenever `Prefer: odata.maxpagesize`
+  was set, but Execute never sent that Prefer.
+  - On ToolBox 1.2.7+, Execute now sends the page size. That covers
+    Retrieve Multiple, Predefined Query and Retrieve NextLink, and later
+    pages ask for the same size. ToolBox asks you to approve the `Prefer`
+    header the first time. Execute still asks for all annotations, so the
+    grid renders as before.
+  - On older ToolBox versions, Execute keeps `$top`, and the hints suggest
+    `$top` instead of a page size that can't be sent.
+
 ## [1.4.0-beta.1] - 2026-10-21
 
 The biggest release so far: four new modes (Bulk Write, Bulk Delete Job,
