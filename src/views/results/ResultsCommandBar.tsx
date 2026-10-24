@@ -55,8 +55,7 @@ import {
 } from '@fluentui/react-icons';
 import type { GridDensity } from '../../state/displaySettings';
 import { useState } from 'react';
-import { useHostSession } from '../../host/HostContext';
-import { saveFileSafe } from '../../host/pptbBridge';
+import { pageSizeIsSent, saveFileSafe } from '../../host/pptbBridge';
 import {
   exportFileName,
   toCsv,
@@ -139,19 +138,18 @@ export function ResultsCommandBar({
   exportView,
 }: ResultsCommandBarProps) {
   const s = useStyles();
-  const host = useHostSession();
   const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState<{ intent: 'success' | 'error'; text: string } | null>(null);
-  // PPTB strips Prefer headers, so `odata.maxpagesize` for small-page-size
-  // testing doesn't apply on Execute. When the response has no nextLink AND
-  // we're inside PPTB, explain WHY pagination is unavailable rather than
-  // just greying out the button.
+  // A ToolBox older than 1.2.7 can't send Prefer, so `odata.maxpagesize`
+  // doesn't apply on Execute there (#219). When the response has no nextLink
+  // on such a host, explain WHY pagination is unavailable rather than just
+  // greying out the button.
   const retrieveAllTooltip = hasMore
     ? 'Keep fetching @odata.nextLink pages until everything is loaded'
-    : host.embedded
-      ? 'No more pages to fetch. Inside PPTB, Prefer: odata.maxpagesize is stripped, ' +
+    : !pageSizeIsSent()
+      ? "No more pages to fetch. This ToolBox version can't send Prefer: odata.maxpagesize, " +
         "so the response uses Dataverse's default 5,000-row page size. To test paging at " +
-        'smaller sizes, export the request via the Code tab.'
+        'smaller sizes, use ToolBox 1.2.7+ or export the request via the Code tab.'
       : 'No more pages to fetch — the response did not include @odata.nextLink. ' +
         'Set Prefer: odata.maxpagesize to enable server-side pagination.';
 

@@ -319,6 +319,14 @@ export const hostSupportsAdditionalHeaders = (): boolean => HEADER_PASS_THROUGH;
 export const hostSupportsBatch = (): boolean => HEADER_PASS_THROUGH;
 
 /**
+ * True when a read's `Prefer: odata.maxpagesize` takes effect: on PPTB
+ * 1.2.7+, where Execute sends it (#219), and standalone, where the Code tab
+ * request carries it. On an older host Execute gets Dataverse's 5,000-row
+ * pages and keeps `$top` instead.
+ */
+export const pageSizeIsSent = (): boolean => !EMBEDDED || HEADER_PASS_THROUGH;
+
+/**
  * The headers a dvHost call should pass as `additionalHeaders`. `undefined`
  * when there's nothing to send or the host can't send it — the call then
  * keeps the pre-1.2.7 shape and never triggers the consent prompt.
@@ -388,8 +396,11 @@ export const dvHost = {
       ? dv().executeTransaction(requests, undefined, headers)
       : dv().executeTransaction(requests),
 
-  // Queries
-  queryData: (odata: string) => dv().queryData(odata),
+  // Queries. Headers (1.2.7+) carry the read's `Prefer` page size (#219).
+  queryData: (odata: string, headers?: DataverseAPI.AdditionalHeaders) => {
+    const h = sendHeaders(headers);
+    return h ? dv().queryData(odata, undefined, h) : dv().queryData(odata);
+  },
   fetchXmlQuery: (xml: string) => dv().fetchXmlQuery(xml),
 
   // Actions / Functions

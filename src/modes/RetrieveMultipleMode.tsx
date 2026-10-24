@@ -73,6 +73,7 @@ import type { ThemeMode } from '../theme/theme';
 // re-render when columns + relationships land from Dataverse.
 import { useLiveTable, useWarmReferencedTables } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
+import { pageSizeIsSent } from '../host/pptbBridge';
 import { topLevelRowCount } from '../views/results/flattenExpansions';
 import {
   mergePage,
@@ -306,6 +307,9 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // results when it finished (#98). Executing therefore also cancels any
   // in-flight paging.
   const runIdRef = useRef(0);
+  // The page size the run's first page asked for. Later pages must ask for
+  // the same one, even if the Prefer pane has changed since (#219).
+  const runPageSizeRef = useRef<number | null>(null);
   // Bumped by Stop to end a Retrieve All, keeping the rows already merged.
   const pagingIdRef = useRef(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -339,6 +343,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   const onExecute = async () => {
     const run = startRun();
     setLoading(true);
+    runPageSizeRef.current = state.prefer.maxpagesize;
     const res = await runtime.retrieveMultiple(state);
     // A newer Execute (e.g. Refresh clicked mid-flight) owns the results now.
     if (runIdRef.current !== run) return;
@@ -416,7 +421,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     if (!nextLink || isLoadingMore) return;
     const status = beginPaging();
     try {
-      const more = await runtime.absoluteUrl(nextLink);
+      const more = await runtime.absoluteUrl(nextLink, runPageSizeRef.current);
       if (status() !== 'current') return;
       if (!more.ok) {
         setPageError(`Couldn't load the next page: ${describePageError(more)}`);
@@ -438,7 +443,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     try {
       const outcome = await retrieveAll({
         nextLink,
-        fetchPage: (url) => runtime.absoluteUrl(url),
+        fetchPage: (url) => runtime.absoluteUrl(url, runPageSizeRef.current),
         commit: commitPages,
         status,
       });
@@ -516,6 +521,14 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     const collectionWithNested =
       !!state.table && hasCollectionExpandWithNestedExpand(state.expand, state.table);
     const nestingAdvisories: Advisory[] = [];
+    // On a ToolBox older than 1.2.7, Execute can't send the page size (#219).
+    const pageSizeNote = pageSizeIsSent() ? null : (
+      <>
+        {' '}
+        This ToolBox version can&apos;t send it on Execute (ToolBox 1.2.7+ can), so Execute gets
+        Dataverse&apos;s 5,000-row pages.
+      </>
+    );
     if (collectionWithNested && state.top != null) {
       nestingAdvisories.push({
         id: 'nested-collection-top',
@@ -533,7 +546,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
             </em>
             <br />
             Drop <code>$top</code> and use <code>Prefer: odata.maxpagesize</code> in the Prefer pane
-            instead.
+            instead.{pageSizeNote}
           </>
         ),
         learnMoreUrl:
@@ -550,7 +563,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
           <>
             Your query has a nested <code>$expand</code> involving a 1:N or N:N relationship. If
             Dataverse rejects <code>$top</code> (<code>0x80060888</code>), drop it and use{' '}
-            <code>Prefer: odata.maxpagesize</code> in the Prefer pane instead.
+            <code>Prefer: odata.maxpagesize</code> in the Prefer pane instead.{pageSizeNote}
           </>
         ),
         learnMoreUrl:
@@ -983,7 +996,13 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
         );
         break;
       case 'prefer':
-        pane = <PreferEditor spec={state.prefer} setSpec={(p) => set('prefer', p, 'prefer')} />;
+        pane = (
+          <PreferEditor
+            spec={state.prefer}
+            setSpec={(p) => set('prefer', p, 'prefer')}
+            sendsPageSize
+          />
+        );
         break;
       case 'headers':
         pane = (

@@ -407,6 +407,7 @@ Dataverse API)
 | Retrieve Multiple (full OData) | ✅ |
 | Retrieve Single (by GUID) | ✅ |
 | `@odata.nextLink` paging, Retrieve all | ✅ |
+| `Prefer: odata.maxpagesize` (page size) | ✅ 1.2.7+ (older ToolBox: Execute keeps `$top` instead) |
 | Predefined / user queries (incl. over related records) | ✅ |
 | `$apply` (groupby / aggregate) | ✅ |
 | Lambda filter (`any` / `all`) | ✅ |

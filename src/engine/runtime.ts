@@ -85,7 +85,7 @@ export const runtime = neverThrow({
   retrieveMultiple: (s: RetrieveMultipleState) => liveRetrieveMultiple(s),
   retrieveSingle: (s: RetrieveSingleState) => liveRetrieveSingle(s),
   nextLink: (s: RetrieveNextLinkState) => liveNextLink(s),
-  absoluteUrl: (url: string) => liveAbsoluteUrl(url),
+  absoluteUrl: (url: string, maxpagesize?: number | null) => liveAbsoluteUrl(url, maxpagesize),
   predefined: (s: PredefinedQueryState) => livePredefined(s),
   create: afterWrite(
     (s: CreateState, headers?: Record<string, string>) => liveCreate(s, headers),
