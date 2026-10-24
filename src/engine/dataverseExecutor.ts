@@ -17,7 +17,8 @@
 //
 // What's expressly NOT implemented:
 //   - Headers on the read / relate / execute groups. Those still run with
-//     the host's own headers, including its default `Prefer`.
+//     the host's own headers. The one exception is the paged reads' page
+//     size (`readPreferHeaders`, #219).
 //   - Binary (file/image) chunked upload — host doesn't expose this API.
 //     ManageFile / ManageImage modes return `host-not-supported` from the
 //     live executor so the user can BUILD the request and copy out, but
@@ -39,6 +40,7 @@ import {
 } from '../host/pptbBridge';
 import { metadata } from '../host/metadataProvider';
 import { cleanHostMessage } from './hostErrorText';
+import { hasCollectionInvolvedNestedExpand } from '../editors/expand/expandTree';
 import {
   buildRetrieveMultiple,
   buildRetrieveSingle,
@@ -311,7 +313,7 @@ export function mapError(
         code: HEADER_REJECTED_CODE,
         message:
           `Power Platform ToolBox rejected a request header, so nothing was sent to Dataverse. ` +
-          `Fix the header in the Headers pane. Host message: ${message}`,
+          `Fix the header in the Headers or Prefer pane. Host message: ${message}`,
         ...raw,
       },
       ms,
@@ -371,7 +373,9 @@ async function timed<T>(
 // Headers PPTB's Dataverse client always sets itself. Its client spreads
 // `additionalHeaders` over its own, so sending these would override them
 // (and prompt for consent for nothing). `Prefer` is host-owned too: the host
-// always sends `return=representation` on writes and would only append ours.
+// always sends `return=representation`, and a custom Prefer replaces the
+// rest of the host's own (on reads, `odata.include-annotations="*"`).
+// Only the paged reads send one, through `readPreferHeaders` (#219).
 const HOST_OWNED_HEADERS = new Set([
   'authorization',
   'accept',
@@ -437,8 +441,11 @@ export function readPreferHeaders(
 export async function executeRetrieveMultiple(s: RetrieveMultipleState): Promise<ExecResult> {
   const headers = readPreferHeaders(s.prefer.maxpagesize);
   // Without the page size on the wire, dropping `$top` (as the Code tab
-  // does) would leave the query uncapped: up to 5,000 rows (#219).
-  const built = buildRetrieveMultiple(s, { keepTop: !headers });
+  // does) would leave the query uncapped: up to 5,000 rows (#219). Except
+  // where Dataverse can reject top-level `$top` (a nested `$expand` that
+  // involves a collection, 0x80060888): there it stays dropped, as before.
+  const keepTop = !headers && !hasCollectionInvolvedNestedExpand(s.expand, s.table);
+  const built = buildRetrieveMultiple(s, { keepTop });
   const res = await timed(() => dvHost.queryData(built.relativeNoBase, headers), headers);
   if (isExecResult(res)) return res;
   return ok(200, res.value, res.ms);

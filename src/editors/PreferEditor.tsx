@@ -72,8 +72,8 @@ export function PreferEditor({
           1.2.7 `additionalHeaders`, see HOST_OWNED_HEADERS). The exception is
           the page size of the paging reads on 1.2.7+ (`readPreferHeaders`,
           #219), sent with all annotations so the grid still renders. On
-          reads the host's default Prefer carries the common annotations
-          (FormattedValue / lookup logical name), and the page size is
+          reads the host's default Prefer asks for all annotations
+          (`odata.include-annotations="*"`), and the page size is
           Dataverse's 5,000. On create / update the host always sends
           `return=representation` (desktop-app dataverseManager), whatever
           the toggle says; `create()` returns the row, `update()` resolves
@@ -98,8 +98,8 @@ export function PreferEditor({
             </MessageBarTitle>
             ToolBox sets <code>Prefer</code> itself, so the values here don&apos;t change what
             Execute sends. Reads use Dataverse&apos;s default page size of <strong>5,000</strong>,
-            and ToolBox still asks for the common annotations (FormattedValue, lookuplogicalname),
-            so the grid renders correctly. Creates and updates always go out with{' '}
+            and ToolBox still asks for all annotations (FormattedValue, lookuplogicalname and the
+            rest), so the grid renders correctly. Creates and updates always go out with{' '}
             <code>return=representation</code>, whatever you pick here: a create shows the new row,
             while ToolBox doesn&apos;t pass the row back for an update or upsert.{' '}
             <strong>The values you set here are emitted into the Code tab</strong> — export to

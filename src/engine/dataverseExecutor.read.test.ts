@@ -9,6 +9,7 @@ import {
   executeRetrieveMultiple,
   readPreferHeaders,
 } from './dataverseExecutor';
+import { makeExpandSpec } from '../editors/ExpandEditor';
 import { emptyPrefer } from '../editors/PreferEditor';
 import type { PredefinedQueryState, RetrieveNextLinkState } from '../state/readState';
 import { registerFixtureTables, retrieveMultipleState } from '../test/fixtures';
@@ -84,6 +85,16 @@ describe('executeRetrieveMultiple', () => {
     expect(host.queryData).toHaveBeenCalledWith('/accounts?$top=10', undefined);
   });
 
+  it('still drops $top where Dataverse rejects it (nested $expand over a collection)', async () => {
+    host.additionalHeaders = false;
+    const nested = {
+      ...makeExpandSpec('contact_customer_accounts'),
+      nestedExpand: [makeExpandSpec('parentcustomerid_contact')],
+    };
+    await executeRetrieveMultiple({ ...paged(10, 50), expand: [nested] });
+    expect(host.queryData).toHaveBeenCalledWith(expect.not.stringContaining('$top'), undefined);
+  });
+
   it('stays header-free without a page size', async () => {
     await executeRetrieveMultiple(paged(10, null));
     expect(host.queryData).toHaveBeenCalledWith('/accounts?$top=10', undefined);
@@ -121,6 +132,12 @@ describe('next pages', () => {
     const s = { url: NEXT, prefer: { ...emptyPrefer(), maxpagesize: 50 } };
     await executeNextLink(s as unknown as RetrieveNextLinkState);
     expect(host.queryData).toHaveBeenCalledWith(expect.any(String), PAGE_50);
+  });
+
+  it('Retrieve NextLink sends no page size by default (no prompt, the link’s own size)', async () => {
+    const s = { url: NEXT, prefer: emptyPrefer() };
+    await executeNextLink(s as unknown as RetrieveNextLinkState);
+    expect(host.queryData).toHaveBeenCalledWith(expect.any(String), undefined);
   });
 });
 

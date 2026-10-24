@@ -67,7 +67,7 @@ import { decodeForDisplay } from '../primitives/decodeForDisplay';
 
 const initialState = (): RetrieveNextLinkState => ({
   url: '',
-  prefer: { ...emptyPrefer(), maxpagesize: 50 },
+  prefer: emptyPrefer(),
   headers: defaultReadHeaders(),
   dirty: new Set(),
 });

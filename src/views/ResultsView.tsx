@@ -455,7 +455,8 @@ function ErrorState({ result }: { result: ExecResult }) {
       : err?.code === HEADER_REJECTED_CODE
         ? {
             title: 'Not sent — header rejected',
-            advice: 'Power Platform ToolBox rejected a request header. Fix it in the Headers pane.',
+            advice:
+              'Power Platform ToolBox rejected a request header. Fix it in the Headers or Prefer pane.',
           }
         : null;
   const title = notSent

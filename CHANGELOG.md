@@ -12,17 +12,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A page size no longer turns `$top` into "up to 5,000 rows"** ([#219]).
   Retrieve Multiple used to drop `$top` whenever `Prefer: odata.maxpagesize`
   was set, but Execute never sent that Prefer.
-  - On ToolBox 1.2.7+, Execute now sends the page size. That covers
-    Retrieve Multiple, Predefined Query and Retrieve NextLink, and later
-    pages ask for the same size. ToolBox asks you to approve the `Prefer`
-    header the first time. Execute still asks for all annotations, so the
-    grid renders as before.
+  - On ToolBox 1.2.7+, Execute now sends the page size you set for
+    Retrieve Multiple, Predefined Query or Retrieve NextLink. In Retrieve
+    Multiple, scrolling and Retrieve all ask for the same size on every
+    page. ToolBox asks you to approve the `Prefer` header the first time.
+    Execute still asks for all annotations, so the grid renders as before.
+    Retrieve NextLink no longer starts with a page size of 50, so a pasted
+    link keeps the size it was made with unless you set one.
   - On older ToolBox versions, Execute keeps `$top`, and the hints suggest
     `$top` instead of a page size that can't be sent.
-  - The Code tab's `Prefer` header now puts `odata.maxpagesize` last.
-    Dataverse rejects it before `odata.include-annotations` with
-    `0x80060888` "Invalid prefer header", so exported requests with both
-    used to fail.
+  - `Prefer` now puts `odata.maxpagesize` last: in the Code tab, in
+    `$batch` parts and in exported collections. Dataverse rejects it before
+    `odata.include-annotations` with `0x80060888` "Invalid prefer header",
+    so requests with a page size and annotations used to fail.
 
 ## [1.4.0-beta.1] - 2026-10-21
 
