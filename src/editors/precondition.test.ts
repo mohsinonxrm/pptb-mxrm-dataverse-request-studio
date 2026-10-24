@@ -58,3 +58,35 @@ describe('preconditionToHeader', () => {
     expect(preconditionToHeader({ kind: 'etag', etag: ' ' })).toBeNull();
   });
 });
+
+describe('ETag paste mistakes (#264 review)', () => {
+  it.each([['W/""'], ['""'], ['W/"1 2"']])('rejects an empty or spaced tag: %s', (v) => {
+    expect(etagProblem(v)).not.toBeNull();
+  });
+
+  it('explains a JSON-escaped ETag and fixes it', () => {
+    expect(etagProblem('W/\\"7281965\\"')).toMatch(/JSON-escaped/);
+    expect(etagFix('W/\\"7281965\\"')).toBe('W/"7281965"');
+    // The whole JSON string value, outer quotes included.
+    expect(etagFix('"W/\\"7281965\\""')).toBe('W/"7281965"');
+  });
+
+  it.each([
+    ['lowercase w/', 'w/"7281965"', 'W/"7281965"'],
+    ['a space after W/', 'W/ "7281965"', 'W/"7281965"'],
+    ['single curly quotes', 'W/‘7281965’', 'W/"7281965"'],
+    ['fullwidth quotes', 'W/＂7281965＂', 'W/"7281965"'],
+  ])('fixes %s', (_, v, want) => {
+    expect(etagProblem(v)).not.toBeNull();
+    expect(etagFix(v)).toBe(want);
+  });
+
+  it('flags curly quotes the same way every time (no stateful regex)', () => {
+    expect(etagProblem('W/“1”')).toMatch(/curly/);
+    expect(etagProblem('W/“1”')).toMatch(/curly/);
+  });
+
+  it('offers no fix for an empty value', () => {
+    expect(etagFix('')).toBeNull();
+  });
+});

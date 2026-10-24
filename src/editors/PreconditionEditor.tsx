@@ -306,7 +306,13 @@ export function preconditionToHeader(m: ConcurrencyMode): { name: string; value:
 }
 
 // A weak (`W/"…"`) or strong (`"…"`) entity tag, the shape of `@odata.etag`.
-const ETAG_RE = /^(W\/)?"[^"]*"$/;
+// Dataverse accepts both (a strong tag was checked live, #264). The tag is
+// visible ASCII without spaces or quotes (RFC 7232 etagc).
+const ETAG_RE = /^(W\/)?"[\x21\x23-\x7E]+"$/;
+// Quote marks that sneak in through copy and paste: curly, low, prime and
+// fullwidth double quotes, and single curly quotes.
+const ODD_QUOTE = /[“”„‟″〝〞＂‘’]/;
+const ODD_QUOTES = new RegExp(ODD_QUOTE.source, 'g');
 
 /**
  * Why an ETag value can't go out as `If-Match`, or null when it can (#264).
@@ -317,19 +323,28 @@ const ETAG_RE = /^(W\/)?"[^"]*"$/;
 export function etagProblem(raw: string): string | null {
   const v = raw.trim();
   if (!v) return 'Provide an etag value or switch the concurrency mode.';
-  if (v === '*') return null; // same as "Update only"
-  if (/[“”„″]/.test(v)) return 'The ETag has curly quotes. Use straight ones: W/"12345678".';
+  if (v === '*') return null; // matches any version, like "Require existing record"
+  if (ETAG_RE.test(v)) return null;
   if (/^\d+$/.test(v)) return `Wrap the ETag in quotes: W/"${v}".`;
-  if (!ETAG_RE.test(v)) {
-    return 'An ETag looks like W/"12345678", quotes included (copy it from @odata.etag).';
+  if (/\\"/.test(v)) {
+    return 'The ETag is still JSON-escaped (\\"). Use W/"12345678", without backslashes.';
   }
-  return null;
+  if (ODD_QUOTE.test(v)) return 'The ETag has curly quotes. Use straight ones: W/"12345678".';
+  return 'An ETag looks like W/"12345678", quotes included (copy it from @odata.etag).';
 }
 
-/** The corrected value for a fixable ETag (a bare version number, curly quotes), else null. */
+/**
+ * The corrected value for a fixable ETag, else null: a bare version number,
+ * curly quotes, JSON escaping (`W/\"1\"` or the whole `"W/\"1\""` string), a
+ * lowercase `w/` or a space after `W/`.
+ */
 export function etagFix(raw: string): string | null {
   const v = raw.trim();
+  if (!v || ETAG_RE.test(v) || v === '*') return null;
   if (/^\d+$/.test(v)) return `W/"${v}"`;
-  const straight = v.replace(/[“”„″]/g, '"');
-  return straight !== v && ETAG_RE.test(straight) ? straight : null;
+  let fixed = v.replace(ODD_QUOTES, '"').replace(/\\"/g, '"');
+  // A whole JSON string value: "W/"1"" → W/"1".
+  if (/^"(W\/)?".*""$/i.test(fixed)) fixed = fixed.slice(1, -1);
+  fixed = fixed.replace(/^w\/\s*/i, 'W/');
+  return ETAG_RE.test(fixed) ? fixed : null;
 }

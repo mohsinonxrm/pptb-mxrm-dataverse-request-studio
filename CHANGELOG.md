@@ -37,11 +37,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Recent runs keeps up with paging** ([#211]): after scrolling or Retrieve
   all, the entry shows the rows loaded, with "more available" or "all pages".
 - **A malformed ETag is caught before it's sent** ([#264]). Update,
-  Upsert and Delete send the **Specific ETag** trimmed and block Execute
-  with the reason when it isn't shaped like `W/"12345678"`: a bare version
-  number, curly quotes or extra text. Before, Dataverse answered with a 412
-  or 400 that didn't point back at the value. **Fix** corrects a bare number
-  or curly quotes in one click.
+  Upsert and Delete send the **Specific ETag** trimmed. They block Execute,
+  with the reason, unless it is a quoted tag such as `W/"12345678"` (or
+  `*`). Before, a bare version number, curly quotes, JSON escaping
+  (`W/\"…\"`) or stray text went out and Dataverse answered with a 412 or
+  400 that didn't point back at the value. **Fix** corrects those paste
+  mistakes in one click. `$batch` parts and exported collections send the
+  trimmed value too.
 
 ## [1.4.0-beta.1] - 2026-10-21
 
