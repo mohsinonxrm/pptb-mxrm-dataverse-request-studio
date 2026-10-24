@@ -149,9 +149,11 @@ modes have their own HTTP / fetch / C# / PPTB outputs.
   org with in-flight promise dedup. Switching the PPTB connection resets the
   prepared request and reloads metadata for the new environment.
 - **Request headers through PPTB 1.2.7+** — Create / Update / Upsert /
-  Delete / Merge / Bulk Write headers (preconditions, `MSCRM.*` bypass, duplicate detection, impersonation) are
-  sent as additional headers after you approve them once in ToolBox. On older
-  hosts, requests that depend on a header are blocked with an explanation.
+  Delete / Merge / Bulk Write / Execute Action / Execute Workflow headers
+  (preconditions, `MSCRM.*` bypass, duplicate detection, impersonation) are
+  sent as additional headers after you approve them once in ToolBox, and so is
+  the page size of paged reads. On older hosts, write requests that depend on
+  a precondition or bypass header are blocked with an explanation.
   `Authorization` / `Cookie` headers are never sent, saved or exported.
 - **Antipattern advisories** — Surfaces real-time guidance per the
   [Microsoft query-antipatterns doc](https://learn.microsoft.com/en-us/power-apps/developer/data-platform/query-antipatterns):
@@ -218,7 +220,8 @@ modes have their own HTTP / fetch / C# / PPTB outputs.
 
 - [Power Platform ToolBox](https://www.powerplatformtoolbox.com/) **1.2.0 or
   later** (the tool declares `minAPI: 1.2.0`). **1.2.7 or later** is
-  recommended: it sends the write modes' request headers and is required for
+  recommended: it sends the write and execute modes' request headers and the
+  page size, and is required for
   the `$batch` and ExecuteMultiple modes.
 - A connection to a Dataverse environment
 - For local development: **Node.js 22.22.2+, 24.15+ or 26+** and **npm** (see

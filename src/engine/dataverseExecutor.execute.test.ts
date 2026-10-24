@@ -81,8 +81,16 @@ describe.each([
   });
 });
 
-it('Execute Action without extra rows stays header-free, so it never prompts', async () => {
-  const { MSCRMCallerID: _, ...builtins } = PANE;
-  await executeAction(action, builtins);
+it.each([
+  ['Execute Action', (h: Record<string, string>) => executeAction(action, h)],
+  ['Execute Workflow', (h: Record<string, string>) => executeWorkflow(workflow, h)],
+])('%s without extra rows stays header-free, so it never prompts', async (_, run) => {
+  const { MSCRMCallerID: _caller, ...builtins } = PANE;
+  await run(builtins);
   expect(host.execute).toHaveBeenCalledWith(expect.any(Object), undefined);
+});
+
+it('never sends credential rows', async () => {
+  await executeAction(action, { ...PANE, Cookie: 'a=b', Authorization: 'Bearer x' });
+  expect(host.execute).toHaveBeenCalledWith(expect.any(Object), { MSCRMCallerID: CALLER });
 });

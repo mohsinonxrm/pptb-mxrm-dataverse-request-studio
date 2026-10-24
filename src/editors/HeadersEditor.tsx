@@ -111,7 +111,7 @@ export function HeadersEditor({
   setItems: (items: HeaderItem[]) => void;
   group?: RequestGroup;
   /** Execute sends these headers on PPTB 1.2.7+. Defaults to the write group;
-   *  Bulk Write sends them too (#257). */
+   *  Bulk Write (#257), Execute Action and Execute Workflow (#266) send them too. */
   sendsHeaders?: boolean;
 }) {
   const s = useStudioStyles();

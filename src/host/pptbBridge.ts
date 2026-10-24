@@ -276,10 +276,11 @@ export async function dataverseQuery(odataQuery: string): Promise<DataverseQuery
 // Every consumer in the studio goes through these helpers. They:
 //   - throw `HostNotAvailableError` when called outside PPTB
 //   - preserve the exact dataverseAPI argument order
-//   - take an optional `headers` map on the write methods. PPTB 1.2.7+
-//     forwards it as `additionalHeaders` (after the user approves it in the
-//     host); older hosts have no header parameter, so the map is dropped
-//     there and `hostHeaderAdvisories` blocks requests that depend on it.
+//   - take an optional `headers` map on the write methods, `execute` and
+//     `queryData`. PPTB 1.2.7+ forwards it as `additionalHeaders` (after the
+//     user approves it in the host); older hosts have no header parameter, so
+//     the map is dropped there. For writes, `hostHeaderAdvisories` blocks the
+//     requests whose meaning depends on a precondition or bypass header.
 
 export class HostNotAvailableError extends Error {
   constructor(method: string) {

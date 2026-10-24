@@ -41,8 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `MSCRMCallerID` / `CallerObjectId` impersonation, or `MSCRM.*` bypass
   headers) now go out with the request, after ToolBox asks you to approve
   them. They used to be dropped, so an action or workflow ran as you without
-  saying so. Reads, relate and Execute Function still run with ToolBox's own
-  headers ([#109]).
+  saying so. Reads (apart from the page size, [#219]), relate, Execute
+  Function, Bulk Delete and the file / image / attachment modes still run
+  with ToolBox's own headers ([#109]).
 
 ## [1.4.0-beta.1] - 2026-10-21
 
