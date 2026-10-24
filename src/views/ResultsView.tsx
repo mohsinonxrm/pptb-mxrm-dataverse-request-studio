@@ -57,6 +57,9 @@ export function ResultsView({
   loadMoreError,
   onRetryLoadMore,
   onDismissLoadMoreError,
+  loadMoreNotice,
+  onContinueLoadMore,
+  onDismissLoadMoreNotice,
   writeContext,
   preferredColumnOrder,
 }: {
@@ -87,6 +90,10 @@ export function ResultsView({
   /** Retry the failed next page. */
   onRetryLoadMore?: () => void;
   onDismissLoadMoreError?: () => void;
+  /** Why Retrieve all paused with pages left (#223); rendered with Continue. */
+  loadMoreNotice?: string | null;
+  onContinueLoadMore?: () => void;
+  onDismissLoadMoreNotice?: () => void;
   /**
    * Write-mode context. When supplied AND `mode === 'single'`, the
    * results pane renders WriteResultCard (operation-specific success /
@@ -248,6 +255,26 @@ export function ResultsView({
             }
           >
             {onRetryLoadMore && <Button onClick={onRetryLoadMore}>Retry</Button>}
+          </MessageBarActions>
+        </MessageBar>
+      )}
+
+      {loadMoreNotice && (
+        <MessageBar intent="info" layout="multiline">
+          <MessageBarBody>{loadMoreNotice}</MessageBarBody>
+          <MessageBarActions
+            containerAction={
+              onDismissLoadMoreNotice && (
+                <Button
+                  appearance="transparent"
+                  aria-label="Dismiss"
+                  icon={<Dismiss20Regular />}
+                  onClick={onDismissLoadMoreNotice}
+                />
+              )
+            }
+          >
+            {onContinueLoadMore && <Button onClick={onContinueLoadMore}>Continue</Button>}
           </MessageBarActions>
         </MessageBar>
       )}

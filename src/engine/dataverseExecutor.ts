@@ -40,6 +40,7 @@ import {
 } from '../host/pptbBridge';
 import { metadata } from '../host/metadataProvider';
 import { cleanHostMessage } from './hostErrorText';
+import { jsonBytes } from './byteSize';
 import { hasCollectionInvolvedNestedExpand } from '../editors/expand/expandTree';
 import {
   buildRetrieveMultiple,
@@ -327,7 +328,7 @@ export function mapError(
 }
 
 function ok(status: number, body: unknown, ms: number): ExecResult {
-  const bytes = body ? JSON.stringify(body).length : 0;
+  const bytes = jsonBytes(body);
   return {
     status,
     statusText: STATUS_TEXT[status] ?? 'OK',
@@ -847,12 +848,12 @@ async function runPerTarget(
   const error = (firstFailure.body as { error: unknown }).error;
   const body = { error, targets };
   if (succeeded === 0) {
-    return { ...firstFailure, ms, body, bytes: JSON.stringify(body).length, targets };
+    return { ...firstFailure, ms, body, bytes: jsonBytes(body), targets };
   }
   return {
     ...firstFailure,
     ms,
-    bytes: JSON.stringify(body).length,
+    bytes: jsonBytes(body),
     ok: false,
     outcome: 'partial',
     body,
