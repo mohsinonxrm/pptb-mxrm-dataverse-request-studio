@@ -131,7 +131,7 @@ describe('retrieveAll', () => {
     expect(last(batches).nextLink).toBe('p3');
   });
 
-  it('on Stop, keeps the merged rows and drops the page that arrived after it', async () => {
+  it('on Stop, keeps the merged rows and merges nothing more', async () => {
     const { batches, commit } = collect();
     let status: PagingStatus = 'current';
     const fetchPage = vi.fn(async (url: string) => {
@@ -139,11 +139,58 @@ describe('retrieveAll', () => {
       const n = Number(url.slice(1));
       return page(rows((n - 1) * 10, 10), `p${n + 1}`);
     });
-    const out = await retrieveAll({ nextLink: 'p1', fetchPage, commit, status: () => status });
+    const out = await retrieveAll({
+      nextLink: 'p1',
+      fetchPage,
+      commit,
+      status: () => status,
+      commitMs: 0, // merge every page
+    });
     expect(out).toEqual({ kind: 'stopped', rows: 20 });
     expect(batches.flatMap((b) => b.rows)).toHaveLength(20);
     // Resuming fetches p3 again, so nothing is lost or duplicated.
     expect(last(batches).nextLink).toBe('p3');
+  });
+
+  it("doesn't duplicate rows when Retrieve all restarts while a stopped one still waits", async () => {
+    // The result envelope, as mergePage keeps it.
+    let merged: Row[] = rows(0, 10);
+    let envelopeNext: string | undefined = 'p2';
+    const commit = (b: PageBatch) => {
+      merged = merged.concat(b.rows);
+      envelopeNext = b.nextLink;
+    };
+    let paging = 0;
+    const statusFor = (id: number) => (): PagingStatus => (paging === id ? 'current' : 'stopped');
+    const fetchNow = server(10, 10);
+    // The first loop holds pages (no merge yet) and hangs on p4.
+    let releaseP4!: () => void;
+    const p4Gate = new Promise<void>((r) => (releaseP4 = r));
+    const first = retrieveAll({
+      nextLink: envelopeNext,
+      fetchPage: async (url) => {
+        if (url === 'p4') await p4Gate;
+        return fetchNow(url);
+      },
+      commit,
+      status: statusFor(++paging),
+      commitMs: 60_000,
+    });
+    await vi.waitFor(() => expect(fetchNow).toHaveBeenCalledWith('p3'));
+    paging++; // Stop
+    const second = retrieveAll({
+      nextLink: envelopeNext!,
+      fetchPage: fetchNow,
+      commit,
+      status: statusFor(++paging), // Retrieve all again, from the envelope
+    });
+    await second;
+    releaseP4();
+    await first;
+    const ids = merged.map((r) => r.accountid);
+    expect(ids).toHaveLength(100);
+    expect(new Set(ids).size).toBe(100);
+    expect(envelopeNext).toBeUndefined();
   });
 
   it('merges nothing once a newer run has started', async () => {

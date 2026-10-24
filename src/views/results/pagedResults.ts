@@ -40,7 +40,10 @@ export function mergePage(r: ExecResult, batch: PageBatch): ExecResult {
   return { ...r, body, bytes: r.bytes + batch.bytes };
 }
 
-/** 'stopped': the user pressed Stop. 'superseded': a newer Execute or a reset. */
+/**
+ * 'stopped': the user pressed Stop, or a newer scroll / Retrieve all took
+ * over. 'superseded': a newer Execute or a reset.
+ */
 export type PagingStatus = 'current' | 'stopped' | 'superseded';
 
 export type RetrieveAllOutcome =
@@ -55,10 +58,10 @@ export type RetrieveAllOutcome =
 /**
  * Follows nextLinks from `nextLink` until the last page, a failure, Stop,
  * or the budget. Pages are collected and handed to `commit` in batches,
- * at most every `commitMs`, and always before returning, except when
- * superseded. The nextLink in each batch is the one after its rows, so a
- * later Retrieve all resumes exactly where this one stopped. `rows` counts
- * the rows this call loaded.
+ * at most every `commitMs`, and before returning, except after Stop or a
+ * newer run, when nothing more is merged. The nextLink in each batch is the
+ * one after its rows, so a later Retrieve all resumes exactly where this one
+ * left off. `rows` counts the rows this call merged.
  */
 export async function retrieveAll(opts: {
   nextLink: string;
@@ -100,11 +103,10 @@ export async function retrieveAll(opts: {
     const res = await fetchPage(next);
     const st = status();
     if (st === 'superseded') return { kind: 'superseded' };
-    // A page that arrives after Stop is dropped; `next` still points at it.
-    if (st === 'stopped') {
-      flush();
-      return { kind: 'stopped', rows: loaded };
-    }
+    // After Stop, the held pages are dropped as well. Stop re-enables
+    // Retrieve all and scrolling, and those start again from the merged
+    // nextLink; merging held pages now would add them a second time.
+    if (st === 'stopped') return { kind: 'stopped', rows: loaded - pending.length };
     if (!res.ok) {
       flush();
       return { kind: 'failed', rows: loaded, error: res };
