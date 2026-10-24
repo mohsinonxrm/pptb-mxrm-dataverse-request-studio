@@ -109,10 +109,16 @@ export const runtime = neverThrow({
   ),
   associate: afterWrite((s: AssociateState) => liveAssociate(s), ownTable),
   disassociate: afterWrite((s: DisassociateState) => liveDisassociate(s), ownTable),
-  action: afterWrite((s: ExecuteActionState) => liveAction(s), everyTable),
+  action: afterWrite(
+    (s: ExecuteActionState, headers?: Record<string, string>) => liveAction(s, headers),
+    everyTable,
+  ),
   // Functions are side-effect free by definition — nothing to invalidate.
   function: (s: ExecuteFunctionState) => liveFunction(s),
-  workflow: afterWrite((s: ExecuteWorkflowState) => liveWorkflow(s), everyTable),
+  workflow: afterWrite(
+    (s: ExecuteWorkflowState, headers?: Record<string, string>) => liveWorkflow(s, headers),
+    everyTable,
+  ),
   manageFile: (s: ManageFileState) => liveManageFile(s),
   manageImage: (s: ManageImageState) => liveManageImage(s),
   manageAttachment: (s: ManageAttachmentState) => liveManageAttachment(s),

@@ -133,17 +133,18 @@ export function HeadersEditor({
       />
 
       {/* PPTB 1.2.7+ sends the write group's headers as `additionalHeaders`
-          (minus the ones its Dataverse client builds itself); every other
-          group still runs with the host's own headers. The values below are
-          always emitted into the Code tab. */}
+          (minus the ones its Dataverse client builds itself), and so do the
+          modes that pass `sendsHeaders` (Bulk Write, Execute Action and
+          Execute Workflow, #266). Every other mode still runs with the host's
+          own headers. The values below are always emitted into the Code tab. */}
       {(sendsHeaders ?? group === 'write') && host.embedded && hostSupportsAdditionalHeaders() ? (
         <MessageBar layout="multiline" intent="info" style={{ marginBottom: 14 }}>
           <MessageBarBody>
             <MessageBarTitle>
               Enabled headers are sent through Power Platform ToolBox.
             </MessageBarTitle>
-            When you click <strong>Execute</strong>, the host sends the enabled headers below plus
-            the ones composed by the Precondition and Bypass panes. It builds{' '}
+            When you click <strong>Execute</strong>, the host sends the enabled headers below, plus
+            any that this mode's Precondition and Bypass panes add. It builds{' '}
             <code>Authorization</code>, <code>Accept</code>, <code>Content-Type</code>,{' '}
             <code>OData-Version</code>, <code>OData-MaxVersion</code> and <code>Prefer</code>{' '}
             itself, so those rows aren&apos;t sent. If you haven&apos;t approved additional request
