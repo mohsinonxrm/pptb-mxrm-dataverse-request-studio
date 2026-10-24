@@ -29,6 +29,7 @@ import {
   HEADER_REJECTED_CODE,
   type ExecResult,
 } from '../engine/dataverseExecutor';
+import { pageSizeIsSent } from '../host/pptbBridge';
 import { ResultsGrid } from './results/ResultsGrid';
 import { ResultsCommandBar } from './results/ResultsCommandBar';
 import type { GridExportView } from './results/exportResults';
@@ -420,10 +421,14 @@ function ErrorState({ result }: { result: ExecResult }) {
         : ErrorCircle20Regular;
   const err = (result.body as { error?: { code?: string; message?: string } } | null)?.error;
   // #126 — the host caps response size; say how to shrink the response.
+  // Only point at the page size where Execute sends it (#219).
   const sizeHint = isResponseSizeLimitError(err?.message)
     ? 'The response is larger than the host allows. Narrow it: add $select on the table and ' +
-      'inside each $expand, filter the expanded rows, or set Prefer: odata.maxpagesize to ' +
-      'return fewer rows per page.'
+      'inside each $expand, filter the expanded rows, or ' +
+      (pageSizeIsSent()
+        ? 'set Prefer: odata.maxpagesize to return fewer rows per page.'
+        : "set $top to return fewer rows (this ToolBox version can't send " +
+          'Prefer: odata.maxpagesize; ToolBox 1.2.7+ can).')
     : null;
   // #126 — 0x80060888 (a generic OData code, so match on the message):
   // top-level $top with a collection $expand that has a nested $expand.
@@ -431,8 +436,12 @@ function ErrorState({ result }: { result: ExecResult }) {
     err?.message ?? '',
   )
     ? 'Dataverse rejects top-level $top when a 1:N or N:N $expand has its own nested ' +
-      '$expand. Remove $top and set Prefer: odata.maxpagesize instead to limit the rows ' +
-      'per page.'
+      '$expand. ' +
+      (pageSizeIsSent()
+        ? 'Remove $top and set Prefer: odata.maxpagesize instead to limit the rows per page.'
+        : "Remove $top. This ToolBox version can't send Prefer: odata.maxpagesize, so pages " +
+          "use Dataverse's 5,000-row default: narrow the rows with $filter, or use " +
+          'ToolBox 1.2.7+ to set a page size.')
     : null;
   // Never sent: ToolBox refused the headers before calling Dataverse, so the
   // 403 / 400 isn't a privilege or request problem (#257).
@@ -446,7 +455,8 @@ function ErrorState({ result }: { result: ExecResult }) {
       : err?.code === HEADER_REJECTED_CODE
         ? {
             title: 'Not sent — header rejected',
-            advice: 'Power Platform ToolBox rejected a request header. Fix it in the Headers pane.',
+            advice:
+              'Power Platform ToolBox rejected a request header. Fix it in the Headers or Prefer pane.',
           }
         : null;
   const title = notSent
