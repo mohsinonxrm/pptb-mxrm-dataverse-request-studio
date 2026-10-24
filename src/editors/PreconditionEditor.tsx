@@ -107,6 +107,9 @@ export function PreconditionEditor({
   const s = useStudioStyles();
   const host = useHostSession();
   const selected = mode.kind;
+  const etagValue = mode.kind === 'etag' ? mode.etag : '';
+  const etagIssue = etagValue.trim() ? etagProblem(etagValue) : null;
+  const etagFixed = etagFix(etagValue);
 
   const onPick = (kind: PreconditionKind) => {
     if (kind === 'etag') {
@@ -234,14 +237,28 @@ export function PreconditionEditor({
                     <Field
                       label="ETag value"
                       hint='Pulled from a previous response&apos;s @odata.etag — looks like `W/"7281965"`.'
+                      // Flag a malformed value as it's typed; an empty one is
+                      // left to the Execute blocker (#264).
+                      validationState={etagIssue ? 'error' : 'none'}
+                      validationMessage={etagIssue ?? undefined}
                     >
                       <span style={{ display: 'flex', gap: 6 }}>
                         <Input
-                          value={mode.kind === 'etag' ? mode.etag : ''}
+                          value={etagValue}
                           onChange={(_, d) => setMode({ kind: 'etag', etag: d.value })}
                           placeholder='W/"12345678"'
                           style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 12, flex: 1 }}
                         />
+                        {etagFixed && (
+                          <Button
+                            size="small"
+                            appearance="outline"
+                            onClick={() => setMode({ kind: 'etag', etag: etagFixed })}
+                            title={`Use ${etagFixed}`}
+                          >
+                            Fix
+                          </Button>
+                        )}
                         {currentEtag && (
                           <Button
                             size="small"
@@ -281,9 +298,38 @@ export function preconditionToHeader(m: ConcurrencyMode): { name: string; value:
       return { name: 'If-None-Match', value: '*' };
     case 'etag':
       if (!m.etag.trim()) return null;
-      return { name: 'If-Match', value: m.etag };
+      return { name: 'If-Match', value: m.etag.trim() };
     case 'none':
     default:
       return null;
   }
+}
+
+// A weak (`W/"…"`) or strong (`"…"`) entity tag, the shape of `@odata.etag`.
+const ETAG_RE = /^(W\/)?"[^"]*"$/;
+
+/**
+ * Why an ETag value can't go out as `If-Match`, or null when it can (#264).
+ * Dataverse answers a malformed value with a 412 or 400 that doesn't point
+ * back at the input, so Execute is blocked with the reason instead.
+ * Surrounding whitespace is fine: the header is sent trimmed.
+ */
+export function etagProblem(raw: string): string | null {
+  const v = raw.trim();
+  if (!v) return 'Provide an etag value or switch the concurrency mode.';
+  if (v === '*') return null; // same as "Update only"
+  if (/[“”„″]/.test(v)) return 'The ETag has curly quotes. Use straight ones: W/"12345678".';
+  if (/^\d+$/.test(v)) return `Wrap the ETag in quotes: W/"${v}".`;
+  if (!ETAG_RE.test(v)) {
+    return 'An ETag looks like W/"12345678", quotes included (copy it from @odata.etag).';
+  }
+  return null;
+}
+
+/** The corrected value for a fixable ETag (a bare version number, curly quotes), else null. */
+export function etagFix(raw: string): string | null {
+  const v = raw.trim();
+  if (/^\d+$/.test(v)) return `W/"${v}"`;
+  const straight = v.replace(/[“”„″]/g, '"');
+  return straight !== v && ETAG_RE.test(straight) ? straight : null;
 }

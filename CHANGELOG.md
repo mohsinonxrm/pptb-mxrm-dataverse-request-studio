@@ -36,6 +36,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     no longer undercounted.
 - **Recent runs keeps up with paging** ([#211]): after scrolling or Retrieve
   all, the entry shows the rows loaded, with "more available" or "all pages".
+- **A malformed ETag is caught before it's sent** ([#264]). Update,
+  Upsert and Delete send the **Specific ETag** trimmed and block Execute
+  with the reason when it isn't shaped like `W/"12345678"`: a bare version
+  number, curly quotes or extra text. Before, Dataverse answered with a 412
+  or 400 that didn't point back at the value. **Fix** corrects a bare number
+  or curly quotes in one click.
 
 ## [1.4.0-beta.1] - 2026-10-21
 
@@ -333,6 +339,7 @@ Dataverse environments.
 [#254]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/254
 [#255]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/255
 [#257]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/257
+[#264]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/264
 
 ## [1.1.4] - 2026-10-17
 
