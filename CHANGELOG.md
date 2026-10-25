@@ -52,6 +52,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   400 that didn't point back at the value. **Fix** corrects those paste
   mistakes in one click. `$batch` parts and exported collections send the
   trimmed value too.
+- **Field set counts only what will be sent** ([#210]). The "N populated"
+  badge, the **Set · N** chip, the Set filter and the red "missing" marker on
+  required rows ignore the empty values a table pre-fills for its required
+  columns, the same way the required count does. Before, a new contact could
+  read "2 populated" with Last Name and Owner still empty.
 
 ## [1.4.0-beta.1] - 2026-10-21
 
@@ -336,6 +341,7 @@ Dataverse environments.
 [#203]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/203
 [#204]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/204
 [#207]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/207
+[#210]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/210
 [#211]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/211
 [#212]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/212
 [#217]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/217
