@@ -20,6 +20,7 @@ import {
   mergeClasses,
   tokens,
   Badge,
+  useId,
 } from '@fluentui/react-components';
 import { ChevronDown20Regular, Search20Regular } from '@fluentui/react-icons';
 import { useStudioStyles } from './styles';
@@ -39,6 +40,8 @@ export function RequestTypePicker({
   const [palOpen, setPalOpen] = useState(false);
   const [search, setSearch] = useState('');
   const active = findRequestType(activeId);
+  // Prefix for the description ids the rows point aria-describedby at (#289).
+  const descId = useId('reqtype-desc');
 
   // Ctrl+K / ⌘K opens the palette
   useEffect(() => {
@@ -61,7 +64,7 @@ export function RequestTypePicker({
         r.name.toLowerCase().includes(q) ||
         r.id.includes(q) ||
         r.method.toLowerCase().includes(q) ||
-        r.sub.toLowerCase().includes(q),
+        r.description.toLowerCase().includes(q),
     );
   }, [search]);
 
@@ -192,14 +195,23 @@ export function RequestTypePicker({
               const items = REQ_TYPES.filter((r) => r.group === g.id);
               return (
                 <Fragment key={g.id}>
-                  <MenuGroupHeader>{g.label}</MenuGroupHeader>
+                  <MenuGroupHeader>
+                    {g.label}
+                    <span className={s.pickerGroupTagline}>{g.tagline}</span>
+                  </MenuGroupHeader>
                   {items.map((r) => {
                     const Icon = r.icon;
                     return (
                       <MenuItem
                         key={r.id}
+                        className={s.pickerMenuItem}
                         icon={<Icon style={{ color: groupColorVar(r.group) }} />}
                         onClick={() => pick(r.id)}
+                        // The description is the item's accessible description,
+                        // not part of its name (#289).
+                        aria-label={r.name}
+                        aria-describedby={`${descId}-menu-${r.id}`}
+                        subText={{ id: `${descId}-menu-${r.id}`, children: r.description }}
                         secondaryContent={
                           <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                             {!r.implemented && (
@@ -264,7 +276,10 @@ export function RequestTypePicker({
               )}
               {grouped.map((g) => (
                 <Fragment key={g.id}>
-                  <div className={s.paletteGroupH}>{g.label}</div>
+                  <div className={s.paletteGroupH}>
+                    {g.label}
+                    <span className={s.pickerGroupTagline}>{g.tagline}</span>
+                  </div>
                   {g.items.map((r) => {
                     const Icon = r.icon;
                     return (
@@ -278,6 +293,8 @@ export function RequestTypePicker({
                         onKeyDown={(e) => onPaletteRowKeyDown(e, r.id)}
                         role="button"
                         tabIndex={0}
+                        aria-label={r.name}
+                        aria-describedby={`${descId}-pal-${r.id}`}
                         data-palette-row
                       >
                         <Icon style={{ color: groupColorVar(r.group), width: 18, height: 18 }} />
@@ -297,8 +314,11 @@ export function RequestTypePicker({
                               </Badge>
                             )}
                           </div>
-                          <div style={{ fontSize: 11, color: tokens.colorNeutralForeground3 }}>
-                            {r.sub}
+                          <div
+                            id={`${descId}-pal-${r.id}`}
+                            style={{ fontSize: 11, color: tokens.colorNeutralForeground3 }}
+                          >
+                            {r.description}
                           </div>
                         </div>
                         <div className={s.paletteRowMethod}>{r.method}</div>

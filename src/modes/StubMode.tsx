@@ -79,7 +79,7 @@ export function StubMode({
               {type.group} · {type.method}
             </div>
             <Title3>{type.name}</Title3>
-            <Body1 style={{ color: tokens.colorNeutralForeground2 }}>{type.sub}</Body1>
+            <Body1 style={{ color: tokens.colorNeutralForeground2 }}>{type.description}</Body1>
             <MessageBar layout="multiline" intent="info">
               <MessageBarBody>
                 This mode isn't available yet. Pick another mode from the request type switcher
