@@ -67,6 +67,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   does. Before, a new contact could read "2 populated" with Last Name and
   Owner still empty. The **Set** filter still lists those pre-filled rows, so
   they stay visible to fill in.
+- **No more "No active Dataverse connection" after the connection is
+  picked** ([#281]). When ToolBox bound the connection while DRS was still
+  starting up, DRS could miss it and stay on that error until it was
+  reopened. It now listens for the connection from the start, and Retry asks
+  ToolBox again.
 - **Code → Editor no longer fakes a run** ([#240]). Its **Run (mock)**
   button ignored the edited code and always showed the same two sample
   account rows, which read like "your code works". The button is gone: the
@@ -375,6 +380,7 @@ Dataverse environments.
 [#257]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/257
 [#266]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/266
 [#264]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/264
+[#281]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/281
 
 ## [1.1.4] - 2026-10-17
 
