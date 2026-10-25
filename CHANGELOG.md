@@ -46,11 +46,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with ToolBox's own headers ([#109]).
 - **Error and result titles name the right source** ([#209]).
   - When ToolBox reports no HTTP status, the error card says the message
-    comes from Dataverse only when it carries a Dataverse `0x…` code.
-    Otherwise it says the message is ToolBox's own, such as its
-    response-size limit. That hint now also suggests `$top`.
-  - Create and Upsert results name the record by the primary name the
-    response returns, so a new contact shows its full name instead of
+    comes from Dataverse only when it carries a Dataverse `0x8…` code. It
+    names ToolBox only for ToolBox's own messages, such as its
+    response-size limit, and claims neither source otherwise. The size hint
+    also mentions `$top` for requests without a page size.
+  - Create results name the record by the primary name the response
+    returns, so a new contact shows its full name instead of
     "record <id>".
 
 ## [1.4.0-beta.1] - 2026-10-21

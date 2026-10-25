@@ -30,6 +30,7 @@ import {
   type ExecResult,
 } from '../engine/dataverseExecutor';
 import { pageSizeIsSent } from '../host/pptbBridge';
+import { noStatusAdvice } from './results/noStatusAdvice';
 import { ResultsGrid } from './results/ResultsGrid';
 import { ResultsCommandBar } from './results/ResultsCommandBar';
 import type { GridExportView } from './results/exportResults';
@@ -439,17 +440,6 @@ function isResponseSizeLimitError(message: string | undefined): boolean {
   return !!message && /16777216|exceeds the maximum size/i.test(message);
 }
 
-/**
- * Advice for an error the host reported without an HTTP status (#209). A
- * Dataverse error carries a `0x8…` code; anything else is the host's own
- * message, e.g. its response-size limit.
- */
-export function noStatusAdvice(err: { code?: string; message?: string } | undefined): string {
-  return /\b0x[0-9a-f]{8}\b/i.test(`${err?.code ?? ''} ${err?.message ?? ''}`)
-    ? "The PPTB host didn't report an HTTP status. The error message below comes from Dataverse."
-    : "The PPTB host didn't report an HTTP status. The message below comes from the host itself, not from Dataverse.";
-}
-
 function ErrorState({ result }: { result: ExecResult }) {
   const Icon =
     result.status === 401
@@ -464,7 +454,7 @@ function ErrorState({ result }: { result: ExecResult }) {
     ? 'The response is larger than the host allows. Narrow it: add $select on the table and ' +
       'inside each $expand, filter the expanded rows, or ' +
       (pageSizeIsSent()
-        ? 'set $top, or Prefer: odata.maxpagesize to return fewer rows per page.'
+        ? 'lower Prefer: odata.maxpagesize (or set $top when no page size is set).'
         : "set $top to return fewer rows (this ToolBox version can't send " +
           'Prefer: odata.maxpagesize; ToolBox 1.2.7+ can).')
     : null;

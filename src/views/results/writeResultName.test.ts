@@ -22,3 +22,8 @@ describe('writeResultName (#209)', () => {
     expect(writeResultName(undefined, { fullname: 'x' }, {})).toBeNull();
   });
 });
+
+it('ignores a blank or non-string returned name', () => {
+  expect(writeResultName('name', { name: '   ' }, { name: 'Contoso' })).toBe('Contoso');
+  expect(writeResultName('name', { name: 42 }, {})).toBeNull();
+});
