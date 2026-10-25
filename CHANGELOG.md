@@ -67,6 +67,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   does. Before, a new contact could read "2 populated" with Last Name and
   Owner still empty. The **Set** filter still lists those pre-filled rows, so
   they stay visible to fill in.
+- **Code → Editor no longer fakes a run** ([#240]). Its **Run (mock)**
+  button ignored the edited code and always showed the same two sample
+  account rows, which read like "your code works". The button is gone: the
+  editor is for editing and copying, and **Execute** sends the request the
+  builder shows.
 
 ## [1.4.0-beta.1] - 2026-10-21
 
@@ -361,6 +366,7 @@ Dataverse environments.
 [#220]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/220
 [#223]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/223
 [#239]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/239
+[#240]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/240
 [#243]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/243
 [#244]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/244
 [#246]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/246
