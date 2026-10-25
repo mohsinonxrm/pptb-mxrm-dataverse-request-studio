@@ -73,7 +73,7 @@ export const REQ_TYPES: RequestType[] = [
     method: 'GET',
     group: 'read',
     icon: Document20Regular,
-    description: 'Get one record by its ID or an alternate key.',
+    description: 'Get one record by its ID, with the columns and related rows you choose.',
     implemented: true,
     executeVerb: 'Execute',
   },

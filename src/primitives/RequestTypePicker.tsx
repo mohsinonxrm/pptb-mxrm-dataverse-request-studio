@@ -209,7 +209,7 @@ export function RequestTypePicker({
                         onClick={() => pick(r.id)}
                         // The description is the item's accessible description,
                         // not part of its name (#289).
-                        aria-label={r.name}
+                        aria-label={`${r.name}, ${r.method}`}
                         aria-describedby={`${descId}-menu-${r.id}`}
                         subText={{ id: `${descId}-menu-${r.id}`, children: r.description }}
                         secondaryContent={
@@ -293,7 +293,7 @@ export function RequestTypePicker({
                         onKeyDown={(e) => onPaletteRowKeyDown(e, r.id)}
                         role="button"
                         tabIndex={0}
-                        aria-label={r.name}
+                        aria-label={`${r.name}, ${r.method}`}
                         aria-describedby={`${descId}-pal-${r.id}`}
                         data-palette-row
                       >
