@@ -61,6 +61,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Create results name the record by the primary name the response
     returns, so a new contact shows its full name instead of
     "record <id>".
+- **No more "No active Dataverse connection" after the connection is
+  picked** ([#281]). When ToolBox bound the connection while DRS was still
+  starting up, DRS could miss it and stay on that error until it was
+  reopened. It now listens for the connection from the start, and Retry asks
+  ToolBox again.
 
 ## [1.4.0-beta.1] - 2026-10-21
 
@@ -362,6 +367,7 @@ Dataverse environments.
 [#257]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/257
 [#266]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/266
 [#264]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/264
+[#281]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/281
 
 ## [1.1.4] - 2026-10-17
 

@@ -122,6 +122,14 @@ interface ConnectionSnapshot {
 let activeConnectionId: string | null = null;
 
 /**
+ * Connection reads are numbered and only the newest may change the session.
+ * ToolBox can bind the connection while the startup read is in flight; the
+ * `connection:updated` read that follows must not be overwritten by the
+ * older "not connected" answer (#281).
+ */
+let connectionReads = 0;
+
+/**
  * Read the tool's active connection. Resolves to `null` when the host call
  * FAILED (timeout, IPC error, a hiccup mid token-refresh) — distinct from a
  * successful "no connection" answer — so callers can keep the last known
@@ -129,15 +137,16 @@ let activeConnectionId: string | null = null;
  */
 async function fetchActiveConnection(
   api: NonNullable<Window['toolboxAPI']>,
-): Promise<ConnectionSnapshot | null> {
+): Promise<(ConnectionSnapshot & { id: string | null }) | null> {
   try {
     const c = await api.connections?.getActiveConnection?.();
-    if (!c) {
-      activeConnectionId = null;
-      return { connected: false, environmentUrl: '', environment: '' };
-    }
-    activeConnectionId = typeof c.id === 'string' && c.id ? c.id : null;
-    return { connected: true, environmentUrl: c.url ?? '', environment: c.environment ?? '' };
+    if (!c) return { connected: false, environmentUrl: '', environment: '', id: null };
+    return {
+      connected: true,
+      environmentUrl: c.url ?? '',
+      environment: c.environment ?? '',
+      id: typeof c.id === 'string' && c.id ? c.id : null,
+    };
   } catch (e) {
     console.warn('[pptbBridge] getActiveConnection failed', e);
     return null;
@@ -205,7 +214,9 @@ async function refetchConnection(
   api: NonNullable<Window['toolboxAPI']>,
   disconnectOnFailure = false,
 ): Promise<void> {
+  const read = ++connectionReads;
   const conn = await fetchActiveConnection(api);
+  if (read !== connectionReads) return; // a newer read owns the session
   // A failed read keeps the last known session: a transient host error (e.g.
   // during a token-refresh `connection:updated`) must not look like a
   // disconnect, which would wipe org-scoped state.
@@ -218,24 +229,46 @@ async function refetchConnection(
     console.warn('[pptbBridge] keeping the last known connection after a failed refetch');
     return;
   }
-  emit({ ...session, ...conn });
+  const { id, ...snapshot } = conn;
+  activeConnectionId = id;
+  emit({ ...session, ...snapshot });
+}
+
+/**
+ * Re-read the active connection, e.g. from Retry on the "No active Dataverse
+ * connection" error, in case ToolBox bound one we didn't hear about (#281).
+ */
+export function recheckConnection(): Promise<void> {
+  if (!EMBEDDED || typeof window === 'undefined' || !window.toolboxAPI) return Promise.resolve();
+  return refetchConnection(window.toolboxAPI);
 }
 
 // Kick off the handshake on module load.
 if (EMBEDDED && typeof window !== 'undefined' && window.toolboxAPI) {
   const api = window.toolboxAPI;
+  // Listen before the first read: ToolBox announces a connection it binds
+  // to this tool with `connection:updated`, which can arrive while the
+  // handshake below is still awaiting (#281).
+  hookEvents(api);
   // Theme first (controls boot paint), then connection.
   void (async () => {
     const theme = await fetchInitialTheme(api);
+    const read = ++connectionReads;
+    const conn = await fetchActiveConnection(api);
+    if (read !== connectionReads) {
+      // A connection event re-read it meanwhile; that read sets the session.
+      emit({ ...session, theme, handshakeDone: true });
+      return;
+    }
     // No last-known session exists yet, so a failed initial read is reported
-    // as "not connected"; a later connection event re-reads it.
-    const conn = (await fetchActiveConnection(api)) ?? {
+    // as "not connected"; a later connection event or Retry re-reads it.
+    const { id = null, ...snapshot } = conn ?? {
       connected: false,
       environmentUrl: '',
       environment: '',
     };
-    emit({ ...session, theme, ...conn, handshakeDone: true });
-    hookEvents(api);
+    activeConnectionId = id;
+    emit({ ...session, theme, ...snapshot, handshakeDone: true });
   })();
 }
 
