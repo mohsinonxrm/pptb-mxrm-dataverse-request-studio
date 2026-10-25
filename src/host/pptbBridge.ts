@@ -122,12 +122,17 @@ interface ConnectionSnapshot {
 let activeConnectionId: string | null = null;
 
 /**
- * Connection reads are numbered and only the newest may change the session.
- * ToolBox can bind the connection while the startup read is in flight; the
- * `connection:updated` read that follows must not be overwritten by the
- * older "not connected" answer (#281).
+ * Connection reads are numbered in the order they're issued (#281). ToolBox
+ * can bind the connection while the startup read is in flight and announce
+ * it with `connection:updated`, so answers can land out of order:
+ *   - the newest read applies;
+ *   - an older read applies only when it found a connection and nothing
+ *     newer has been applied yet (the newer read may still fail);
+ * so a stale "not connected" never replaces a connection or flashes the
+ * no-connection error.
  */
 let connectionReads = 0;
+let appliedRead = 0;
 
 /**
  * Read the tool's active connection. Resolves to `null` when the host call
@@ -216,22 +221,36 @@ async function refetchConnection(
 ): Promise<void> {
   const read = ++connectionReads;
   const conn = await fetchActiveConnection(api);
-  if (read !== connectionReads) return; // a newer read owns the session
+  const newest = read === connectionReads;
+  if (read < appliedRead) return; // a newer read already set the session
   // A failed read keeps the last known session: a transient host error (e.g.
   // during a token-refresh `connection:updated`) must not look like a
   // disconnect, which would wipe org-scoped state.
   if (!conn) {
+    if (!newest) return;
     if (disconnectOnFailure) {
+      appliedRead = read;
       activeConnectionId = null;
-      emit({ ...session, connected: false, environmentUrl: '', environment: '' });
+      emit({
+        ...session,
+        connected: false,
+        environmentUrl: '',
+        environment: '',
+        handshakeDone: true,
+      });
       return;
     }
     console.warn('[pptbBridge] keeping the last known connection after a failed refetch');
+    // No last-known session at startup: the tool is "not connected" until a
+    // connection event or Retry re-reads it.
+    if (!session.handshakeDone) emit({ ...session, handshakeDone: true });
     return;
   }
+  if (!newest && !conn.connected) return; // a stale "not connected"
+  appliedRead = read;
   const { id, ...snapshot } = conn;
   activeConnectionId = id;
-  emit({ ...session, ...snapshot });
+  emit({ ...session, ...snapshot, handshakeDone: true });
 }
 
 /**
@@ -250,25 +269,12 @@ if (EMBEDDED && typeof window !== 'undefined' && window.toolboxAPI) {
   // to this tool with `connection:updated`, which can arrive while the
   // handshake below is still awaiting (#281).
   hookEvents(api);
-  // Theme first (controls boot paint), then connection.
+  // Theme first (controls boot paint), applied at once so a settings change
+  // during the connection read isn't overwritten; then the connection, which
+  // ends the handshake (`handshakeDone`) when its answer, or a newer one, lands.
   void (async () => {
-    const theme = await fetchInitialTheme(api);
-    const read = ++connectionReads;
-    const conn = await fetchActiveConnection(api);
-    if (read !== connectionReads) {
-      // A connection event re-read it meanwhile; that read sets the session.
-      emit({ ...session, theme, handshakeDone: true });
-      return;
-    }
-    // No last-known session exists yet, so a failed initial read is reported
-    // as "not connected"; a later connection event or Retry re-reads it.
-    const { id = null, ...snapshot } = conn ?? {
-      connected: false,
-      environmentUrl: '',
-      environment: '',
-    };
-    activeConnectionId = id;
-    emit({ ...session, theme, ...snapshot, handshakeDone: true });
+    emit({ ...session, theme: await fetchInitialTheme(api) });
+    await refetchConnection(api);
   })();
 }
 

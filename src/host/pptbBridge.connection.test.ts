@@ -69,3 +69,48 @@ describe('connection handshake (#281)', () => {
     expect(bridge.getSession()).toMatchObject({ connected: true, environmentUrl: CONN.url });
   });
 });
+
+describe('out-of-order connection reads (#281 review)', () => {
+  it('a stale "not connected" never shows the no-connection state while a newer read is pending', async () => {
+    const host = fakeHost();
+    const bridge = await loadBridge(host.api);
+    await flush();
+    host.fire('connection:updated');
+    await flush();
+    host.reads[0](null); // stale handshake answer lands first
+    await flush();
+    expect(bridge.getSession().handshakeDone).toBe(false); // no "connected: false" flash
+    host.reads[1](CONN);
+    await flush();
+    expect(bridge.getSession()).toMatchObject({ connected: true, handshakeDone: true });
+  });
+
+  it('keeps a connection an older read found when the newer read fails', async () => {
+    const host = fakeHost();
+    const bridge = await loadBridge(host.api);
+    await flush();
+    host.fire('connection:updated');
+    await flush();
+    host.reads[0](CONN); // older read: connected
+    await flush();
+    expect(bridge.getSession()).toMatchObject({ connected: true, handshakeDone: true });
+    // The newer read fails at the IPC level: keep the last known connection.
+    host.api.connections.getActiveConnection.mockImplementationOnce(() =>
+      Promise.reject(new Error('IPC')),
+    );
+    host.fire('connection:updated');
+    await flush();
+    expect(bridge.getSession()).toMatchObject({ connected: true });
+  });
+
+  it('a failed first read ends the handshake as not connected', async () => {
+    const host = fakeHost();
+    host.api.connections.getActiveConnection.mockImplementationOnce(() =>
+      Promise.reject(new Error('IPC')),
+    );
+    const bridge = await loadBridge(host.api);
+    await flush();
+    await flush();
+    expect(bridge.getSession()).toMatchObject({ connected: false, handshakeDone: true });
+  });
+});
