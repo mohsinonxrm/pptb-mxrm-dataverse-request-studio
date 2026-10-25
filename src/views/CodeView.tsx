@@ -21,7 +21,6 @@ import {
 import {
   Copy20Regular,
   ArrowReset20Regular,
-  Play20Filled,
   Code20Filled,
   Edit20Filled,
   ArrowDownload20Regular,
@@ -124,7 +123,7 @@ export function CodeView({ themeMode, inputs, group = 'read' }: CodeViewProps) {
         sub={
           viewTab === 'code'
             ? `${FORMATS.length} formats — read-only, regenerated on every builder change.`
-            : 'Writable playground — edit the starter, copy or run it (mock).'
+            : 'Writable playground — edit the starter and copy it out.'
         }
         group={group}
       />
@@ -314,42 +313,13 @@ function EditorPane({
   themeMode: ThemeMode;
   monacoOptions: monacoNs.editor.IStandaloneEditorConstructionOptions;
 }) {
-  const [output, setOutput] = useState<string>('');
-  const [running, setRunning] = useState(false);
   const editorRef = useRef<monacoNs.editor.IStandaloneCodeEditor | null>(null);
   const onMount: OnMount = (editor) => {
     editorRef.current = editor;
   };
-
-  const onMockRun = async () => {
-    setRunning(true);
-    setOutput('');
-    try {
-      // We can't safely eval arbitrary JS against a real Dataverse, so the
-      // mock Run simulates by intercepting `fetch` and `console.log` and
-      // routing the request to a deterministic mock response. For now we just
-      // show a structured echo of what the code would attempt + a stub result.
-      // (Hooking up the real mock executor would require parsing the URL out
-      // of the user-edited code — left as a follow-up.)
-      await new Promise((r) => setTimeout(r, 350));
-      const sampleResp = {
-        status: 200,
-        ok: true,
-        body: {
-          '@odata.context': '$metadata#accounts(name,revenue)',
-          value: [
-            { name: 'Contoso Ltd.', revenue: 18_500_000 },
-            { name: 'Fabrikam, Inc.', revenue: 9_120_000 },
-          ],
-        },
-      };
-      setOutput(`✓ Mock run finished\n\n${JSON.stringify(sampleResp, null, 2)}`);
-    } catch (e) {
-      setOutput(String(e));
-    } finally {
-      setRunning(false);
-    }
-  };
+  // No Run here: a fixed sample response read like "your edited code works"
+  // (#240). Execute sends the builder's request; running edited code would
+  // need a raw-request transport (#225) and never eval.
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flexGrow: 1 }}>
@@ -401,34 +371,20 @@ function EditorPane({
             Copy
           </Button>
         </Tooltip>
-        <Tooltip
-          content="Run against the mock simulator — returns sample data without touching a real environment"
-          relationship="description"
-        >
-          <Button
-            icon={<Play20Filled />}
-            appearance="primary"
-            size="small"
-            onClick={onMockRun}
-            disabled={running}
-          >
-            {running ? 'Running…' : 'Run (mock)'}
-          </Button>
-        </Tooltip>
       </div>
 
       <MessageBar layout="multiline" intent="info" style={{ marginBottom: 10 }}>
         <MessageBarBody>
-          <strong>Playground.</strong> Edit the starter however you like, copy it out, or hit{' '}
-          <strong>Run (mock)</strong> to see a simulated response below. Reset re-generates the
-          starter from the current builder state.
+          <strong>Playground.</strong> Edit the starter however you like and copy it out. Edits here
+          aren&apos;t run: <strong>Execute</strong> sends the request the builder shows. Reset
+          re-generates the starter from the current builder state.
         </MessageBarBody>
       </MessageBar>
 
       <div
         style={{
           display: 'grid',
-          gridTemplateRows: '1fr auto',
+          gridTemplateRows: '1fr',
           gap: 10,
           minHeight: 0,
           flexGrow: 1,
@@ -445,42 +401,6 @@ function EditorPane({
             onMount={onMount}
           />
         </MonacoFrame>
-
-        {output && (
-          <div
-            style={{
-              borderRadius: tokens.borderRadiusMedium,
-              border: `1px solid ${tokens.colorNeutralStroke2}`,
-              backgroundColor: tokens.colorNeutralBackground1,
-              padding: 12,
-              maxHeight: 220,
-              overflow: 'auto',
-            }}
-          >
-            <Caption1
-              style={{
-                display: 'block',
-                fontWeight: 600,
-                color: tokens.colorNeutralForeground2,
-                marginBottom: 6,
-              }}
-            >
-              Mock output
-            </Caption1>
-            <pre
-              style={{
-                margin: 0,
-                fontFamily: tokens.fontFamilyMonospace,
-                fontSize: 12,
-                color: tokens.colorNeutralForeground1,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-              }}
-            >
-              {output}
-            </pre>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -72,6 +72,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   starting up, DRS could miss it and stay on that error until it was
   reopened. It now listens for the connection from the start, and Retry asks
   ToolBox again.
+- **Code → Editor no longer fakes a run** ([#240]). Its **Run (mock)**
+  button ignored the edited code and always showed the same two sample
+  account rows, which read like "your code works". The button is gone: the
+  editor is for editing and copying, and **Execute** sends the request the
+  builder shows.
 - **The "…" menu has no dead items, and the counts are right** ([#265]).
   **Duplicate request** and **Export OpenAPI** did nothing and are removed.
   OpenAPI is one of the Code tab's formats, with **Save**. The mode picker and
@@ -371,6 +376,7 @@ Dataverse environments.
 [#220]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/220
 [#223]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/223
 [#239]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/239
+[#240]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/240
 [#243]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/243
 [#244]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/244
 [#246]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/246
