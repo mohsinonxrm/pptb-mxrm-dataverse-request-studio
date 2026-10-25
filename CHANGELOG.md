@@ -44,6 +44,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   saying so. Reads (apart from the page size, [#219]), relate, Execute
   Function, Bulk Delete and the file / image / attachment modes still run
   with ToolBox's own headers ([#109]).
+- **Error and result titles name the right source** ([#209]).
+  - When ToolBox reports no HTTP status, the error card says the message
+    comes from Dataverse only when it carries a Dataverse `0x…` code.
+    Otherwise it says the message is ToolBox's own, such as its
+    response-size limit. That hint now also suggests `$top`.
+  - Create and Upsert results name the record by the primary name the
+    response returns, so a new contact shows its full name instead of
+    "record <id>".
 
 ## [1.4.0-beta.1] - 2026-10-21
 
@@ -328,6 +336,7 @@ Dataverse environments.
 [#203]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/203
 [#204]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/204
 [#207]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/207
+[#209]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/209
 [#211]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/211
 [#212]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/212
 [#217]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/217

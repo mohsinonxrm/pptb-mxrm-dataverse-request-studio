@@ -453,7 +453,7 @@ function ErrorState({ result }: { result: ExecResult }) {
     ? 'The response is larger than the host allows. Narrow it: add $select on the table and ' +
       'inside each $expand, filter the expanded rows, or ' +
       (pageSizeIsSent()
-        ? 'set Prefer: odata.maxpagesize to return fewer rows per page.'
+        ? 'set $top, or Prefer: odata.maxpagesize to return fewer rows per page.'
         : "set $top to return fewer rows (this ToolBox version can't send " +
           'Prefer: odata.maxpagesize; ToolBox 1.2.7+ can).')
     : null;
@@ -510,7 +510,11 @@ function ErrorState({ result }: { result: ExecResult }) {
           : result.status === 501
             ? 'The request was not sent. See the message below.'
             : result.status === 0
-              ? "The PPTB host didn't report an HTTP status. The error message below comes from Dataverse."
+              ? // A Dataverse error carries a 0x8… code; anything else is the
+                // host's own message, e.g. its response-size limit (#209).
+                /\b0x[0-9a-f]{8}\b/i.test(`${err?.code ?? ''} ${err?.message ?? ''}`)
+                ? "The PPTB host didn't report an HTTP status. The error message below comes from Dataverse."
+                : "The PPTB host didn't report an HTTP status. The message below comes from the host itself, not from Dataverse."
               : 'Inspect the error message below for details.';
   // Any failure is 'danger', including a status the host didn't report (0).
   const kind: 'success' | 'danger' | 'warning' = !result.ok
