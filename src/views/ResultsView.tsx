@@ -439,6 +439,17 @@ function isResponseSizeLimitError(message: string | undefined): boolean {
   return !!message && /16777216|exceeds the maximum size/i.test(message);
 }
 
+/**
+ * Advice for an error the host reported without an HTTP status (#209). A
+ * Dataverse error carries a `0x8…` code; anything else is the host's own
+ * message, e.g. its response-size limit.
+ */
+export function noStatusAdvice(err: { code?: string; message?: string } | undefined): string {
+  return /\b0x[0-9a-f]{8}\b/i.test(`${err?.code ?? ''} ${err?.message ?? ''}`)
+    ? "The PPTB host didn't report an HTTP status. The error message below comes from Dataverse."
+    : "The PPTB host didn't report an HTTP status. The message below comes from the host itself, not from Dataverse.";
+}
+
 function ErrorState({ result }: { result: ExecResult }) {
   const Icon =
     result.status === 401
@@ -510,11 +521,7 @@ function ErrorState({ result }: { result: ExecResult }) {
           : result.status === 501
             ? 'The request was not sent. See the message below.'
             : result.status === 0
-              ? // A Dataverse error carries a 0x8… code; anything else is the
-                // host's own message, e.g. its response-size limit (#209).
-                /\b0x[0-9a-f]{8}\b/i.test(`${err?.code ?? ''} ${err?.message ?? ''}`)
-                ? "The PPTB host didn't report an HTTP status. The error message below comes from Dataverse."
-                : "The PPTB host didn't report an HTTP status. The message below comes from the host itself, not from Dataverse."
+              ? noStatusAdvice(err)
               : 'Inspect the error message below for details.';
   // Any failure is 'danger', including a status the host didn't report (0).
   const kind: 'success' | 'danger' | 'warning' = !result.ok
