@@ -30,6 +30,7 @@ import {
   type ExecResult,
 } from '../engine/dataverseExecutor';
 import { pageSizeIsSent } from '../host/pptbBridge';
+import { noStatusAdvice } from './results/noStatusAdvice';
 import { ResultsGrid } from './results/ResultsGrid';
 import { ResultsCommandBar } from './results/ResultsCommandBar';
 import type { GridExportView } from './results/exportResults';
@@ -453,7 +454,7 @@ function ErrorState({ result }: { result: ExecResult }) {
     ? 'The response is larger than the host allows. Narrow it: add $select on the table and ' +
       'inside each $expand, filter the expanded rows, or ' +
       (pageSizeIsSent()
-        ? 'set Prefer: odata.maxpagesize to return fewer rows per page.'
+        ? 'lower Prefer: odata.maxpagesize (or set $top when no page size is set).'
         : "set $top to return fewer rows (this ToolBox version can't send " +
           'Prefer: odata.maxpagesize; ToolBox 1.2.7+ can).')
     : null;
@@ -510,7 +511,7 @@ function ErrorState({ result }: { result: ExecResult }) {
           : result.status === 501
             ? 'The request was not sent. See the message below.'
             : result.status === 0
-              ? "The PPTB host didn't report an HTTP status. The error message below comes from Dataverse."
+              ? noStatusAdvice(err)
               : 'Inspect the error message below for details.';
   // Any failure is 'danger', including a status the host didn't report (0).
   const kind: 'success' | 'danger' | 'warning' = !result.ok

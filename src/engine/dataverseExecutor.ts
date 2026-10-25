@@ -226,7 +226,7 @@ const STATUS_BY_DATAVERSE_CODE: Record<string, number> = {
 
 /** The first Dataverse error code (`0x8xxxxxxx`) in a host message, as written. */
 function dataverseCodeIn(message: string): string | undefined {
-  return /\b0x[0-9a-fA-F]{8}\b/.exec(message)?.[0];
+  return /\b0x8[0-9a-fA-F]{7}\b/.exec(message)?.[0];
 }
 
 /** Status recoverable from a host message: an explicit `HTTP <nnn>` wins,

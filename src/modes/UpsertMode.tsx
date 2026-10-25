@@ -55,6 +55,7 @@ import {
 } from '../editors/PreconditionEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
+import { writeResultName } from '../views/results/writeResultName';
 import { findTable } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import {
@@ -745,11 +746,7 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
               // response comes back (and even then PPTB blocks alt-key
               // via the advisory, so this path rarely fires in practice).
               recordId: state.key.kind === 'guid' ? state.key.recordId : null,
-              recordName: (() => {
-                if (!tbl) return null;
-                const v = state.fieldValues[tbl.primaryName];
-                return typeof v === 'string' && v ? v : null;
-              })(),
+              recordName: writeResultName(tbl?.primaryName, result?.body, state.fieldValues),
             }}
           />
         )}
