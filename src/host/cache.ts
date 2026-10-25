@@ -1,4 +1,4 @@
-// Metadata cache — singleton, TTL-based, with in-flight promise dedup.
+// Metadata cache — one per connected org, TTL-based, with in-flight promise dedup.
 //
 // Every metadata fetch (entities, attributes, relationships, publishers,
 // solutions, components) flows through this cache. Consumers go:

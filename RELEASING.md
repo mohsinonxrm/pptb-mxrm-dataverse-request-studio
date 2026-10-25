@@ -61,4 +61,4 @@ publishes to `latest`.
 
 Work happens on branches cut from `dev`, merged into `dev` by PR. Releases go `dev` →
 `main`. Adopting the full shared model from FetchXML Studio (`release/X.Y` for betas,
-`support/X.Y` for the previous minor) is tracked in #90.
+`support/X.Y` for the previous minor) is tracked in #197.
