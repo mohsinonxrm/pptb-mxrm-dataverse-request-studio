@@ -33,8 +33,9 @@ modes have their own HTTP / fetch / C# / PPTB outputs.
 - **Retrieve Multiple** — full OData query composer with `$select`, `$filter`,
   `$orderby`, `$expand` (nested, with inner `$filter` / `$orderby` / `$top`),
   `$top`, `$count`, `$apply` (groupby / aggregate), and a virtualized results
-  grid with infinite scroll via `@odata.nextLink`, **Retrieve all**, CSV / JSON
-  export, per-column filters, row search, density and persisted column widths.
+  grid with infinite scroll via `@odata.nextLink`, **Retrieve all** (pauses
+  every 50,000 rows with **Continue**), CSV / JSON export, per-column filters,
+  row search, density and persisted column widths.
   Address shortcut chips in the `$filter` builder; paste any OData URL to load
   it into the builder.
 - **Retrieve Single** — one record by primary key (GUID), with `$select` /
@@ -362,7 +363,7 @@ src/
     pptbBridge.ts            — typed wrapper over window.dataverseAPI
     metadataProvider.ts      — entity / attribute / relationship loaders
     csdlProvider.ts          — $metadata XML parsing + action / function index
-    cache.ts                 — singleton TTL cache with in-flight dedup
+    cache.ts                 — per-org metadata caches (TTL + in-flight dedup)
     useLiveMetadata.ts, useColumnDetail.ts, useScopedEntities.ts, …
 
   primitives/                — small reusable UI bits

@@ -82,6 +82,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   OpenAPI is one of the Code tab's formats, with **Save**. The mode picker and
   the Code tab now count their modes (23) and formats (10) instead of saying
   18 and 8.
+- **Docs caught up** ([#237]). CONTRIBUTING lists `npm test` and the CI
+  checks, and describes the tag-driven release (RELEASING.md) instead of a
+  manual publish. README describes the per-org metadata caches and the
+  Retrieve all pause.
 
 ## [1.4.0-beta.1] - 2026-10-21
 
@@ -375,6 +379,7 @@ Dataverse environments.
 [#219]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/219
 [#220]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/220
 [#223]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/223
+[#237]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/237
 [#239]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/239
 [#240]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/240
 [#243]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/243
