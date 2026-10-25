@@ -163,7 +163,7 @@ export function RequestTypePicker({
               borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
             }}
           >
-            <span>Pick request type · 18 modes</span>
+            <span>Pick request type · {REQ_TYPES.length} modes</span>
             <button
               type="button"
               onClick={() => {

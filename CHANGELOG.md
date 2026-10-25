@@ -67,6 +67,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   does. Before, a new contact could read "2 populated" with Last Name and
   Owner still empty. The **Set** filter still lists those pre-filled rows, so
   they stay visible to fill in.
+- **The "…" menu has no dead items, and the counts are right** ([#265]).
+  **Duplicate request** and **Export OpenAPI** did nothing and are removed.
+  OpenAPI is one of the Code tab's formats, with **Save**. The mode picker and
+  the Code tab now count their modes (23) and formats (10) instead of saying
+  18 and 8.
 
 ## [1.4.0-beta.1] - 2026-10-21
 
@@ -369,6 +374,7 @@ Dataverse environments.
 [#257]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/257
 [#266]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/266
 [#264]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/264
+[#265]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/265
 
 ## [1.1.4] - 2026-10-17
 

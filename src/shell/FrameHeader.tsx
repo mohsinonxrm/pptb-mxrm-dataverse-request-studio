@@ -12,7 +12,6 @@ import {
   MenuPopover,
   MenuList,
   MenuItem,
-  MenuDivider,
   Badge,
   tokens,
 } from '@fluentui/react-components';
@@ -164,9 +163,6 @@ export function FrameHeader({
         </MenuTrigger>
         <MenuPopover>
           <MenuList>
-            <MenuItem>Duplicate request</MenuItem>
-            <MenuItem>Export OpenAPI</MenuItem>
-            <MenuDivider />
             <MenuItem icon={<Settings20Regular />} onClick={() => setSettingsOpen(true)}>
               Settings
             </MenuItem>
