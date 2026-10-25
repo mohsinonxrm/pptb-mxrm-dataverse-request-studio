@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { loadSolutionEntityNames } from './dataverseMetadata';
 import { metadata, subscribeMetadataReset, type EntityListItem } from './metadataProvider';
 import { useHostSession } from './HostContext';
+import { recheckConnection } from './pptbBridge';
 import { usePersistedSettings } from './usePersistedSettings';
 
 export interface UseScopedEntitiesResult {
@@ -62,7 +63,13 @@ export function useScopedEntities(): UseScopedEntitiesResult {
   const noConnection = session.embedded && session.handshakeDone && !session.connected;
   const connectionKey = `${ready}|${noConnection}|${session.environmentUrl}`;
   const [attempt, setAttempt] = useState(0);
-  const retry = useCallback(() => setAttempt((n) => n + 1), []);
+  const retry = useCallback(() => {
+    // Without a connection, Retry first asks ToolBox again: it may have
+    // bound one this tool didn't hear about (#281). A found connection
+    // changes `connectionKey`, which reloads the list.
+    if (noConnection) void recheckConnection();
+    setAttempt((n) => n + 1);
+  }, [noConnection]);
   // "Refresh metadata" drops the cached entity list — re-pull it so newly
   // created tables show up without a remount.
   useEffect(() => subscribeMetadataReset(retry), [retry]);

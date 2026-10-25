@@ -67,6 +67,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   does. Before, a new contact could read "2 populated" with Last Name and
   Owner still empty. The **Set** filter still lists those pre-filled rows, so
   they stay visible to fill in.
+- **No more "No active Dataverse connection" after the connection is
+  picked** ([#281]). When ToolBox bound the connection while DRS was still
+  starting up, DRS could miss it and stay on that error until it was
+  reopened. It now listens for the connection from the start, and Retry asks
+  ToolBox again.
 - **The "…" menu has no dead items, and the counts are right** ([#265]).
   **Duplicate request** and **Export OpenAPI** did nothing and are removed.
   OpenAPI is one of the Code tab's formats, with **Save**. The mode picker and
@@ -374,6 +379,7 @@ Dataverse environments.
 [#257]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/257
 [#266]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/266
 [#264]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/264
+[#281]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/281
 [#265]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/265
 
 ## [1.1.4] - 2026-10-17
