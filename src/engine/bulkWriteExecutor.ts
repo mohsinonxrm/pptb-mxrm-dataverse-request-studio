@@ -3,6 +3,7 @@
 // the mode stays a self-contained (lazy-loaded) addition.
 
 import { dvHost } from '../host/pptbBridge';
+import { jsonBytes } from './byteSize';
 import { mapError, sendable, type ExecResult } from './dataverseExecutor';
 import {
   buildBulkWriteBody,
@@ -73,7 +74,7 @@ export async function executeBulkWrite(
       status: out ? 200 : 204,
       statusText: out ? 'OK' : 'No Content',
       ms,
-      bytes: out ? JSON.stringify(out).length : 0,
+      bytes: jsonBytes(out),
       ok: true,
       outcome: 'ok',
       body: out,

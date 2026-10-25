@@ -8,7 +8,8 @@
 // responses without round-trips); the host returns real status codes.
 //
 // Request headers: the write group (Create / Update / Upsert / Delete /
-// Merge) passes the headers its mode composed for the Code tab. On PPTB
+// Merge), Execute Action and Execute Workflow (#266) pass the headers their
+// mode composed for the Code tab. On PPTB
 // 1.2.7+ the precondition (`If-Match` / `If-None-Match`), bypass (`MSCRM.*`)
 // and user-added headers go out as `additionalHeaders` once the user
 // approves them in the host. Headers the host builds itself (see
@@ -16,8 +17,9 @@
 // `hostHeaderAdvisories` blocks the requests whose meaning depends on it.
 //
 // What's expressly NOT implemented:
-//   - Headers on the read / relate / execute groups. Those still run with
-//     the host's own headers, including its default `Prefer`.
+//   - Headers on the read / relate groups and Execute Function. Those
+//     still run with the host's own headers (#109). The one exception is
+//     the paged reads' page size (`readPreferHeaders`, #219).
 //   - Binary (file/image) chunked upload — host doesn't expose this API.
 //     ManageFile / ManageImage modes return `host-not-supported` from the
 //     live executor so the user can BUILD the request and copy out, but
@@ -39,6 +41,8 @@ import {
 } from '../host/pptbBridge';
 import { metadata } from '../host/metadataProvider';
 import { cleanHostMessage } from './hostErrorText';
+import { jsonBytes } from './byteSize';
+import { hasCollectionInvolvedNestedExpand } from '../editors/expand/expandTree';
 import {
   buildRetrieveMultiple,
   buildRetrieveSingle,
@@ -222,7 +226,7 @@ const STATUS_BY_DATAVERSE_CODE: Record<string, number> = {
 
 /** The first Dataverse error code (`0x8xxxxxxx`) in a host message, as written. */
 function dataverseCodeIn(message: string): string | undefined {
-  return /\b0x[0-9a-fA-F]{8}\b/.exec(message)?.[0];
+  return /\b0x8[0-9a-fA-F]{7}\b/.exec(message)?.[0];
 }
 
 /** Status recoverable from a host message: an explicit `HTTP <nnn>` wins,
@@ -311,7 +315,7 @@ export function mapError(
         code: HEADER_REJECTED_CODE,
         message:
           `Power Platform ToolBox rejected a request header, so nothing was sent to Dataverse. ` +
-          `Fix the header in the Headers pane. Host message: ${message}`,
+          `Fix the header in the Headers or Prefer pane. Host message: ${message}`,
         ...raw,
       },
       ms,
@@ -325,7 +329,7 @@ export function mapError(
 }
 
 function ok(status: number, body: unknown, ms: number): ExecResult {
-  const bytes = body ? JSON.stringify(body).length : 0;
+  const bytes = jsonBytes(body);
   return {
     status,
     statusText: STATUS_TEXT[status] ?? 'OK',
@@ -371,7 +375,9 @@ async function timed<T>(
 // Headers PPTB's Dataverse client always sets itself. Its client spreads
 // `additionalHeaders` over its own, so sending these would override them
 // (and prompt for consent for nothing). `Prefer` is host-owned too: the host
-// always sends `return=representation` on writes and would only append ours.
+// always sends `return=representation`, and a custom Prefer replaces the
+// rest of the host's own (on reads, `odata.include-annotations="*"`).
+// Only the paged reads send one, through `readPreferHeaders` (#219).
 const HOST_OWNED_HEADERS = new Set([
   'authorization',
   'accept',
@@ -417,9 +423,32 @@ function isExecResult(x: unknown): x is ExecResult {
 
 // ── Read group ───────────────────────────────────────────────────────────
 
+/**
+ * The `Prefer` a read sends for `odata.maxpagesize` (#219): only when a page
+ * size is set and the host can send headers (1.2.7+), so other reads stay
+ * header-free and never prompt. A custom Prefer replaces the host's own
+ * `odata.include-annotations="*"` (desktop-app dataverseManager), so it's
+ * sent again here; the grid needs those annotations. The page size goes
+ * last: Dataverse rejects it ahead of `include-annotations` (0x80060888
+ * "Invalid prefer header", confirmed live). Pages after the first must
+ * carry the same page size (Dataverse "Page results").
+ */
+export function readPreferHeaders(
+  maxpagesize: number | null | undefined,
+): Record<string, string> | undefined {
+  if (!maxpagesize || maxpagesize <= 0 || !hostSupportsAdditionalHeaders()) return undefined;
+  return { Prefer: `odata.include-annotations="*",odata.maxpagesize=${maxpagesize}` };
+}
+
 export async function executeRetrieveMultiple(s: RetrieveMultipleState): Promise<ExecResult> {
-  const built = buildRetrieveMultiple(s);
-  const res = await timed(() => dvHost.queryData(built.relativeNoBase));
+  const headers = readPreferHeaders(s.prefer.maxpagesize);
+  // Without the page size on the wire, dropping `$top` (as the Code tab
+  // does) would leave the query uncapped: up to 5,000 rows (#219). Except
+  // where Dataverse can reject top-level `$top` (a nested `$expand` that
+  // involves a collection, 0x80060888): there it stays dropped, as before.
+  const keepTop = !headers && !hasCollectionInvolvedNestedExpand(s.expand, s.table);
+  const built = buildRetrieveMultiple(s, { keepTop });
+  const res = await timed(() => dvHost.queryData(built.relativeNoBase, headers), headers);
   if (isExecResult(res)) return res;
   return ok(200, res.value, res.ms);
 }
@@ -439,7 +468,7 @@ export async function executeRetrieveSingle(s: RetrieveSingleState): Promise<Exe
 }
 
 export async function executeNextLink(s: RetrieveNextLinkState): Promise<ExecResult> {
-  return executeAbsoluteUrl(s.url);
+  return executeAbsoluteUrl(s.url, s.prefer.maxpagesize);
 }
 
 /**
@@ -447,9 +476,14 @@ export async function executeNextLink(s: RetrieveNextLinkState): Promise<ExecRes
  * pulled out of a previous response). The host's `queryData` takes a path
  * relative to `/api/data/v9.2/`, so we strip the scheme/host/api/version
  * prefix before calling. Used by ResultsGrid's infinite scroll +
- * Retrieve-All command.
+ * Retrieve-All command. `maxpagesize` is the page size the first page was
+ * requested with; Dataverse wants it on every later page too (#219).
  */
-export async function executeAbsoluteUrl(url: string): Promise<ExecResult> {
+export async function executeAbsoluteUrl(
+  url: string,
+  maxpagesize?: number | null,
+): Promise<ExecResult> {
+  const headers = readPreferHeaders(maxpagesize);
   let path = url;
   const apiIdx = path.indexOf('/api/data/');
   if (apiIdx >= 0) {
@@ -457,7 +491,7 @@ export async function executeAbsoluteUrl(url: string): Promise<ExecResult> {
     const slash = path.indexOf('/');
     if (slash >= 0) path = path.slice(slash + 1);
   }
-  const res = await timed(() => dvHost.queryData(path));
+  const res = await timed(() => dvHost.queryData(path, headers), headers);
   if (isExecResult(res)) return res;
   return ok(200, res.value, res.ms);
 }
@@ -472,7 +506,10 @@ export async function executePredefined(s: PredefinedQueryState): Promise<ExecRe
   const tbl = metadata.peekTable(s.table) ?? (await metadata.getTable(s.table));
   if (!tbl) return mapError({ statusCode: 404, message: `Unknown table ${s.table}` }, 0);
   const param = s.queryType === 'savedQuery' ? 'savedQuery' : 'userQuery';
-  const top = s.top ? `&$top=${s.top}` : '';
+  const headers = readPreferHeaders(s.prefer.maxpagesize);
+  // Dataverse ignores `$top` next to a page size, so it's only sent when the
+  // page size isn't (#219); that matches the URL bar whenever it can.
+  const top = s.top && !headers ? `&$top=${s.top}` : '';
   // Related collection (#5): /<sourceSet>(<id>)/<nav>?savedQuery=<id>
   let collection = tbl.entitySetName;
   if (s.related) {
@@ -488,7 +525,7 @@ export async function executePredefined(s: PredefinedQueryState): Promise<ExecRe
     collection = `${src.entitySetName}(${r.recordId})/${r.navProperty}`;
   }
   const path = `${collection}?${param}=${s.queryId}${top}`;
-  const res = await timed(() => dvHost.queryData(path));
+  const res = await timed(() => dvHost.queryData(path, headers), headers);
   if (isExecResult(res)) return res;
   return ok(200, res.value, res.ms);
 }
@@ -812,12 +849,12 @@ async function runPerTarget(
   const error = (firstFailure.body as { error: unknown }).error;
   const body = { error, targets };
   if (succeeded === 0) {
-    return { ...firstFailure, ms, body, bytes: JSON.stringify(body).length, targets };
+    return { ...firstFailure, ms, body, bytes: jsonBytes(body), targets };
   }
   return {
     ...firstFailure,
     ms,
-    bytes: JSON.stringify(body).length,
+    bytes: jsonBytes(body),
     ok: false,
     outcome: 'partial',
     body,
@@ -916,7 +953,10 @@ export async function executeDisassociate(s: DisassociateState): Promise<ExecRes
 
 // ── Execute group ────────────────────────────────────────────────────────
 
-export async function executeAction(s: ExecuteActionState): Promise<ExecResult> {
+export async function executeAction(
+  s: ExecuteActionState,
+  headers?: Record<string, string>,
+): Promise<ExecResult> {
   if (!s.actionName) return mapError({ statusCode: 400, message: 'Pick an action.' }, 0);
   const action = await actions.find(s.actionName);
   if (!action) return mapError({ statusCode: 404, message: `Unknown action ${s.actionName}` }, 0);
@@ -941,14 +981,21 @@ export async function executeAction(s: ExecuteActionState): Promise<ExecResult> 
     boundEntityId = s.boundRecordId;
   }
 
-  const res = await timed(() =>
-    dvHost.execute({
-      operationName: s.actionName!,
-      operationType: 'action',
-      entityName: boundEntity,
-      entityId: boundEntityId,
-      parameters: params,
-    }),
+  // The Headers pane's rows (impersonation, bypass, …) go out on 1.2.7+ (#266).
+  const sent = sendable(headers);
+  const res = await timed(
+    () =>
+      dvHost.execute(
+        {
+          operationName: s.actionName!,
+          operationType: 'action',
+          entityName: boundEntity,
+          entityId: boundEntityId,
+          parameters: params,
+        },
+        sent,
+      ),
+    sent,
   );
   if (isExecResult(res)) return res;
   return ok(200, res.value, res.ms);
@@ -997,20 +1044,29 @@ export async function executeFunction(s: ExecuteFunctionState): Promise<ExecResu
   return ok(200, res.value, res.ms);
 }
 
-export async function executeWorkflow(s: ExecuteWorkflowState): Promise<ExecResult> {
+export async function executeWorkflow(
+  s: ExecuteWorkflowState,
+  headers?: Record<string, string>,
+): Promise<ExecResult> {
   if (!s.workflowId || !s.entityId) {
     return mapError({ statusCode: 400, message: 'Pick a workflow and a record.' }, 0);
   }
   // POST /workflows(<wf-id>)/Microsoft.Dynamics.CRM.ExecuteWorkflow
   // body: { EntityId: '<target-guid>' }
-  const res = await timed(() =>
-    dvHost.execute({
-      operationName: 'ExecuteWorkflow',
-      operationType: 'action',
-      entityName: 'workflow',
-      entityId: s.workflowId!,
-      parameters: { EntityId: s.entityId },
-    }),
+  const sent = sendable(headers);
+  const res = await timed(
+    () =>
+      dvHost.execute(
+        {
+          operationName: 'ExecuteWorkflow',
+          operationType: 'action',
+          entityName: 'workflow',
+          entityId: s.workflowId!,
+          parameters: { EntityId: s.entityId },
+        },
+        sent,
+      ),
+    sent,
   );
   if (isExecResult(res)) return res;
   return ok(204, res.value, res.ms);

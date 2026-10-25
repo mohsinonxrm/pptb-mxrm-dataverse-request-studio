@@ -24,7 +24,7 @@
 // they're working with raw schema names. This is the same v9 design language
 // used in SelectEditor and FilterValueInput.
 
-import { createContext, useContext, useMemo, useState, useEffect } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, useEffect } from 'react';
 import {
   Input,
   Textarea,
@@ -375,13 +375,6 @@ export function FieldSetEditor({
   // as ownerid are defaulted by Dataverse. They still sit at the top of the
   // form (see `visible`) so they can be overridden.
   const requiredFields = useMemo(() => writable.filter(mustSupplyOnCreate), [writable]);
-  // "Populated" includes both columns with a value AND columns flagged as
-  // explicit-null — both produce a body entry, so both count toward
-  // "the user has expressed an intent for this column".
-  const populatedFields = useMemo(
-    () => writable.filter((c) => c.logicalName in values || nullFields.includes(c.logicalName)),
-    [writable, values, nullFields],
-  );
   // A required column counts as set when what will be sent gives it a value:
   // the typed body in JSON mode, a non-empty form value otherwise — the
   // test the mode's Execute gate uses. A seeded but empty value (an Owner
@@ -392,6 +385,26 @@ export function FieldSetEditor({
         ? suppliedColumnTest(tbl, bodyMode === 'json' ? jsonText : null, valuesProp)
         : () => false,
     [tbl, bodyMode, jsonText, valuesProp],
+  );
+  // "Populated" = the column produces a body entry: a supplied value or an
+  // explicit null. Seeded empty values (required columns pre-filled when the
+  // table's metadata is cached) aren't sent, so they don't count (#210).
+  // Drives the "N populated" badge and the per-row missing marker.
+  const isPopulated = useCallback(
+    (c: ColumnMeta) => isSupplied(c) || nullFields.includes(c.logicalName),
+    [isSupplied, nullFields],
+  );
+  const populatedFields = useMemo(() => writable.filter(isPopulated), [writable, isPopulated]);
+  // The working set: every column added to the form (seeded, picked with
+  // "Add field", or being edited) plus explicit nulls. The Set filter (the
+  // default view) shows these, so an empty row stays visible to be filled in.
+  const inWorkingSet = useCallback(
+    (c: ColumnMeta) => c.logicalName in values || nullFields.includes(c.logicalName),
+    [values, nullFields],
+  );
+  const workingSetCount = useMemo(
+    () => writable.filter(inWorkingSet).length,
+    [writable, inWorkingSet],
   );
 
   // Required-field check: a column marked explicit-null still counts as
@@ -448,8 +461,7 @@ export function FieldSetEditor({
     // must supply. SystemRequired ones (ownerid, statecode) are defaulted
     // by Dataverse and stay out of this view.
     if (filter === 'required') pool = pool.filter(mustSupplyOnCreate);
-    if (filter === 'set')
-      pool = pool.filter((c) => c.logicalName in values || nullFields.includes(c.logicalName));
+    if (filter === 'set') pool = pool.filter(inWorkingSet);
     if (filter === 'common') {
       pool = pool.filter(
         (c) =>
@@ -470,7 +482,7 @@ export function FieldSetEditor({
       );
     }
     return pool;
-  }, [writable, values, filter, search, tbl]);
+  }, [writable, values, nullFields, filter, search, tbl, inWorkingSet]);
 
   // Pool of fields available to add (writable, not currently visible)
   const addable = useMemo(() => {
@@ -576,7 +588,7 @@ export function FieldSetEditor({
           <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
             <FilterChip
               label="Set"
-              count={populatedFields.length}
+              count={workingSetCount}
               active={filter === 'set'}
               onClick={() => setFilter('set')}
             />
@@ -627,7 +639,7 @@ export function FieldSetEditor({
                     table={tbl}
                     col={col}
                     value={values[col.logicalName]}
-                    populated={col.logicalName in values || nullFields.includes(col.logicalName)}
+                    populated={isPopulated(col)}
                     isNull={isNull(col.logicalName)}
                     nullSupported={nullFieldsSupported}
                     requiredOnWrite={requiresAllRequired}

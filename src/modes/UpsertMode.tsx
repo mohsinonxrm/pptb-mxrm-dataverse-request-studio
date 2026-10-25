@@ -48,9 +48,14 @@ import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
 import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
-import { PreconditionEditor, preconditionToHeader } from '../editors/PreconditionEditor';
+import {
+  PreconditionEditor,
+  etagProblem,
+  preconditionToHeader,
+} from '../editors/PreconditionEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
+import { writeResultName } from '../views/results/writeResultName';
 import { findTable } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import {
@@ -199,8 +204,8 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
             ? `${missingRequired.length} required field${missingRequired.length === 1 ? '' : 's'} unset for create-only: ${missingRequired.slice(0, 3).join(', ')}${missingRequired.length > 3 ? '…' : ''}`
             : Object.keys(body).length === 0
               ? 'Body is empty — set at least one field.'
-              : state.concurrency.kind === 'etag' && !state.concurrency.etag.trim()
-                ? 'Provide an etag value or switch the concurrency mode.'
+              : state.concurrency.kind === 'etag' && etagProblem(state.concurrency.etag)
+                ? etagProblem(state.concurrency.etag)
                 : state.headers.some((h) => h.enabled && !h.name)
                   ? 'Fix empty header name.'
                   : null;
@@ -741,11 +746,7 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
               // response comes back (and even then PPTB blocks alt-key
               // via the advisory, so this path rarely fires in practice).
               recordId: state.key.kind === 'guid' ? state.key.recordId : null,
-              recordName: (() => {
-                if (!tbl) return null;
-                const v = state.fieldValues[tbl.primaryName];
-                return typeof v === 'string' && v ? v : null;
-              })(),
+              recordName: writeResultName(tbl?.primaryName, result?.body, state.fieldValues),
             }}
           />
         )}

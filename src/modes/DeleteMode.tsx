@@ -79,7 +79,11 @@ import {
   headerItemsToObject,
   type HeaderItem,
 } from '../editors/HeadersEditor';
-import { PreconditionEditor, preconditionToHeader } from '../editors/PreconditionEditor';
+import {
+  PreconditionEditor,
+  etagProblem,
+  preconditionToHeader,
+} from '../editors/PreconditionEditor';
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
 import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
@@ -416,8 +420,8 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
         ? 'Record id is not a valid GUID.'
         : state.scope.kind === 'single-property' && !state.scope.column
           ? 'Pick a column to clear.'
-          : state.concurrency.kind === 'etag' && !state.concurrency.etag.trim()
-            ? 'Provide an etag value or switch the concurrency mode.'
+          : state.concurrency.kind === 'etag' && etagProblem(state.concurrency.etag)
+            ? etagProblem(state.concurrency.etag)
             : state.headers.some((h) => h.enabled && !h.name)
               ? 'Fix empty header name.'
               : requireTypedConfirm && pickedRowLoading && !pickedPrimaryFromPicker

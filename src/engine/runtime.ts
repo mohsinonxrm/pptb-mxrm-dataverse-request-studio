@@ -85,7 +85,7 @@ export const runtime = neverThrow({
   retrieveMultiple: (s: RetrieveMultipleState) => liveRetrieveMultiple(s),
   retrieveSingle: (s: RetrieveSingleState) => liveRetrieveSingle(s),
   nextLink: (s: RetrieveNextLinkState) => liveNextLink(s),
-  absoluteUrl: (url: string) => liveAbsoluteUrl(url),
+  absoluteUrl: (url: string, maxpagesize?: number | null) => liveAbsoluteUrl(url, maxpagesize),
   predefined: (s: PredefinedQueryState) => livePredefined(s),
   create: afterWrite(
     (s: CreateState, headers?: Record<string, string>) => liveCreate(s, headers),
@@ -109,10 +109,16 @@ export const runtime = neverThrow({
   ),
   associate: afterWrite((s: AssociateState) => liveAssociate(s), ownTable),
   disassociate: afterWrite((s: DisassociateState) => liveDisassociate(s), ownTable),
-  action: afterWrite((s: ExecuteActionState) => liveAction(s), everyTable),
+  action: afterWrite(
+    (s: ExecuteActionState, headers?: Record<string, string>) => liveAction(s, headers),
+    everyTable,
+  ),
   // Functions are side-effect free by definition — nothing to invalidate.
   function: (s: ExecuteFunctionState) => liveFunction(s),
-  workflow: afterWrite((s: ExecuteWorkflowState) => liveWorkflow(s), everyTable),
+  workflow: afterWrite(
+    (s: ExecuteWorkflowState, headers?: Record<string, string>) => liveWorkflow(s, headers),
+    everyTable,
+  ),
   manageFile: (s: ManageFileState) => liveManageFile(s),
   manageImage: (s: ManageImageState) => liveManageImage(s),
   manageAttachment: (s: ManageAttachmentState) => liveManageAttachment(s),

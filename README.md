@@ -33,8 +33,9 @@ modes have their own HTTP / fetch / C# / PPTB outputs.
 - **Retrieve Multiple** — full OData query composer with `$select`, `$filter`,
   `$orderby`, `$expand` (nested, with inner `$filter` / `$orderby` / `$top`),
   `$top`, `$count`, `$apply` (groupby / aggregate), and a virtualized results
-  grid with infinite scroll via `@odata.nextLink`, **Retrieve all**, CSV / JSON
-  export, per-column filters, row search, density and persisted column widths.
+  grid with infinite scroll via `@odata.nextLink`, **Retrieve all** (pauses
+  every 50,000 rows with **Continue**), CSV / JSON export, per-column filters,
+  row search, density and persisted column widths.
   Address shortcut chips in the `$filter` builder; paste any OData URL to load
   it into the builder.
 - **Retrieve Single** — one record by primary key (GUID), with `$select` /
@@ -149,9 +150,11 @@ modes have their own HTTP / fetch / C# / PPTB outputs.
   org with in-flight promise dedup. Switching the PPTB connection resets the
   prepared request and reloads metadata for the new environment.
 - **Request headers through PPTB 1.2.7+** — Create / Update / Upsert /
-  Delete / Merge / Bulk Write headers (preconditions, `MSCRM.*` bypass, duplicate detection, impersonation) are
-  sent as additional headers after you approve them once in ToolBox. On older
-  hosts, requests that depend on a header are blocked with an explanation.
+  Delete / Merge / Bulk Write / Execute Action / Execute Workflow headers
+  (preconditions, `MSCRM.*` bypass, duplicate detection, impersonation) are
+  sent as additional headers after you approve them once in ToolBox, and so is
+  the page size of paged reads. On older hosts, write requests that depend on
+  a precondition or bypass header are blocked with an explanation.
   `Authorization` / `Cookie` headers are never sent, saved or exported.
 - **Antipattern advisories** — Surfaces real-time guidance per the
   [Microsoft query-antipatterns doc](https://learn.microsoft.com/en-us/power-apps/developer/data-platform/query-antipatterns):
@@ -218,7 +221,8 @@ modes have their own HTTP / fetch / C# / PPTB outputs.
 
 - [Power Platform ToolBox](https://www.powerplatformtoolbox.com/) **1.2.0 or
   later** (the tool declares `minAPI: 1.2.0`). **1.2.7 or later** is
-  recommended: it sends the write modes' request headers and is required for
+  recommended: it sends the write and execute modes' request headers and the
+  page size, and is required for
   the `$batch` and ExecuteMultiple modes.
 - A connection to a Dataverse environment
 - For local development: **Node.js 22.22.2+, 24.15+ or 26+** and **npm** (see
@@ -359,7 +363,7 @@ src/
     pptbBridge.ts            — typed wrapper over window.dataverseAPI
     metadataProvider.ts      — entity / attribute / relationship loaders
     csdlProvider.ts          — $metadata XML parsing + action / function index
-    cache.ts                 — singleton TTL cache with in-flight dedup
+    cache.ts                 — per-org metadata caches (TTL + in-flight dedup)
     useLiveMetadata.ts, useColumnDetail.ts, useScopedEntities.ts, …
 
   primitives/                — small reusable UI bits
@@ -407,6 +411,7 @@ Dataverse API)
 | Retrieve Multiple (full OData) | ✅ |
 | Retrieve Single (by GUID) | ✅ |
 | `@odata.nextLink` paging, Retrieve all | ✅ |
+| `Prefer: odata.maxpagesize` (page size) | ✅ 1.2.7+ (older ToolBox: Execute keeps `$top` instead) |
 | Predefined / user queries (incl. over related records) | ✅ |
 | `$apply` (groupby / aggregate) | ✅ |
 | Lambda filter (`any` / `all`) | ✅ |

@@ -30,11 +30,13 @@ npm install
 |---|---|
 | `npm run dev` | Vite dev server on `localhost:5173` (standalone, no PPTB host) |
 | `npm run typecheck` | `tsc -b --noEmit` — fast type-only check |
+| `npm test` / `npm run test:watch` | Vitest unit tests, once / in watch mode |
 | `npm run build` | Full production build into `dist/` |
 | `npm run preview` | Serve the production build locally |
 | `npm run format` / `npm run format:check` | Prettier write / check over the repo |
 | `npm run validate` | Run `pptb-validate` against the manifest |
 | `npm run finalize-package` | `validate` → `build` (pre-release) |
+| `npm run build:analyze` | Production build plus a bundle-size report |
 
 ### Standalone vs PPTB-embedded
 
@@ -57,11 +59,13 @@ returns true only in the iframe.
 ## Branch model
 
 - **`dev`** — default working branch. All feature work, fixes, and refactors
-  target `dev`. PRs into `dev` should be small, focused, and pass
-  `npm run typecheck` + `npm run build`.
+  target `dev`. PRs into `dev` should be small, focused, and pass the CI
+  checks (see [Pull requests](#pull-requests)).
 - **`main`** — protected. Only updated at release time by a PR from `dev`,
-  merged with a merge commit. Releases are tagged (`v1.0.0`, `v1.1.0`, …)
-  and published to npm from `main`.
+  merged with a merge commit. A release is a `vX.Y.Z` (or `vX.Y.Z-beta.N`)
+  tag on that merge commit: the Release workflow publishes it to npm and
+  creates the GitHub Release. Nobody publishes by hand; see
+  [RELEASING.md](../RELEASING.md).
 
 ### Workflow
 
@@ -163,8 +167,9 @@ icons/                — tool icons (bundled into dist/icons at build time)
 A good PR:
 
 - Targets `dev`
-- Passes `npm run typecheck`, `npm run format:check` AND `npm run build`
-  locally
+- Passes `npm run typecheck`, `npm run format:check`, `npm test` AND
+  `npm run build` locally. CI (`.github/workflows/ci.yml`) runs these plus
+  `npm run validate` on every PR, and GitHub code scanning (CodeQL) runs too
 - Touches one logical concern (split mechanical refactors into their own PR)
 - Includes screenshots for any UI change (light AND dark mode)
 - Updates `CHANGELOG.md` under `## [Unreleased]` if user-facing

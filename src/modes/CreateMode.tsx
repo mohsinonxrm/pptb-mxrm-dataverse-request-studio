@@ -53,6 +53,7 @@ import { disabledReasonFromAdvisories } from '../primitives/advisories';
 import { Warning20Filled } from '@fluentui/react-icons';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
+import { writeResultName } from '../views/results/writeResultName';
 import { findTable } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildCreate, buildCreateBody } from '../engine/urlBuilder';
@@ -541,15 +542,11 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
               table: state.table,
               // Create has no recordId pre-execute — WriteResultCard
               // pulls the new GUID from the response's `OData-EntityId`
-              // header. recordName: best-effort from the body we sent
-              // (the primary-name field is usually populated for a Create
-              // form to be valid).
+              // header. recordName: the returned row's primary name (a
+              // computed one like a contact's fullname is never sent), else
+              // the value we sent (#209).
               recordId: null,
-              recordName: (() => {
-                if (!tbl) return null;
-                const v = state.fieldValues[tbl.primaryName];
-                return typeof v === 'string' && v ? v : null;
-              })(),
+              recordName: writeResultName(tbl?.primaryName, result?.body, state.fieldValues),
             }}
           />
         )}

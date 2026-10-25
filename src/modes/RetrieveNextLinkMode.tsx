@@ -67,7 +67,7 @@ import { decodeForDisplay } from '../primitives/decodeForDisplay';
 
 const initialState = (): RetrieveNextLinkState => ({
   url: '',
-  prefer: { ...emptyPrefer(), maxpagesize: 50 },
+  prefer: emptyPrefer(),
   headers: defaultReadHeaders(),
   dirty: new Set(),
 });
@@ -411,7 +411,13 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
       );
       break;
     case 'prefer':
-      pane = <PreferEditor spec={state.prefer} setSpec={(p) => set('prefer', p, 'prefer')} />;
+      pane = (
+        <PreferEditor
+          spec={state.prefer}
+          setSpec={(p) => set('prefer', p, 'prefer')}
+          sendsPageSize
+        />
+      );
       break;
     case 'headers':
       pane = <HeadersEditor items={state.headers} setItems={(h) => set('headers', h, 'headers')} />;

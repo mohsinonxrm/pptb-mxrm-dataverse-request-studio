@@ -29,6 +29,8 @@ import {
   HEADER_REJECTED_CODE,
   type ExecResult,
 } from '../engine/dataverseExecutor';
+import { pageSizeIsSent } from '../host/pptbBridge';
+import { noStatusAdvice } from './results/noStatusAdvice';
 import { ResultsGrid } from './results/ResultsGrid';
 import { ResultsCommandBar } from './results/ResultsCommandBar';
 import type { GridExportView } from './results/exportResults';
@@ -56,6 +58,9 @@ export function ResultsView({
   loadMoreError,
   onRetryLoadMore,
   onDismissLoadMoreError,
+  loadMoreNotice,
+  onContinueLoadMore,
+  onDismissLoadMoreNotice,
   writeContext,
   preferredColumnOrder,
 }: {
@@ -86,6 +91,10 @@ export function ResultsView({
   /** Retry the failed next page. */
   onRetryLoadMore?: () => void;
   onDismissLoadMoreError?: () => void;
+  /** Why Retrieve all paused with pages left (#223); rendered with Continue. */
+  loadMoreNotice?: string | null;
+  onContinueLoadMore?: () => void;
+  onDismissLoadMoreNotice?: () => void;
   /**
    * Write-mode context. When supplied AND `mode === 'single'`, the
    * results pane renders WriteResultCard (operation-specific success /
@@ -247,6 +256,26 @@ export function ResultsView({
             }
           >
             {onRetryLoadMore && <Button onClick={onRetryLoadMore}>Retry</Button>}
+          </MessageBarActions>
+        </MessageBar>
+      )}
+
+      {loadMoreNotice && (
+        <MessageBar intent="info" layout="multiline">
+          <MessageBarBody>{loadMoreNotice}</MessageBarBody>
+          <MessageBarActions
+            containerAction={
+              onDismissLoadMoreNotice && (
+                <Button
+                  appearance="transparent"
+                  aria-label="Dismiss"
+                  icon={<Dismiss20Regular />}
+                  onClick={onDismissLoadMoreNotice}
+                />
+              )
+            }
+          >
+            {onContinueLoadMore && <Button onClick={onContinueLoadMore}>Continue</Button>}
           </MessageBarActions>
         </MessageBar>
       )}
@@ -420,10 +449,14 @@ function ErrorState({ result }: { result: ExecResult }) {
         : ErrorCircle20Regular;
   const err = (result.body as { error?: { code?: string; message?: string } } | null)?.error;
   // #126 — the host caps response size; say how to shrink the response.
+  // Only point at the page size where Execute sends it (#219).
   const sizeHint = isResponseSizeLimitError(err?.message)
     ? 'The response is larger than the host allows. Narrow it: add $select on the table and ' +
-      'inside each $expand, filter the expanded rows, or set Prefer: odata.maxpagesize to ' +
-      'return fewer rows per page.'
+      'inside each $expand, filter the expanded rows, or ' +
+      (pageSizeIsSent()
+        ? 'lower Prefer: odata.maxpagesize (or set $top when no page size is set).'
+        : "set $top to return fewer rows (this ToolBox version can't send " +
+          'Prefer: odata.maxpagesize; ToolBox 1.2.7+ can).')
     : null;
   // #126 — 0x80060888 (a generic OData code, so match on the message):
   // top-level $top with a collection $expand that has a nested $expand.
@@ -431,8 +464,12 @@ function ErrorState({ result }: { result: ExecResult }) {
     err?.message ?? '',
   )
     ? 'Dataverse rejects top-level $top when a 1:N or N:N $expand has its own nested ' +
-      '$expand. Remove $top and set Prefer: odata.maxpagesize instead to limit the rows ' +
-      'per page.'
+      '$expand. ' +
+      (pageSizeIsSent()
+        ? 'Remove $top and set Prefer: odata.maxpagesize instead to limit the rows per page.'
+        : "Remove $top. This ToolBox version can't send Prefer: odata.maxpagesize, so pages " +
+          "use Dataverse's 5,000-row default: narrow the rows with $filter, or use " +
+          'ToolBox 1.2.7+ to set a page size.')
     : null;
   // Never sent: ToolBox refused the headers before calling Dataverse, so the
   // 403 / 400 isn't a privilege or request problem (#257).
@@ -446,7 +483,8 @@ function ErrorState({ result }: { result: ExecResult }) {
       : err?.code === HEADER_REJECTED_CODE
         ? {
             title: 'Not sent — header rejected',
-            advice: 'Power Platform ToolBox rejected a request header. Fix it in the Headers pane.',
+            advice:
+              'Power Platform ToolBox rejected a request header. Fix it in the Headers or Prefer pane.',
           }
         : null;
   const title = notSent
@@ -473,7 +511,7 @@ function ErrorState({ result }: { result: ExecResult }) {
           : result.status === 501
             ? 'The request was not sent. See the message below.'
             : result.status === 0
-              ? "The PPTB host didn't report an HTTP status. The error message below comes from Dataverse."
+              ? noStatusAdvice(err)
               : 'Inspect the error message below for details.';
   // Any failure is 'danger', including a status the host didn't report (0).
   const kind: 'success' | 'danger' | 'warning' = !result.ok

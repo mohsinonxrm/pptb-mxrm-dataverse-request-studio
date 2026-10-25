@@ -73,7 +73,15 @@ import type { ThemeMode } from '../theme/theme';
 // re-render when columns + relationships land from Dataverse.
 import { useLiveTable, useWarmReferencedTables } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
+import { pageSizeIsSent } from '../host/pptbBridge';
 import { topLevelRowCount } from '../views/results/flattenExpansions';
+import {
+  mergePage,
+  pageOf,
+  retrieveAll,
+  type PageBatch,
+  type PagingStatus,
+} from '../views/results/pagedResults';
 
 // Empty initial state — the studio is a request *builder*; seeding it with
 // mock data confused users in PPTB ("why are there pre-filled rules against
@@ -299,17 +307,29 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // results when it finished (#98). Executing therefore also cancels any
   // in-flight paging.
   const runIdRef = useRef(0);
+  // The page size the run's first page asked for. Later pages must ask for
+  // the same one, even if the Prefer pane has changed since (#219).
+  const runPageSizeRef = useRef<number | null>(null);
   // Bumped by Stop to end a Retrieve All, keeping the rows already merged.
   const pagingIdRef = useRef(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   // Last next-page failure, shown above the grid. Auto-load on scroll is
   // paused while it's set so a failing page isn't retried on every scroll.
   const [pageError, setPageError] = useState<string | null>(null);
+  // Why the last Retrieve all paused with pages left (#223).
+  const [pagingNotice, setPagingNotice] = useState<string | null>(null);
+  // Rows in the current result, and the run's Recent runs entry, so paging
+  // keeps that entry's row count in step with the grid (#211).
+  const rowCountRef = useRef(0);
+  const runRecentIdRef = useRef<string | null>(null);
 
   const startRun = () => {
     runIdRef.current += 1;
     setIsLoadingMore(false);
     setPageError(null);
+    setPagingNotice(null);
+    rowCountRef.current = 0;
+    runRecentIdRef.current = null;
     return runIdRef.current;
   };
   const clearResult = () => {
@@ -323,16 +343,20 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   const onExecute = async () => {
     const run = startRun();
     setLoading(true);
+    runPageSizeRef.current = state.prefer.maxpagesize;
     const res = await runtime.retrieveMultiple(state);
     // A newer Execute (e.g. Refresh clicked mid-flight) owns the results now.
     if (runIdRef.current !== run) return;
     setResult(res);
     setLoading(false);
     setTab('results');
+    const recentId = `r-${Date.now()}`;
+    runRecentIdRef.current = recentId;
+    rowCountRef.current = topLevelRowCount(res.body) ?? 0;
     setRecents((rs) =>
       [
         {
-          id: `r-${Date.now()}`,
+          id: recentId,
           snapshot: currentSerialized,
           modeId: 'retrieve-multiple',
           url: built.relativeUrl,
@@ -354,26 +378,17 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // rows onto the existing body so the grid keeps everything in one
   // virtualized list — no client-side paging needed.
   //
-  // Each page is merged into the CURRENT result (functional update), and
-  // only while the run that requested it is still current. A failed page
+  // Pages are merged into the CURRENT result (functional update), and only
+  // while the run that requested them is still current. A failed page
   // keeps the rows + nextLink already loaded, so the user can retry.
-  const appendPage = (more: ExecResult) => {
-    const moreRows = (more.body as { value?: Record<string, unknown>[] } | null)?.value ?? [];
-    const moreNext = (more.body as { '@odata.nextLink'?: string } | null)?.['@odata.nextLink'];
-    setResult((r) => {
-      if (!r) return r;
-      const prevBody = (r.body as Record<string, unknown> | null) ?? {};
-      const prevRows = (prevBody as { value?: Record<string, unknown>[] }).value ?? [];
-      // Merge: keep existing envelope, replace `value` + carry the new nextLink (or drop it if exhausted).
-      const mergedBody: Record<string, unknown> = {
-        ...prevBody,
-        value: [...prevRows, ...moreRows],
-      };
-      if (moreNext) mergedBody['@odata.nextLink'] = moreNext;
-      else delete mergedBody['@odata.nextLink'];
-      return { ...r, body: mergedBody, bytes: JSON.stringify(mergedBody).length };
-    });
-    return moreNext;
+  const commitPages = (batch: PageBatch) => {
+    setResult((r) => (r ? mergePage(r, batch) : r));
+    rowCountRef.current += batch.rows.length;
+    // The Recent runs entry follows the grid (#211).
+    const id = runRecentIdRef.current;
+    const n = rowCountRef.current;
+    const summary = `${n.toLocaleString()} rows · ${batch.nextLink ? 'more available' : 'all pages'}`;
+    if (id) setRecents((rs) => rs.map((x) => (x.id === id ? { ...x, rowCount: n, summary } : x)));
   };
 
   const describePageError = (more: ExecResult) => {
@@ -385,51 +400,64 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   };
 
   // Shared start-up for both paging handlers: claims a paging id under the
-  // current run and returns a check for "still allowed to merge".
+  // current run and returns whether it's still current, stopped (Stop bumps
+  // the paging id) or superseded (a newer run or a reset).
   const beginPaging = () => {
     const run = runIdRef.current;
     const paging = ++pagingIdRef.current;
     setIsLoadingMore(true);
     setPageError(null);
-    return () => runIdRef.current === run && pagingIdRef.current === paging;
+    setPagingNotice(null);
+    return (): PagingStatus =>
+      runIdRef.current !== run
+        ? 'superseded'
+        : pagingIdRef.current !== paging
+          ? 'stopped'
+          : 'current';
   };
 
   const fetchOneMorePage = async () => {
     const nextLink = (result?.body as { '@odata.nextLink'?: string } | null)?.['@odata.nextLink'];
     if (!nextLink || isLoadingMore) return;
-    const isCurrent = beginPaging();
+    const status = beginPaging();
     try {
-      const more = await runtime.absoluteUrl(nextLink);
-      if (!isCurrent()) return;
+      const more = await runtime.absoluteUrl(nextLink, runPageSizeRef.current);
+      if (status() !== 'current') return;
       if (!more.ok) {
         setPageError(`Couldn't load the next page: ${describePageError(more)}`);
         return;
       }
-      appendPage(more);
+      commitPages(pageOf(more));
     } finally {
-      if (isCurrent()) setIsLoadingMore(false);
+      if (status() === 'current') setIsLoadingMore(false);
     }
   };
 
+  // Pages reach the grid in batches and the loop pauses at a row / page
+  // budget with a Continue prompt, so a large table can't freeze the tool
+  // or fill memory unasked (#223).
   const retrieveAllPages = async () => {
-    let nextLink = (result?.body as { '@odata.nextLink'?: string } | null)?.['@odata.nextLink'];
+    const nextLink = (result?.body as { '@odata.nextLink'?: string } | null)?.['@odata.nextLink'];
     if (!nextLink || isLoadingMore) return;
-    const isCurrent = beginPaging();
+    const status = beginPaging();
     try {
-      let guard = 0;
-      while (nextLink && guard++ < 200) {
-        // hard safety cap
-        const more = await runtime.absoluteUrl(nextLink);
-        // Superseded by a newer Execute / reset, or stopped by the user.
-        if (!isCurrent()) return;
-        if (!more.ok) {
-          setPageError(`Retrieve all stopped at a failed page: ${describePageError(more)}`);
-          return;
-        }
-        nextLink = appendPage(more);
+      const outcome = await retrieveAll({
+        nextLink,
+        fetchPage: (url) => runtime.absoluteUrl(url, runPageSizeRef.current),
+        commit: commitPages,
+        status,
+      });
+      if (outcome.kind === 'failed') {
+        setPageError(`Retrieve all stopped at a failed page: ${describePageError(outcome.error)}`);
+      } else if (outcome.kind === 'paused') {
+        setPagingNotice(
+          `Retrieve all paused after ${outcome.rows.toLocaleString()} more rows ` +
+            `(${rowCountRef.current.toLocaleString()} loaded). More pages remain: Continue ` +
+            'loads the next batch.',
+        );
       }
     } finally {
-      if (isCurrent()) setIsLoadingMore(false);
+      if (status() === 'current') setIsLoadingMore(false);
     }
   };
 
@@ -493,6 +521,14 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     const collectionWithNested =
       !!state.table && hasCollectionExpandWithNestedExpand(state.expand, state.table);
     const nestingAdvisories: Advisory[] = [];
+    // On a ToolBox older than 1.2.7, Execute can't send the page size (#219).
+    const pageSizeNote = pageSizeIsSent() ? null : (
+      <>
+        {' '}
+        This ToolBox version can&apos;t send it on Execute (ToolBox 1.2.7+ can), so Execute gets
+        Dataverse&apos;s 5,000-row pages.
+      </>
+    );
     if (collectionWithNested && state.top != null) {
       nestingAdvisories.push({
         id: 'nested-collection-top',
@@ -510,7 +546,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
             </em>
             <br />
             Drop <code>$top</code> and use <code>Prefer: odata.maxpagesize</code> in the Prefer pane
-            instead.
+            instead.{pageSizeNote}
           </>
         ),
         learnMoreUrl:
@@ -527,7 +563,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
           <>
             Your query has a nested <code>$expand</code> involving a 1:N or N:N relationship. If
             Dataverse rejects <code>$top</code> (<code>0x80060888</code>), drop it and use{' '}
-            <code>Prefer: odata.maxpagesize</code> in the Prefer pane instead.
+            <code>Prefer: odata.maxpagesize</code> in the Prefer pane instead.{pageSizeNote}
           </>
         ),
         learnMoreUrl:
@@ -960,7 +996,13 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
         );
         break;
       case 'prefer':
-        pane = <PreferEditor spec={state.prefer} setSpec={(p) => set('prefer', p, 'prefer')} />;
+        pane = (
+          <PreferEditor
+            spec={state.prefer}
+            setSpec={(p) => set('prefer', p, 'prefer')}
+            sendsPageSize
+          />
+        );
         break;
       case 'headers':
         pane = (
@@ -1025,6 +1067,9 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
             loadMoreError={pageError}
             onRetryLoadMore={retryLoadMore}
             onDismissLoadMoreError={() => setPageError(null)}
+            loadMoreNotice={pagingNotice}
+            onContinueLoadMore={retrieveAllPages}
+            onDismissLoadMoreNotice={() => setPagingNotice(null)}
           />
         )}
       </MainTabs>

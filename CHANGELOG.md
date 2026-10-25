@@ -5,6 +5,124 @@ All notable changes to Dataverse Request Studio will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [1.4.0-beta.2] - 2026-10-24
+
+The second 1.4.0 beta fixes the issues found while testing beta.1 and
+finishes the v1.4.0 milestone:
+- paged reads now honour your page size;
+- Retrieve all stays fast on very large tables;
+- Execute Action and Execute Workflow send their headers (impersonation,
+  bypass);
+- malformed ETags are caught before they're sent;
+- a startup race that could leave DRS without a connection is fixed.
+
+Still a **prerelease** on the npm `beta` tag, with the gold Insider icon.
+Every fix was verified in Power Platform ToolBox 1.2.8 against a live
+Dataverse environment.
+
+### 🛡️ Security
+
+- **DOMPurify 3.4.17 in the Monaco editor.** Monaco bundles its own copy of
+  DOMPurify, and 1.4.0-beta.1 shipped 3.1.7, which open Dependabot alerts
+  (up to high severity) cover. The build now swaps in the npm package at
+  3.4.17, and CI and the release workflow check the bundled version.
+  Command Bar Studio and FetchXML Studio use the same fix.
+
+### 🐛 Fixed
+
+- **A page size no longer turns `$top` into "up to 5,000 rows"** ([#219]).
+  Retrieve Multiple used to drop `$top` whenever `Prefer: odata.maxpagesize`
+  was set, but Execute never sent that Prefer.
+  - On ToolBox 1.2.7+, Execute now sends the page size you set for
+    Retrieve Multiple, Predefined Query or Retrieve NextLink. In Retrieve
+    Multiple, scrolling and Retrieve all ask for the same size on every
+    page. ToolBox asks you to approve the `Prefer` header the first time.
+    Execute still asks for all annotations, so the grid renders as before.
+    Retrieve NextLink no longer starts with a page size of 50, so a pasted
+    link keeps the size it was made with unless you set one.
+  - On older ToolBox versions, Execute keeps `$top`, and the hints suggest
+    `$top` instead of a page size that can't be sent.
+  - `Prefer` now puts `odata.maxpagesize` last: in the Code tab, in
+    `$batch` parts and in exported collections. Dataverse rejects it before
+    `odata.include-annotations` with `0x80060888` "Invalid prefer header",
+    so requests with a page size and annotations used to fail.
+- **Retrieve all stays responsive on large tables** ([#223]).
+  - Pages reach the grid in batches. The size is added up page by page,
+    instead of re-measuring everything loaded after every page, which slowed
+    down with every page.
+  - It pauses every 50,000 rows (or 1,000 pages) and says how many rows are
+    loaded. **Continue** loads the next batch. It used to stop silently after
+    200 pages, so the grid and exports could look complete when they weren't.
+  - Response sizes are counted in UTF-8 bytes, so text in other scripts is
+    no longer undercounted.
+- **Recent runs keeps up with paging** ([#211]): after scrolling or Retrieve
+  all, the entry shows the rows loaded, with "more available" or "all pages".
+- **Execute Action and Execute Workflow send your request headers** ([#266]).
+  On ToolBox 1.2.7+, the enabled rows in their Headers pane (for example
+  `MSCRMCallerID` / `CallerObjectId` impersonation, or `MSCRM.*` bypass
+  headers) now go out with the request, after ToolBox asks you to approve
+  them. They used to be dropped, so an action or workflow ran as you without
+  saying so. Reads (apart from the page size, [#219]), relate, Execute
+  Function, Bulk Delete and the file / image / attachment modes still run
+  with ToolBox's own headers ([#109]).
+- **A malformed ETag is caught before it's sent** ([#264]). Update,
+  Upsert and Delete send the **Specific ETag** trimmed. They block Execute,
+  with the reason, unless it is a quoted tag such as `W/"12345678"` (or
+  `*`). Before, a bare version number, curly quotes, JSON escaping
+  (`W/\"…\"`) or stray text went out and Dataverse answered with a 412 or
+  400 that didn't point back at the value. **Fix** corrects those paste
+  mistakes in one click. `$batch` parts and exported collections send the
+  trimmed value too.
+- **Error and result titles name the right source** ([#209]).
+  - When ToolBox reports no HTTP status, the error card says the message
+    comes from Dataverse only when it carries a Dataverse `0x8…` code. It
+    names ToolBox only for ToolBox's own messages, such as its
+    response-size limit, and claims neither source otherwise. The size hint
+    also mentions `$top` for requests without a page size.
+  - Create results name the record by the primary name the response
+    returns, so a new contact shows its full name instead of
+    "record <id>".
+- **"N populated" counts only values that will be sent** ([#210]). The badge
+  and the red "missing" marker on required rows ignore the empty values a
+  table pre-fills for its required columns, the same way the required count
+  does. Before, a new contact could read "2 populated" with Last Name and
+  Owner still empty. The **Set** filter still lists those pre-filled rows, so
+  they stay visible to fill in.
+- **No more "No active Dataverse connection" after the connection is
+  picked** ([#281]). When ToolBox bound the connection while DRS was still
+  starting up, DRS could miss it and stay on that error until it was
+  reopened. It now listens for the connection from the start, and Retry asks
+  ToolBox again.
+- **Code → Editor no longer fakes a run** ([#240]). Its **Run (mock)**
+  button ignored the edited code and always showed the same two sample
+  account rows, which read like "your code works". The button is gone: the
+  editor is for editing and copying, and **Execute** sends the request the
+  builder shows.
+- **The "…" menu has no dead items, and the counts are right** ([#265]).
+  **Duplicate request** and **Export OpenAPI** did nothing and are removed.
+  OpenAPI is one of the Code tab's formats, with **Save**. The mode picker and
+  the Code tab now count their modes (23) and formats (10) instead of saying
+  18 and 8.
+- **Docs caught up** ([#237]). CONTRIBUTING lists `npm test` and the CI
+  checks, and describes the tag-driven release (RELEASING.md) instead of a
+  manual publish. README describes the per-org metadata caches and the
+  Retrieve all pause.
+
+[#109]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/109
+[#209]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/209
+[#210]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/210
+[#211]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/211
+[#219]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/219
+[#223]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/223
+[#237]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/237
+[#240]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/240
+[#264]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/264
+[#265]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/265
+[#266]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/266
+[#281]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/281
+
 ## [1.4.0-beta.1] - 2026-10-21
 
 The biggest release so far: four new modes (Bulk Write, Bulk Delete Job,

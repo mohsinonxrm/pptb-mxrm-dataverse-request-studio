@@ -174,6 +174,14 @@ describe('buildRetrieveMultiple', () => {
     expect(built.queryParts.find((p) => p.key === '$top')).toBeUndefined();
   });
 
+  it('keeps $top next to a page size when asked (Execute on a host without Prefer, #219)', () => {
+    const built = buildRetrieveMultiple(
+      retrieveMultipleState({ top: 10, prefer: { ...emptyPrefer(), maxpagesize: 50 } }),
+      { keepTop: true },
+    );
+    expect(built.relativeNoBase).toBe('/accounts?$top=10');
+  });
+
   it('lets $apply replace $select / $filter / $expand / $orderby', () => {
     const built = buildRetrieveMultiple(
       retrieveMultipleState({
