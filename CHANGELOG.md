@@ -61,6 +61,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Create results name the record by the primary name the response
     returns, so a new contact shows its full name instead of
     "record <id>".
+- **"N populated" counts only values that will be sent** ([#210]). The badge
+  and the red "missing" marker on required rows ignore the empty values a
+  table pre-fills for its required columns, the same way the required count
+  does. Before, a new contact could read "2 populated" with Last Name and
+  Owner still empty. The **Set** filter still lists those pre-filled rows, so
+  they stay visible to fill in.
 - **No more "No active Dataverse connection" after the connection is
   picked** ([#281]). When ToolBox bound the connection while DRS was still
   starting up, DRS could miss it and stay on that error until it was
@@ -351,6 +357,7 @@ Dataverse environments.
 [#204]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/204
 [#207]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/207
 [#209]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/209
+[#210]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/210
 [#211]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/211
 [#212]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/212
 [#217]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/217
