@@ -107,6 +107,9 @@ export function PreconditionEditor({
   const s = useStudioStyles();
   const host = useHostSession();
   const selected = mode.kind;
+  const etagValue = mode.kind === 'etag' ? mode.etag : '';
+  const etagIssue = etagValue.trim() ? etagProblem(etagValue) : null;
+  const etagFixed = etagFix(etagValue);
 
   const onPick = (kind: PreconditionKind) => {
     if (kind === 'etag') {
@@ -234,14 +237,28 @@ export function PreconditionEditor({
                     <Field
                       label="ETag value"
                       hint='Pulled from a previous response&apos;s @odata.etag — looks like `W/"7281965"`.'
+                      // Flag a malformed value as it's typed; an empty one is
+                      // left to the Execute blocker (#264).
+                      validationState={etagIssue ? 'error' : 'none'}
+                      validationMessage={etagIssue ?? undefined}
                     >
                       <span style={{ display: 'flex', gap: 6 }}>
                         <Input
-                          value={mode.kind === 'etag' ? mode.etag : ''}
+                          value={etagValue}
                           onChange={(_, d) => setMode({ kind: 'etag', etag: d.value })}
                           placeholder='W/"12345678"'
                           style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 12, flex: 1 }}
                         />
+                        {etagFixed && (
+                          <Button
+                            size="small"
+                            appearance="outline"
+                            onClick={() => setMode({ kind: 'etag', etag: etagFixed })}
+                            title={`Use ${etagFixed}`}
+                          >
+                            Fix
+                          </Button>
+                        )}
                         {currentEtag && (
                           <Button
                             size="small"
@@ -281,9 +298,53 @@ export function preconditionToHeader(m: ConcurrencyMode): { name: string; value:
       return { name: 'If-None-Match', value: '*' };
     case 'etag':
       if (!m.etag.trim()) return null;
-      return { name: 'If-Match', value: m.etag };
+      return { name: 'If-Match', value: m.etag.trim() };
     case 'none':
     default:
       return null;
   }
+}
+
+// A weak (`W/"…"`) or strong (`"…"`) entity tag, the shape of `@odata.etag`.
+// Dataverse accepts both (a strong tag was checked live, #264). The tag is
+// visible ASCII without spaces or quotes (RFC 7232 etagc).
+const ETAG_RE = /^(W\/)?"[\x21\x23-\x7E]+"$/;
+// Quote marks that sneak in through copy and paste: curly, low, prime and
+// fullwidth double quotes, and single curly quotes.
+const ODD_QUOTE = /[“”„‟″〝〞＂‘’]/;
+const ODD_QUOTES = new RegExp(ODD_QUOTE.source, 'g');
+
+/**
+ * Why an ETag value can't go out as `If-Match`, or null when it can (#264).
+ * Dataverse answers a malformed value with a 412 or 400 that doesn't point
+ * back at the input, so Execute is blocked with the reason instead.
+ * Surrounding whitespace is fine: the header is sent trimmed.
+ */
+export function etagProblem(raw: string): string | null {
+  const v = raw.trim();
+  if (!v) return 'Provide an etag value or switch the concurrency mode.';
+  if (v === '*') return null; // matches any version, like "Require existing record"
+  if (ETAG_RE.test(v)) return null;
+  if (/^\d+$/.test(v)) return `Wrap the ETag in quotes: W/"${v}".`;
+  if (/\\"/.test(v)) {
+    return 'The ETag is still JSON-escaped (\\"). Use W/"12345678", without backslashes.';
+  }
+  if (ODD_QUOTE.test(v)) return 'The ETag has curly quotes. Use straight ones: W/"12345678".';
+  return 'An ETag looks like W/"12345678", quotes included (copy it from @odata.etag).';
+}
+
+/**
+ * The corrected value for a fixable ETag, else null: a bare version number,
+ * curly quotes, JSON escaping (`W/\"1\"` or the whole `"W/\"1\""` string), a
+ * lowercase `w/` or a space after `W/`.
+ */
+export function etagFix(raw: string): string | null {
+  const v = raw.trim();
+  if (!v || ETAG_RE.test(v) || v === '*') return null;
+  if (/^\d+$/.test(v)) return `W/"${v}"`;
+  let fixed = v.replace(ODD_QUOTES, '"').replace(/\\"/g, '"');
+  // A whole JSON string value: "W/"1"" → W/"1".
+  if (/^"(W\/)?".*""$/i.test(fixed)) fixed = fixed.slice(1, -1);
+  fixed = fixed.replace(/^w\/\s*/i, 'W/');
+  return ETAG_RE.test(fixed) ? fixed : null;
 }
