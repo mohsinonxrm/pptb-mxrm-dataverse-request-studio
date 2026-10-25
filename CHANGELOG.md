@@ -36,6 +36,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     no longer undercounted.
 - **Recent runs keeps up with paging** ([#211]): after scrolling or Retrieve
   all, the entry shows the rows loaded, with "more available" or "all pages".
+- **Execute Action and Execute Workflow send your request headers** ([#266]).
+  On ToolBox 1.2.7+, the enabled rows in their Headers pane (for example
+  `MSCRMCallerID` / `CallerObjectId` impersonation, or `MSCRM.*` bypass
+  headers) now go out with the request, after ToolBox asks you to approve
+  them. They used to be dropped, so an action or workflow ran as you without
+  saying so. Reads (apart from the page size, [#219]), relate, Execute
+  Function, Bulk Delete and the file / image / attachment modes still run
+  with ToolBox's own headers ([#109]).
 
 ## [1.4.0-beta.1] - 2026-10-21
 
@@ -298,6 +306,7 @@ Dataverse environments.
 [#106]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/106
 [#107]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/107
 [#108]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/108
+[#109]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/109
 [#110]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/110
 [#111]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/111
 [#112]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/112
@@ -333,6 +342,7 @@ Dataverse environments.
 [#254]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/254
 [#255]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/255
 [#257]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/257
+[#266]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/266
 
 ## [1.1.4] - 2026-10-17
 

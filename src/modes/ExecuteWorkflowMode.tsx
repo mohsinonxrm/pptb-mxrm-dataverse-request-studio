@@ -193,7 +193,7 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.workflow(state);
+    const res = await runtime.workflow(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setLoading(false);
     setTab('results');
@@ -395,6 +395,7 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
           items={state.headers}
           setItems={(h) => set('headers', h, 'headers')}
           group="execute"
+          sendsHeaders
         />
       );
       break;

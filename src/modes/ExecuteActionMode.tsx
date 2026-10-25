@@ -244,7 +244,7 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
 
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.action(state);
+    const res = await runtime.action(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setLoading(false);
     setTab('results');
@@ -530,6 +530,7 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
           items={state.headers}
           setItems={(h) => set('headers', h, 'headers')}
           group="execute"
+          sendsHeaders
         />
       );
       break;
