@@ -8,7 +8,8 @@
 // responses without round-trips); the host returns real status codes.
 //
 // Request headers: the write group (Create / Update / Upsert / Delete /
-// Merge) passes the headers its mode composed for the Code tab. On PPTB
+// Merge), Execute Action and Execute Workflow (#266) pass the headers their
+// mode composed for the Code tab. On PPTB
 // 1.2.7+ the precondition (`If-Match` / `If-None-Match`), bypass (`MSCRM.*`)
 // and user-added headers go out as `additionalHeaders` once the user
 // approves them in the host. Headers the host builds itself (see
@@ -16,9 +17,9 @@
 // `hostHeaderAdvisories` blocks the requests whose meaning depends on it.
 //
 // What's expressly NOT implemented:
-//   - Headers on the read / relate / execute groups. Those still run with
-//     the host's own headers. The one exception is the paged reads' page
-//     size (`readPreferHeaders`, #219).
+//   - Headers on the read / relate groups and Execute Function. Those
+//     still run with the host's own headers (#109). The one exception is
+//     the paged reads' page size (`readPreferHeaders`, #219).
 //   - Binary (file/image) chunked upload — host doesn't expose this API.
 //     ManageFile / ManageImage modes return `host-not-supported` from the
 //     live executor so the user can BUILD the request and copy out, but
@@ -952,7 +953,10 @@ export async function executeDisassociate(s: DisassociateState): Promise<ExecRes
 
 // ── Execute group ────────────────────────────────────────────────────────
 
-export async function executeAction(s: ExecuteActionState): Promise<ExecResult> {
+export async function executeAction(
+  s: ExecuteActionState,
+  headers?: Record<string, string>,
+): Promise<ExecResult> {
   if (!s.actionName) return mapError({ statusCode: 400, message: 'Pick an action.' }, 0);
   const action = await actions.find(s.actionName);
   if (!action) return mapError({ statusCode: 404, message: `Unknown action ${s.actionName}` }, 0);
@@ -977,14 +981,21 @@ export async function executeAction(s: ExecuteActionState): Promise<ExecResult> 
     boundEntityId = s.boundRecordId;
   }
 
-  const res = await timed(() =>
-    dvHost.execute({
-      operationName: s.actionName!,
-      operationType: 'action',
-      entityName: boundEntity,
-      entityId: boundEntityId,
-      parameters: params,
-    }),
+  // The Headers pane's rows (impersonation, bypass, …) go out on 1.2.7+ (#266).
+  const sent = sendable(headers);
+  const res = await timed(
+    () =>
+      dvHost.execute(
+        {
+          operationName: s.actionName!,
+          operationType: 'action',
+          entityName: boundEntity,
+          entityId: boundEntityId,
+          parameters: params,
+        },
+        sent,
+      ),
+    sent,
   );
   if (isExecResult(res)) return res;
   return ok(200, res.value, res.ms);
@@ -1033,20 +1044,29 @@ export async function executeFunction(s: ExecuteFunctionState): Promise<ExecResu
   return ok(200, res.value, res.ms);
 }
 
-export async function executeWorkflow(s: ExecuteWorkflowState): Promise<ExecResult> {
+export async function executeWorkflow(
+  s: ExecuteWorkflowState,
+  headers?: Record<string, string>,
+): Promise<ExecResult> {
   if (!s.workflowId || !s.entityId) {
     return mapError({ statusCode: 400, message: 'Pick a workflow and a record.' }, 0);
   }
   // POST /workflows(<wf-id>)/Microsoft.Dynamics.CRM.ExecuteWorkflow
   // body: { EntityId: '<target-guid>' }
-  const res = await timed(() =>
-    dvHost.execute({
-      operationName: 'ExecuteWorkflow',
-      operationType: 'action',
-      entityName: 'workflow',
-      entityId: s.workflowId!,
-      parameters: { EntityId: s.entityId },
-    }),
+  const sent = sendable(headers);
+  const res = await timed(
+    () =>
+      dvHost.execute(
+        {
+          operationName: 'ExecuteWorkflow',
+          operationType: 'action',
+          entityName: 'workflow',
+          entityId: s.workflowId!,
+          parameters: { EntityId: s.entityId },
+        },
+        sent,
+      ),
+    sent,
   );
   if (isExecResult(res)) return res;
   return ok(204, res.value, res.ms);
