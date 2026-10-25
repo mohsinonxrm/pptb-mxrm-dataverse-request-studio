@@ -389,11 +389,23 @@ export function FieldSetEditor({
   // "Populated" = the column produces a body entry: a supplied value or an
   // explicit null. Seeded empty values (required columns pre-filled when the
   // table's metadata is cached) aren't sent, so they don't count (#210).
+  // Drives the "N populated" badge and the per-row missing marker.
   const isPopulated = useCallback(
     (c: ColumnMeta) => isSupplied(c) || nullFields.includes(c.logicalName),
     [isSupplied, nullFields],
   );
   const populatedFields = useMemo(() => writable.filter(isPopulated), [writable, isPopulated]);
+  // The working set: every column added to the form (seeded, picked with
+  // "Add field", or being edited) plus explicit nulls. The Set filter (the
+  // default view) shows these, so an empty row stays visible to be filled in.
+  const inWorkingSet = useCallback(
+    (c: ColumnMeta) => c.logicalName in values || nullFields.includes(c.logicalName),
+    [values, nullFields],
+  );
+  const workingSetCount = useMemo(
+    () => writable.filter(inWorkingSet).length,
+    [writable, inWorkingSet],
+  );
 
   // Required-field check: a column marked explicit-null still counts as
   // "missing" since the server will reject a null on a required column —
@@ -449,7 +461,7 @@ export function FieldSetEditor({
     // must supply. SystemRequired ones (ownerid, statecode) are defaulted
     // by Dataverse and stay out of this view.
     if (filter === 'required') pool = pool.filter(mustSupplyOnCreate);
-    if (filter === 'set') pool = pool.filter(isPopulated);
+    if (filter === 'set') pool = pool.filter(inWorkingSet);
     if (filter === 'common') {
       pool = pool.filter(
         (c) =>
@@ -470,7 +482,7 @@ export function FieldSetEditor({
       );
     }
     return pool;
-  }, [writable, values, nullFields, filter, search, tbl, isPopulated]);
+  }, [writable, values, nullFields, filter, search, tbl, inWorkingSet]);
 
   // Pool of fields available to add (writable, not currently visible)
   const addable = useMemo(() => {
@@ -576,7 +588,7 @@ export function FieldSetEditor({
           <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
             <FilterChip
               label="Set"
-              count={populatedFields.length}
+              count={workingSetCount}
               active={filter === 'set'}
               onClick={() => setFilter('set')}
             />
