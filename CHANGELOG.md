@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0-beta.2] - 2026-10-24
+
+The second 1.4.0 beta fixes the issues found while testing beta.1 and
+finishes the v1.4.0 milestone:
+- paged reads now honour your page size;
+- Retrieve all stays fast on very large tables;
+- Execute Action and Execute Workflow send their headers (impersonation,
+  bypass);
+- malformed ETags are caught before they're sent;
+- a startup race that could leave DRS without a connection is fixed.
+
+Still a **prerelease** on the npm `beta` tag, with the gold Insider icon.
+Every fix was verified in Power Platform ToolBox 1.2.8 against a live
+Dataverse environment.
+
 ### 🐛 Fixed
 
 - **A page size no longer turns `$top` into "up to 5,000 rows"** ([#219]).
@@ -86,6 +101,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   checks, and describes the tag-driven release (RELEASING.md) instead of a
   manual publish. README describes the per-org metadata caches and the
   Retrieve all pause.
+
+[#109]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/109
+[#209]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/209
+[#210]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/210
+[#211]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/211
+[#219]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/219
+[#223]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/223
+[#237]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/237
+[#240]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/240
+[#264]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/264
+[#265]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/265
+[#266]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/266
+[#281]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/281
 
 ## [1.4.0-beta.1] - 2026-10-21
 
@@ -348,7 +376,6 @@ Dataverse environments.
 [#106]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/106
 [#107]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/107
 [#108]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/108
-[#109]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/109
 [#110]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/110
 [#111]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/111
 [#112]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/112
@@ -370,28 +397,18 @@ Dataverse environments.
 [#203]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/203
 [#204]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/204
 [#207]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/207
-[#209]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/209
-[#210]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/210
-[#211]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/211
 [#212]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/212
 [#217]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/217
 [#218]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/218
 [#219]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/219
 [#220]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/220
-[#223]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/223
-[#237]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/237
 [#239]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/239
-[#240]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/240
 [#243]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/243
 [#244]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/244
 [#246]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/246
 [#254]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/254
 [#255]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/255
 [#257]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/257
-[#266]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/266
-[#264]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/264
-[#281]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/281
-[#265]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/265
 
 ## [1.1.4] - 2026-10-17
 
