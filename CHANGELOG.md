@@ -77,6 +77,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   account rows, which read like "your code works". The button is gone: the
   editor is for editing and copying, and **Execute** sends the request the
   builder shows.
+- **The "…" menu has no dead items, and the counts are right** ([#265]).
+  **Duplicate request** and **Export OpenAPI** did nothing and are removed.
+  OpenAPI is one of the Code tab's formats, with **Save**. The mode picker and
+  the Code tab now count their modes (23) and formats (10) instead of saying
+  18 and 8.
 
 ## [1.4.0-beta.1] - 2026-10-21
 
@@ -381,6 +386,7 @@ Dataverse environments.
 [#266]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/266
 [#264]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/264
 [#281]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/281
+[#265]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/265
 
 ## [1.1.4] - 2026-10-17
 

@@ -122,7 +122,7 @@ export function CodeView({ themeMode, inputs, group = 'read' }: CodeViewProps) {
         title="Generated code"
         sub={
           viewTab === 'code'
-            ? '8 formats — read-only, regenerated on every builder change.'
+            ? `${FORMATS.length} formats — read-only, regenerated on every builder change.`
             : 'Writable playground — edit the starter and copy it out.'
         }
         group={group}
