@@ -22,6 +22,14 @@ Still a **prerelease** on the npm `beta` tag, with the gold Insider icon.
 Every fix was verified in Power Platform ToolBox 1.2.8 against a live
 Dataverse environment.
 
+### 🛡️ Security
+
+- **DOMPurify 3.4.17 in the Monaco editor.** Monaco bundles its own copy of
+  DOMPurify, and 1.4.0-beta.1 shipped 3.1.7, which open Dependabot alerts
+  (up to high severity) cover. The build now swaps in the npm package at
+  3.4.17, and CI and the release workflow check the bundled version.
+  Command Bar Studio and FetchXML Studio use the same fix.
+
 ### 🐛 Fixed
 
 - **A page size no longer turns `$top` into "up to 5,000 rows"** ([#219]).
