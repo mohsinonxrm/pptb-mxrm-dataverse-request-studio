@@ -44,6 +44,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   saying so. Reads (apart from the page size, [#219]), relate, Execute
   Function, Bulk Delete and the file / image / attachment modes still run
   with ToolBox's own headers ([#109]).
+- **A malformed ETag is caught before it's sent** ([#264]). Update,
+  Upsert and Delete send the **Specific ETag** trimmed. They block Execute,
+  with the reason, unless it is a quoted tag such as `W/"12345678"` (or
+  `*`). Before, a bare version number, curly quotes, JSON escaping
+  (`W/\"…\"`) or stray text went out and Dataverse answered with a 412 or
+  400 that didn't point back at the value. **Fix** corrects those paste
+  mistakes in one click. `$batch` parts and exported collections send the
+  trimmed value too.
 - **Error and result titles name the right source** ([#209]).
   - When ToolBox reports no HTTP status, the error card says the message
     comes from Dataverse only when it carries a Dataverse `0x8…` code. It
@@ -353,6 +361,7 @@ Dataverse environments.
 [#255]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/255
 [#257]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/257
 [#266]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/266
+[#264]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/264
 
 ## [1.1.4] - 2026-10-17
 

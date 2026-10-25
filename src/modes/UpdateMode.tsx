@@ -63,7 +63,11 @@ import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
 import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
-import { PreconditionEditor } from '../editors/PreconditionEditor';
+import {
+  PreconditionEditor,
+  etagProblem,
+  preconditionToHeader,
+} from '../editors/PreconditionEditor';
 import { UpdateDiffPane } from '../editors/UpdateDiffPane';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
@@ -395,8 +399,8 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
               : Object.keys(body).length === 0
                 ? 'Body is empty — set at least one value.'
                 : null) ||
-            (state.concurrency.kind === 'etag' && !state.concurrency.etag.trim()
-              ? 'Provide an etag value or switch the concurrency mode.'
+            (state.concurrency.kind === 'etag' && etagProblem(state.concurrency.etag)
+              ? etagProblem(state.concurrency.etag)
               : state.headers.some((h) => h.enabled && !h.name)
                 ? 'Fix empty header name.'
                 : null);
@@ -430,21 +434,13 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   const effectiveHeaders = useMemo(() => {
     let h = [...state.headers];
     // Mirror the IfMatch card editor's choice onto a header for execute time
-    const m = state.concurrency;
-    if (m.kind === 'update-only') {
+    // (preconditionToHeader sends the ETag trimmed, #264.)
+    const cc = preconditionToHeader(state.concurrency);
+    if (cc) {
       h.push({
-        id: '__cc__If-Match-any',
-        name: 'If-Match',
-        value: '*',
-        enabled: true,
-        builtin: true,
-        hint: 'Auto-composed from the If-Match pane.',
-      });
-    } else if (m.kind === 'etag' && m.etag.trim()) {
-      h.push({
-        id: '__cc__If-Match-etag',
-        name: 'If-Match',
-        value: m.etag,
+        id: `__cc__${cc.name}`,
+        name: cc.name,
+        value: cc.value,
         enabled: true,
         builtin: true,
         hint: 'Auto-composed from the If-Match pane.',
