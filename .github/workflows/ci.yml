@@ -34,4 +34,7 @@ jobs:
             echo "::error::dist has root-absolute /assets/ URLs. Keep base: './' in vite.config.ts."
             exit 1
           fi
+      # Monaco ships its own DOMPurify; vite.config.ts swaps in the npm one.
+      - name: Check the bundled DOMPurify
+        run: node .github/scripts/check-dompurify.mjs
       - run: npm run validate

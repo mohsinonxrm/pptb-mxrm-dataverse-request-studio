@@ -30,6 +30,31 @@ function toolIcon(): Plugin {
   };
 }
 
+// Monaco ships its own copy of DOMPurify
+// (monaco-editor/esm/vs/base/browser/dompurify/dompurify.js), so npm
+// `overrides` alone never reach the bundle: 1.4.0-beta.1 shipped 3.1.7. This
+// resolves Monaco's import to the npm `dompurify` package instead (same default
+// export, the DOMPurify instance), so security fixes come from npm at the
+// version package.json's override sets. .github/scripts/check-dompurify.mjs
+// checks the built bundle in CI and before publishing. Same approach as
+// Command Bar Studio 0.6.2 and FetchXML Studio.
+function monacoDompurify(): Plugin {
+  return {
+    name: 'drs-monaco-dompurify',
+    enforce: 'pre',
+    async resolveId(source, importer, options) {
+      if (
+        !importer ||
+        !/[\\/]monaco-editor[\\/]esm[\\/]vs[\\/]base[\\/]browser[\\/]/.test(importer)
+      )
+        return null;
+      if (!/(^|[\\/])dompurify[\\/]dompurify\.js$/.test(source)) return null;
+      // Resolved from Monaco's folder: its own (overridden) dompurify dependency.
+      return this.resolve('dompurify', importer, { ...options, skipSelf: true });
+    },
+  };
+}
+
 // Opt-in bundle report (#22): `npm run build:analyze` (or ANALYZE=1).
 // Dependency-free: prints every emitted JS/CSS chunk with raw + gzip size
 // and the heaviest packages inside each chunk (by rendered bytes after tree
@@ -159,7 +184,7 @@ export default defineConfig({
   // (the codicon font) resolves outside the tool and fails. CI checks the
   // build for root-absolute asset URLs.
   base: './',
-  plugins: [react(), toolIcon(), bundleReport()],
+  plugins: [react(), toolIcon(), monacoDompurify(), bundleReport()],
   server: { port: 5173, open: true },
   optimizeDeps: {
     include: ['monaco-editor'],
