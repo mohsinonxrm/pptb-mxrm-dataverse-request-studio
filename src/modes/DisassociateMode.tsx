@@ -725,32 +725,27 @@ function TargetPane({
   }
 
   // Collection-valued: reuse the AssociateTargetsEditor for multi-target picking.
-  // Same UX as Associate — live RecordPicker, dedupe, name cache.
+  // Same UX as Associate — live RecordPicker, dedupe, name cache. Its pane
+  // head carries Disassociate's own wording (DELETE, not POST — #307).
   return (
-    <div>
-      <PaneHead
-        icon={PersonAccounts20Filled}
-        title={state.targetIds.length > 1 ? 'Target records' : 'Target record'}
-        sub={
-          <>
-            Pick one or more <code>{targetTbl?.logicalName}</code> rows to remove from the
-            collection. Each fires a separate DELETE request per docs — the target rows are{' '}
-            <strong>not</strong> deleted, only the links.
-          </>
-        }
-        group="relate"
-      />
-      <AssociateTargetsEditor
-        table={state.table}
-        navProperty={state.navProperty}
-        targets={state.targetIds}
-        setTargets={setTargetIds}
-        targetNames={targetNames}
-        setTargetNames={setTargetNames}
-        group="relate"
-        resolvedMethod={null}
-      />
-    </div>
+    <AssociateTargetsEditor
+      table={state.table}
+      navProperty={state.navProperty}
+      targets={state.targetIds}
+      setTargets={setTargetIds}
+      targetNames={targetNames}
+      setTargetNames={setTargetNames}
+      group="relate"
+      resolvedMethod={null}
+      verb="DELETE"
+      sub={
+        <>
+          Pick one or more <code>{targetTbl?.logicalName}</code> rows to remove from the collection.
+          Each fires a separate DELETE request per docs — the target rows are <strong>not</strong>{' '}
+          deleted, only the links.
+        </>
+      }
+    />
   );
 }
 
