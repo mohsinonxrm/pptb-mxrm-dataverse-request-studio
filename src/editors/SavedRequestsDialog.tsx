@@ -192,7 +192,7 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
   const [crossMode, setCrossMode] = useState<{ existing: SavedRequest; typed: string } | null>(
     null,
   );
-  const { save, capacity, findById, findByName, error } = useSavedRequests();
+  const { save, capacity, findById, findByName, error, health } = useSavedRequests();
 
   // The remembered entry only counts while it targets the same table /
   // action as the current draft. After a target switch it belongs to a
@@ -202,8 +202,9 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
   const ownSavedId = lastSaved && sameSaveTarget(lastSaved.state, state) ? lastSaved.id : undefined;
   // The entry this request was saved as / loaded from was deleted from the
   // library: the request is no longer saved anywhere, so Save is available
-  // even though nothing was edited (#308).
-  const canSave = dirty || (!!lastSavedId && !lastSaved);
+  // even though nothing was edited (#308). An unreadable library looks empty
+  // too, but saving into it fails, so that doesn't count.
+  const canSave = dirty || (!!lastSavedId && !lastSaved && !health.unreadable);
 
   // Auto-suggest name whenever the dialog opens. If the user previously
   // saved this request, default to the existing name so a quick re-save
@@ -434,7 +435,11 @@ export interface SavedLibraryButtonProps {
   onLoad: (entry: SavedRequest) => void;
   /** Optional — the currently-loaded entry's id, shown with a checkmark badge. */
   currentId?: string;
-  /** The current request has unsaved changes: loading asks before discarding them. */
+  /**
+   * The current request has unsaved changes. Loading asks before discarding
+   * them when the request itself came from the library (`currentId`); a
+   * never-saved draft always reads as dirty, so it doesn't ask.
+   */
   dirty?: boolean;
 }
 
@@ -474,7 +479,7 @@ export function SavedLibraryButton({ modeId, onLoad, currentId, dirty }: SavedLi
   );
 
   const load = (entry: SavedRequest) => {
-    if (!dirty) {
+    if (!dirty || !currentId) {
       onLoad(entry);
       setOpen(false);
       return;
@@ -568,7 +573,11 @@ export function SavedLibraryButton({ modeId, onLoad, currentId, dirty }: SavedLi
         {health.unreadable ? null : list.length === 0 ? (
           <div className={s.libraryEmpty}>
             <BookmarkMultiple20Regular style={{ width: 32, height: 32, opacity: 0.4 }} />
-            <div style={{ marginTop: 8 }}>Nothing here yet.</div>
+            <div style={{ marginTop: 8 }}>
+              {!allModes && otherModesCount > 0
+                ? 'Nothing saved in this mode.'
+                : 'Nothing here yet.'}
+            </div>
           </div>
         ) : (
           <div className={s.libraryList}>
