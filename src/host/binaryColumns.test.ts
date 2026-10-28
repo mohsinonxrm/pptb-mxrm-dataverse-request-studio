@@ -3,7 +3,15 @@
 // Image / File Data found no columns.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getEntityAttributes, isBinaryColumn, type AttributeMetadata } from './pptbClient';
-import { attributeTypeOf, mapAttribute } from './metadataProvider';
+import { attributeTypeOf, enrichBinaryColumns, mapAttribute } from './metadataProvider';
+import { mustSupplyOnCreate } from '../engine/fieldBody';
+import type { ColumnMeta } from '../mock/metadata';
+
+const loadAttributesByTypeCast = vi.hoisted(() => vi.fn());
+vi.mock('./dataverseMetadata', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./dataverseMetadata')>()),
+  loadAttributesByTypeCast,
+}));
 
 const attr = (
   LogicalName: string,
@@ -113,5 +121,80 @@ describe('getEntityAttributes (Advanced Find only)', () => {
 
     expect(queryData.mock.calls[0][0]).not.toContain('$filter');
     expect(attrs).toHaveLength(2);
+  });
+});
+
+describe('enrichBinaryColumns', () => {
+  afterEach(() => loadAttributesByTypeCast.mockReset());
+
+  const cols = () =>
+    [
+      mapAttribute(attr('name', 'String', 'StringType', true)),
+      mapAttribute(attr('entityimage', 'Virtual', 'ImageType', false)),
+      mapAttribute(attr('custom_photo', 'Virtual', 'ImageType', false)),
+      mapAttribute(attr('custom_doc', 'Virtual', 'FileType', false)),
+    ] as ColumnMeta[];
+
+  it('fills size limits and full-image storage from the type casts', async () => {
+    loadAttributesByTypeCast.mockImplementation(async (_t: string, cast: string) =>
+      cast.endsWith('ImageAttributeMetadata')
+        ? [
+            {
+              LogicalName: 'entityimage',
+              MaxSizeInKB: 10240,
+              CanStoreFullImage: false,
+              IsPrimaryImage: true,
+            },
+            {
+              LogicalName: 'custom_photo',
+              MaxSizeInKB: 30720,
+              CanStoreFullImage: true,
+              IsPrimaryImage: false,
+            },
+          ]
+        : [{ LogicalName: 'custom_doc', MaxSizeInKB: 131072 }],
+    );
+    const c = cols();
+    await enrichBinaryColumns('account', c);
+    expect(c[1]).toMatchObject({
+      maxSizeInKB: 10240,
+      canStoreFullImage: false,
+      isPrimaryImage: true,
+    });
+    expect(c[2]).toMatchObject({ maxSizeInKB: 30720, canStoreFullImage: true });
+    expect(c[2]).not.toHaveProperty('isPrimaryImage', true);
+    expect(c[3]).toMatchObject({ maxSizeInKB: 131072 });
+  });
+
+  it('skips the requests when the table has no binary columns', async () => {
+    await enrichBinaryColumns('x', [mapAttribute(attr('name', 'String', 'StringType', true))!]);
+    expect(loadAttributesByTypeCast).not.toHaveBeenCalled();
+  });
+
+  it('keeps the defaults when a type cast fails', async () => {
+    loadAttributesByTypeCast.mockRejectedValue(new Error('boom'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const c = cols();
+    await enrichBinaryColumns('account', c);
+    expect(c[1]).not.toHaveProperty('maxSizeInKB');
+    warn.mockRestore();
+  });
+});
+
+describe('mustSupplyOnCreate', () => {
+  it("doesn't require File / Image columns, which can't be set in the field set", () => {
+    const required = (c: ColumnMeta) =>
+      ({ ...c, requiredLevel: 'ApplicationRequired' }) as ColumnMeta;
+    expect(
+      mustSupplyOnCreate(
+        required(mapAttribute(attr('entityimage', 'Virtual', 'ImageType', false))!),
+      ),
+    ).toBe(false);
+    expect(
+      mustSupplyOnCreate(required(mapAttribute(attr('doc', 'Virtual', 'FileType', false))!)),
+    ).toBe(false);
+    expect(
+      mustSupplyOnCreate(required(mapAttribute(attr('name', 'String', 'StringType', true))!)),
+    ).toBe(true);
   });
 });

@@ -352,6 +352,56 @@ export function subscribeMetadataReset(cb: () => void): () => void {
   return () => resetListeners.delete(cb);
 }
 
+/**
+ * Fill `maxSizeInKB` (File / Image) and `canStoreFullImage` / `isPrimaryImage`
+ * (Image) from the Image/FileAttributeMetadata type casts. Best effort: on
+ * failure the columns keep the editors' documented defaults.
+ */
+export async function enrichBinaryColumns(logical: string, columns: ColumnMeta[]): Promise<void> {
+  const casts = [
+    {
+      type: 'Image' as const,
+      cast: 'Microsoft.Dynamics.CRM.ImageAttributeMetadata',
+      select: 'LogicalName,MaxSizeInKB,CanStoreFullImage,IsPrimaryImage',
+    },
+    {
+      type: 'File' as const,
+      cast: 'Microsoft.Dynamics.CRM.FileAttributeMetadata',
+      select: 'LogicalName,MaxSizeInKB',
+    },
+  ].filter((c) => columns.some((col) => col.attributeType === c.type));
+  await Promise.all(
+    casts.map(async ({ type, cast, select }) => {
+      try {
+        const rows = (await loader.loadAttributesByTypeCast(
+          logical,
+          cast,
+          select,
+        )) as unknown as Array<{
+          LogicalName: string;
+          MaxSizeInKB?: number | null;
+          CanStoreFullImage?: boolean | null;
+          IsPrimaryImage?: boolean | null;
+        }>;
+        for (const r of rows) {
+          const col = columns.find((c) => c.logicalName === r.LogicalName);
+          if (!col) continue;
+          if (col.attributeType === 'File' && type === 'File') {
+            if (typeof r.MaxSizeInKB === 'number') col.maxSizeInKB = r.MaxSizeInKB;
+          } else if (col.attributeType === 'Image' && type === 'Image') {
+            if (typeof r.MaxSizeInKB === 'number') col.maxSizeInKB = r.MaxSizeInKB;
+            if (typeof r.CanStoreFullImage === 'boolean')
+              col.canStoreFullImage = r.CanStoreFullImage;
+            if (r.IsPrimaryImage === true) col.isPrimaryImage = true;
+          }
+        }
+      } catch (e) {
+        console.warn(`[metadata] ${type} column details for ${logical} failed`, e);
+      }
+    }),
+  );
+}
+
 async function buildTable(logical: string): Promise<TableMeta | undefined> {
   // The org this build belongs to. The result is registered under it even if
   // the connection switches mid-fetch, so it can't leak into another org.
@@ -394,6 +444,11 @@ async function buildTable(logical: string): Promise<TableMeta | undefined> {
       // Mark the primary image (thumbnail-only, settable on Create).
       const img = columns.find((c) => c.logicalName === entity.PrimaryImageAttribute);
       if (img && img.attributeType === 'Image') img.isPrimaryImage = true;
+
+      // Size limits + full-image storage live on the type-cast subtypes,
+      // not the basic projection. One extra request per binary type, and
+      // only for tables that have such columns (#305).
+      await enrichBinaryColumns(logical, columns);
 
       // Map the EntityKeyMetadata projection into our lightweight
       // AlternateKeyDef shape. We keep only Active keys — Pending /
