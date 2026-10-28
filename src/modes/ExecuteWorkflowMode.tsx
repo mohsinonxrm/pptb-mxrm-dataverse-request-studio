@@ -19,6 +19,7 @@ import {
   Table20Filled,
   LineHorizontal320Regular,
   LineHorizontal320Filled,
+  ArrowSync20Regular,
 } from '@fluentui/react-icons';
 import {
   Field,
@@ -26,8 +27,10 @@ import {
   Option,
   Caption1,
   Badge,
+  Button,
   tokens,
   MessageBar,
+  MessageBarActions,
   MessageBarBody,
   MessageBarTitle,
   Spinner,
@@ -107,6 +110,9 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
   const [workflows, setWorkflows] = useState<WorkflowRow[]>([]);
   const [workflowsLoading, setWorkflowsLoading] = useState(false);
   const [workflowsError, setWorkflowsError] = useState<string | null>(null);
+  // Bumped by Retry to run the load again (#306).
+  const [workflowsReload, setWorkflowsReload] = useState(0);
+  const hasHost = typeof window !== 'undefined' && !!window.dataverseAPI?.queryData;
   useEffect(() => {
     let cancelled = false;
     if (typeof window === 'undefined' || !window.dataverseAPI?.queryData) {
@@ -151,7 +157,7 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [workflowsReload]);
 
   const wf = state.workflowId ? workflows.find((w) => w.id === state.workflowId) : undefined;
   // Warm the workflow's primary-entity metadata as soon as a workflow is
@@ -340,6 +346,7 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
           workflows={workflows}
           loading={workflowsLoading}
           error={workflowsError}
+          onRetry={hasHost ? () => setWorkflowsReload((n) => n + 1) : undefined}
           workflowId={state.workflowId}
           setWorkflowId={(id) => {
             setState((s) => ({ ...s, workflowId: id, entityId: null }));
@@ -464,12 +471,15 @@ function WorkflowPickerPane({
   workflows,
   loading,
   error,
+  onRetry,
   workflowId,
   setWorkflowId,
 }: {
   workflows: WorkflowRow[];
   loading: boolean;
   error: string | null;
+  /** Runs the workflow load again. Omitted outside PPTB, where it can't succeed. */
+  onRetry?: () => void;
   workflowId: string | null;
   setWorkflowId: (id: string | null) => void;
 }) {
@@ -515,9 +525,26 @@ function WorkflowPickerPane({
           </Badge>
         )}
       </PaneHead>
-      {error && (
+      {error && !loading && (
         <MessageBar intent="error" layout="multiline" style={{ marginBottom: 12, maxWidth: 760 }}>
-          <MessageBarBody>Couldn't load workflows: {error}</MessageBarBody>
+          <MessageBarBody>
+            <MessageBarTitle>Couldn't load workflows</MessageBarTitle>
+            {error}
+          </MessageBarBody>
+          {onRetry && (
+            <MessageBarActions
+              containerAction={
+                <Button
+                  appearance="primary"
+                  size="small"
+                  icon={<ArrowSync20Regular />}
+                  onClick={onRetry}
+                >
+                  Retry
+                </Button>
+              }
+            />
+          )}
         </MessageBar>
       )}
       <div style={{ maxWidth: 760 }}>
@@ -547,9 +574,11 @@ function WorkflowPickerPane({
             placeholder={
               loading
                 ? 'Loading workflows…'
-                : workflows.length === 0
-                  ? 'No activated workflows in this environment'
-                  : 'Search workflows…'
+                : error
+                  ? 'Workflows didn’t load'
+                  : workflows.length === 0
+                    ? 'No activated workflows in this environment'
+                    : 'Search workflows…'
             }
             disabled={loading || workflows.length === 0}
             listbox={{ style: { maxHeight: 420 } }}
