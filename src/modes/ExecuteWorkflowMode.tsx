@@ -467,7 +467,8 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
   );
 }
 
-function WorkflowPickerPane({
+/** Exported for tests. */
+export function WorkflowPickerPane({
   workflows,
   loading,
   error,
