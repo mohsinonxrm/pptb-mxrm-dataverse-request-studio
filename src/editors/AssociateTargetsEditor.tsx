@@ -15,7 +15,7 @@
 // Records come from the live `RecordPicker` typeahead — same primitive
 // Merge / Delete / Update use; results fetched via `dataverseAPI.queryData`.
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   Caption1,
   Badge,
@@ -60,8 +60,12 @@ export interface AssociateTargetsEditorProps {
   targetNames?: Record<string, string>;
   setTargetNames?: (next: Record<string, string>) => void;
   group?: RequestGroup;
-  /** Method that will be sent (POST or PUT) — surfaced as a chip. */
+  /** Method that will be sent (POST or PATCH) — surfaced as a chip. */
   resolvedMethod: 'POST' | 'PATCH' | null;
+  /** Replaces the pane head's description (Disassociate describes its DELETEs). */
+  sub?: ReactNode;
+  /** Verb each collection target sends — POST to associate, DELETE to disassociate. */
+  verb?: 'POST' | 'DELETE';
 }
 
 export function AssociateTargetsEditor({
@@ -73,6 +77,8 @@ export function AssociateTargetsEditor({
   setTargetNames: setTargetNamesProp,
   group = 'relate',
   resolvedMethod,
+  sub,
+  verb = 'POST',
 }: AssociateTargetsEditorProps) {
   // Callers that don't track names externally get a transient session map.
   // Defined alongside the controlled path so the editor's display logic
@@ -141,17 +147,18 @@ export function AssociateTargetsEditor({
         title={singleValued ? 'Target record' : 'Target records'}
         sub={
           <span>
-            {singleValued ? (
-              <>
-                One target is allowed for <code>{nav.cardinality}</code> nav props — the server PUT
-                sets the lookup.
-              </>
-            ) : (
-              <>
-                One or more targets — each fires a separate POST request. For many targets,
-                Dataverse recommends a <code>$batch</code> request.
-              </>
-            )}
+            {sub ??
+              (singleValued ? (
+                <>
+                  One target is allowed for <code>{nav.cardinality}</code> nav props — a PATCH with{' '}
+                  <code>{nav.name}@odata.bind</code> sets the lookup.
+                </>
+              ) : (
+                <>
+                  One or more targets — each fires a separate POST request. For many targets,
+                  Dataverse recommends a <code>$batch</code> request.
+                </>
+              ))}
           </span>
         }
         group={group}
@@ -264,8 +271,8 @@ export function AssociateTargetsEditor({
             label={singleValued ? 'Pick target' : 'Add target'}
             hint={
               singleValued
-                ? `Pick a single ${targetTbl?.displayName ?? 'record'} — the PUT sets this as the lookup value.`
-                : `Each pick queues a separate POST. Currently ${targets.length} target${targets.length === 1 ? '' : 's'} queued.`
+                ? `Pick a single ${targetTbl?.displayName ?? 'record'} — the PATCH sets this as the lookup value.`
+                : `Each pick queues a separate ${verb}. Currently ${targets.length} target${targets.length === 1 ? '' : 's'} queued.`
             }
           >
             <RecordPicker
@@ -291,8 +298,8 @@ export function AssociateTargetsEditor({
         <MessageBar layout="multiline" intent="info" style={{ maxWidth: 720, marginTop: 12 }}>
           <MessageBarBody>
             <MessageBarTitle>Single-valued nav property — one target only.</MessageBarTitle>
-            To change the target, remove the current one first. The server PUT atomically replaces
-            the previous lookup value.
+            To change the target, remove the current one first. The PATCH replaces the previous
+            lookup value.
           </MessageBarBody>
         </MessageBar>
       )}

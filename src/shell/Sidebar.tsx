@@ -124,8 +124,8 @@ export function Sidebar({
                     }}
                   >
                     {/* status 0 = the host failed the call without an HTTP status */}
-                    {timeAgo(r.ts)} · {r.status || 'error'} ·{' '}
-                    {r.summary ?? `${r.rowCount ?? '—'} rows`}
+                    {timeAgo(r.ts)} · {r.status || 'error'}
+                    {runDetail(r)}
                   </span>
                 </div>
               ))}
@@ -193,4 +193,26 @@ function timeAgo(ts: number): string {
   if (h < 24) return `${h} hr ago`;
   const d = Math.floor(h / 24);
   return `${d}d ago`;
+}
+
+/** Modes whose runs return rows. */
+const ROW_MODES = new Set([
+  'retrieve-multiple',
+  'retrieve-single',
+  'retrieve-nextlink',
+  'predefined-query',
+]);
+
+/**
+ * The tail of a Recent runs line: the mode's own summary, or a row count for
+ * reads. A row count means nothing for a write ("204 · 1 rows") or for a
+ * function / download, so those show the status alone unless the mode gave
+ * a summary (#309).
+ */
+export function runDetail(r: Pick<RecentRun, 'modeId' | 'summary' | 'rowCount'>): string {
+  if (r.summary) return ` · ${r.summary}`;
+  if (!ROW_MODES.has(r.modeId)) return '';
+  const n = r.rowCount;
+  if (n === undefined) return ' · — rows';
+  return ` · ${n.toLocaleString()} ${n === 1 ? 'row' : 'rows'}`;
 }

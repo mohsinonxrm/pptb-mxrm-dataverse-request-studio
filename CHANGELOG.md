@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0-beta.3] - 2026-10-27
+
+The third 1.4.0 beta fixes what a full regression pass on beta.2 turned up
+([#304]). The headline fix: Manage Image Data and Manage File Data can pick
+columns again. The rest are smaller fixes to error handling, wording and
+the saved-request library.
+
+Still a **prerelease** on the npm `beta` tag, with the gold Insider icon.
+Every fix was verified in Power Platform ToolBox 1.2.8 against a live
+Dataverse environment.
+
+### 🐛 Fixed
+
+- **Manage Image Data and Manage File Data list their columns again**
+  ([#305]). Image and File columns report the type `Virtual` and aren't
+  Advanced Find-eligible, so DRS dropped them, and both modes said the table
+  had no Image or File columns, even Account's `entityimage`.
+  - They're now loaded in the same metadata request, and `entityimage` can
+    also be used in `$select`.
+  - Each column's size limit and full-size image setting come from the
+    environment, so upload size checks use the column's real limit, and the
+    table's primary image is marked as thumbnail-only.
+  - **Order by** doesn't offer Image or File columns, which can't be sorted
+    on.
+  - A required Image or File column no longer blocks Create or Bulk Write.
+    Those columns are uploaded separately and aren't in the field set.
+- **Execute Workflow can retry a failed workflow list** ([#306]). If loading
+  the on-demand workflows fails (for example a brief `HTTP 401` from the
+  host), the error has a **Retry** button, and the picker says the workflows
+  didn't load instead of "No activated workflows in this environment".
+- **Associate and Disassociate name the right HTTP verb** ([#307]).
+  Disassociate's targets pane said each target fires a POST; it fires a
+  DELETE. Single-valued navigation properties said a PUT sets the lookup;
+  it's a PATCH with `<nav>@odata.bind`. Disassociate also showed the "Target
+  records" heading twice.
+- **Saved-request library** ([#308]):
+  - With **All modes** off, an empty list says how many requests are saved
+    in other modes, instead of "No saved requests yet".
+  - Loading a saved request over a saved request you've edited asks before
+    discarding your changes.
+  - After you delete the saved entry a request came from, **Save** works
+    again without editing the request first.
+- **Smaller wording fixes** ([#309]):
+  - Execute Action and Execute Function results point at the **JSON** tab.
+  - The response properties of an action or Custom API come from the
+    environment's `$metadata`, including inherited properties, instead of a
+    note about a "mock CSDL".
+  - Recent runs show a row count only for reads ("1 row", "6 rows"), not
+    "204 · 1 rows" for writes. Associate and Disassociate say how many
+    links were done ("3 of 5 linked"), and Bulk Write how many rows were
+    written.
+  - The **Learn more** link on an unknown-column error goes to *Select
+    columns*, or *Order rows* for `$orderby`.
+
+[#304]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/304
+[#305]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/305
+[#306]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/306
+[#307]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/307
+[#308]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/308
+[#309]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/309
+
 ## [1.4.0-beta.2] - 2026-10-24
 
 The second 1.4.0 beta fixes the issues found while testing beta.1 and

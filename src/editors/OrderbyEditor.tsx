@@ -212,9 +212,11 @@ export function OrderbyEditor({
                       currentDisplay={col?.displayName}
                       // Read picker filter — same rule as SelectEditor /
                       // FilterEditor: honor IsValidForRead, hide companion
-                      // *name / *yominame logical read-only columns.
+                      // *name / *yominame logical read-only columns. File and
+                      // Image columns can't be sorted on.
                       columns={tbl.columns
                         .filter((c) => c.isValidForRead !== false)
+                        .filter((c) => c.attributeType !== 'File' && c.attributeType !== 'Image')
                         .filter((c) => !isCompanionLogicalReadOnly(c))}
                       onChange={(logicalName) => update(i, { col: logicalName })}
                     />
