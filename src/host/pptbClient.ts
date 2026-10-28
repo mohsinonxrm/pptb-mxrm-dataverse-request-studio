@@ -27,6 +27,8 @@ export interface EntityMetadata {
   EntitySetName: string;
   PrimaryIdAttribute: string;
   PrimaryNameAttribute: string;
+  /** Logical name of the table's primary image column (`entityimage`), or null. */
+  PrimaryImageAttribute?: string | null;
   IsValidForAdvancedFind?: boolean;
   MetadataId: string;
   ObjectTypeCode: number;
@@ -309,6 +311,12 @@ export async function getEntityMetadata(logicalName: string): Promise<EntityMeta
   )) as unknown as EntityMetadata;
 }
 
+/** Image and File columns: `AttributeType` is `Virtual`, the real type is in `AttributeTypeName`. */
+export function isBinaryColumn(a: Pick<AttributeMetadata, 'AttributeType' | 'AttributeTypeName'>) {
+  const name = a.AttributeTypeName?.Value;
+  return a.AttributeType === 'Virtual' && (name === 'ImageType' || name === 'FileType');
+}
+
 /** Entity attributes — basic projection. Type-specific props via separate calls. */
 export async function getEntityAttributes(
   logicalName: string,
@@ -353,9 +361,18 @@ export async function getEntityAttributes(
   //
   // `IsValidForAdvancedFind` IS reliable across inheritance and is a
   // reasonable default-on filter (hides internal/system-only columns).
+  //
+  // Image and File columns are never Advanced Find-eligible (`entityimage`
+  // reports false), so the filter would hide them from Manage Image / File
+  // Data (#305). Their AttributeType is `Virtual` — the real type is in
+  // `AttributeTypeName`, which the metadata endpoint can't filter on
+  // (0x80044183) — so pull in every virtual column and keep only the binary
+  // ones below.
   const predicates: string[] = [];
   if (advancedFindOnly) {
-    predicates.push('IsValidForAdvancedFind/Value eq true');
+    predicates.push(
+      "(IsValidForAdvancedFind/Value eq true or AttributeType eq Microsoft.Dynamics.CRM.AttributeTypeCode'Virtual')",
+    );
   }
   if (predicates.length > 0) {
     query += `&$filter=${predicates.join(' and ')}`;
@@ -364,7 +381,12 @@ export async function getEntityAttributes(
   const result = await throttledMetadataQuery<{ value?: unknown[] } & Record<string, unknown>>(
     query,
   );
-  const attrs = result.value as unknown as AttributeMetadata[];
+  let attrs = result.value as unknown as AttributeMetadata[];
+  if (advancedFindOnly) {
+    attrs = attrs.filter(
+      (a) => a.AttributeType !== 'Virtual' || a.IsValidForAdvancedFind?.Value || isBinaryColumn(a),
+    );
+  }
 
   attrs.sort((a, b) => {
     const nameA = a.DisplayName?.UserLocalizedLabel?.Label || a.LogicalName;

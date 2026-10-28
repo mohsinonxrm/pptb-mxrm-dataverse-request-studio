@@ -469,7 +469,14 @@ export function rawBodyBlocker(rawBody: string | null | undefined): string | nul
  *     An explicit null never counts.
  */
 export function mustSupplyOnCreate(c: ColumnMeta): boolean {
-  return c.requiredLevel === 'ApplicationRequired' && c.isValidForCreate !== false;
+  return (
+    c.requiredLevel === 'ApplicationRequired' &&
+    c.isValidForCreate !== false &&
+    // File / Image columns are uploaded separately and hidden from the field
+    // set, so they can't block a create (#305).
+    c.attributeType !== 'File' &&
+    c.attributeType !== 'Image'
+  );
 }
 
 function isFieldValueSet(c: ColumnMeta, v: CreateFieldValue | undefined): boolean {

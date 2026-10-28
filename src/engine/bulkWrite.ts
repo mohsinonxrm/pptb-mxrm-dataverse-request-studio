@@ -38,6 +38,7 @@ import type {
   CreateState,
   LookupFieldValue,
 } from '../state/writeState';
+import { mustSupplyOnCreate } from './fieldBody';
 import { buildCreateBody, type BuiltRequest } from './urlBuilder';
 
 export type BulkOperation =
@@ -243,9 +244,10 @@ export function buildBulkTarget(
   return { target, issue };
 }
 
+// File / Image columns can't be set in a row, so they never count as missing (#305).
 function missingRequired(tbl: TableMeta, row: BulkRow): string[] {
   return tbl.columns
-    .filter((c) => c.requiredLevel === 'ApplicationRequired' && c.isValidForCreate !== false)
+    .filter((c) => mustSupplyOnCreate(c))
     .filter((c) => {
       const v = row.fieldValues[c.logicalName];
       if (v == null || v === '') return true;
