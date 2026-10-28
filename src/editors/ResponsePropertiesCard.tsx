@@ -19,6 +19,7 @@ import { tokens, mergeClasses, Badge, Caption1 } from '@fluentui/react-component
 import { Code20Filled } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import type { CsdlAction } from '../mock/actionsCsdl';
+import { lookupComplexType } from '../host/csdlProvider';
 
 // Known complex-type schemas — for actions/functions that return well-known
 // response types. Custom APIs would source these from the customapiresponseproperty
@@ -76,6 +77,30 @@ const KNOWN_RESPONSE_SCHEMAS: Record<
   ],
 };
 
+/**
+ * Properties of a return type from the loaded CSDL, base types first (a
+ * derived property with the same name wins). Tried for `entity` too: the
+ * parser calls any lowercase `mscrm.<name>` an entity, which includes
+ * publisher-prefixed Custom API responses (`new_DoThingResponse`).
+ */
+export function csdlComplexProperties(
+  kind: string,
+  typeName: string,
+): Array<{ name: string; type: string }> {
+  if (kind !== 'complex' && kind !== 'entity') return [];
+  const byName = new Map<string, { name: string; type: string }>();
+  const seen = new Set<string>();
+  const walk = (name: string) => {
+    const def = lookupComplexType(name.includes('.') ? name : `mscrm.${name}`);
+    if (!def || seen.has(def.name)) return;
+    seen.add(def.name);
+    if (def.baseType) walk(def.baseType);
+    for (const p of def.properties) byName.set(p.name, { name: p.name, type: p.type });
+  };
+  walk(typeName);
+  return [...byName.values()];
+}
+
 export interface ResponsePropertiesCardProps {
   action: CsdlAction;
   /** Pill text — defaults to "from $metadata" / "from Custom API def" based on source. */
@@ -85,7 +110,10 @@ export interface ResponsePropertiesCardProps {
 export function ResponsePropertiesCard({ action, pillText }: ResponsePropertiesCardProps) {
   const s = useStudioStyles();
   const rt = action.returnType;
-  const schema = KNOWN_RESPONSE_SCHEMAS[rt.typeName] ?? [];
+  // Hand-written notes first; otherwise the properties of the complex type
+  // in the loaded CSDL (live $metadata inside PPTB) (#309).
+  const schema: Array<{ name: string; type: string; notes?: string }> =
+    KNOWN_RESPONSE_SCHEMAS[rt.typeName] ?? csdlComplexProperties(rt.kind, rt.typeName);
   const sourcePill =
     pillText ?? (action.source === 'custom-api' ? 'from Custom API def' : 'from $metadata');
 
@@ -188,9 +216,8 @@ export function ResponsePropertiesCard({ action, pillText }: ResponsePropertiesC
             fontStyle: 'italic',
           }}
         >
-          Returns <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{rt.typeName}</code>. No
-          detailed schema in the mock CSDL — fetch the live <code>$metadata</code> for the full
-          structure.
+          Returns <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{rt.typeName}</code>. Its
+          properties aren&apos;t described in the loaded <code>$metadata</code>.
         </Caption1>
       )}
     </div>

@@ -262,6 +262,8 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
           status: res.status,
           ms: res.ms,
           rowCount: relateDoneCount(res, requests.length) ?? 0,
+          // Recent runs shows no row count for writes (#309); say how many links were done.
+          summary: `${relateDoneCount(res, requests.length) ?? 0} of ${requests.length} unlinked`,
         },
         ...rs,
       ].slice(0, 8),

@@ -576,7 +576,7 @@ function buildNarrative(
         title: `Action: ${opName}`,
         body:
           result.status === 200 || result.status === 201
-            ? `Executed ${opName}${boundFrag}. Server returned a result body — see JSON / Results tabs.`
+            ? `Executed ${opName}${boundFrag}. Server returned a result body — see the JSON tab.`
             : `Executed ${opName}${boundFrag}. Server returned 204 No Content — no return value.`,
       };
     }
@@ -587,7 +587,7 @@ function buildNarrative(
         : '';
       return {
         title: `Function: ${opName}`,
-        body: `Invoked ${opName}${boundFrag}. Result body in JSON / Results tabs.`,
+        body: `Invoked ${opName}${boundFrag}. The result body is in the JSON tab.`,
       };
     }
     case 'workflow': {
