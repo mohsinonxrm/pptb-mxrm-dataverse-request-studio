@@ -195,14 +195,23 @@ function timeAgo(ts: number): string {
   return `${d}d ago`;
 }
 
+/** Modes whose runs return rows. */
+const ROW_MODES = new Set([
+  'retrieve-multiple',
+  'retrieve-single',
+  'retrieve-nextlink',
+  'predefined-query',
+]);
+
 /**
  * The tail of a Recent runs line: the mode's own summary, or a row count for
- * reads. A row count means nothing for a write ("204 · 1 rows"), so writes
- * without a summary show the status alone (#309).
+ * reads. A row count means nothing for a write ("204 · 1 rows") or for a
+ * function / download, so those show the status alone unless the mode gave
+ * a summary (#309).
  */
-export function runDetail(r: Pick<RecentRun, 'method' | 'summary' | 'rowCount'>): string {
+export function runDetail(r: Pick<RecentRun, 'modeId' | 'summary' | 'rowCount'>): string {
   if (r.summary) return ` · ${r.summary}`;
-  if (r.method !== 'GET') return '';
+  if (!ROW_MODES.has(r.modeId)) return '';
   const n = r.rowCount;
   if (n === undefined) return ' · — rows';
   return ` · ${n.toLocaleString()} ${n === 1 ? 'row' : 'rows'}`;

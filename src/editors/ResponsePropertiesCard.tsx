@@ -77,6 +77,30 @@ const KNOWN_RESPONSE_SCHEMAS: Record<
   ],
 };
 
+/**
+ * Properties of a return type from the loaded CSDL, base types first (a
+ * derived property with the same name wins). Tried for `entity` too: the
+ * parser calls any lowercase `mscrm.<name>` an entity, which includes
+ * publisher-prefixed Custom API responses (`new_DoThingResponse`).
+ */
+export function csdlComplexProperties(
+  kind: string,
+  typeName: string,
+): Array<{ name: string; type: string }> {
+  if (kind !== 'complex' && kind !== 'entity') return [];
+  const byName = new Map<string, { name: string; type: string }>();
+  const seen = new Set<string>();
+  const walk = (name: string) => {
+    const def = lookupComplexType(name.includes('.') ? name : `mscrm.${name}`);
+    if (!def || seen.has(def.name)) return;
+    seen.add(def.name);
+    if (def.baseType) walk(def.baseType);
+    for (const p of def.properties) byName.set(p.name, { name: p.name, type: p.type });
+  };
+  walk(typeName);
+  return [...byName.values()];
+}
+
 export interface ResponsePropertiesCardProps {
   action: CsdlAction;
   /** Pill text — defaults to "from $metadata" / "from Custom API def" based on source. */
@@ -88,14 +112,8 @@ export function ResponsePropertiesCard({ action, pillText }: ResponsePropertiesC
   const rt = action.returnType;
   // Hand-written notes first; otherwise the properties of the complex type
   // in the loaded CSDL (live $metadata inside PPTB) (#309).
-  const csdlType =
-    rt.kind === 'complex'
-      ? lookupComplexType(rt.typeName.includes('.') ? rt.typeName : `mscrm.${rt.typeName}`)
-      : undefined;
   const schema: Array<{ name: string; type: string; notes?: string }> =
-    KNOWN_RESPONSE_SCHEMAS[rt.typeName] ??
-    csdlType?.properties.map((p) => ({ name: p.name, type: p.type })) ??
-    [];
+    KNOWN_RESPONSE_SCHEMAS[rt.typeName] ?? csdlComplexProperties(rt.kind, rt.typeName);
   const sourcePill =
     pillText ?? (action.source === 'custom-api' ? 'from Custom API def' : 'from $metadata');
 

@@ -245,6 +245,10 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
           status: res.status,
           ms: res.ms,
           rowCount: res.ok ? ids.length || state.rows.length : 0,
+          // Recent runs shows no row count for writes (#309).
+          summary: res.ok
+            ? `${ids.length || state.rows.length} ${(ids.length || state.rows.length) === 1 ? 'row' : 'rows'} written`
+            : undefined,
         },
         ...rs,
       ].slice(0, 8),
