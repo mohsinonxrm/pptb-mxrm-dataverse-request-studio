@@ -137,6 +137,7 @@ export function FrameHeader({
             modeId={saveCtx.modeId}
             onLoad={saveCtx.onLoadSaved}
             currentId={saveCtx.lastSavedId}
+            dirty={saveCtx.dirty}
           />
           <SaveButton
             state={saveCtx.state}

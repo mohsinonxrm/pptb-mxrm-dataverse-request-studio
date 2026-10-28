@@ -200,6 +200,10 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
   // A same-name save then goes through the overwrite confirm below (#58).
   const lastSaved = lastSavedId ? findById(lastSavedId) : undefined;
   const ownSavedId = lastSaved && sameSaveTarget(lastSaved.state, state) ? lastSaved.id : undefined;
+  // The entry this request was saved as / loaded from was deleted from the
+  // library: the request is no longer saved anywhere, so Save is available
+  // even though nothing was edited (#308).
+  const canSave = dirty || (!!lastSavedId && !lastSaved);
 
   // Auto-suggest name whenever the dialog opens. If the user previously
   // saved this request, default to the existing name so a quick re-save
@@ -278,13 +282,19 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
     >
       <DialogTrigger disableButtonEnhancement>
         <Tooltip
-          content={dirty ? 'Save current request (unsaved changes)' : 'No changes since last save'}
+          content={
+            dirty
+              ? 'Save current request (unsaved changes)'
+              : canSave
+                ? 'Save current request (its saved copy was deleted)'
+                : 'No changes since last save'
+          }
           relationship="label"
         >
           <Button
-            appearance={dirty ? 'primary' : 'subtle'}
-            icon={dirty ? <Save20Filled /> : <Save20Regular />}
-            disabled={!dirty}
+            appearance={canSave ? 'primary' : 'subtle'}
+            icon={canSave ? <Save20Filled /> : <Save20Regular />}
+            disabled={!canSave}
             aria-label="Save request"
           >
             Save
@@ -424,9 +434,11 @@ export interface SavedLibraryButtonProps {
   onLoad: (entry: SavedRequest) => void;
   /** Optional — the currently-loaded entry's id, shown with a checkmark badge. */
   currentId?: string;
+  /** The current request has unsaved changes: loading asks before discarding them. */
+  dirty?: boolean;
 }
 
-export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryButtonProps) {
+export function SavedLibraryButton({ modeId, onLoad, currentId, dirty }: SavedLibraryButtonProps) {
   const s = useStyles();
   const [open, setOpen] = useState(false);
   const [renameId, setRenameId] = useState<string | null>(null);
@@ -454,6 +466,33 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
     () => saved.filter((e) => e.modeId === modeId && (!e.orgScope || e.orgScope === scope)).length,
     [saved, modeId, scope],
   );
+  // Saved in other modes of this connection — named in the empty state so a
+  // filtered-out library doesn't read as an empty one (#308).
+  const otherModesCount = useMemo(
+    () => saved.filter((e) => e.modeId !== modeId && (!e.orgScope || e.orgScope === scope)).length,
+    [saved, modeId, scope],
+  );
+
+  const load = (entry: SavedRequest) => {
+    if (!dirty) {
+      onLoad(entry);
+      setOpen(false);
+      return;
+    }
+    // Loading replaces the current request: don't drop unsaved edits silently (#308).
+    confirmingRef.current = true;
+    void askConfirm({
+      title: 'Discard unsaved changes?',
+      message: `Loading "${entry.name}" replaces the current request, and its unsaved changes are lost.`,
+      confirmLabel: 'Load',
+      destructive: true,
+    }).then((ok) => {
+      confirmingRef.current = false;
+      if (!ok) return;
+      onLoad(entry);
+      setOpen(false);
+    });
+  };
   const list = useMemo(
     () =>
       saved
@@ -504,7 +543,9 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
             {health.unreadable
               ? "Saved requests couldn't be read — see below."
               : list.length === 0
-                ? 'No saved requests yet — click Save to create one.'
+                ? !allModes && otherModesCount > 0
+                  ? `No saved ${modeName(modeId)} requests · ${otherModesCount} in other modes — turn on All modes to see them.`
+                  : 'No saved requests yet — click Save to create one.'
                 : `${list.length} saved · click to load, hover for rename/delete`}
           </Caption1>
           <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -551,8 +592,7 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
                   }
                   onClick={() => {
                     if (isRenaming || otherMode) return;
-                    onLoad(entry);
-                    setOpen(false);
+                    load(entry);
                   }}
                 >
                   <Badge
