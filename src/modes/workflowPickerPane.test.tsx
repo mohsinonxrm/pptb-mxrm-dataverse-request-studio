@@ -53,6 +53,7 @@ describe('WorkflowPickerPane', () => {
   it("says the workflows didn't load instead of claiming there are none", () => {
     const el = render({ error: 'HTTP 401', onRetry: () => {} });
     expect(el.querySelector('input')?.placeholder).toBe('Workflows didn’t load');
+    expect(el.textContent).not.toContain('0 workflows');
   });
 
   it('has no Retry when the load can never succeed (outside PPTB)', () => {

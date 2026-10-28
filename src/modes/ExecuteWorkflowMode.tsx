@@ -520,7 +520,7 @@ export function WorkflowPickerPane({
           <Badge appearance="ghost" icon={<Spinner size="extra-tiny" />}>
             loading…
           </Badge>
-        ) : (
+        ) : error ? null : (
           <Badge appearance="ghost">
             {workflows.length} workflow{workflows.length === 1 ? '' : 's'}
           </Badge>
