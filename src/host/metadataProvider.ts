@@ -105,8 +105,25 @@ function odataNameOf(attrType: AttributeTypeCode, logicalName: string): string {
   return logicalName;
 }
 
-function mapAttribute(raw: AttributeMetadata): ColumnMeta | null {
-  const attrType = ATTRIBUTE_TYPE_MAP[raw.AttributeType];
+/**
+ * The studio type for a raw attribute. Image and File columns report
+ * `AttributeType: Virtual`; their real type is in `AttributeTypeName` (#305).
+ * Other virtual columns (`…name` label columns) stay unmapped.
+ */
+export function attributeTypeOf(
+  raw: Pick<AttributeMetadata, 'AttributeType' | 'AttributeTypeName'>,
+): AttributeTypeCode | undefined {
+  if (raw.AttributeType === 'Virtual') {
+    const name = raw.AttributeTypeName?.Value;
+    if (name === 'ImageType') return 'Image';
+    if (name === 'FileType') return 'File';
+    return undefined;
+  }
+  return ATTRIBUTE_TYPE_MAP[raw.AttributeType];
+}
+
+export function mapAttribute(raw: AttributeMetadata): ColumnMeta | null {
+  const attrType = attributeTypeOf(raw);
   if (!attrType) return null;
 
   // We intentionally do NOT drop `IsValidODataAttribute=false` columns.
@@ -373,6 +390,10 @@ async function buildTable(logical: string): Promise<TableMeta | undefined> {
       // Mark the primary key.
       const pk = columns.find((c) => c.logicalName === entity.PrimaryIdAttribute);
       if (pk && pk.attributeType === 'Uniqueidentifier') pk.isPrimaryKey = true;
+
+      // Mark the primary image (thumbnail-only, settable on Create).
+      const img = columns.find((c) => c.logicalName === entity.PrimaryImageAttribute);
+      if (img && img.attributeType === 'Image') img.isPrimaryImage = true;
 
       // Map the EntityKeyMetadata projection into our lightweight
       // AlternateKeyDef shape. We keep only Active keys — Pending /
