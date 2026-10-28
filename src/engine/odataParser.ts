@@ -97,8 +97,10 @@ const DOCS = {
     'https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/query-data-web-api',
   joinTables:
     'https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/query/join-tables',
+  // Unknown-column errors ($select / $orderby): column names and the
+  // `_<lookup>_value` form are explained on Select columns (#309).
   attrMetadata:
-    'https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/use-web-api-functions#address-lookup-and-customer-fields-in-functions',
+    'https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/query/select-columns',
 };
 
 /** Internal — throw from any sub-parser to carry a learn-more URL up through

@@ -19,6 +19,7 @@ import { tokens, mergeClasses, Badge, Caption1 } from '@fluentui/react-component
 import { Code20Filled } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import type { CsdlAction } from '../mock/actionsCsdl';
+import { lookupComplexType } from '../host/csdlProvider';
 
 // Known complex-type schemas — for actions/functions that return well-known
 // response types. Custom APIs would source these from the customapiresponseproperty
@@ -85,7 +86,16 @@ export interface ResponsePropertiesCardProps {
 export function ResponsePropertiesCard({ action, pillText }: ResponsePropertiesCardProps) {
   const s = useStudioStyles();
   const rt = action.returnType;
-  const schema = KNOWN_RESPONSE_SCHEMAS[rt.typeName] ?? [];
+  // Hand-written notes first; otherwise the properties of the complex type
+  // in the loaded CSDL (live $metadata inside PPTB) (#309).
+  const csdlType =
+    rt.kind === 'complex'
+      ? lookupComplexType(rt.typeName.includes('.') ? rt.typeName : `mscrm.${rt.typeName}`)
+      : undefined;
+  const schema: Array<{ name: string; type: string; notes?: string }> =
+    KNOWN_RESPONSE_SCHEMAS[rt.typeName] ??
+    csdlType?.properties.map((p) => ({ name: p.name, type: p.type })) ??
+    [];
   const sourcePill =
     pillText ?? (action.source === 'custom-api' ? 'from Custom API def' : 'from $metadata');
 
@@ -188,9 +198,8 @@ export function ResponsePropertiesCard({ action, pillText }: ResponsePropertiesC
             fontStyle: 'italic',
           }}
         >
-          Returns <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{rt.typeName}</code>. No
-          detailed schema in the mock CSDL — fetch the live <code>$metadata</code> for the full
-          structure.
+          Returns <code style={{ fontFamily: tokens.fontFamilyMonospace }}>{rt.typeName}</code>. Its
+          properties aren&apos;t described in the loaded <code>$metadata</code>.
         </Caption1>
       )}
     </div>
