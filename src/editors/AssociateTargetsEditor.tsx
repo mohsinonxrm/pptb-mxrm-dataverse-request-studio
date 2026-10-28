@@ -64,6 +64,8 @@ export interface AssociateTargetsEditorProps {
   resolvedMethod: 'POST' | 'PATCH' | null;
   /** Replaces the pane head's description (Disassociate describes its DELETEs). */
   sub?: ReactNode;
+  /** Verb each collection target sends — POST to associate, DELETE to disassociate. */
+  verb?: 'POST' | 'DELETE';
 }
 
 export function AssociateTargetsEditor({
@@ -76,6 +78,7 @@ export function AssociateTargetsEditor({
   group = 'relate',
   resolvedMethod,
   sub,
+  verb = 'POST',
 }: AssociateTargetsEditorProps) {
   // Callers that don't track names externally get a transient session map.
   // Defined alongside the controlled path so the editor's display logic
@@ -268,8 +271,8 @@ export function AssociateTargetsEditor({
             label={singleValued ? 'Pick target' : 'Add target'}
             hint={
               singleValued
-                ? `Pick a single ${targetTbl?.displayName ?? 'record'} — the PUT sets this as the lookup value.`
-                : `Each pick queues a separate POST. Currently ${targets.length} target${targets.length === 1 ? '' : 's'} queued.`
+                ? `Pick a single ${targetTbl?.displayName ?? 'record'} — the PATCH sets this as the lookup value.`
+                : `Each pick queues a separate ${verb}. Currently ${targets.length} target${targets.length === 1 ? '' : 's'} queued.`
             }
           >
             <RecordPicker

@@ -737,6 +737,7 @@ function TargetPane({
       setTargetNames={setTargetNames}
       group="relate"
       resolvedMethod={null}
+      verb="DELETE"
       sub={
         <>
           Pick one or more <code>{targetTbl?.logicalName}</code> rows to remove from the collection.
