@@ -35,6 +35,7 @@ import { useHostSession } from '../host/HostContext';
 import { useSaveContext } from '../state/SaveContext';
 import { useRegisterModeNavigator } from '../state/modeHandoff';
 import { SaveButton, SavedLibraryButton } from '../editors/SavedRequestsDialog';
+import { EnvironmentBadge } from './confirmWrite';
 
 export function FrameHeader({
   themeMode,
@@ -53,6 +54,9 @@ export function FrameHeader({
   // keep them in standalone mode (the local dev experience needs them).
   const host = useHostSession();
   const embedded = host.embedded;
+  // The connection name, else the environment's host name.
+  const connectionLabel =
+    host.connectionName || host.environmentUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   const env = getEnv();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, updateSettings] = usePersistedSettings();
@@ -98,6 +102,44 @@ export function FrameHeader({
         </Breadcrumb>
       </div>
       <div className={s.spacer} />
+      {/* The connection the requests go to, also when embedded, with
+          Production highlighted (#241). */}
+      {embedded && host.connected && (connectionLabel || host.environment) && (
+        <Tooltip
+          content={`Requests go to ${host.connectionName || 'this connection'}${
+            host.environmentUrl ? ` (${host.environmentUrl.replace(/\/$/, '')})` : ''
+          }`}
+          relationship="description"
+        >
+          <span
+            data-testid="environment-indicator"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              flexShrink: 1,
+              minWidth: 0,
+              maxWidth: 260,
+              marginRight: 8,
+            }}
+          >
+            {connectionLabel && (
+              <span
+                style={{
+                  fontSize: tokens.fontSizeBase200,
+                  color: tokens.colorNeutralForeground2,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {connectionLabel}
+              </span>
+            )}
+            <EnvironmentBadge environment={host.environment} />
+          </span>
+        </Tooltip>
+      )}
       {!embedded && (
         <>
           <Badge

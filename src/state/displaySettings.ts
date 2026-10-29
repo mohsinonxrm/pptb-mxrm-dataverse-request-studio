@@ -30,6 +30,11 @@ export interface DisplaySettings {
   /** Results-grid row density (#16). */
   gridDensity: GridDensity;
   /**
+   * Production safe mode (#241): on a Production connection every write asks
+   * first, and you type the table (or operation) name to confirm.
+   */
+  productionSafeMode: boolean;
+  /**
    * Selected publisher ids (publisherid GUIDs). Used when
    * entityScopeMode === 'publisher-solution' to narrow the solution list.
    * Empty array = no publisher chosen yet (the solutions list will be empty).
@@ -116,6 +121,7 @@ export const defaultDisplaySettings: DisplaySettings = {
   entityScopeMode: 'publisher-solution',
   advancedFindOnly: true,
   gridDensity: 'medium',
+  productionSafeMode: true,
   selectedPublisherIds: [],
   selectedSolutionIds: [],
 };

@@ -706,6 +706,16 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
           method="POST"
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={{
+            operation: 'Merge Records',
+            table: state.table,
+            scope: {
+              kind: 'text',
+              text: '2 records: the subordinate merges into the master and is deactivated',
+            },
+            highImpact: true,
+          }}
           disabledReason={disabledReason ?? bypassBlocker}
           loading={loading}
           onExecute={onExecute}

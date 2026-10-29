@@ -21,6 +21,7 @@
 // equivalent, so that's what gets sent.
 
 import { useCallback, useMemo, useRef, useState } from 'react';
+import type { WriteConfirmSpec } from '../engine/writeConfirm';
 import {
   Document20Regular,
   Document20Filled,
@@ -132,6 +133,23 @@ export function BatchMode({
   const compiled = useMemo(() => compileBatch(state.groups, orgUrl), [state.groups, orgUrl]);
   const plan = useMemo(() => planDispatch(compiled.items), [compiled]);
   const unavailable = batchUnavailableReason();
+  // A batch with writes always asks before it's sent (#241); a read-only one doesn't.
+  const batchWriteConfirm = useMemo((): WriteConfirmSpec | null => {
+    const total = compiled.items.length;
+    const writes = compiled.items.filter((c) => c.wire && c.wire.method !== 'GET').length;
+    if (writes === 0) return null;
+    return {
+      operation: type.name,
+      scope: {
+        kind: 'text',
+        text: `${total} request${total === 1 ? '' : 's'}, ${writes} of them change${writes === 1 ? 's' : ''} data`,
+        // More than 100 writes needs the word typed, as for other bulk writes.
+        count: writes,
+      },
+      highImpact: true,
+      confirmWord: type.id === 'execute-multiple' ? 'ExecuteMultiple' : 'batch',
+    };
+  }, [compiled, type.id, type.name]);
 
   // ── State helpers ──
   const touch = (s: BatchState, id: string): BatchState => {
@@ -256,7 +274,7 @@ export function BatchMode({
           'batch-deletes',
           'validation',
           `This batch deletes ${deletes} record${deletes === 1 ? '' : 's'}`,
-          'Deletes in a batch run without the Delete mode’s confirmation. Check the ids first.',
+          'The batch’s confirmation counts writes, not the records each delete removes, and there’s no typed record name as in the Delete mode. Check the ids first.',
           'overview',
         ),
       );
@@ -582,6 +600,8 @@ export function BatchMode({
           url={`${API_BASE}/$batch`}
           bytes={bodyBytes}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={batchWriteConfirm}
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}

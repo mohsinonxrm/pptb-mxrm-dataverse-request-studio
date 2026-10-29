@@ -521,6 +521,13 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
           method="POST"
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={{
+            operation: 'Create Record',
+            table: state.table,
+            scope: { kind: 'records', count: 1 },
+            highImpact: false,
+          }}
           disabledReason={disabledReason ?? bypassBlocker}
           loading={loading}
           onExecute={onExecute}

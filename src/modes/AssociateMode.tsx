@@ -473,6 +473,13 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
           method={method}
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={{
+            operation: nav ? `Associate (${nav.name})` : 'Associate',
+            table: state.table,
+            scope: { kind: 'records', count: Math.max(1, state.targets.length) },
+            highImpact: state.targets.length > 1,
+          }}
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}

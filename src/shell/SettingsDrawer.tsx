@@ -128,6 +128,13 @@ export function SettingsDrawer({
     [settings, onSettingsChange],
   );
 
+  const handleSafeModeChange = useCallback(
+    (checked: boolean) => {
+      onSettingsChange({ ...settings, productionSafeMode: checked });
+    },
+    [settings, onSettingsChange],
+  );
+
   const handleValueDisplayModeChange = useCallback(
     (mode: ValueDisplayMode) => {
       onSettingsChange({ ...settings, valueDisplayMode: mode });
@@ -350,6 +357,31 @@ export function SettingsDrawer({
               <Option value="raw">Raw</Option>
               <Option value="both">Both (2 columns per attribute)</Option>
             </Dropdown>
+          </div>
+        </div>
+
+        <Divider />
+
+        {/* ── Section: Safety (#241) ───────────────────────────── */}
+        <div className={styles.section} style={{ marginTop: tokens.spacingVerticalL }}>
+          <Text className={styles.sectionTitle}>Safety</Text>
+
+          <div className={styles.settingItem}>
+            <div className={styles.settingRow}>
+              <div>
+                <Text className={styles.settingLabel}>Production safe mode</Text>
+                <Text className={styles.settingDescription} block>
+                  On a Production connection, every write asks first, and you type the table (or
+                  operation) name to confirm. Merge, actions, workflows, bulk and batch writes
+                  always ask, on any connection.
+                </Text>
+              </div>
+              <Switch
+                aria-label="Production safe mode"
+                checked={settings.productionSafeMode}
+                onChange={(_e, data) => handleSafeModeChange(data.checked)}
+              />
+            </div>
           </div>
         </div>
 

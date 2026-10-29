@@ -237,6 +237,53 @@ gold Insider icon.
 
 ---
 
+## ✏️ What this tool changes
+
+Dataverse Request Studio only reads from Dataverse until you send a request
+from one of the write, relate, execute, bulk or batch modes. Every request runs
+as the connected user (or the user an impersonation header names), so Dataverse
+applies that user's security roles.
+
+**Before a write is sent, it asks.** The confirmation names the target: the
+environment (connection name, URL and type, with Production highlighted), the
+operation, the table and the scope. The header shows the connection and its
+type at all times.
+
+| Request | When it asks |
+|---|---|
+| **Merge**, **Execute Action / Custom API / Custom Action**, **Execute Workflow**, **Bulk Write**, `$batch` / **ExecuteMultiple** with any write, **Associate / Disassociate** with more than one target | Always |
+| **Create**, **Update**, **Upsert**, single-target **Associate / Disassociate** | On a Production connection, with **Production safe mode** on (the default; Settings → Safety) |
+| **Delete** | Always for a whole row: type the record's name and acknowledge, in the mode itself. On a Production connection with safe mode on, the confirmation above as well |
+| **Bulk Delete Job** | Always: the confirmation names the environment, counts the matching rows, and you type the table name |
+| Reads (Retrieve, Predefined Query, Execute Function, downloads) | Never |
+
+On a Production connection with safe mode on, and for more than 100 records (or
+more than 100 writes in a batch) on any connection, you type the table name (or
+the action name, or `batch` / `ExecuteMultiple`) before the confirm button
+enables. Execute and Ctrl+Enter go through the same confirmation. If the
+connection changes while the confirmation is open, nothing is sent.
+
+What each request does in Dataverse is exactly what the URL bar and the Code
+tab show: one Web API request (or one per target for Associate / Disassociate,
+or one `$batch` per group). The binary modes (file, image, attachment) don't
+send anything from inside ToolBox: Execute returns 501, and you copy the request
+from the Code tab.
+
+**Stored on your machine, not in Dataverse:**
+
+- **Saved requests** — in the browser storage of the ToolBox tool window, one
+  library per environment (`drs:saved-requests:v1:<host>`). If a library can't
+  be read, it's copied to a backup key instead of being overwritten. Export and
+  Import write and read JSON files you pick.
+- **Settings** (logical names, value display, scope, Advanced Find, density,
+  column widths, Production safe mode) — in ToolBox's settings store for this
+  tool.
+- **Exports** (CSV, JSON, Postman, Insomnia, Bruno, OpenAPI) — only to files you
+  choose. Credential headers (`Authorization`, cookies) are never saved or
+  exported.
+
+---
+
 ## 🛠️ Development
 
 ### Setup

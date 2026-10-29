@@ -546,6 +546,13 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
           method={method}
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={{
+            operation: nav ? `Disassociate (${nav.name})` : 'Disassociate',
+            table: state.table,
+            scope: { kind: 'records', count: Math.max(1, state.targetIds.length) },
+            highImpact: state.targetIds.length > 1,
+          }}
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}

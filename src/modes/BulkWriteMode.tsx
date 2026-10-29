@@ -538,6 +538,13 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
           method="POST"
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={{
+            operation: `Bulk Write · ${state.operation}`,
+            table: state.table,
+            scope: { kind: 'records', count: state.rows.length },
+            highImpact: true,
+          }}
           disabledReason={disabledReason ?? bypassBlocker}
           loading={loading}
           onExecute={onExecute}

@@ -729,6 +729,17 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
           method="DELETE"
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // The typed record name already guards the delete itself; this
+          // adds the environment check on a Production connection (#241).
+          writeConfirm={{
+            operation:
+              state.scope.kind === 'whole-row'
+                ? 'Delete Record'
+                : `Clear column ${state.scope.column ?? ''}`.trim(),
+            table: state.table,
+            scope: { kind: 'records', count: 1 },
+            highImpact: false,
+          }}
           // Delete uses the trash icon as a safety affordance so the
           // destructiveness reads before clicking.
           executeIcon={Delete20Filled}
