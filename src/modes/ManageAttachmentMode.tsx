@@ -97,6 +97,7 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { invalidUrlPartReason } from '../primitives/urlParts';
 
 // Default cap = Organization.MaxUploadFileSize default per doc (5 MB).
 const DEFAULT_MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -162,6 +163,11 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const firstStepMethod = pipeline[0]?.method ?? 'POST';
 
+  // Ids and names that go into the URL as-is (#221).
+  const urlPartProblem = invalidUrlPartReason([
+    ['Record id', state.recordId],
+    ['Parent activity id', state.parentActivityId],
+  ]);
   const disabledReason =
     state.operation === 'upload' && state.target === 'attachment' && !state.parentActivityId
       ? 'Pick the parent email activity for the attachment.'
@@ -176,7 +182,7 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
             ? 'Choose a file to upload.'
             : state.headers.some((h) => h.enabled && !h.name)
               ? 'Fix empty header name.'
-              : null;
+              : urlPartProblem;
 
   const onExecute = async () => {
     setLoading(true);

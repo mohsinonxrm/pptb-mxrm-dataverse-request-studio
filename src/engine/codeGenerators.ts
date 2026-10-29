@@ -11,6 +11,7 @@ import type { BuiltRequest } from './urlBuilder';
 import { ENV } from '../mock/environment';
 import { generateOpenApi } from './openApiGenerator';
 import { isCredentialHeader, withoutCredentialHeaders } from './sensitiveHeaders';
+import { encodeSpaces } from '../primitives/urlParts';
 
 export type CodeFormat =
   | 'fetch'
@@ -176,16 +177,28 @@ export function generateCode(fmt: CodeFormat, i: CodegenInputs): string {
 // ────────────────────────────────────────────────────────────
 // Shared helpers
 // ────────────────────────────────────────────────────────────
+/**
+ * The request's absolute URL, with spaces percent-encoded. The URL bar keeps
+ * `$filter`'s spaces literal to match the Microsoft Learn examples; a URL in
+ * generated code or an HTTP action must not have them (curl sends a raw
+ * space, and Dataverse rejects it) (#221).
+ */
+function httpUrl(i: CodegenInputs): string {
+  return encodeSpaces(`https://${ENV.host}${i.built.relativeUrl}`);
+}
+
 function fullUrl(i: CodegenInputs): string {
   // The nextLink comes straight from a textarea — drop pasted whitespace.
   if (i.isNextLink && i.rawNextLink) return i.rawNextLink.trim();
-  return `https://${ENV.host}${i.built.relativeUrl}`;
+  return httpUrl(i);
 }
 
 /** Absolute URL of one multi-request step. A placeholder URL (e.g.
  *  `<upload-url-from-Location-header>`) is kept as-is, not host-prefixed. */
 function multiUrl(r: MultiRequest): string {
-  return r.relativeUrl.startsWith('<') ? r.relativeUrl : `https://${ENV.host}${r.relativeUrl}`;
+  return r.relativeUrl.startsWith('<')
+    ? r.relativeUrl
+    : encodeSpaces(`https://${ENV.host}${r.relativeUrl}`);
 }
 
 /** URL path without the query string. */
@@ -1092,7 +1105,7 @@ function genXhr(i: CodegenInputs): string {
   var clientUrl = (typeof Xrm !== 'undefined' && Xrm.Utility && Xrm.Utility.getGlobalContext)
     ? Xrm.Utility.getGlobalContext().getClientUrl()
     : '${ENV.host ? 'https://' + ENV.host : ''}';
-  var url = clientUrl + '${jsEscape(i.built.relativeUrl || (i.rawNextLink ?? ''))}';
+  var url = clientUrl + '${jsEscape(encodeSpaces(i.built.relativeUrl) || (i.rawNextLink ?? ''))}';
 
   var req = new XMLHttpRequest();
   req.open('${i.method}', url, true);
@@ -1234,7 +1247,7 @@ function powerAutomateHttpSpec(i: CodegenInputs, reason: string): PowerAutomateA
     notes: ["Request headers (If-Match, Prefer, MSCRM.*) go in the action's Headers field."],
     httpFallback: {
       method: i.method,
-      uri: `https://${ENV.host}${i.built.relativeUrl}`,
+      uri: httpUrl(i),
       note: 'Generic HTTP action — use this when "Invoke an HTTP request" isn\'t available in your connector version.',
     },
   };
@@ -1418,7 +1431,7 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
       ],
       httpFallback: {
         method: 'GET',
-        uri: `https://${ENV.host}${i.built.relativeUrl}`,
+        uri: httpUrl(i),
         note: 'Generic HTTP action — use this when "Invoke an HTTP request" isn\'t available in your connector version.',
       },
     };
@@ -1610,7 +1623,7 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
     httpFallback: apply
       ? {
           method: i.method,
-          uri: `https://${ENV.host}${i.built.relativeUrl}`,
+          uri: httpUrl(i),
           note: 'Use this generic HTTP action because $apply / aggregation isn\'t exposed by the "List rows" action. Replace <access-token> with a valid bearer token.',
         }
       : undefined,
@@ -1683,7 +1696,7 @@ ${row('Relative URI', relativeToApi(i))}
 ${row('Body', i.body ? JSON.stringify(i.body) : '(none)')}
 
 # Request headers (If-Match, Prefer, MSCRM.*) go in the action's Headers field.
-# Generic HTTP action alternative: ${i.method} https://${ENV.host}${i.built.relativeUrl}
+# Generic HTTP action alternative: ${i.method} ${httpUrl(i)}
 `;
   }
 
@@ -1875,7 +1888,7 @@ ${apply_warning}
 # a token from your OAuth / Service Principal step.
 
   Method:   ${i.method}
-  URI:      https://${ENV.host}${i.built.relativeUrl}
+  URI:      ${httpUrl(i)}
   Headers:  { "Authorization": "Bearer <access-token>" }
 `;
 }

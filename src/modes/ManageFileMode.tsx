@@ -91,6 +91,7 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { invalidUrlPartReason } from '../primitives/urlParts';
 
 const initialState = (): ManageFileState => ({
   // Empty initial state — user picks table + record + file column from live
@@ -160,6 +161,11 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const firstStepMethod = pipeline[0]?.method ?? 'PATCH';
 
+  // Ids and names that go into the URL as-is (#221).
+  const urlPartProblem = invalidUrlPartReason(
+    [['Record id', state.recordId]],
+    [['File column', state.fileColumn]],
+  );
   const disabledReason = !tbl
     ? 'Pick a target table first.'
     : !state.recordId
@@ -174,7 +180,7 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
           ? 'Choose a file to upload.'
           : state.headers.some((h) => h.enabled && !h.name)
             ? 'Fix empty header name.'
-            : null;
+            : urlPartProblem;
 
   // Bound-record name capture for the WriteResultCard narrative.
   const [recordName, setRecordName] = useState<string>('');

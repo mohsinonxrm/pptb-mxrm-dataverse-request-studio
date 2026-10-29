@@ -56,7 +56,11 @@ import {
   buildDisassociateRequests,
   PATCH_EXISTING_HEADERS,
 } from './urlBuilder';
-import { buildExecuteActionBody, buildExecuteFunctionWirePath } from './executeBuilders';
+import {
+  buildExecuteActionBody,
+  buildExecuteFunctionWirePath,
+  invalidFunctionParamReason,
+} from './executeBuilders';
 import type {
   RetrieveMultipleState,
   RetrieveSingleState,
@@ -84,6 +88,7 @@ import type {
 // Action lookup goes through the live CSDL provider. PPTB-only.
 import { actions } from '../host/csdlProvider';
 import { isCredentialHeader } from './sensitiveHeaders';
+import { invalidUrlPartReason } from '../primitives/urlParts';
 
 // ── Public types ─────────────────────────────────────────────────────────
 
@@ -453,7 +458,22 @@ export async function executeRetrieveMultiple(s: RetrieveMultipleState): Promise
   return ok(200, res.value, res.ms);
 }
 
+/**
+ * A request whose ids or names would change the URL's shape isn't sent
+ * (#221). The modes block Execute for these already; this is the backstop
+ * for state that reached the executor some other way (an imported request).
+ */
+function refuseUrlParts(
+  ids: Parameters<typeof invalidUrlPartReason>[0],
+  names: Parameters<typeof invalidUrlPartReason>[1] = [],
+): ExecResult | null {
+  const reason = invalidUrlPartReason(ids, names);
+  return reason ? mapError({ statusCode: 400, message: `Not sent: ${reason}` }, 0) : null;
+}
+
 export async function executeRetrieveSingle(s: RetrieveSingleState): Promise<ExecResult> {
+  const refused = refuseUrlParts([['Record id', s.recordId]]);
+  if (refused) return refused;
   const built = buildRetrieveSingle(s);
   // RetrieveSingle returns a single object, not a {value:[…]} envelope. The
   // host's queryData wraps responses in `{ value: Record<string, unknown>[] }`
@@ -500,6 +520,14 @@ export async function executePredefined(s: PredefinedQueryState): Promise<ExecRe
   if (!s.queryId) {
     return mapError({ statusCode: 400, message: 'Pick a saved query first.' }, 0);
   }
+  const refused = refuseUrlParts(
+    [
+      ['Query id', s.queryId],
+      ['Source row id', s.related?.recordId],
+    ],
+    [['Relationship', s.related?.navProperty]],
+  );
+  if (refused) return refused;
   // Predefined queries: GET /<entitySet>?savedQuery=<id>  or  ?userQuery=<id>
   // We need the entity set name from the table. The metadata provider gives
   // us TableMeta synchronously when cached.
@@ -622,6 +650,8 @@ export async function executeUpdate(
   headers?: Record<string, string>,
 ): Promise<ExecResult> {
   if (!s.recordId) return mapError({ statusCode: 400, message: 'Pick a record to update.' }, 0);
+  const refused = refuseUrlParts([['Record id', s.recordId]]);
+  if (refused) return refused;
   // CRITICAL: PUT single-column (PUT /<entityset>(<id>)/<column> with body
   // `{ value: <scalar> }`) is a real Web API pattern but PPTB's
   // dataverseAPI.update is PATCH-only — there's no raw-request hook for the
@@ -686,6 +716,8 @@ export async function executeUpsert(
     return mapError({ statusCode: 400, message: 'Pick or enter a record GUID.' }, 0);
   }
   const recordId = s.key.recordId;
+  const refused = refuseUrlParts([['Record id', recordId]]);
+  if (refused) return refused;
   // CRITICAL: route the body through buildUpsertBody (== buildCreateBody)
   // so lookups become `<navProp>@odata.bind`, multi-select picklists become
   // comma-strings, and empty values are dropped. The previous version cast
@@ -703,6 +735,8 @@ export async function executeDelete(
   headers?: Record<string, string>,
 ): Promise<ExecResult> {
   if (!s.recordId) return mapError({ statusCode: 400, message: 'Pick a record to delete.' }, 0);
+  const refused = refuseUrlParts([['Record id', s.recordId]]);
+  if (refused) return refused;
   // CRITICAL: single-property delete (DELETE /<entityset>(<id>)/<column>) is
   // a real Web API pattern (per the docs) but PPTB's dataverseAPI surface
   // only exposes a whole-row `delete(entityLogicalName, id)`. There is no
@@ -734,6 +768,11 @@ export async function executeMerge(
   headers?: Record<string, string>,
 ): Promise<ExecResult> {
   // Per docs: POST /Merge with { Target, Subordinate, UpdateContent, PerformParentingChecks }
+  const refused = refuseUrlParts([
+    ['Master record id', s.targetId],
+    ['Subordinate record id', s.subordinateId],
+  ]);
+  if (refused) return refused;
   const body = buildMergeBody(s);
   const wire = sendable(headers);
   const res = await timed(
@@ -868,6 +907,11 @@ export async function executeAssociate(s: AssociateState): Promise<ExecResult> {
   if (!sourceId || !navProperty) {
     return mapError({ statusCode: 400, message: 'Pick a source record + navigation property.' }, 0);
   }
+  const refused = refuseUrlParts(
+    [['Source record id', sourceId], ...s.targets.map((id) => ['Target record id', id] as const)],
+    [['Navigation property', navProperty]],
+  );
+  if (refused) return refused;
   const reqs = buildAssociateRequests(s);
   if (reqs.length === 0)
     return mapError({ statusCode: 400, message: 'Pick at least one target.' }, 0);
@@ -919,6 +963,11 @@ export async function executeDisassociate(s: DisassociateState): Promise<ExecRes
   if (!sourceId || !navProperty) {
     return mapError({ statusCode: 400, message: 'Pick a source record + navigation property.' }, 0);
   }
+  const refused = refuseUrlParts(
+    [['Source record id', sourceId], ...s.targetIds.map((id) => ['Target record id', id] as const)],
+    [['Navigation property', navProperty]],
+  );
+  if (refused) return refused;
   const reqs = buildDisassociateRequests(s);
   if (reqs.length === 0)
     return mapError({ statusCode: 400, message: 'Pick at least one target.' }, 0);
@@ -978,6 +1027,8 @@ export async function executeAction(
         0,
       );
     }
+    const refused = refuseUrlParts([['Bound record id', s.boundRecordId]]);
+    if (refused) return refused;
     boundEntityId = s.boundRecordId;
   }
 
@@ -1012,6 +1063,12 @@ export async function executeFunction(s: ExecuteFunctionState): Promise<ExecResu
       0,
     );
   }
+  if (action.binding.kind === 'entity') {
+    const refused = refuseUrlParts([['Bound record id', s.boundRecordId]]);
+    if (refused) return refused;
+  }
+  const badParam = invalidFunctionParamReason(action.parameters, s.paramValues);
+  if (badParam) return mapError({ statusCode: 400, message: `Not sent: ${badParam}` }, 0);
   // Bound functions need the table's real entity set name for the URL; make
   // sure its metadata is in the registry the builder reads from.
   if (action.binding.kind !== 'unbound') {
@@ -1051,6 +1108,11 @@ export async function executeWorkflow(
   if (!s.workflowId || !s.entityId) {
     return mapError({ statusCode: 400, message: 'Pick a workflow and a record.' }, 0);
   }
+  const refused = refuseUrlParts([
+    ['Workflow id', s.workflowId],
+    ['Record id', s.entityId],
+  ]);
+  if (refused) return refused;
   // POST /workflows(<wf-id>)/Microsoft.Dynamics.CRM.ExecuteWorkflow
   // body: { EntityId: '<target-guid>' }
   const sent = sendable(headers);

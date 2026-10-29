@@ -14,6 +14,7 @@ import type { ColumnMeta, TableMeta } from '../../mock/metadata';
 import { resolveNavPath } from '../../mock/metadata';
 import { findOperator, type OperatorDef } from './operators';
 import { attrRef } from '../../engine/odataAttr';
+import { ISO_DATE_RE, invalidNameReason, isPropertyPath } from '../../primitives/urlParts';
 // `Pick<>` here keeps the literal type narrow but allows ColumnMeta arity to widen
 export type { ColumnMeta } from '../../mock/metadata';
 
@@ -392,40 +393,78 @@ export function strippedKindLabel(k: StrippedKind): string {
   }
 }
 
-function quoteLiteral(col: ColumnMeta | undefined, raw: string): string {
-  if (raw === '' || raw == null) return "''";
-  if (!col) return inferLiteral(raw);
+// ── Literal shapes (#221) ───────────────────────────────────
+// Typed literals go into `$filter` unquoted, so a value that doesn't have
+// its column's shape could end the literal and add to the expression
+// (`1 or name ne null`). Those values are quoted and escaped instead, and
+// `collectInvalidLiterals` flags them so Execute is blocked with a clear
+// message rather than a Dataverse 400.
+const INTEGER_RE = /^-?\d+$/;
+const NUMBER_RE = /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/;
+const INTEGER_LIST_RE = /^-?\d+(,-?\d+)*$/;
+const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+interface LiteralShape {
+  re: RegExp;
+  /** What the value should be, for the advisory: "a whole number". */
+  expected: string;
+}
+
+const WHOLE_NUMBER: LiteralShape = { re: INTEGER_RE, expected: 'a whole number' };
+const GUID_SHAPE: LiteralShape = { re: GUID_RE, expected: 'a GUID' };
+const DATE_SHAPE: LiteralShape = { re: ISO_DATE_RE, expected: 'an ISO 8601 date or date-time' };
+
+/** The shape an unquoted literal for this column must have; null when it's quoted (strings). */
+function literalShape(col: ColumnMeta): LiteralShape | null {
   switch (col.attributeType) {
-    case 'String':
-    case 'Memo':
-      return `'${escapeStringLiteral(raw)}'`;
     case 'DateTime':
       // ISO 8601 — no quotes for DateTimeOffset; DateOnly columns use a plain date literal.
-      return raw.includes('T') || /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw : `'${raw}'`;
-    case 'Boolean':
-      return raw === 'true' || raw === '1' ? 'true' : 'false';
+      return DATE_SHAPE;
     case 'Uniqueidentifier':
     case 'Lookup':
     case 'Customer':
     case 'Owner':
-      return raw; // GUID literal — no quotes per OData v4
+      return GUID_SHAPE; // GUID literal — no quotes per OData v4
     case 'BigInt':
     case 'Integer':
+    case 'Picklist':
+    case 'State':
+    case 'Status':
+      return WHOLE_NUMBER;
+    // EntityName (objecttypecode, …) is Edm.String in the Web API:
+    // `objecttypecode eq 'account'`. Quoted, like other strings.
     case 'Decimal':
     case 'Double':
     case 'Money':
-    case 'Picklist':
+      return { re: NUMBER_RE, expected: 'a number' };
     case 'MultiSelectPicklist':
-    case 'State':
-    case 'Status':
-    case 'EntityName':
-      return raw;
-    case 'File':
-    case 'Image':
-      return raw; // shouldn't reach here — File/Image are hidden in the column picker
+      return { re: INTEGER_LIST_RE, expected: 'whole numbers separated by commas' };
     default:
-      return `'${escapeStringLiteral(raw)}'`;
+      return null;
   }
+}
+
+/** `raw` unquoted when it has the shape, else as an escaped string literal. */
+const shapedLiteral = (shape: LiteralShape, raw: string): string =>
+  shape.re.test(raw.trim()) ? raw.trim() : `'${escapeStringLiteral(raw)}'`;
+
+/**
+ * A one-value Dataverse function's PropertyValue: dates go quoted
+ * (`On(PropertyValue='2024-01-31')`), like strings; other types unquoted
+ * when they have the column's shape.
+ */
+function dvFnValueShape(col: ColumnMeta): LiteralShape | null {
+  if (col.attributeType === 'DateTime') return null;
+  if (col.attributeType === 'Boolean') return { re: /^(true|false)$/, expected: 'true or false' };
+  return literalShape(col);
+}
+
+function quoteLiteral(col: ColumnMeta | undefined, raw: string): string {
+  if (raw === '' || raw == null) return "''";
+  if (!col) return inferLiteral(raw);
+  if (col.attributeType === 'Boolean') return raw === 'true' || raw === '1' ? 'true' : 'false';
+  const shape = literalShape(col);
+  return shape ? shapedLiteral(shape, raw) : `'${escapeStringLiteral(raw)}'`;
 }
 /**
  * Literal for a value whose column couldn't be resolved — typically a
@@ -576,7 +615,10 @@ export function functionToOData(fn: FilterFunctionNode, ctx: EncodeCtx): string 
   const op = findOperator(fn.op);
   if (!op) return '';
   const col = colLookup(fn.col, ctx.lambdaAlias, ctx.table);
-  const propName = propertyNameForFunction(fn, op, ctx);
+  const propName = escapeStringLiteral(propertyNameForFunction(fn, op, ctx));
+  // Whole-number parameters (LastXDays, fiscal period and year): unquoted
+  // only when they are one (#221).
+  const int = (v: string | undefined) => shapedLiteral(WHOLE_NUMBER, v || '0');
 
   let expr = '';
   switch (op.kind) {
@@ -585,22 +627,21 @@ export function functionToOData(fn: FilterFunctionNode, ctx: EncodeCtx): string 
       break;
     case 'dv-fn-1': {
       const v = fn.val ?? '';
-      const lit =
-        col &&
-        (col.attributeType === 'DateTime' ||
-          col.attributeType === 'String' ||
-          col.attributeType === 'Memo')
-          ? `'${escapeStringLiteral(v)}'`
-          : v;
+      const shape = col ? dvFnValueShape(col) : null;
+      const lit = !col
+        ? inferLiteral(v)
+        : shape
+          ? shapedLiteral(shape, v)
+          : `'${escapeStringLiteral(v)}'`;
       expr = `${op.odata}(PropertyName='${propName}',PropertyValue=${lit})`;
       break;
     }
     case 'dv-fn-1-int':
-      expr = `${op.odata}(PropertyName='${propName}',PropertyValue=${fn.val || '0'})`;
+      expr = `${op.odata}(PropertyName='${propName}',PropertyValue=${int(fn.val)})`;
       break;
     case 'dv-fn-2': {
       const [a, b] = fn.vals ?? ['', ''];
-      expr = `${op.odata}(PropertyName='${propName}',PropertyValue1=${a || '0'},PropertyValue2=${b || '0'})`;
+      expr = `${op.odata}(PropertyName='${propName}',PropertyValue1=${int(a)},PropertyValue2=${int(b)})`;
       break;
     }
     case 'dv-fn-array': {
@@ -614,7 +655,7 @@ export function functionToOData(fn: FilterFunctionNode, ctx: EncodeCtx): string 
       break;
     }
     case 'dv-fn-guid':
-      expr = `${op.odata}(PropertyName='${propName}',PropertyValue='${fn.val ?? ''}')`;
+      expr = `${op.odata}(PropertyName='${propName}',PropertyValue='${escapeStringLiteral(fn.val ?? '')}')`;
       break;
     default:
       return '';
@@ -706,6 +747,139 @@ export function groupToOData(
     return `not (${body})`;
   }
   return body;
+}
+
+/** A filter value that doesn't have its column's shape (#221). */
+export interface InvalidLiteral {
+  nodeId: string;
+  col: string;
+  value: string;
+  /** What it should be: "a whole number", "a GUID", … */
+  expected: string;
+}
+
+/**
+ * Every literal in the tree that doesn't have its column's shape: a number
+ * column compared with text, a GUID function given something else. The
+ * encoder quotes these so they can't change the expression; validateRequest
+ * blocks Execute on them, since Dataverse would reject them anyway. Columns
+ * whose metadata isn't loaded yet are skipped.
+ */
+export function collectInvalidLiterals(
+  group: FilterGroup,
+  table: TableMeta | undefined,
+  lambdaAlias?: string,
+  out: InvalidLiteral[] = [],
+): InvalidLiteral[] {
+  const check = (
+    node: FilterRule | FilterFunctionNode,
+    value: string | undefined,
+    shape: LiteralShape | null,
+  ) => {
+    if (shape && value && !shape.re.test(value.trim())) {
+      out.push({ nodeId: node.id, col: node.col, value, expected: shape.expected });
+    }
+  };
+  for (const node of group.rules) {
+    switch (node.type) {
+      case 'group':
+        collectInvalidLiterals(node, table, lambdaAlias, out);
+        break;
+      case 'lambda': {
+        // Same scoping as lambdaToOData.
+        const nav = table?.navigationProperties.find((n) => n.name === node.nav);
+        const inner = nav ? findTableByLogical(nav.targetEntity) : undefined;
+        collectInvalidLiterals(node.inner, inner ?? table, node.alias, out);
+        break;
+      }
+      case 'rule': {
+        if (findOperator(node.op)?.kind !== 'comparison' || node.valKind === 'column') break;
+        const col = colLookup(node.col, lambdaAlias, table);
+        if (col && col.attributeType !== 'Boolean') check(node, node.val, literalShape(col));
+        break;
+      }
+      case 'function': {
+        switch (findOperator(node.op)?.kind) {
+          case 'dv-fn-1': {
+            const col = colLookup(node.col, lambdaAlias, table);
+            if (col)
+              check(
+                node,
+                node.val,
+                col.attributeType === 'DateTime' ? DATE_SHAPE : dvFnValueShape(col),
+              );
+            break;
+          }
+          case 'dv-fn-1-int':
+            check(node, node.val, WHOLE_NUMBER);
+            break;
+          case 'dv-fn-2':
+            check(node, node.vals?.[0], WHOLE_NUMBER);
+            check(node, node.vals?.[1], WHOLE_NUMBER);
+            break;
+          case 'dv-fn-guid':
+            check(node, node.val, GUID_SHAPE);
+            break;
+        }
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Column, navigation and alias names in the tree that aren't names (#221).
+ * They're written into `$filter` as they are, so a "column" like
+ * `name eq 'a' or name` would add to the expression. Needs no metadata, so
+ * saved-request import uses it too.
+ */
+export function collectInvalidNames(group: FilterGroup, out: string[] = []): string[] {
+  const path = (label: string, v: string | undefined) => {
+    if (v && !isPropertyPath(v)) out.push(`${label} ${JSON.stringify(v)} isn't a valid name.`);
+  };
+  for (const node of group.rules) {
+    switch (node.type) {
+      case 'group':
+        collectInvalidNames(node, out);
+        break;
+      case 'lambda': {
+        const r = invalidNameReason([
+          ['Filter navigation property', node.nav],
+          ['Filter alias', node.alias],
+        ]);
+        if (r) out.push(r);
+        collectInvalidNames(node.inner, out);
+        break;
+      }
+      case 'rule':
+        path('Filter column', node.col);
+        if (node.valKind === 'column') path('Filter column', node.val);
+        break;
+      case 'function':
+        path('Filter column', node.col);
+        break;
+    }
+  }
+  return out;
+}
+
+/** The parts of an `$expand` item that hold names (ExpandSpec, structurally). */
+interface ExpandNames {
+  nav: string;
+  filter?: FilterGroup;
+  nestedExpand?: ExpandNames[];
+}
+
+/** Name problems in `$expand`: navigation properties and inner filters, at every level (#221). */
+export function expandNameProblems(items: readonly ExpandNames[], out: string[] = []): string[] {
+  for (const it of items) {
+    const r = invalidNameReason([['Expanded navigation property', it.nav]]);
+    if (r) out.push(r);
+    if (it.filter) collectInvalidNames(it.filter, out);
+    if (it.nestedExpand) expandNameProblems(it.nestedExpand, out);
+  }
+  return out;
 }
 
 // Pulled in lazily to avoid circular deps at module-init time.

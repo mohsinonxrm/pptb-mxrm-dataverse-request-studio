@@ -75,6 +75,7 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { invalidUrlPartReason } from '../primitives/urlParts';
 
 // Empty initial state — same pattern as MergeMode/AssociateMode. User picks
 // the table → source record → nav property → targets (if collection-valued).
@@ -230,6 +231,14 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
     if (dirtyId) markDirty(dirtyId);
   };
 
+  // Ids and names that go into the URL as-is (#221).
+  const urlPartProblem = invalidUrlPartReason(
+    [
+      ['Source record id', state.sourceId],
+      ...state.targetIds.map((id) => ['Target record id', id] as const),
+    ],
+    [['Navigation property', state.navProperty]],
+  );
   const disabledReason = !tbl
     ? 'Pick a source table first.'
     : !state.sourceId
@@ -242,7 +251,7 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
             ? "Source's lookup is already empty — nothing to disassociate."
             : state.headers.some((h) => h.enabled && !h.name)
               ? 'Fix empty header name.'
-              : null;
+              : urlPartProblem;
 
   const onExecute = async () => {
     setLoading(true);

@@ -55,6 +55,7 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { invalidUrlPartReason } from '../primitives/urlParts';
 
 export type ActionCategory = 'oob' | 'custom-api' | 'custom-action';
 
@@ -227,6 +228,10 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
       );
     });
 
+  // Ids and names that go into the URL as-is (#221).
+  const urlPartProblem = invalidUrlPartReason(
+    requiresBoundRecord ? [['Bound record id', state.boundRecordId]] : [],
+  );
   const disabledReason = !action
     ? 'Pick an action.'
     : requiresBoundRecord && !state.boundRecordId
@@ -240,7 +245,7 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
               .join(', ')}${missingRequired.length > 3 ? '…' : ''}`
           : state.headers.some((h) => h.enabled && !h.name)
             ? 'Fix empty header name.'
-            : null;
+            : urlPartProblem;
 
   const onExecute = async () => {
     setLoading(true);

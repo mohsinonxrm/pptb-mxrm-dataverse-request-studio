@@ -65,6 +65,8 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { invalidUrlPartReason } from '../primitives/urlParts';
+import { invalidFunctionParamReason } from '../engine/executeBuilders';
 
 // Empty initial state — no pre-seeded function. User picks from the live
 // CSDL once it loads.
@@ -149,6 +151,10 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
       );
     });
 
+  // Ids, names and parameter values that go into the URL (#221).
+  const urlPartProblem =
+    invalidUrlPartReason(requiresBoundRecord ? [['Bound record id', state.boundRecordId]] : []) ??
+    invalidFunctionParamReason(fn?.parameters ?? [], state.paramValues);
   const disabledReason = !fn
     ? 'Pick a function.'
     : requiresBoundRecord && !state.boundRecordId
@@ -159,7 +165,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
           ? `${missingRequired.length} required param${missingRequired.length === 1 ? '' : 's'} unset.`
           : state.headers.some((h) => h.enabled && !h.name)
             ? 'Fix empty header name.'
-            : null;
+            : urlPartProblem;
 
   const onExecute = async () => {
     setLoading(true);
