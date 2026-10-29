@@ -41,13 +41,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   quoted and escaped, and Execute is blocked with a message naming the value,
   instead of a Dataverse 400. The DateTime fallback now escapes quotes. The
   same applies to the Dataverse query functions (`LastXDays`, `Under`, …),
-  `$expand` inner filters and Bulk Delete Job.
+  `$expand` inner filters and Bulk Delete Job. Filter column, lambda and
+  `$expand` names must be names too. EntityName columns (`objecttypecode`)
+  are now compared as strings, as the Web API expects.
+- **Execute Function parameters are typed the same way** ([#221]). GUID and
+  date values go into the URL unquoted only when they are one, and record
+  references are escaped.
 - **Imported saved requests are checked deeply** ([#221]). Entries whose
-  ids or names would change the URL are skipped, and the import status says
-  which and why.
+  ids, names or query trees would change the URL are skipped, and the import
+  status says which and why. Copying or moving from another connection's
+  library applies the same check.
 - **Exported URLs encode spaces** ([#221]). Postman, Insomnia and Bruno
-  collections, cURL / fetch / C# / PowerShell code and the HTTP-action URIs
-  write `%20`. The URL bar still shows spaces.
+  collections, cURL / fetch / XHR / C# / PowerShell code and the HTTP-action
+  URIs write `%20`. The URL bar still shows spaces.
 
 [#221]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/221
 [#241]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/241

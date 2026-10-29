@@ -5,6 +5,7 @@ import { __registerLiveTables, findTable, type TableMeta } from '../../mock/meta
 import {
   _setTableLookup,
   collectInvalidLiterals,
+  collectInvalidNames,
   groupToOData,
   type FilterGroup,
   type FilterNode,
@@ -32,6 +33,7 @@ const account: TableMeta = {
       format: 'DateAndTime',
       dateTimeBehavior: 'UserLocal',
     },
+    { logicalName: 'objecttypecode', displayName: 'Type', attributeType: 'EntityName' },
     {
       logicalName: 'parentaccountid',
       displayName: 'Parent',
@@ -39,7 +41,13 @@ const account: TableMeta = {
       targets: ['account'],
     },
   ] as TableMeta['columns'],
-  navigationProperties: [],
+  navigationProperties: [
+    {
+      name: 'contact_customer_accounts',
+      cardinality: 'OneToMany',
+      targetEntity: 'account',
+    },
+  ] as TableMeta['navigationProperties'],
 };
 
 beforeAll(() => {
@@ -152,5 +160,64 @@ describe('collectInvalidLiterals', () => {
     expect(filterToQueryExpression(account, tree(rule('numberofemployees', 'x'))).problems).toEqual(
       ['"numberofemployees" needs a whole number, not "x".'],
     );
+  });
+});
+
+describe('review follow-ups', () => {
+  it('EntityName is a string: quoted, and not flagged', () => {
+    const t = tree(rule('objecttypecode', 'account'));
+    expect(groupToOData(t, account)).toBe("objecttypecode eq 'account'");
+    expect(collectInvalidLiterals(t, account)).toEqual([]);
+  });
+
+  it('names: a column, a column-to-column right-hand side and a lambda nav must be names', () => {
+    const t = tree(
+      rule("name eq 'a' or name", 'x'),
+      {
+        id: 'c',
+        type: 'rule',
+        col: 'name',
+        op: 'eq',
+        valKind: 'column',
+        val: 'name or createdon ne null',
+      },
+      {
+        id: 'l',
+        type: 'lambda',
+        nav: 'contact_customer_accounts/any(x:true) or x',
+        lambda: 'any',
+        alias: 'c',
+        inner: tree(),
+      },
+      rule('parentaccountid/name', 'fine'),
+    );
+    expect(collectInvalidNames(t)).toEqual([
+      `Filter column "name eq 'a' or name" isn't a valid name.`,
+      `Filter column "name or createdon ne null" isn't a valid name.`,
+      `Filter navigation property "contact_customer_accounts/any(x:true) or…" isn't a valid name (letters, digits and underscores).`,
+    ]);
+    const blockers = validateRequest({ table: 'account', filter: t }).filter(
+      (a) => a.severity === 'error' && a.id.startsWith('query-name-'),
+    );
+    expect(blockers).toHaveLength(3);
+  });
+
+  it("checks $expand's navigation property and the literals and names of its inner filter", () => {
+    const advisories = validateRequest({
+      table: 'account',
+      expand: [
+        {
+          id: 'e',
+          nav: 'contact_customer_accounts',
+          select: [],
+          orderby: [],
+          filter: tree(rule('numberofemployees', 'lots')),
+          nestedExpand: [{ id: 'n', nav: 'bad nav', select: [], orderby: [] }],
+        },
+      ],
+    });
+    const titles = advisories.filter((a) => a.severity === 'error').map((a) => a.title);
+    expect(titles).toContain('`numberofemployees` needs a whole number, not "lots".');
+    expect(titles.some((t) => /Expanded navigation property "bad nav"/.test(String(t)))).toBe(true);
   });
 });

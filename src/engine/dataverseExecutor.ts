@@ -56,7 +56,11 @@ import {
   buildDisassociateRequests,
   PATCH_EXISTING_HEADERS,
 } from './urlBuilder';
-import { buildExecuteActionBody, buildExecuteFunctionWirePath } from './executeBuilders';
+import {
+  buildExecuteActionBody,
+  buildExecuteFunctionWirePath,
+  invalidFunctionParamReason,
+} from './executeBuilders';
 import type {
   RetrieveMultipleState,
   RetrieveSingleState,
@@ -1063,6 +1067,8 @@ export async function executeFunction(s: ExecuteFunctionState): Promise<ExecResu
     const refused = refuseUrlParts([['Bound record id', s.boundRecordId]]);
     if (refused) return refused;
   }
+  const badParam = invalidFunctionParamReason(action.parameters, s.paramValues);
+  if (badParam) return mapError({ statusCode: 400, message: `Not sent: ${badParam}` }, 0);
   // Bound functions need the table's real entity set name for the URL; make
   // sure its metadata is in the registry the builder reads from.
   if (action.binding.kind !== 'unbound') {

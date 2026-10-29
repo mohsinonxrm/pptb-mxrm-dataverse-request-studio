@@ -66,6 +66,7 @@ import {
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { invalidUrlPartReason } from '../primitives/urlParts';
+import { invalidFunctionParamReason } from '../engine/executeBuilders';
 
 // Empty initial state — no pre-seeded function. User picks from the live
 // CSDL once it loads.
@@ -150,10 +151,10 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
       );
     });
 
-  // Ids and names that go into the URL as-is (#221).
-  const urlPartProblem = invalidUrlPartReason(
-    requiresBoundRecord ? [['Bound record id', state.boundRecordId]] : [],
-  );
+  // Ids, names and parameter values that go into the URL (#221).
+  const urlPartProblem =
+    invalidUrlPartReason(requiresBoundRecord ? [['Bound record id', state.boundRecordId]] : []) ??
+    invalidFunctionParamReason(fn?.parameters ?? [], state.paramValues);
   const disabledReason = !fn
     ? 'Pick a function.'
     : requiresBoundRecord && !state.boundRecordId

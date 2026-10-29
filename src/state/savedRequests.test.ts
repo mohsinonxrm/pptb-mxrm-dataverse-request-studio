@@ -173,3 +173,43 @@ describe('import checks ids and names (#221)', () => {
     expect(r.problems).toEqual([]);
   });
 });
+
+describe('import checks query names (#221 review)', () => {
+  it('skips a Retrieve Multiple whose filter column, $select or $expand is not a name', () => {
+    const rule = (col: string) => ({
+      id: 'r',
+      type: 'rule',
+      col,
+      op: 'eq',
+      val: 'x',
+    });
+    const group = (col: string) => ({
+      id: 'g',
+      type: 'group',
+      combinator: 'and',
+      rules: [rule(col)],
+    });
+    const base = {
+      table: 'account',
+      select: ['name'],
+      orderby: [],
+      expand: [],
+      filter: group('name'),
+    };
+    const file = buildSavedExport(
+      [
+        entry('ok', 'retrieve-multiple', { state: base }),
+        entry('col', 'retrieve-multiple', {
+          state: { ...base, filter: group("name eq 'a' or name") },
+        }),
+        entry('sel', 'retrieve-multiple', { state: { ...base, select: ['name,revenue'] } }),
+        entry('exp', 'retrieve-multiple', { state: { ...base, expand: [{ nav: 'x?$top=1' }] } }),
+        entry('bad', 'retrieve-multiple', { state: { ...base, filter: { rules: [null] } } }),
+      ],
+      'org.example',
+    );
+    const r = parseSavedImport(file);
+    expect(r.entries.map((e) => e.id)).toEqual(['ok']);
+    expect(r.problems.map((p) => p.split(':')[0])).toEqual(['"col"', '"sel"', '"exp"', '"bad"']);
+  });
+});

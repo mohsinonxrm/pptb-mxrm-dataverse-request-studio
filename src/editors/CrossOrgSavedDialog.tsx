@@ -35,6 +35,7 @@ import { Dismiss20Regular, Globe20Regular } from '@fluentui/react-icons';
 import {
   MAX_SAVED,
   getOrgScope,
+  importedEntryProblem,
   listOtherOrgLibraries,
   removeFromOrgLibrary,
   tableNameFromState,
@@ -136,8 +137,21 @@ export function CrossOrgSavedDialog({ open, onOpenChange }: CrossOrgSavedDialogP
 
   const bringHere = (move: boolean) => {
     if (!library) return;
-    const chosen = entries.filter((e) => picked.has(e.id));
-    if (!chosen.length) return;
+    // Entries whose ids or names would change the URL stay where they are,
+    // as on import (#221).
+    const blocked: string[] = [];
+    const chosen = entries.filter((e) => {
+      if (!picked.has(e.id)) return false;
+      const problem = importedEntryProblem(e);
+      if (problem) blocked.push(`"${e.name}": ${problem}`);
+      return !problem;
+    });
+    if (!chosen.length) {
+      if (blocked.length) {
+        setStatus({ intent: 'error', title: "Couldn't copy", text: blocked.join(' ') });
+      }
+      return;
+    }
     const here = new Set(saved.map((e) => e.id));
     const newCount = chosen.filter((e) => !here.has(e.id)).length;
     if (saved.length + newCount > MAX_SAVED) {
@@ -169,7 +183,8 @@ export function CrossOrgSavedDialog({ open, onOpenChange }: CrossOrgSavedDialogP
     }
     const notes = [`${r.added} added, ${r.updated} updated, ${r.unchanged} already up to date.`];
     if (renamed) notes.push(`${renamed} renamed with a (n) suffix because the name was in use.`);
-    let intent: Status['intent'] = renamed ? 'warning' : 'success';
+    if (blocked.length) notes.push(`Not ${move ? 'moved' : 'copied'}: ${blocked.join(' ')}`);
+    let intent: Status['intent'] = renamed || blocked.length ? 'warning' : 'success';
     if (move) {
       try {
         removeFromOrgLibrary(library.scope, new Set(chosen.map((e) => e.id)));

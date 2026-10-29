@@ -36,6 +36,7 @@ import { ENV } from '../mock/environment';
 import type { HeaderItem } from '../editors/HeadersEditor';
 import {
   collectInvalidLiterals,
+  collectInvalidNames,
   groupToOData,
   stripLeadingWildcards,
   type FilterGroup,
@@ -308,6 +309,8 @@ export function filterToQueryExpression(tbl: TableMeta, root: FilterGroup): Quer
   for (const l of collectInvalidLiterals(root, tbl)) {
     problems.push(`"${l.col}" needs ${l.expected}, not ${JSON.stringify(l.value)}.`);
   }
+  // Column names that aren't names: the count query writes them as they are.
+  problems.push(...collectInvalidNames(root));
   return {
     query: problems.length ? null : { EntityName: tbl.logicalName, Criteria },
     problems,

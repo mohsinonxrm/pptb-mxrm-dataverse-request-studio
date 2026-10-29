@@ -10,10 +10,22 @@
 import { isRecordGuid } from './guid';
 
 const IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const PROPERTY_PATH_RE = /^[A-Za-z_][A-Za-z0-9_]*(\/[A-Za-z_][A-Za-z0-9_]*)*$/;
+
+/** An ISO 8601 date or date-time, as OData writes it unquoted. */
+export const ISO_DATE_RE =
+  /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})?)?$/;
 
 /** True when `s` is an OData simple identifier (a navigation property, column or table name). */
 export const isODataIdentifier = (s: string | null | undefined): boolean =>
   !!s && IDENTIFIER_RE.test(s);
+
+/**
+ * True when `s` is a property path: identifiers joined by `/` (a column, a
+ * lambda alias + column, a lookup's nav + related column).
+ */
+export const isPropertyPath = (s: string | null | undefined): boolean =>
+  !!s && PROPERTY_PATH_RE.test(s);
 
 const shown = (v: string) => JSON.stringify(v.length > 40 ? `${v.slice(0, 40)}…` : v);
 

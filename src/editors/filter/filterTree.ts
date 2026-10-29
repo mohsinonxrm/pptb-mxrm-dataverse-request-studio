@@ -14,6 +14,7 @@ import type { ColumnMeta, TableMeta } from '../../mock/metadata';
 import { resolveNavPath } from '../../mock/metadata';
 import { findOperator, type OperatorDef } from './operators';
 import { attrRef } from '../../engine/odataAttr';
+import { ISO_DATE_RE, invalidNameReason, isPropertyPath } from '../../primitives/urlParts';
 // `Pick<>` here keeps the literal type narrow but allows ColumnMeta arity to widen
 export type { ColumnMeta } from '../../mock/metadata';
 
@@ -402,7 +403,6 @@ const INTEGER_RE = /^-?\d+$/;
 const NUMBER_RE = /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/;
 const INTEGER_LIST_RE = /^-?\d+(,-?\d+)*$/;
 const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})?)?$/;
 
 interface LiteralShape {
   re: RegExp;
@@ -430,8 +430,9 @@ function literalShape(col: ColumnMeta): LiteralShape | null {
     case 'Picklist':
     case 'State':
     case 'Status':
-    case 'EntityName':
       return WHOLE_NUMBER;
+    // EntityName (objecttypecode, …) is Edm.String in the Web API:
+    // `objecttypecode eq 'account'`. Quoted, like other strings.
     case 'Decimal':
     case 'Double':
     case 'Money':
@@ -823,6 +824,60 @@ export function collectInvalidLiterals(
         break;
       }
     }
+  }
+  return out;
+}
+
+/**
+ * Column, navigation and alias names in the tree that aren't names (#221).
+ * They're written into `$filter` as they are, so a "column" like
+ * `name eq 'a' or name` would add to the expression. Needs no metadata, so
+ * saved-request import uses it too.
+ */
+export function collectInvalidNames(group: FilterGroup, out: string[] = []): string[] {
+  const path = (label: string, v: string | undefined) => {
+    if (v && !isPropertyPath(v)) out.push(`${label} ${JSON.stringify(v)} isn't a valid name.`);
+  };
+  for (const node of group.rules) {
+    switch (node.type) {
+      case 'group':
+        collectInvalidNames(node, out);
+        break;
+      case 'lambda': {
+        const r = invalidNameReason([
+          ['Filter navigation property', node.nav],
+          ['Filter alias', node.alias],
+        ]);
+        if (r) out.push(r);
+        collectInvalidNames(node.inner, out);
+        break;
+      }
+      case 'rule':
+        path('Filter column', node.col);
+        if (node.valKind === 'column') path('Filter column', node.val);
+        break;
+      case 'function':
+        path('Filter column', node.col);
+        break;
+    }
+  }
+  return out;
+}
+
+/** The parts of an `$expand` item that hold names (ExpandSpec, structurally). */
+interface ExpandNames {
+  nav: string;
+  filter?: FilterGroup;
+  nestedExpand?: ExpandNames[];
+}
+
+/** Name problems in `$expand`: navigation properties and inner filters, at every level (#221). */
+export function expandNameProblems(items: readonly ExpandNames[], out: string[] = []): string[] {
+  for (const it of items) {
+    const r = invalidNameReason([['Expanded navigation property', it.nav]]);
+    if (r) out.push(r);
+    if (it.filter) collectInvalidNames(it.filter, out);
+    if (it.nestedExpand) expandNameProblems(it.nestedExpand, out);
   }
   return out;
 }

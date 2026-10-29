@@ -1105,7 +1105,7 @@ function genXhr(i: CodegenInputs): string {
   var clientUrl = (typeof Xrm !== 'undefined' && Xrm.Utility && Xrm.Utility.getGlobalContext)
     ? Xrm.Utility.getGlobalContext().getClientUrl()
     : '${ENV.host ? 'https://' + ENV.host : ''}';
-  var url = clientUrl + '${jsEscape(i.built.relativeUrl || (i.rawNextLink ?? ''))}';
+  var url = clientUrl + '${jsEscape(encodeSpaces(i.built.relativeUrl) || (i.rawNextLink ?? ''))}';
 
   var req = new XMLHttpRequest();
   req.open('${i.method}', url, true);

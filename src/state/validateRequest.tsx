@@ -33,7 +33,12 @@
 import type { TableMeta } from '../mock/metadata';
 import { findTable } from '../mock/metadata';
 import type { FilterGroup, FilterNode, InvalidLiteral } from '../editors/filter/filterTree';
-import { collectInvalidLiterals, countRules } from '../editors/filter/filterTree';
+import {
+  collectInvalidLiterals,
+  collectInvalidNames,
+  countRules,
+  expandNameProblems,
+} from '../editors/filter/filterTree';
 import { findOperator } from '../editors/filter/operators';
 import type { ExpandSpec } from '../editors/ExpandEditor';
 import type { OrderbySpec } from '../editors/OrderbyEditor';
@@ -110,6 +115,24 @@ export function validateRequest(input: ValidateRequestInput): Advisory[] {
       ),
     );
   }
+  // Names written into the query as they are: filter columns, lambda navs
+  // and aliases, $expand navigation properties. The pickers only offer real
+  // names; a pasted URL or an imported request might not.
+  const names = [
+    ...(activeFilter ? collectInvalidNames(activeFilter) : []),
+    ...expandNameProblems(input.expand ?? []),
+  ];
+  names.forEach((n, i) =>
+    out.push(
+      adv.err(
+        `query-name-${i}`,
+        'validation',
+        n,
+        'Only column and relationship names can go here: letters, digits and underscores, with `/` between the steps of a path.',
+        'filter',
+      ),
+    ),
+  );
 
   // ── Expand validation ────────────────────────────────────────
   if (input.expand && input.expand.length > 0) {

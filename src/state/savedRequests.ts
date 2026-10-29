@@ -50,6 +50,11 @@ import { getEnv } from '../mock/environment';
 import { stripCredentialRows } from '../engine/sensitiveHeaders';
 import { invalidUrlPartReason } from '../primitives/urlParts';
 import {
+  collectInvalidNames,
+  expandNameProblems,
+  type FilterGroup,
+} from '../editors/filter/filterTree';
+import {
   autoSuggestBatch,
   autoSuggestExecuteMultiple,
   type SerializedBatchState,
@@ -707,16 +712,48 @@ export function buildSavedExport(entries: SavedRequest[], orgScope: string): str
 
 type UrlPart = readonly [label: string, value: unknown];
 
+/** What an entry puts into a URL: ids, names, and problems found in its query trees. */
+interface EntryUrlParts {
+  ids: UrlPart[];
+  names: UrlPart[];
+  /** From the filter / $expand trees (column, nav and alias names). */
+  problems?: () => string[];
+}
+
+const isGroup = (v: unknown): v is FilterGroup =>
+  !!v && typeof v === 'object' && Array.isArray((v as FilterGroup).rules);
+const filterNames = (v: unknown) => (isGroup(v) ? collectInvalidNames(v) : []);
+const expandNames = (v: unknown) =>
+  Array.isArray(v) ? expandNameProblems(v as Parameters<typeof expandNameProblems>[0]) : [];
+
 /**
- * The values each mode puts into a URL as-is, as [label, value]: record ids
- * (GUIDs) and names (tables, navigation properties, columns). Batch and
+ * The values each mode puts into a URL as-is: record ids (GUIDs), names
+ * (tables, navigation properties, columns) and its query trees. Batch and
  * ExecuteMultiple aren't listed: their items also hold alternate keys and
  * `$n` references, and their builder checks those per item.
  */
 const IMPORT_URL_PARTS: Partial<
-  Record<SavedModeId, (s: Record<string, unknown>) => { ids: UrlPart[]; names: UrlPart[] }>
+  Record<SavedModeId, (s: Record<string, unknown>) => EntryUrlParts>
 > = {
-  'retrieve-single': (s) => ({ ids: [['Record id', s.recordId]], names: [] }),
+  'retrieve-multiple': (s) => ({
+    ids: [],
+    names: [
+      ...listOf(s.select, 'Selected column'),
+      ...(Array.isArray(s.orderby)
+        ? s.orderby.map((o) => ['Sort column', (o as { col?: unknown })?.col] as const)
+        : []),
+    ],
+    problems: () => [
+      ...filterNames(s.filter),
+      ...filterNames((s.apply as { prefilter?: unknown } | undefined)?.prefilter),
+      ...expandNames(s.expand),
+    ],
+  }),
+  'retrieve-single': (s) => ({
+    ids: [['Record id', s.recordId]],
+    names: listOf(s.select, 'Selected column'),
+    problems: () => expandNames(s.expand),
+  }),
   'predefined-query': (s) => {
     const r = (s.related ?? {}) as Record<string, unknown>;
     return {
@@ -730,8 +767,12 @@ const IMPORT_URL_PARTS: Partial<
       ],
     };
   },
-  delete: (s) => ({ ids: [['Record id', s.recordId]], names: [] }),
-  update: (s) => ({ ids: [['Record id', s.recordId]], names: [] }),
+  'bulk-delete': (s) => ({ ids: [], names: [], problems: () => filterNames(s.filter) }),
+  delete: (s) => ({
+    ids: [['Record id', s.recordId]],
+    names: [['Column', (s.scope as { column?: unknown } | undefined)?.column]],
+  }),
+  update: (s) => ({ ids: [['Record id', s.recordId]], names: [['Column', s.putColumn]] }),
   upsert: (s) => {
     const k = (s.key ?? {}) as Record<string, unknown>;
     return { ids: k.kind === 'guid' ? [['Record id', k.recordId]] : [], names: [] };
@@ -772,8 +813,9 @@ const IMPORT_URL_PARTS: Partial<
     ids: [
       ['Record id', s.recordId],
       ['Parent activity id', s.parentActivityId],
+      ['Parent record id', s.parentEntityId],
     ],
-    names: [],
+    names: [['Parent table', s.parentEntityLogical]],
   }),
 };
 
@@ -783,10 +825,11 @@ function listOf(v: unknown, label: string): UrlPart[] {
 }
 
 /**
- * Why an imported entry can't be loaded safely, or null (#221). Its ids must
- * be GUIDs and its names plain identifiers: an imported file is untrusted, and
- * a value like `x)/other_nav?$filter=…` would send a different request from
- * the one its name describes. Empty values are fine (the mode asks for them).
+ * Why an entry from outside this library (an import file, another
+ * connection's library) can't be loaded safely, or null (#221). Its ids must
+ * be GUIDs and its names plain names: such a file is untrusted, and a value
+ * like `x)/other_nav?$filter=…` would send a different request from the one
+ * its name describes. Empty values are fine (the mode asks for them).
  */
 export function importedEntryProblem(e: SavedRequest): string | null {
   const s = e.state as Record<string, unknown>;
@@ -796,7 +839,14 @@ export function importedEntryProblem(e: SavedRequest): string | null {
     if (value != null && typeof value !== 'string') return `${label} isn't text.`;
   }
   const text = (ps: UrlPart[]) => ps as ReadonlyArray<readonly [string, string | null | undefined]>;
-  return invalidUrlPartReason(text(parts.ids), text(names));
+  const reason = invalidUrlPartReason(text(parts.ids), text(names));
+  if (reason) return reason;
+  try {
+    return parts.problems?.()[0] ?? null;
+  } catch {
+    // A tree that isn't one (nodes that aren't objects, …).
+    return "Its query can't be read.";
+  }
 }
 
 /**
