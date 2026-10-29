@@ -200,7 +200,11 @@ export function SelectEditor({
   const onGridSelectionChange = useCallback(
     (_evt: unknown, data: { selectedItems: Set<string | number> }) => {
       const incoming = data.selectedItems;
-      const survivors = selectedIds.filter((id) => incoming.has(id));
+      // The grid only knows the rows it shows. A selected column it doesn't
+      // show (outside "Advanced Find only", #44, or the search) stays
+      // selected; "Deselect all" would drop it otherwise.
+      const shown = new Set(gridItems.map((g) => g.logicalName));
+      const survivors = selectedIds.filter((id) => incoming.has(id) || !shown.has(id));
       const current = new Set(selectedIds);
       const additions: string[] = [];
       for (const id of incoming) {
@@ -209,7 +213,7 @@ export function SelectEditor({
       }
       setSelectedIds([...survivors, ...additions]);
     },
-    [selectedIds, setSelectedIds],
+    [selectedIds, setSelectedIds, gridItems],
   );
 
   // Memoized so a search keystroke (or the deferred re-filter) does not

@@ -158,3 +158,72 @@ describe('relationship pickers', () => {
     expect(relatedCollectionOptions(t, false)).toHaveLength(1);
   });
 });
+
+describe('review follow-ups', () => {
+  type C = {
+    logicalName: string;
+    attributeType: string;
+    isValidForRead?: boolean;
+    isValidForAdvancedFind?: boolean;
+  };
+  const cols: C[] = [
+    { logicalName: 'secret', attributeType: 'String', isValidForRead: false },
+    { logicalName: 'photo', attributeType: 'Image' },
+    { logicalName: 'hidden', attributeType: 'String', isValidForAdvancedFind: false },
+    { logicalName: 'name', attributeType: 'String' },
+  ];
+
+  it('a new clause starts on a readable column the picker offers', async () => {
+    const { firstOfferedColumn } = await import('./metadataScope');
+    expect(firstOfferedColumn(cols, false)?.logicalName).toBe('hidden');
+    expect(firstOfferedColumn(cols, true)?.logicalName).toBe('name');
+    expect(firstOfferedColumn(cols, false, (c) => c.logicalName !== 'hidden')?.logicalName).toBe(
+      'name',
+    );
+  });
+
+  it("a column Advanced Find hides isn't required on the form", async () => {
+    const { isRequiredColumn, mustSupplyOnCreate } = await import('../engine/fieldBody');
+    const req = {
+      logicalName: 'owneridtype',
+      displayName: 'Owner type',
+      attributeType: 'EntityName',
+      required: true,
+      requiredLevel: 'ApplicationRequired',
+    } as never;
+    expect(isRequiredColumn(req)).toBe(true);
+    expect(mustSupplyOnCreate(req)).toBe(true);
+    const hiddenReq = { ...(req as object), isValidForAdvancedFind: false } as never;
+    expect(isRequiredColumn(hiddenReq)).toBe(false);
+    expect(mustSupplyOnCreate(hiddenReq)).toBe(false);
+  });
+
+  it('a new Dataverse function starts on an offered, readable column', async () => {
+    const { defaultFunction } = await import('../editors/filter/filterTree');
+    const table = {
+      logicalName: 't',
+      entitySetName: 'ts',
+      displayName: 'T',
+      primaryKey: 'tid',
+      primaryName: 'name',
+      columns: [
+        {
+          logicalName: 'unread',
+          displayName: 'U',
+          attributeType: 'DateTime',
+          isValidForRead: false,
+        },
+        {
+          logicalName: 'afhidden',
+          displayName: 'H',
+          attributeType: 'DateTime',
+          isValidForAdvancedFind: false,
+        },
+        { logicalName: 'createdon', displayName: 'Created', attributeType: 'DateTime' },
+      ],
+      navigationProperties: [],
+    } as unknown as TableMeta;
+    expect(defaultFunction(table, 'LastXDays').col).toBe('afhidden');
+    expect(defaultFunction(table, 'LastXDays', true).col).toBe('createdon');
+  });
+});

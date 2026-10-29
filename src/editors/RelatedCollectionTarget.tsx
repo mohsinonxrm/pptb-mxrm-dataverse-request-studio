@@ -119,7 +119,9 @@ export function RelatedCollectionTarget({
         validationMessage={
           options.length
             ? undefined
-            : `${table.displayName} has no lookups or many-to-many relationships.`
+            : advancedFindOnly && relatedCollectionOptions(table).length > 0
+              ? `None of ${table.displayName}'s lookups or many-to-many relationships are shown in Advanced Find. Turn off "Advanced Find only" in Settings to see them.`
+              : `${table.displayName} has no lookups or many-to-many relationships.`
         }
       >
         <Dropdown

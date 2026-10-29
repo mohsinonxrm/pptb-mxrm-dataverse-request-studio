@@ -45,6 +45,27 @@ export const scopedColumns = <C extends Scoped & { attributeType?: string }>(
 export const scopedNavs = <N extends Scoped>(navs: readonly N[], advancedFindOnly: boolean): N[] =>
   navs.filter((n) => isNavInScope(n, advancedFindOnly));
 
+/**
+ * The column a new clause (sort, filter rule, function, …) starts on: the
+ * first one the read pickers offer, readable and not Image / File.
+ */
+export function firstOfferedColumn<
+  C extends Scoped & { logicalName: string; attributeType?: string; isValidForRead?: boolean },
+>(
+  columns: readonly C[],
+  advancedFindOnly: boolean,
+  accept: (c: C) => boolean = () => true,
+): C | undefined {
+  return columns.find(
+    (c) =>
+      c.isValidForRead !== false &&
+      c.attributeType !== 'Image' &&
+      c.attributeType !== 'File' &&
+      isColumnInScope(c, advancedFindOnly) &&
+      accept(c),
+  );
+}
+
 /** The "Advanced Find only" setting; pickers re-render when it changes. */
 export function useAdvancedFindOnly(): boolean {
   return usePersistedSettings()[0].advancedFindOnly;

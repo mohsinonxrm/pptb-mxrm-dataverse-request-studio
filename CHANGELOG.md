@@ -60,6 +60,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     column already in a request keeps working either way. Before, the switch
     did nothing, and columns and relationships that Advanced Find hides were
     never offered.
+  - The read pickers still never offer columns that can't be read, and new
+    sorts, filter rules and functions start on a column the picker offers.
+  - The Create form doesn't treat columns Advanced Find hides (such as
+    `owneridtype`) as required, as before.
   - A setting saved by an earlier version is reset to off once.
   - Loading a saved request, pasting a URL and a batch item's entity set
     check the table against every table, so a saved request for a table

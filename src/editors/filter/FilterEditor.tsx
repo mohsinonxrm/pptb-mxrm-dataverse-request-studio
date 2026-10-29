@@ -85,6 +85,7 @@ import { AntipatternIcon } from '../../primitives/AntipatternIcon';
 import { detectColumnAntipatterns } from '../../engine/antipatterns';
 import { AddressChips } from './AddressChips';
 import {
+  firstOfferedColumn,
   isColumnInScope,
   isNavInScope,
   scopedNavs,
@@ -160,6 +161,8 @@ export function FilterEditor({
 }: FilterEditorProps) {
   const s = useStudioStyles();
   const tbl = findTable(table);
+  // New clauses start on what the pickers offer (#44).
+  const advancedFindOnly = useAdvancedFindOnly();
   const total = useMemo(() => countRules(tree), [tree]);
   const odata = useMemo(() => (tbl ? groupToOData(tree, tbl) : ''), [tree, tbl]);
   const v = validateTree(tree, urlBytes);
@@ -191,7 +194,9 @@ export function FilterEditor({
     levelTable: TableMeta = tbl,
     levelAlias?: string,
   ) => {
-    const firstCol = levelTable.columns[0].logicalName;
+    const firstCol = (
+      firstOfferedColumn(levelTable.columns, advancedFindOnly) ?? levelTable.columns[0]
+    ).logicalName;
     const prefix = levelAlias ? `${levelAlias}/` : '';
     let child: FilterNode;
     if (kind === 'rule') child = defaultRule(prefix + firstCol);
@@ -201,18 +206,21 @@ export function FilterEditor({
     // NOTE: Dataverse query functions inside lambdas use PropertyName *without*
     // the alias prefix (the lambda scope is implicit); we therefore don't prefix
     // function `col` here even when levelAlias is set.
-    else if (kind === 'function') child = defaultFunction(levelTable, extra ?? 'LastXDays');
+    else if (kind === 'function')
+      child = defaultFunction(levelTable, extra ?? 'LastXDays', advancedFindOnly);
     else {
       // Nested lambda — Dataverse rejects this in practice, but if it
       // ever ships we'd anchor on the current level's collection navs.
-      const collections = levelTable.navigationProperties.filter(
+      const collections = scopedNavs(levelTable.navigationProperties, advancedFindOnly).filter(
         (n) => n.cardinality !== 'ManyToOne',
       );
       const nav = extra ?? collections[0]?.name;
       if (!nav) return;
       const navMeta = levelTable.navigationProperties.find((n) => n.name === nav);
       const target = navMeta ? findTable(navMeta.targetEntity) : undefined;
-      const targetFirstCol = target?.columns[0].logicalName ?? firstCol;
+      const targetFirstCol = target
+        ? (firstOfferedColumn(target.columns, advancedFindOnly) ?? target.columns[0]).logicalName
+        : firstCol;
       child = defaultLambda(nav, targetFirstCol);
     }
     setTree(addChild(tree, parentId, child));
@@ -1313,14 +1321,11 @@ function FunctionBlock({
     // If the current column isn't compatible with the new function, snap to the first compatible one.
     const allowed = next.allowedTypes;
     if (allowed && col && !allowed.includes(col.attributeType)) {
-      const visible = table.columns.filter(
-        (c) =>
-          c.attributeType !== 'File' &&
-          c.attributeType !== 'Image' &&
-          c.isValidForRead !== false &&
-          !isCompanionLogicalReadOnly(c),
+      const compatible = firstOfferedColumn(
+        table.columns,
+        advancedFindOnly,
+        (c) => !isCompanionLogicalReadOnly(c) && allowed.includes(c.attributeType),
       );
-      const compatible = visible.find((c) => allowed.includes(c.attributeType));
       if (compatible) patch.col = compatible.logicalName;
     }
     onUpdate(fn.id, patch);
@@ -1565,7 +1570,10 @@ function LambdaBlock({
     if (!newNav) return;
     const newTarget = findTable(newNav.targetEntity);
     const newAlias = navName[0] ?? node.alias;
-    const newCol = newTarget?.columns[0].logicalName ?? 'name';
+    const newCol = newTarget
+      ? (firstOfferedColumn(newTarget.columns, advancedFindOnly) ?? newTarget.columns[0])
+          .logicalName
+      : 'name';
     onUpdate(node.id, {
       nav: navName,
       alias: newAlias,

@@ -495,8 +495,9 @@ export interface AlternateKeyDef {
   columns: string[];
   /**
    * AttributeType of key columns that aren't in the table's loaded `columns`
-   * (the basic load is filtered to IsValidForAdvancedFind, so e.g.
-   * `canvasapp.componentstate` / `overwritetime` are missing). Filled by the
+   * (the basic load used to be filtered to IsValidForAdvancedFind, so e.g.
+   * `canvasapp.componentstate` / `overwritetime` were missing; #44 loads it
+   * unfiltered). Filled by the
    * live metadata provider so key literals are typed correctly (#64).
    */
   columnTypes?: Record<string, AttributeTypeCode>;

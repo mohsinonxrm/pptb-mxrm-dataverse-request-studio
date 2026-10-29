@@ -468,9 +468,18 @@ export function rawBodyBlocker(rawBody: string | null | undefined): string | nul
  *     needs a record id (a seeded empty lookup is dropped from the body).
  *     An explicit null never counts.
  */
+/**
+ * Whether the form treats a column as required. Columns Advanced Find hides
+ * (`owneridtype` and other system columns) don't count: the attribute load
+ * used to leave them out, and the server fills them in (#44).
+ */
+export const isRequiredColumn = (c: ColumnMeta): boolean =>
+  !!c.required && c.isValidForAdvancedFind !== false;
+
 export function mustSupplyOnCreate(c: ColumnMeta): boolean {
   return (
     c.requiredLevel === 'ApplicationRequired' &&
+    c.isValidForAdvancedFind !== false &&
     c.isValidForCreate !== false &&
     // File / Image columns are uploaded separately and hidden from the field
     // set, so they can't block a create (#305).

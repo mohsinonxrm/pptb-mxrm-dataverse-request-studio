@@ -190,7 +190,9 @@ export function ApplyEditor({
     [spec.groupby, spec.aggregates],
   );
   const offered = useCallback(
-    (c: ColumnMeta) => isColumnInScope(c, advancedFindOnly) || usedCols.has(c.logicalName),
+    (c: ColumnMeta) =>
+      usedCols.has(c.logicalName) ||
+      (c.isValidForRead !== false && isColumnInScope(c, advancedFindOnly)),
     [advancedFindOnly, usedCols],
   );
   const groupableCols = useMemo(
@@ -552,8 +554,8 @@ export function ApplyEditor({
                               // Reset col to the first one eligible for the new fn if the
                               // current pick isn't valid (e.g. switching avg → max keeps
                               // numeric; switching sum → min from datetime needs reset).
-                              const eligibleForNewFn = tbl.columns.filter((c) =>
-                                isAggregateEligible(fn, c),
+                              const eligibleForNewFn = tbl.columns.filter(
+                                (c) => offered(c) && isAggregateEligible(fn, c),
                               );
                               const stillValid = eligibleForNewFn.some(
                                 (c) => c.logicalName === a.col,

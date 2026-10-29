@@ -53,7 +53,8 @@ class MetadataCache {
   // are keyed inside the entities map and the sub-maps).
   private entities: Map<string, CacheEntry<EntityMetadata>> = new Map();
   private allEntitiesCache: CacheEntry<EntityMetadata[]> | undefined;
-  // Entity attributes — key format: "${logicalName}_${advancedFindOnly}".
+  // Entity attributes — key format: "${logicalName}_${advancedFindOnly}"
+  // (always `_false` now: the load is unfiltered and the pickers scope, #44).
   // Type-cast attribute drills (OptionSet, detailed numeric) reuse this map
   // with keys like "${logical}_${attr}_optionset" / "_detailed".
   private entityAttributes: Map<string, CacheEntry<AttributeMetadata[]>> = new Map();

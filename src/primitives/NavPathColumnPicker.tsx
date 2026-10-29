@@ -354,7 +354,10 @@ export function NavPathColumnPicker({
     if (!current) return { columnsAtLevel: [] as ColumnMeta[], navsAtLevel: [] as NavProperty[] };
     // The options follow "Advanced Find only" (#44); the current value is
     // resolved from the full table above, so it keeps showing.
-    let cols = scopedColumns(current.columns, advancedFindOnly);
+    // Read pickers ($filter, $apply groupby): only readable columns.
+    let cols = scopedColumns(current.columns, advancedFindOnly).filter(
+      (c) => c.isValidForRead !== false,
+    );
     // Always hide File / Image — never meaningful in filter/groupby paths.
     cols = cols.filter((c) => c.attributeType !== 'File' && c.attributeType !== 'Image');
     if (allowedColumnTypes) cols = cols.filter((c) => allowedColumnTypes.includes(c.attributeType));

@@ -28,7 +28,7 @@ import {
 } from '../mock/metadata';
 import { attrRef } from '../engine/odataAttr';
 import { PaneHead } from './PaneHead';
-import { scopedColumns, useAdvancedFindOnly } from '../state/metadataScope';
+import { firstOfferedColumn, scopedColumns, useAdvancedFindOnly } from '../state/metadataScope';
 import { ApplyOverridesBanner } from './ApplyOverridesBanner';
 import { SortableList, SortableItem } from '../primitives/Sortable';
 import { MoreOptionsHint, useOptionSearch } from '../primitives/optionSearch';
@@ -117,8 +117,16 @@ export function OrderbyEditor({
       ? `ord_${crypto.randomUUID()}`
       : `ord_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`;
 
+  // A new sort starts on a column the picker offers (#44).
   const add = () =>
-    setItems([...items, { id: newOrderId(), col: tbl.columns[0].logicalName, dir: 'asc' }]);
+    setItems([
+      ...items,
+      {
+        id: newOrderId(),
+        col: (firstOfferedColumn(tbl.columns, advancedFindOnly) ?? tbl.columns[0]).logicalName,
+        dir: 'asc',
+      },
+    ]);
   const update = (i: number, patch: Partial<OrderbySpec>) =>
     setItems(items.map((it, j) => (j === i ? { ...it, ...patch } : it)));
   const remove = (i: number) => setItems(items.filter((_, j) => j !== i));

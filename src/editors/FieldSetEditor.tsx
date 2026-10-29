@@ -99,6 +99,7 @@ import { useLookupRecords } from '../host/useLookupRecords';
 import {
   decodeFieldBody,
   encodeFieldBody,
+  isRequiredColumn,
   mustSupplyOnCreate,
   parseRawBody,
   suppliedColumnTest,
@@ -437,7 +438,7 @@ export function FieldSetEditor({
     const writableById = new Map(writable.map((c) => [c.logicalName, c]));
 
     // Required columns in metadata order (regardless of whether they're populated)
-    const requiredCols = writable.filter((c) => c.required);
+    const requiredCols = writable.filter(isRequiredColumn);
     const requiredIds = new Set(requiredCols.map((c) => c.logicalName));
 
     // Then user-added non-required fields in insertion order. Sourced
@@ -466,7 +467,7 @@ export function FieldSetEditor({
     if (filter === 'common') {
       pool = pool.filter(
         (c) =>
-          c.required ||
+          isRequiredColumn(c) ||
           c.logicalName === tbl?.primaryName ||
           c.logicalName === 'statecode' ||
           c.logicalName === 'statuscode' ||
@@ -789,7 +790,7 @@ function FieldRow({
   onClearNull: () => void;
 }) {
   const s = useStudioStyles();
-  const isMissing = col.required && (requiredOnWrite ? !populated : isNull);
+  const isMissing = isRequiredColumn(col) && (requiredOnWrite ? !populated : isNull);
 
   const rs = useFieldRowStyles();
   return (
@@ -810,7 +811,7 @@ function FieldRow({
           <span style={{ fontWeight: 500, color: tokens.colorNeutralForeground1 }}>
             {col.displayName}
           </span>
-          {col.required && (
+          {isRequiredColumn(col) && (
             <Tooltip
               content={
                 requiredOnWrite
@@ -948,7 +949,7 @@ function FieldRow({
       </div>
 
       {/* Remove */}
-      {!col.required ? (
+      {!isRequiredColumn(col) ? (
         <Tooltip content="Remove field from the body" relationship="label">
           <Button
             size="small"

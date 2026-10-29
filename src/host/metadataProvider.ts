@@ -471,8 +471,8 @@ async function buildTable(logical: string): Promise<TableMeta | undefined> {
         }))
         .filter((k) => k.columns.length > 0);
 
-      // #64 — key columns missing from the basic (IsValidForAdvancedFind)
-      // load would otherwise be typed as strings and single-quoted in the
+      // #64 — key columns missing from the basic load (rare now that it's
+      // unfiltered, #44; it used to be IsValidForAdvancedFind-only) would otherwise be typed as strings and single-quoted in the
       // key URL (e.g. canvasapp `componentstate` / `overwritetime`). Fetch
       // their AttributeType; anything that still fails stays unknown.
       const loaded = new Set(columns.map((c) => c.logicalName));

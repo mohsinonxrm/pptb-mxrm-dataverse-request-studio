@@ -1201,7 +1201,8 @@ function ColumnRhsPicker({ rule, col, parentTable, onChange }: ValueInputProps):
     (c) =>
       c.attributeType === col.attributeType &&
       c.logicalName !== col.logicalName &&
-      (isColumnInScope(c, advancedFindOnly) || c.logicalName === rule.val),
+      (c.logicalName === rule.val ||
+        (c.isValidForRead !== false && isColumnInScope(c, advancedFindOnly))),
   );
   const cur = sameType.find((c) => c.logicalName === rule.val);
 

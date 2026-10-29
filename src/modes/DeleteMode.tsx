@@ -117,6 +117,7 @@ import {
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { isRecordGuid } from '../primitives/guid';
+import { isColumnInScope, useAdvancedFindOnly } from '../state/metadataScope';
 
 const initialState = (): DeleteState => ({
   table: '',
@@ -1429,11 +1430,15 @@ function ScopeEditor({
   setScope: (s: DeleteScope) => void;
 }) {
   const tbl = findTable(table);
+  // Follows "Advanced Find only" (#44); the chosen column stays.
+  const advancedFindOnly = useAdvancedFindOnly();
+  const chosen = scope.kind === 'single-property' ? scope.column : null;
   const clearable = useMemo(
     () =>
       (tbl?.columns ?? [])
         .filter(
           (c) =>
+            (isColumnInScope(c, advancedFindOnly) || c.logicalName === chosen) &&
             c.attributeType !== 'Uniqueidentifier' &&
             c.attributeType !== 'File' &&
             c.attributeType !== 'Image' &&
@@ -1441,7 +1446,7 @@ function ScopeEditor({
         )
         .slice()
         .sort((a, b) => a.displayName.localeCompare(b.displayName)),
-    [tbl],
+    [tbl, advancedFindOnly, chosen],
   );
   // `search` is the user's currently-typed filter text. While typing, the
   // input shows what they're typing; once they pick (or clear), it falls
