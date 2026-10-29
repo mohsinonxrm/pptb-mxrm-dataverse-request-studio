@@ -55,13 +55,15 @@ describe('isHeaderSafeFileName', () => {
 
 describe('single-request upload', () => {
   it('an ASCII name stays in the header, as Microsoft documents', () => {
-    const [step] = buildFileSingleUpload(file('4094kb.txt', { kind: 'single' } as never));
+    const [step] = buildFileSingleUpload(file('4094kb.txt', { kind: 'single-request' } as never));
     expect(step.relativeUrl).toBe(`/api/data/v9.2/accounts(${ID})/sample_filecolumn`);
     expect(step.headers?.['x-ms-file-name']).toBe('4094kb.txt');
   });
 
   it('a non-ASCII name goes in the query parameter, with no header', () => {
-    const [step] = buildFileSingleUpload(file('报告 Résumé✓.pdf', { kind: 'single' } as never));
+    const [step] = buildFileSingleUpload(
+      file('报告 Résumé✓.pdf', { kind: 'single-request' } as never),
+    );
     expect(step.relativeUrl).toBe(
       `/api/data/v9.2/accounts(${ID})/sample_filecolumn?x-ms-file-name=${encodeURIComponent('报告 Résumé✓.pdf')}`,
     );

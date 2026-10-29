@@ -106,7 +106,7 @@ const fileNameHeader = (name: string): Record<string, string> =>
   isHeaderSafeFileName(name) ? { 'x-ms-file-name': name } : {};
 
 const NON_ASCII_NOTE =
-  " The file name has characters outside ASCII, which the x-ms-file-name header doesn't support, so it travels as the x-ms-file-name query parameter instead.";
+  " The file name has characters outside ASCII, which the x-ms-file-name header doesn't support (and fetch, XHR and .NET refuse to send), so it travels as the x-ms-file-name query parameter instead. Microsoft documents that parameter on the chunked upload's first request; if a single request doesn't keep the name, use the chunked upload.";
 
 // ──────────────────────────────────────────────────────────────
 // File — single-request upload

@@ -93,3 +93,20 @@ describe('BinarySourceCard', () => {
     expect(host!.textContent).toMatch(/can be pasted\. Use Upload file for larger files\./);
   });
 });
+
+describe('estimateBase64Size', () => {
+  it('ignores line breaks, other whitespace and a data: prefix', async () => {
+    const { estimateBase64Size } = await import('./BinarySourceCard');
+    expect(estimateBase64Size('QUJD')).toBe(3);
+    expect(estimateBase64Size('QUJD\r\nREVG\r\n')).toBe(6);
+    expect(estimateBase64Size('QQ==\n')).toBe(1);
+    expect(estimateBase64Size('data:image/png;base64,QUJD')).toBe(3);
+  });
+
+  it('a wrapped body just under the cap counts as under it', async () => {
+    const { estimateBase64Size } = await import('./BinarySourceCard');
+    const chars = Math.floor((MAX_PASTED_BASE64_BYTES * 4) / 3 / 4) * 4;
+    const wrapped = ('A'.repeat(chars).match(/.{1,76}/g) ?? []).join('\r\n');
+    expect(estimateBase64Size(wrapped)).toBeLessThanOrEqual(MAX_PASTED_BASE64_BYTES);
+  });
+});

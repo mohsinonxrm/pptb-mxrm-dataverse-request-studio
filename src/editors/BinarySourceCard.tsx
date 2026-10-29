@@ -12,7 +12,7 @@
 // When "From URL" we just store the URL (informational — actual fetch would
 // happen client-side at execute time).
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Field,
   Input,
@@ -64,6 +64,8 @@ export function BinarySourceCard(props: BinarySourceCardProps) {
   const s = useStudioStyles();
   const inputRef = useRef<HTMLInputElement>(null);
   const [pasteError, setPasteError] = useState<string | null>(null);
+  // A refused paste's message belongs to that paste, not to the next source.
+  useEffect(() => setPasteError(null), [props.source.kind]);
 
   return (
     <div className={mergeClasses(s.inlineCard)} style={{ padding: 12, maxWidth: 880 }}>
@@ -272,7 +274,12 @@ function SourceTab({
   );
 }
 
-function estimateBase64Size(b64: string): number {
+/**
+ * Decoded size of pasted base64. Line breaks and other whitespace (base64 is
+ * often wrapped at 76 characters) and a `data:…;base64,` prefix aren't data.
+ */
+export function estimateBase64Size(text: string): number {
+  const b64 = text.replace(/^data:[^,]*,/, '').replace(/\s+/g, '');
   if (!b64) return 0;
   const padding = (b64.match(/=+$/) ?? [''])[0].length;
   return Math.max(0, Math.floor((b64.length * 3) / 4) - padding);

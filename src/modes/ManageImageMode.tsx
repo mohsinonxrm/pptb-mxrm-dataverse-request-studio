@@ -132,7 +132,10 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
   // The chosen image's preview: an object URL for the File, never its bytes
   // in state (#222). Up to MAX_PREVIEW_BYTES; revoked when replaced and on
   // unmount.
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // `name` is the file it shows: a preview only applies while that's still
+  // the request's file name (not after loading a saved request, or typing
+  // another name under Paste base64).
+  const [preview, setPreview] = useState<{ url: string; name: string } | null>(null);
   const previewRef = useRef<string | null>(null);
   const onFile = useCallback((f: File | null) => {
     if (previewRef.current) URL.revokeObjectURL(previewRef.current);
@@ -140,8 +143,9 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
       f && f.type.startsWith('image/') && f.size <= MAX_PREVIEW_BYTES
         ? URL.createObjectURL(f)
         : null;
-    setPreviewUrl(previewRef.current);
+    setPreview(previewRef.current && f ? { url: previewRef.current, name: f.name } : null);
   }, []);
+  const previewUrl = preview && preview.name === state.fileName ? preview.url : null;
   useEffect(
     () => () => {
       if (previewRef.current) URL.revokeObjectURL(previewRef.current);
@@ -262,6 +266,8 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
       return;
     }
     setState(deserializeManageImage(snap));
+    // The loaded request has no file bytes; drop the last file's preview.
+    onFile(null);
     setLastSavedId(entry.id);
     setLastSavedHash(hashState(snap));
     setResult(null);
