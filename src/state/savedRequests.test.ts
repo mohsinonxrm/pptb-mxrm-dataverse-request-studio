@@ -114,3 +114,62 @@ describe('import and the other-connections view', () => {
     expect(libs[0].entries.map((e) => e.id)).toEqual(['b']);
   });
 });
+
+describe('import checks ids and names (#221)', () => {
+  const ID = '00000000-0000-0000-0000-0000000000a1';
+  const withState = (id: string, modeId: string, state: Record<string, unknown>) =>
+    entry(id, modeId, { state });
+
+  it('skips entries whose ids or names would change the URL, and says why', () => {
+    const file = buildSavedExport(
+      [
+        withState('ok', 'retrieve-single', { table: 'account', recordId: ID }),
+        withState('path', 'retrieve-single', { table: 'account', recordId: `${ID})/x` }),
+        withState('nav', 'associate', {
+          table: 'account',
+          sourceId: ID,
+          navProperty: 'nav?$top=1',
+          targets: [ID],
+        }),
+        withState('target', 'disassociate', {
+          table: 'account',
+          sourceId: ID,
+          navProperty: 'contact_customer_accounts',
+          targetIds: [ID, 'bad'],
+        }),
+        withState('query', 'predefined-query', { table: 'account', queryId: 'x&$top=1' }),
+        withState('table', 'update', { table: 'accounts(x)', recordId: ID }),
+        withState('type', 'merge', { table: 'account', targetId: 42 }),
+      ],
+      'org.example',
+    );
+    const r = parseSavedImport(file);
+    expect(r.entries.map((e) => e.id)).toEqual(['ok']);
+    expect(r.invalid).toBe(6);
+    expect(r.problems).toEqual([
+      `"path": Record id "${ID})/x" isn't a GUID (00000000-0000-0000-0000-000000000000).`,
+      '"nav": Navigation property "nav?$top=1" isn\'t a valid name (letters, digits and underscores).',
+      '"target": Target record id "bad" isn\'t a GUID (00000000-0000-0000-0000-000000000000).',
+      '"query": Query id "x&$top=1" isn\'t a GUID (00000000-0000-0000-0000-000000000000).',
+      '"table": Table "accounts(x)" isn\'t a valid name (letters, digits and underscores).',
+      '"type": Master record id isn\'t text.',
+    ]);
+  });
+
+  it("keeps empty ids, an upsert by alternate key, and batch items' alternate keys", () => {
+    const file = buildSavedExport(
+      [
+        withState('empty', 'delete', { table: 'account', recordId: null }),
+        withState('alt', 'upsert', {
+          table: 'account',
+          key: { kind: 'alternate', values: { accountnumber: "A'1" } },
+        }),
+        withState('batch', 'batch', { groups: [{ items: [{ recordId: "accountnumber='A1'" }] }] }),
+      ],
+      'org.example',
+    );
+    const r = parseSavedImport(file);
+    expect(r.entries.map((e) => e.id)).toEqual(['empty', 'alt', 'batch']);
+    expect(r.problems).toEqual([]);
+  });
+});

@@ -93,6 +93,7 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { invalidUrlPartReason } from '../primitives/urlParts';
 
 const initialState = (): ManageImageState => ({
   // Empty initial state — user picks everything from live metadata.
@@ -164,6 +165,11 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const firstStepMethod = pipeline[0]?.method ?? 'PATCH';
 
+  // Ids and names that go into the URL as-is (#221).
+  const urlPartProblem = invalidUrlPartReason(
+    [['Record id', state.recordId]],
+    [['Image column', state.imageColumn]],
+  );
   const disabledReason = !tbl
     ? 'Pick a target table first.'
     : !state.recordId
@@ -178,7 +184,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
             ? `${state.imageColumn} doesn't store full-size images (canStoreFullImage = false).`
             : state.headers.some((h) => h.enabled && !h.name)
               ? 'Fix empty header name.'
-              : null;
+              : urlPartProblem;
 
   // Bound-record name capture for the WriteResultCard narrative.
   const [recordName, setRecordName] = useState<string>('');

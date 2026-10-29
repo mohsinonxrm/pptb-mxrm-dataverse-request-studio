@@ -108,6 +108,8 @@ const TRICKY_PARTS = [
   { key: '$select', value: 'name,revenue' },
   { key: '$filter', value: "name eq 'O''Brien $HOME `whoami` \"q\"'" },
 ];
+// The URL generated code sends: spaces percent-encoded, the rest as built (#221).
+const TRICKY_WIRE_URL = `${HOST}${API}/accounts?$select=name,revenue&$filter=name%20eq%20'O''Brien%20$HOME%20\`whoami\`%20"q"'`;
 
 describe('generateCode — every format', () => {
   it.each<CodeFormat>([
@@ -132,9 +134,7 @@ describe('cURL quoting (#49)', () => {
     const start = out.indexOf(`'${HOST}`);
     expect(start).toBeGreaterThan(-1);
     const word = shWordAt(out, start);
-    expect(shUnquote(word)).toBe(
-      `${HOST}${API}/accounts?$select=name,revenue&$filter=name eq 'O''Brien $HOME \`whoami\` "q"'`,
-    );
+    expect(shUnquote(word)).toBe(TRICKY_WIRE_URL);
     expect(out).toContain('--globoff');
   });
 
@@ -175,9 +175,7 @@ describe('PowerShell quoting (#49)', () => {
     );
     const uri = out.match(/-Uri ('(?:[^']|'')*')/)?.[1];
     expect(uri).toBeDefined();
-    expect(psUnquote(uri!)).toBe(
-      `${HOST}${API}/accounts?$select=name,revenue&$filter=name eq 'O''Brien $HOME \`whoami\` "q"'`,
-    );
+    expect(psUnquote(uri!)).toBe(TRICKY_WIRE_URL);
     const headerLines = [...out.matchAll(/^ {2}('(?:[^']|'')*') = ('(?:[^']|'')*')$/gm)];
     expect(headerLines.map((m) => [psUnquote(m[1]), psUnquote(m[2])])).toEqual([
       ['Prefer', 'odata.include-annotations="*"'],
@@ -204,9 +202,7 @@ describe('JavaScript string escaping (#50)', () => {
     const out = generateCode('fetch', inputs('GET', built(TRICKY_URL_PATH, TRICKY_PARTS)));
     const lit = out.match(/const url = ('(?:[^'\\\n]|\\.)*');/)?.[1];
     expect(lit).toBeDefined();
-    expect(jsUnquote(lit!)).toBe(
-      `${HOST}${API}/accounts?$select=name,revenue&$filter=name eq 'O''Brien $HOME \`whoami\` "q"'`,
-    );
+    expect(jsUnquote(lit!)).toBe(TRICKY_WIRE_URL);
   });
 
   it('fetch: a pasted nextLink with a backslash and a trailing newline stays one literal', () => {
@@ -421,7 +417,9 @@ describe('Power Automate classification (#51)', () => {
       inputs('GET', built('/accounts', [{ key: '$apply', value: 'aggregate($count as n)' }])),
     );
     expect(apply.actionName).toBe('List rows');
-    expect(apply.httpFallback?.uri).toBe(`${HOST}${API}/accounts?$apply=aggregate($count as n)`);
+    expect(apply.httpFallback?.uri).toBe(
+      `${HOST}${API}/accounts?$apply=aggregate($count%20as%20n)`,
+    );
 
     const saved = generatePowerAutomateFields(
       inputs('GET', built('/accounts', [{ key: 'savedQuery', value: ID }])),

@@ -85,6 +85,7 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { invalidUrlPartReason } from '../primitives/urlParts';
 
 // Empty initial state — the studio is a request *builder*. Pre-seeding a
 // table or a query confused users in PPTB ("why is this random view
@@ -475,13 +476,21 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
     setState((ss) => ({ ...ss, dirty: new Set() }));
   };
 
+  // Ids and names that go into the URL as-is (#221).
+  const urlPartProblem = invalidUrlPartReason(
+    [
+      ['Query id', state.queryId],
+      ['Source row id', state.related?.recordId],
+    ],
+    [['Relationship', state.related?.navProperty]],
+  );
   const disabledReason = !state.table
     ? 'Pick a table first.'
     : !state.queryId
       ? 'Pick a saved query or user view.'
       : state.related && !(state.related.navProperty && state.related.recordId)
         ? 'Pick the relationship and the row whose related records to query.'
-        : null;
+        : urlPartProblem;
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializePredefinedQuery(state), [state]);

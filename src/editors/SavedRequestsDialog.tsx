@@ -741,7 +741,7 @@ function SavedLibraryTransfer({
 
   const applyImport = (text: string) => {
     try {
-      const { entries, invalid } = parseSavedImport(text);
+      const { entries, invalid, problems } = parseSavedImport(text);
       const r = importEntries(entries);
       if (!r.ok) {
         setStatus({ intent: 'error', title: "Couldn't import", text: r.error ?? '' });
@@ -757,6 +757,12 @@ function SavedLibraryTransfer({
       }
       if (invalid > 0) {
         notes.push(`${invalid} item(s) in the file weren't valid saved requests and were skipped.`);
+      }
+      // Entries skipped for an id or name that isn't one (#221): say which.
+      if (problems.length > 0) {
+        notes.push(
+          `${problems.slice(0, 3).join(' ')}${problems.length > 3 ? ` (and ${problems.length - 3} more)` : ''}`,
+        );
       }
       setStatus({
         intent: r.skippedFull > 0 || invalid > 0 ? 'warning' : 'success',

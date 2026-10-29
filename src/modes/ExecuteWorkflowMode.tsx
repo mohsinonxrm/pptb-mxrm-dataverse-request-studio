@@ -66,6 +66,7 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { invalidUrlPartReason } from '../primitives/urlParts';
 
 // Workflow shape used by the picker — the wire response fields are
 // camelCased differently per the OData convention (workflowid not Id, etc).
@@ -189,13 +190,18 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
     if (dirtyId) markDirty(dirtyId);
   };
 
+  // Ids and names that go into the URL as-is (#221).
+  const urlPartProblem = invalidUrlPartReason([
+    ['Workflow id', state.workflowId],
+    ['Record id', state.entityId],
+  ]);
   const disabledReason = !wf
     ? 'Pick a workflow.'
     : !state.entityId
       ? `Pick a ${wf.primaryEntity} record to run the workflow on.`
       : state.headers.some((h) => h.enabled && !h.name)
         ? 'Fix empty header name.'
-        : null;
+        : urlPartProblem;
 
   const onExecute = async () => {
     setLoading(true);

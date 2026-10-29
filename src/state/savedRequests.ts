@@ -48,6 +48,7 @@ import type {
 import type { ManageFileState, ManageImageState, ManageAttachmentState } from './binaryState';
 import { getEnv } from '../mock/environment';
 import { stripCredentialRows } from '../engine/sensitiveHeaders';
+import { invalidUrlPartReason } from '../primitives/urlParts';
 import {
   autoSuggestBatch,
   autoSuggestExecuteMultiple,
@@ -704,12 +705,111 @@ export function buildSavedExport(entries: SavedRequest[], orgScope: string): str
   return JSON.stringify(file, null, 2);
 }
 
+type UrlPart = readonly [label: string, value: unknown];
+
+/**
+ * The values each mode puts into a URL as-is, as [label, value]: record ids
+ * (GUIDs) and names (tables, navigation properties, columns). Batch and
+ * ExecuteMultiple aren't listed: their items also hold alternate keys and
+ * `$n` references, and their builder checks those per item.
+ */
+const IMPORT_URL_PARTS: Partial<
+  Record<SavedModeId, (s: Record<string, unknown>) => { ids: UrlPart[]; names: UrlPart[] }>
+> = {
+  'retrieve-single': (s) => ({ ids: [['Record id', s.recordId]], names: [] }),
+  'predefined-query': (s) => {
+    const r = (s.related ?? {}) as Record<string, unknown>;
+    return {
+      ids: [
+        ['Query id', s.queryId],
+        ['Source row id', r.recordId],
+      ],
+      names: [
+        ['Source table', r.sourceTable],
+        ['Relationship', r.navProperty],
+      ],
+    };
+  },
+  delete: (s) => ({ ids: [['Record id', s.recordId]], names: [] }),
+  update: (s) => ({ ids: [['Record id', s.recordId]], names: [] }),
+  upsert: (s) => {
+    const k = (s.key ?? {}) as Record<string, unknown>;
+    return { ids: k.kind === 'guid' ? [['Record id', k.recordId]] : [], names: [] };
+  },
+  merge: (s) => ({
+    ids: [
+      ['Master record id', s.targetId],
+      ['Subordinate record id', s.subordinateId],
+    ],
+    names: [],
+  }),
+  associate: (s) => ({
+    ids: [['Source record id', s.sourceId], ...listOf(s.targets, 'Target record id')],
+    names: [['Navigation property', s.navProperty]],
+  }),
+  disassociate: (s) => ({
+    ids: [['Source record id', s.sourceId], ...listOf(s.targetIds, 'Target record id')],
+    names: [['Navigation property', s.navProperty]],
+  }),
+  'exec-action': (s) => ({ ids: [['Bound record id', s.boundRecordId]], names: [] }),
+  'exec-function': (s) => ({ ids: [['Bound record id', s.boundRecordId]], names: [] }),
+  'exec-workflow': (s) => ({
+    ids: [
+      ['Workflow id', s.workflowId],
+      ['Record id', s.entityId],
+    ],
+    names: [],
+  }),
+  'manage-file': (s) => ({
+    ids: [['Record id', s.recordId]],
+    names: [['File column', s.fileColumn]],
+  }),
+  'manage-image': (s) => ({
+    ids: [['Record id', s.recordId]],
+    names: [['Image column', s.imageColumn]],
+  }),
+  'manage-attachment': (s) => ({
+    ids: [
+      ['Record id', s.recordId],
+      ['Parent activity id', s.parentActivityId],
+    ],
+    names: [],
+  }),
+};
+
+/** A list field as parts; a value that isn't an array is reported as one part. */
+function listOf(v: unknown, label: string): UrlPart[] {
+  return Array.isArray(v) ? v.map((x) => [label, x] as const) : v == null ? [] : [[label, v]];
+}
+
+/**
+ * Why an imported entry can't be loaded safely, or null (#221). Its ids must
+ * be GUIDs and its names plain identifiers: an imported file is untrusted, and
+ * a value like `x)/other_nav?$filter=…` would send a different request from
+ * the one its name describes. Empty values are fine (the mode asks for them).
+ */
+export function importedEntryProblem(e: SavedRequest): string | null {
+  const s = e.state as Record<string, unknown>;
+  const parts = IMPORT_URL_PARTS[e.modeId]?.(s) ?? { ids: [], names: [] };
+  const names: UrlPart[] = [['Table', s.table], ...parts.names];
+  for (const [label, value] of [...parts.ids, ...names]) {
+    if (value != null && typeof value !== 'string') return `${label} isn't text.`;
+  }
+  const text = (ps: UrlPart[]) => ps as ReadonlyArray<readonly [string, string | null | undefined]>;
+  return invalidUrlPartReason(text(parts.ids), text(names));
+}
+
 /**
  * Parse an export file. Throws an Error with a user-facing message when the
  * file isn't a saved-requests export at all; otherwise returns the valid
- * entries and how many were dropped (bad shape, unknown mode, newer schema).
+ * entries and how many were dropped (bad shape, unknown mode, newer schema,
+ * or an id or name that isn't one; `problems` says why for those).
  */
-export function parseSavedImport(text: string): { entries: SavedRequest[]; invalid: number } {
+export function parseSavedImport(text: string): {
+  entries: SavedRequest[];
+  invalid: number;
+  problems: string[];
+} {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
@@ -735,8 +835,15 @@ export function parseSavedImport(text: string): { entries: SavedRequest[]; inval
   } else {
     throw new Error('The file is not a Dataverse Request Studio saved-requests export.');
   }
-  const entries = raw.filter(isUsableEntry);
-  return { entries, invalid: raw.length - entries.length };
+  const entries: SavedRequest[] = [];
+  const problems: string[] = [];
+  for (const e of raw) {
+    if (!isUsableEntry(e)) continue;
+    const problem = importedEntryProblem(e);
+    if (problem) problems.push(`"${e.name}": ${problem}`);
+    else entries.push(e);
+  }
+  return { entries, invalid: raw.length - entries.length, problems };
 }
 
 // ── Hash + dirty detection ────────────────────────────────────────────

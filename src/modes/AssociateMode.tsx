@@ -75,6 +75,7 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { invalidUrlPartReason } from '../primitives/urlParts';
 
 // Empty initial state. The user picks a table → record → nav property →
 // target(s) before the request can fire. Seeding with a mock account id
@@ -143,6 +144,14 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
     if (dirtyId) markDirty(dirtyId);
   };
 
+  // Ids and names that go into the URL as-is (#221).
+  const urlPartProblem = invalidUrlPartReason(
+    [
+      ['Source record id', state.sourceId],
+      ...state.targets.map((id) => ['Target record id', id] as const),
+    ],
+    [['Navigation property', state.navProperty]],
+  );
   const disabledReason = !tbl
     ? 'Pick a source table first.'
     : !state.sourceId
@@ -153,7 +162,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
           ? 'Pick at least one target record.'
           : state.headers.some((h) => h.enabled && !h.name)
             ? 'Fix empty header name.'
-            : null;
+            : urlPartProblem;
 
   const onExecute = async () => {
     setLoading(true);

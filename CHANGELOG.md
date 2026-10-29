@@ -28,6 +28,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **README: "What this tool changes"** lists every request that changes data,
   when it asks, and what DRS stores locally ([#241]).
 
+### 🐛 Fixed
+
+- **Ids and names are checked before they go into a URL** ([#221]). A record
+  id must be a GUID, and a navigation property or column name a plain name,
+  before Execute enables. This applies in Associate, Disassociate, Execute
+  Action / Function / Workflow, Predefined Query and the file, image and
+  attachment modes. The other modes already checked. The executor refuses
+  them too, so a value like `x)/other_nav` can't send a different request.
+- **Filter values are typed** ([#221]). A number, GUID or date column's
+  value goes into `$filter` unquoted only when it is one. Anything else is
+  quoted and escaped, and Execute is blocked with a message naming the value,
+  instead of a Dataverse 400. The DateTime fallback now escapes quotes. The
+  same applies to the Dataverse query functions (`LastXDays`, `Under`, …),
+  `$expand` inner filters and Bulk Delete Job.
+- **Imported saved requests are checked deeply** ([#221]). Entries whose
+  ids or names would change the URL are skipped, and the import status says
+  which and why.
+- **Exported URLs encode spaces** ([#221]). Postman, Insomnia and Bruno
+  collections, cURL / fetch / C# / PowerShell code and the HTTP-action URIs
+  write `%20`. The URL bar still shows spaces.
+
+[#221]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/221
 [#241]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/241
 
 ## [1.4.0-beta.3] - 2026-10-27

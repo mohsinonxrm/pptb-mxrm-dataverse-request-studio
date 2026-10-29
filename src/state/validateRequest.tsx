@@ -32,8 +32,8 @@
 
 import type { TableMeta } from '../mock/metadata';
 import { findTable } from '../mock/metadata';
-import type { FilterGroup, FilterNode } from '../editors/filter/filterTree';
-import { countRules } from '../editors/filter/filterTree';
+import type { FilterGroup, FilterNode, InvalidLiteral } from '../editors/filter/filterTree';
+import { collectInvalidLiterals, countRules } from '../editors/filter/filterTree';
 import { findOperator } from '../editors/filter/operators';
 import type { ExpandSpec } from '../editors/ExpandEditor';
 import type { OrderbySpec } from '../editors/OrderbyEditor';
@@ -87,6 +87,28 @@ export function validateRequest(input: ValidateRequestInput): Advisory[] {
         ),
       );
     }
+  }
+
+  // ── Literal values (#221) ────────────────────────────────────
+  // A value without its column's shape (text on a number column, a non-GUID
+  // for a GUID function) is sent quoted, so it can't change the query, but
+  // Dataverse rejects it with a 400 that doesn't say which value is wrong.
+  // Block Execute and name it instead. Covers $expand's inner filters too.
+  const literals = [
+    ...(activeFilter ? collectInvalidLiterals(activeFilter, rootTable) : []),
+    ...expandFilterLiterals(input.expand ?? [], rootTable),
+  ];
+  for (const l of literals) {
+    out.push(
+      adv.err(
+        `filter-literal-${l.nodeId}`,
+        'validation',
+        `\`${l.col}\` needs ${l.expected}, not ${JSON.stringify(l.value.length > 40 ? `${l.value.slice(0, 40)}…` : l.value)}.`,
+        "The filter value doesn't match the column's type, so Dataverse would reject the query. Fix the value in the filter.",
+        'filter',
+        'https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/query/filter-rows',
+      ),
+    );
   }
 
   // ── Expand validation ────────────────────────────────────────
@@ -436,6 +458,19 @@ function validateFilterNode(
     validateFilterGroup(node.inner, innerTable, node.alias, out);
     return;
   }
+}
+
+/** Invalid literals in $expand's inner filters, at every level (#221). */
+function expandFilterLiterals(items: ExpandSpec[], parentTable: TableMeta): InvalidLiteral[] {
+  const out: InvalidLiteral[] = [];
+  for (const it of items) {
+    const nav = parentTable.navigationProperties.find((n) => n.name === it.nav);
+    const target = nav ? findTable(nav.targetEntity) : undefined;
+    if (!target) continue; // metadata not loaded yet
+    if (it.filter) collectInvalidLiterals(it.filter, target, undefined, out);
+    if (it.nestedExpand) out.push(...expandFilterLiterals(it.nestedExpand, target));
+  }
+  return out;
 }
 
 // walkExpandTree was used by the $top/$orderby-when-nested advisory which
