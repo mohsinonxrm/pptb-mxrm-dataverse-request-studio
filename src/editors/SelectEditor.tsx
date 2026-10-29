@@ -36,6 +36,7 @@ import { findTable, isCompanionLogicalReadOnly, type ColumnMeta } from '../mock/
 import { groupColorVar } from '../theme/theme';
 import type { RequestGroup } from '../registry/requestTypes';
 import { SortableList, SortableItem } from '../primitives/Sortable';
+import { scopedColumns, useAdvancedFindOnly } from '../state/metadataScope';
 
 export interface SelectEditorProps {
   table: string;
@@ -61,6 +62,7 @@ export function SelectEditor({
   // The column grid can hold 500–800 rows: filter on a deferred copy of the
   // search text so the input repaints before the grid re-renders (#21).
   const deferredSearch = useDeferredValue(search);
+  const advancedFindOnly = useAdvancedFindOnly();
 
   const all = useMemo(() => {
     // Read picker filter:
@@ -87,13 +89,16 @@ export function SelectEditor({
   // This lets users tick many columns rapidly without items disappearing
   // mid-flow (the previous "moved-to-right-pane" pattern was tedious for
   // bulk picks). Selected pane (right) still shows ordered + DnD list.
+  // The picker follows "Advanced Find only" (#44); `all` stays whole so
+  // columns already selected still resolve.
   const available = useMemo(() => {
-    if (!deferredSearch) return all;
+    const offered = scopedColumns(all, advancedFindOnly);
+    if (!deferredSearch) return offered;
     const q = deferredSearch.toLowerCase();
-    return all.filter(
+    return offered.filter(
       (c) => c.displayName.toLowerCase().includes(q) || c.logicalName.toLowerCase().includes(q),
     );
-  }, [all, deferredSearch]);
+  }, [all, deferredSearch, advancedFindOnly]);
 
   const { selected, orphanCount } = useMemo(() => {
     const byName = new Map(all.map((c) => [c.logicalName, c]));
@@ -195,7 +200,11 @@ export function SelectEditor({
   const onGridSelectionChange = useCallback(
     (_evt: unknown, data: { selectedItems: Set<string | number> }) => {
       const incoming = data.selectedItems;
-      const survivors = selectedIds.filter((id) => incoming.has(id));
+      // The grid only knows the rows it shows. A selected column it doesn't
+      // show (outside "Advanced Find only", #44, or the search) stays
+      // selected; "Deselect all" would drop it otherwise.
+      const shown = new Set(gridItems.map((g) => g.logicalName));
+      const survivors = selectedIds.filter((id) => incoming.has(id) || !shown.has(id));
       const current = new Set(selectedIds);
       const additions: string[] = [];
       for (const id of incoming) {
@@ -204,7 +213,7 @@ export function SelectEditor({
       }
       setSelectedIds([...survivors, ...additions]);
     },
-    [selectedIds, setSelectedIds],
+    [selectedIds, setSelectedIds, gridItems],
   );
 
   // Memoized so a search keystroke (or the deferred re-filter) does not

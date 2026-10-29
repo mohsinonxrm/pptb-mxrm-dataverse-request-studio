@@ -97,6 +97,7 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { rawBodyBlocker, sentFieldValues } from '../engine/fieldBody';
 import { isRecordGuid } from '../primitives/guid';
+import { isColumnInScope, useAdvancedFindOnly } from '../state/metadataScope';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -147,7 +148,9 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   // findTable(), which is empty until the fetch lands — keying on `state`
   // alone left the URL / Code tab blank after picking a table (#78).
   const { loading: tableLoading, table: liveTable } = useLiveTable(state.table || null);
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
@@ -929,11 +932,14 @@ function MethodPane({
   onExitPut: () => void;
 }) {
   const tbl = findTable(table);
+  // Follows "Advanced Find only" (#44); the chosen column stays.
+  const advancedFindOnly = useAdvancedFindOnly();
   const pickable = useMemo(
     () =>
       (tbl?.columns ?? [])
         .filter(
           (c) =>
+            (isColumnInScope(c, advancedFindOnly) || c.logicalName === putColumn) &&
             c.attributeType !== 'Uniqueidentifier' &&
             c.attributeType !== 'File' &&
             c.attributeType !== 'Image' &&
@@ -948,7 +954,7 @@ function MethodPane({
         )
         .slice()
         .sort((a, b) => a.displayName.localeCompare(b.displayName)),
-    [tbl],
+    [tbl, advancedFindOnly, putColumn],
   );
   // Same freeform + clearable Combobox pattern as Delete's ScopeEditor —
   // a vanilla Combobox is unusable on tables with 100+ columns; without

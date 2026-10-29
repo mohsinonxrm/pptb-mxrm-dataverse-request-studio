@@ -274,7 +274,7 @@ async function throttledMetadataQuery<T>(query: string): Promise<T> {
 // ── Entity metadata ────────────────────────────────────────────────────
 
 /** Fetch every entity in the org. Sorted client-side by display name. */
-export async function getAllEntities(advancedFindOnly: boolean = true): Promise<EntityMetadata[]> {
+export async function getAllEntities(advancedFindOnly: boolean = false): Promise<EntityMetadata[]> {
   if (!isDataverseAvailable()) throw new Error('PPTB Dataverse API not available');
 
   let query =
@@ -320,7 +320,8 @@ export function isBinaryColumn(a: Pick<AttributeMetadata, 'AttributeType' | 'Att
 /** Entity attributes — basic projection. Type-specific props via separate calls. */
 export async function getEntityAttributes(
   logicalName: string,
-  advancedFindOnly: boolean = true,
+  // Unfiltered by default: the pickers scope locally (#44).
+  advancedFindOnly: boolean = false,
 ): Promise<AttributeMetadata[]> {
   if (!isDataverseAvailable()) throw new Error('PPTB Dataverse API not available');
 
@@ -584,7 +585,8 @@ export async function getAttributesByTypeCast(
 /** Three parallel queries — 1:N + N:1 + N:N. Sorted client-side by SchemaName. */
 export async function getEntityRelationships(
   logicalName: string,
-  advancedFindOnly: boolean = true,
+  // Unfiltered by default: the pickers scope locally (#44).
+  advancedFindOnly: boolean = false,
 ): Promise<{
   oneToMany: RelationshipMetadata[];
   manyToOne: RelationshipMetadata[];

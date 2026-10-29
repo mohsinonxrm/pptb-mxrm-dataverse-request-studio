@@ -36,6 +36,7 @@ import {
   type WireRequest,
 } from '../../engine/batch/batchModel';
 import { encodePart } from '../../engine/batch/multipart';
+import { scopedNavs, useAdvancedFindOnly } from '../../state/metadataScope';
 
 const OPS: { id: BatchOpKind; label: string }[] = [
   { id: 'create', label: 'Create (POST)' },
@@ -78,16 +79,18 @@ export function BatchItemEditor({
   onMove: (delta: -1 | 1) => void;
   onMoveToGroup: (groupId: string) => void;
 }) {
-  const { entities } = useScopedEntities();
+  const { entities, allEntities } = useScopedEntities();
   // Resolve the entity set back to a logical name for navigation-property hints.
   const logical = useMemo(
-    () => entities.find((e) => e.entitySetName === item.entitySet.trim())?.logicalName ?? null,
-    [entities, item.entitySet],
+    () => allEntities.find((e) => e.entitySetName === item.entitySet.trim())?.logicalName ?? null,
+    [allEntities, item.entitySet],
   );
   const { table } = useLiveTable(item.op === 'associate' ? logical : null);
+  const advancedFindOnly = useAdvancedFindOnly();
   const navs = useMemo(
-    () => (table?.navigationProperties ?? []).filter(isCollectionValuedNav),
-    [table],
+    () =>
+      scopedNavs(table?.navigationProperties ?? [], advancedFindOnly).filter(isCollectionValuedNav),
+    [table, advancedFindOnly],
   );
   const listId = `drs-batch-sets-${item.id}`;
   const navListId = `drs-batch-navs-${item.id}`;

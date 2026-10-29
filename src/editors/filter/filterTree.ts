@@ -15,6 +15,7 @@ import { resolveNavPath } from '../../mock/metadata';
 import { findOperator, type OperatorDef } from './operators';
 import { attrRef } from '../../engine/odataAttr';
 import { ISO_DATE_RE, invalidNameReason, isPropertyPath } from '../../primitives/urlParts';
+import { isColumnInScope } from '../../state/metadataScope';
 // `Pick<>` here keeps the literal type narrow but allows ColumnMeta arity to widen
 export type { ColumnMeta } from '../../mock/metadata';
 
@@ -936,11 +937,20 @@ export function defaultGroup(firstColumn: string): FilterGroup {
  * defaulted to the first DateTime column rather than a wrong-type column.
  * Falls back to the first non-hidden column if none match.
  */
-export function defaultFunction(table: TableMeta, fnId = 'LastXDays'): FilterFunctionNode {
+export function defaultFunction(
+  table: TableMeta,
+  fnId = 'LastXDays',
+  advancedFindOnly = false,
+): FilterFunctionNode {
   const op = findOperator(fnId);
   const allowed = op?.allowedTypes;
+  // Columns the function picker offers: readable, in the picker scope (#44).
   const visibleCols = table.columns.filter(
-    (c) => c.attributeType !== 'File' && c.attributeType !== 'Image',
+    (c) =>
+      c.attributeType !== 'File' &&
+      c.attributeType !== 'Image' &&
+      c.isValidForRead !== false &&
+      isColumnInScope(c, advancedFindOnly),
   );
   const compatible = allowed
     ? visibleCols.find((c) => allowed.includes(c.attributeType))

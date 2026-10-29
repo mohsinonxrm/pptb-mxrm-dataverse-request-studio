@@ -51,6 +51,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🐛 Fixed
 
+- **"Advanced Find only" works, and is off by default** ([#44]), matching
+  FetchXML Studio:
+  - Off: the table, column and relationship pickers offer everything.
+  - On: they offer only what Advanced Find shows (`IsValidForAdvancedFind`).
+    Image and File columns are always offered.
+  - Metadata now loads unfiltered, and only the pickers are scoped, so a
+    column already in a request keeps working either way. Before, the switch
+    did nothing, and columns and relationships that Advanced Find hides were
+    never offered.
+  - The read pickers still never offer columns that can't be read, and new
+    sorts, filter rules and functions start on a column the picker offers.
+  - The Create form doesn't treat columns Advanced Find hides (such as
+    `owneridtype`) as required, as before.
+  - A setting saved by an earlier version is reset to off once.
+  - Loading a saved request, pasting a URL and a batch item's entity set
+    check the table against every table, so a saved request for a table
+    outside the Query Scope loads instead of being reported missing.
 - **Ids and names are checked before they go into a URL** ([#221]). A record
   id must be a GUID, and a navigation property or column name a plain name,
   before Execute enables. This applies in Associate, Disassociate, Execute
@@ -79,6 +96,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   collections, cURL / fetch / XHR / C# / PowerShell code and the HTTP-action
   URIs write `%20`. The URL bar still shows spaces.
 
+[#44]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/44
 [#109]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/109
 [#221]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/221
 [#241]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/241

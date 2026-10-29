@@ -210,7 +210,9 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
   };
 
   // ── Save / Load ──
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const currentSerialized = useMemo(() => serializeManageAttachment(state), [state]);

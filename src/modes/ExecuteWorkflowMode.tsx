@@ -170,7 +170,9 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
   const tbl = wf ? findTable(wf.primaryEntity) : undefined;
 
   // Save / Load
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const [entityRecordName, setEntityRecordName] = useState<string>('');

@@ -117,6 +117,7 @@ import {
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { isRecordGuid } from '../primitives/guid';
+import { isColumnInScope, useAdvancedFindOnly } from '../state/metadataScope';
 
 const initialState = (): DeleteState => ({
   table: '',
@@ -147,7 +148,9 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
   // findTable(), which is empty until the fetch lands — keying on `state`
   // alone left the URL / Code tab blank after picking a table (#78).
   const { table: liveTable } = useLiveTable(state.table || null);
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
@@ -1427,11 +1430,15 @@ function ScopeEditor({
   setScope: (s: DeleteScope) => void;
 }) {
   const tbl = findTable(table);
+  // Follows "Advanced Find only" (#44); the chosen column stays.
+  const advancedFindOnly = useAdvancedFindOnly();
+  const chosen = scope.kind === 'single-property' ? scope.column : null;
   const clearable = useMemo(
     () =>
       (tbl?.columns ?? [])
         .filter(
           (c) =>
+            (isColumnInScope(c, advancedFindOnly) || c.logicalName === chosen) &&
             c.attributeType !== 'Uniqueidentifier' &&
             c.attributeType !== 'File' &&
             c.attributeType !== 'Image' &&
@@ -1439,7 +1446,7 @@ function ScopeEditor({
         )
         .slice()
         .sort((a, b) => a.displayName.localeCompare(b.displayName)),
-    [tbl],
+    [tbl, advancedFindOnly, chosen],
   );
   // `search` is the user's currently-typed filter text. While typing, the
   // input shows what they're typing; once they pick (or clear), it falls

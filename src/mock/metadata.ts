@@ -121,6 +121,9 @@ export interface BaseColumnMeta {
   /** True iff this attribute can be read. Always true on standard
    *  attributes; surfaced for defensive $select filtering in Read modes. */
   isValidForRead?: boolean;
+  /** Shown in Advanced Find. Only the pickers use it, when "Advanced Find
+   *  only" is on (#44, state/metadataScope). Missing = true. */
+  isValidForAdvancedFind?: boolean;
   /**
    * True iff the attribute is exposed via the OData / Web API. Hard wall —
    * if false, the attribute can't be selected, filtered, ordered, or
@@ -472,6 +475,8 @@ export interface NavProperty {
    * single source attribute).
    */
   referencingAttribute?: string;
+  /** Shown in Advanced Find; scopes the relationship pickers (#44). Missing = true. */
+  isValidForAdvancedFind?: boolean;
 }
 
 /**
@@ -490,8 +495,9 @@ export interface AlternateKeyDef {
   columns: string[];
   /**
    * AttributeType of key columns that aren't in the table's loaded `columns`
-   * (the basic load is filtered to IsValidForAdvancedFind, so e.g.
-   * `canvasapp.componentstate` / `overwritetime` are missing). Filled by the
+   * (the basic load used to be filtered to IsValidForAdvancedFind, so e.g.
+   * `canvasapp.componentstate` / `overwritetime` were missing; #44 loads it
+   * unfiltered). Filled by the
    * live metadata provider so key literals are typed correctly (#64).
    */
   columnTypes?: Record<string, AttributeTypeCode>;

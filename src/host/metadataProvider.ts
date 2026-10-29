@@ -33,6 +33,8 @@ export interface EntityListItem {
   displayName: string;
   entitySetName: string;
   metadataId: string;
+  /** Shown in Advanced Find; scopes the table pickers (#44). */
+  isValidForAdvancedFind?: boolean;
 }
 
 export interface MetadataProvider {
@@ -153,6 +155,7 @@ export function mapAttribute(raw: AttributeMetadata): ColumnMeta | null {
     isValidForCreate: raw.IsValidForCreate !== false, // default true if undefined
     isValidForUpdate: raw.IsValidForUpdate !== false,
     isValidForRead: raw.IsValidForRead !== false,
+    isValidForAdvancedFind: raw.IsValidForAdvancedFind?.Value !== false,
     // Carried for diagnostics. Don't filter on it — see comment above.
     isValidOData: raw.IsValidODataAttribute !== false,
     // Fetched on the basic projection alongside everything else — see
@@ -292,6 +295,7 @@ function mapRelationships(
       // (referencingAttribute, targetEntity) to pick the right
       // `@odata.bind` property name. See urlBuilder.bindPropertyFor.
       referencingAttribute: r.ReferencingAttribute,
+      isValidForAdvancedFind: r.IsValidForAdvancedFind !== false,
     });
   }
 
@@ -305,6 +309,7 @@ function mapRelationships(
       relationshipName: r.SchemaName,
       cardinality: 'OneToMany',
       targetEntity: r.ReferencingEntity ?? '',
+      isValidForAdvancedFind: r.IsValidForAdvancedFind !== false,
     });
   }
 
@@ -321,6 +326,7 @@ function mapRelationships(
       relationshipName: r.SchemaName,
       cardinality: 'ManyToMany',
       targetEntity: isEntity1 ? (r.Entity2LogicalName ?? '') : (r.Entity1LogicalName ?? ''),
+      isValidForAdvancedFind: r.IsValidForAdvancedFind !== false,
     });
   }
   return out;
@@ -332,6 +338,7 @@ function mapEntityListItem(e: EntityMetadata): EntityListItem {
     displayName: labelOf(e.DisplayName, e.LogicalName),
     entitySetName: e.EntitySetName,
     metadataId: e.MetadataId,
+    isValidForAdvancedFind: e.IsValidForAdvancedFind !== false,
   };
 }
 
@@ -464,8 +471,8 @@ async function buildTable(logical: string): Promise<TableMeta | undefined> {
         }))
         .filter((k) => k.columns.length > 0);
 
-      // #64 — key columns missing from the basic (IsValidForAdvancedFind)
-      // load would otherwise be typed as strings and single-quoted in the
+      // #64 — key columns missing from the basic load (rare now that it's
+      // unfiltered, #44; it used to be IsValidForAdvancedFind-only) would otherwise be typed as strings and single-quoted in the
       // key URL (e.g. canvasapp `componentstate` / `overwritetime`). Fetch
       // their AttributeType; anything that still fails stays unknown.
       const loaded = new Set(columns.map((c) => c.logicalName));

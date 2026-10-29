@@ -53,6 +53,7 @@ import {
   type TableMeta,
 } from '../mock/metadata';
 import { useLiveTable } from '../host/useLiveMetadata';
+import { scopedColumns, scopedNavs, useAdvancedFindOnly } from '../state/metadataScope';
 
 const useStyles = makeStyles({
   // Trigger button. Fluent v9's <Button> appearance variants paint their
@@ -348,9 +349,15 @@ export function NavPathColumnPicker({
 
   // ── Options at the current draft-walked level ──
   const current = draftWalked.current;
+  const advancedFindOnly = useAdvancedFindOnly();
   const { columnsAtLevel, navsAtLevel } = useMemo(() => {
     if (!current) return { columnsAtLevel: [] as ColumnMeta[], navsAtLevel: [] as NavProperty[] };
-    let cols = current.columns;
+    // The options follow "Advanced Find only" (#44); the current value is
+    // resolved from the full table above, so it keeps showing.
+    // Read pickers ($filter, $apply groupby): only readable columns.
+    let cols = scopedColumns(current.columns, advancedFindOnly).filter(
+      (c) => c.isValidForRead !== false,
+    );
     // Always hide File / Image — never meaningful in filter/groupby paths.
     cols = cols.filter((c) => c.attributeType !== 'File' && c.attributeType !== 'Image');
     if (allowedColumnTypes) cols = cols.filter((c) => allowedColumnTypes.includes(c.attributeType));
@@ -358,11 +365,11 @@ export function NavPathColumnPicker({
     // Only N:1 navs are eligible drill-in steps — per spec, conditions on
     // collection-valued navs nested in a lookup are forbidden. This also
     // makes the forbidden lambda-in-lookup pattern impossible to construct.
-    const navs = current.navigationProperties.filter(
+    const navs = scopedNavs(current.navigationProperties, advancedFindOnly).filter(
       (n: NavProperty) => n.cardinality === 'ManyToOne',
     );
     return { columnsAtLevel: cols, navsAtLevel: navs };
-  }, [current, allowedColumnTypes, leafFilter]);
+  }, [current, allowedColumnTypes, leafFilter, advancedFindOnly]);
 
   const filteredColumns = useMemo(() => {
     const q = query.trim().toLowerCase();

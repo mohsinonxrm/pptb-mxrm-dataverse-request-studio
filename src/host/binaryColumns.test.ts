@@ -95,7 +95,7 @@ describe('getEntityAttributes (Advanced Find only)', () => {
     }));
     (window as unknown as { dataverseAPI: unknown }).dataverseAPI = { queryData };
 
-    const attrs = await getEntityAttributes('account');
+    const attrs = await getEntityAttributes('account', true);
 
     const query = queryData.mock.calls[0][0];
     expect(query).toContain(

@@ -6,6 +6,7 @@
 
 import { type ExpandSpec, makeExpandSpec } from '../ExpandEditor';
 import { findTable, type NavProperty, type TableMeta } from '../../mock/metadata';
+import { isNavInScope } from '../../state/metadataScope';
 
 // ────────────────────────────────────────────────────────────
 // Lookups
@@ -131,6 +132,8 @@ export interface NavAvailabilityOpts {
    * host N:1 AND further 1:N. Only N:N parents truly forbid all nesting.
    */
   parentCardinality: NavProperty['cardinality'] | null;
+  /** Offer only the relationships Advanced Find shows (#44). */
+  advancedFindOnly?: boolean;
 }
 
 /**
@@ -164,6 +167,7 @@ export function availableNavsAt(
   const used = new Set(existingAtLevel.map((e) => e.nav));
   return parent.navigationProperties.filter((n) => {
     if (used.has(n.name)) return false;
+    if (!isNavInScope(n, opts.advancedFindOnly ?? false)) return false;
     // Inside a 1:N collection, N:N navs are not safely nestable in
     // Dataverse (the docs' "N:N when nested $expand exists in the query"
     // restriction). Filter them out at this level.
