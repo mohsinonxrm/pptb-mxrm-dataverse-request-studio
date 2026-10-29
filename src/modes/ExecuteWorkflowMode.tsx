@@ -438,6 +438,17 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
           method="POST"
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={
+            wf
+              ? {
+                  operation: `Execute Workflow "${wf.name}"`,
+                  table: wf.primaryEntity || undefined,
+                  scope: { kind: 'records', count: 1 },
+                  highImpact: true,
+                }
+              : null
+          }
           executeIcon={Flowchart20Filled}
           disabledReason={disabledReason}
           loading={loading}

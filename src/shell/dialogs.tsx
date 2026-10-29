@@ -24,6 +24,8 @@ import {
   DialogContent,
   DialogSurface,
   DialogTitle,
+  Field,
+  Input,
   Toast,
   ToastBody,
   ToastTitle,
@@ -36,6 +38,7 @@ import {
   type ToastIntent,
 } from '@fluentui/react-components';
 import { Dismiss16Regular } from '@fluentui/react-icons';
+import { isTypedConfirmation } from '../engine/writeConfirm';
 
 export interface ConfirmOptions {
   /** Dialog title. Defaults to "Are you sure?". */
@@ -48,6 +51,13 @@ export interface ConfirmOptions {
   cancelLabel?: string;
   /** Style the confirm button as a destructive (red) action. */
   destructive?: boolean;
+  /**
+   * Require this word to be typed (case-insensitive) before the confirm
+   * button enables (#241).
+   */
+  typeToConfirm?: string;
+  /** Wider surface, for confirmations with a details table. */
+  wide?: boolean;
 }
 
 export interface NotifyOptions {
@@ -190,41 +200,77 @@ export function AppDialogHost() {
     setConfirms((q) => q.filter((p) => p.id !== current.id));
   };
 
-  const o = current?.options;
   return (
     <>
       <Toaster toasterId={toasterId} position="top-end" offset={{ vertical: 48 }} limit={4} />
-      {current && o && (
-        <Dialog
-          key={current.id}
-          open
-          modalType="alert"
-          onOpenChange={(_, d) => {
-            if (!d.open) settle(false);
-          }}
-        >
-          <DialogSurface style={{ maxWidth: 480 }}>
-            <DialogBody>
-              <DialogTitle>{o.title ?? 'Are you sure?'}</DialogTitle>
-              {o.message != null && (
-                <DialogContent className={s.message}>{o.message}</DialogContent>
-              )}
-              <DialogActions>
-                <Button appearance="secondary" onClick={() => settle(false)}>
-                  {o.cancelLabel ?? 'Cancel'}
-                </Button>
-                <Button
-                  appearance="primary"
-                  className={o.destructive ? s.destructive : undefined}
-                  onClick={() => settle(true)}
-                >
-                  {o.confirmLabel ?? (o.destructive ? 'Delete' : 'OK')}
-                </Button>
-              </DialogActions>
-            </DialogBody>
-          </DialogSurface>
-        </Dialog>
-      )}
+      {current && <ConfirmView key={current.id} options={current.options} settle={settle} />}
     </>
+  );
+}
+
+/** One confirm dialog. Keyed by request, so a typed confirmation starts empty each time. */
+function ConfirmView({
+  options: o,
+  settle,
+}: {
+  options: ConfirmOptions;
+  settle: (ok: boolean) => void;
+}) {
+  const s = useStyles();
+  const [typed, setTyped] = useState('');
+  const word = o.typeToConfirm?.trim();
+  const blocked = !!word && !isTypedConfirmation(typed, word);
+  return (
+    <Dialog
+      open
+      modalType="alert"
+      onOpenChange={(_, d) => {
+        if (!d.open) settle(false);
+      }}
+    >
+      <DialogSurface style={{ maxWidth: o.wide ? 600 : 480 }}>
+        <DialogBody>
+          <DialogTitle>{o.title ?? 'Are you sure?'}</DialogTitle>
+          {(o.message != null || word) && (
+            <DialogContent className={s.message}>
+              {o.message}
+              {word && (
+                <Field
+                  label={
+                    <>
+                      Type <strong>{word}</strong> to confirm
+                    </>
+                  }
+                  style={{ marginTop: tokens.spacingVerticalM }}
+                >
+                  <Input
+                    value={typed}
+                    onChange={(_, d) => setTyped(d.value)}
+                    aria-label={`Type ${word} to confirm`}
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !blocked) settle(true);
+                    }}
+                  />
+                </Field>
+              )}
+            </DialogContent>
+          )}
+          <DialogActions>
+            <Button appearance="secondary" onClick={() => settle(false)}>
+              {o.cancelLabel ?? 'Cancel'}
+            </Button>
+            <Button
+              appearance="primary"
+              className={o.destructive ? s.destructive : undefined}
+              disabled={blocked}
+              onClick={() => settle(true)}
+            >
+              {o.confirmLabel ?? (o.destructive ? 'Delete' : 'OK')}
+            </Button>
+          </DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
   );
 }

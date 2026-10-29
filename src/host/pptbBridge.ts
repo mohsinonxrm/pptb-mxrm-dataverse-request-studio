@@ -42,6 +42,8 @@ export interface HostSession {
   environmentUrl: string;
   /** Environment label from the host — "Dev" / "Test" / "UAT" / "Production" or empty. */
   environment: string;
+  /** The connection's name in ToolBox (e.g. "Contoso Prod"), or empty. Shown in write confirmations (#241). */
+  connectionName: string;
   /**
    * True once the initial host handshake (theme + active connection) has
    * resolved. Always true standalone. Lets consumers tell "still connecting"
@@ -69,6 +71,7 @@ let session: HostSession = {
   theme: readBootTheme(),
   environmentUrl: '',
   environment: '',
+  connectionName: '',
   handshakeDone: !EMBEDDED,
 };
 
@@ -112,6 +115,7 @@ interface ConnectionSnapshot {
   connected: boolean;
   environmentUrl: string;
   environment: string;
+  connectionName: string;
 }
 
 /**
@@ -145,11 +149,20 @@ async function fetchActiveConnection(
 ): Promise<(ConnectionSnapshot & { id: string | null }) | null> {
   try {
     const c = await api.connections?.getActiveConnection?.();
-    if (!c) return { connected: false, environmentUrl: '', environment: '', id: null };
+    if (!c) {
+      return {
+        connected: false,
+        environmentUrl: '',
+        environment: '',
+        connectionName: '',
+        id: null,
+      };
+    }
     return {
       connected: true,
       environmentUrl: c.url ?? '',
       environment: c.environment ?? '',
+      connectionName: c.name ?? '',
       id: typeof c.id === 'string' && c.id ? c.id : null,
     };
   } catch (e) {
@@ -236,6 +249,7 @@ async function refetchConnection(
         connected: false,
         environmentUrl: '',
         environment: '',
+        connectionName: '',
         handshakeDone: true,
       });
       return;

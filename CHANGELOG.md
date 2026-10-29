@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ✨ Added
+
+- **Writes ask before they're sent** ([#241]). The confirmation names the
+  target: the environment (connection name, URL and type, with Production
+  highlighted), the operation, the table and the scope. Execute and Ctrl+Enter
+  both go through it.
+  - Merge, Execute Action / Custom API / Custom Action, Execute Workflow, Bulk
+    Write, `$batch` and ExecuteMultiple with writes, and multi-target
+    Associate / Disassociate always ask.
+  - Create, Update, Upsert and single-target Associate / Disassociate ask on a
+    Production connection.
+  - On Production, and for more than 100 records anywhere, you type the table
+    (or operation) name before the button enables.
+- **The header shows the connection and its environment type** inside
+  ToolBox too, with Production in red ([#241]).
+- **Production safe mode** in Settings → Safety, on by default ([#241]).
+- **README: "What this tool changes"** lists every request that changes data,
+  when it asks, and what DRS stores locally ([#241]).
+
+[#241]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/241
+
 ## [1.4.0-beta.3] - 2026-10-27
 
 The third 1.4.0 beta fixes what a full regression pass on beta.2 turned up

@@ -566,6 +566,20 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
           method="POST"
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={
+            action
+              ? {
+                  operation: `${type.name} ${action.name}`,
+                  table: boundEntity ?? undefined,
+                  scope: boundEntity
+                    ? { kind: 'records', count: 1 }
+                    : { kind: 'text', text: 'Unbound: runs against the environment' },
+                  highImpact: true,
+                  confirmWord: action.name,
+                }
+              : null
+          }
           executeIcon={Flash20Filled}
           disabledReason={disabledReason}
           loading={loading}

@@ -723,6 +723,13 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
           method="PATCH"
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={{
+            operation: 'Upsert Record',
+            table: state.table,
+            scope: { kind: 'records', count: 1 },
+            highImpact: false,
+          }}
           disabledReason={disabledReason ?? bypassBlocker}
           loading={loading}
           onExecute={onExecute}

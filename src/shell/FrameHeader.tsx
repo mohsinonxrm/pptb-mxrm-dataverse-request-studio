@@ -35,6 +35,7 @@ import { useHostSession } from '../host/HostContext';
 import { useSaveContext } from '../state/SaveContext';
 import { useRegisterModeNavigator } from '../state/modeHandoff';
 import { SaveButton, SavedLibraryButton } from '../editors/SavedRequestsDialog';
+import { EnvironmentBadge } from './confirmWrite';
 
 export function FrameHeader({
   themeMode,
@@ -98,6 +99,42 @@ export function FrameHeader({
         </Breadcrumb>
       </div>
       <div className={s.spacer} />
+      {/* The connection the requests go to, also when embedded, with
+          Production highlighted (#241). */}
+      {embedded && host.connected && (host.connectionName || host.environment) && (
+        <Tooltip
+          content={`Requests go to ${host.connectionName || 'this connection'}${
+            host.environmentUrl ? ` (${host.environmentUrl.replace(/\/$/, '')})` : ''
+          }`}
+          relationship="description"
+        >
+          <span
+            data-testid="environment-indicator"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              flexShrink: 1,
+              minWidth: 0,
+              maxWidth: 260,
+              marginRight: 8,
+            }}
+          >
+            <span
+              style={{
+                fontSize: tokens.fontSizeBase200,
+                color: tokens.colorNeutralForeground2,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {host.connectionName}
+            </span>
+            <EnvironmentBadge environment={host.environment} />
+          </span>
+        </Tooltip>
+      )}
       {!embedded && (
         <>
           <Badge

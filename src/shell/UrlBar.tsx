@@ -10,6 +10,10 @@ import type { Advisory } from '../primitives/advisories';
 import { ENV } from '../mock/environment';
 import { UrlTokens } from './UrlTokens';
 import type { HttpMethod } from '../registry/requestTypes';
+import { getSession } from '../host/pptbBridge';
+import { usePersistedSettings } from '../host/usePersistedSettings';
+import { needsWriteConfirmation, type WriteConfirmSpec } from '../engine/writeConfirm';
+import { confirmWrite } from './confirmWrite';
 
 export interface UrlBarProps {
   method: HttpMethod;
@@ -47,6 +51,13 @@ export interface UrlBarProps {
    * multipart body of a $batch (#198). Defaults to the URL length.
    */
   bytes?: number;
+  /**
+   * What the request changes, for the write confirmation (#241). Execute
+   * (and Ctrl+Enter) asks first when engine/writeConfirm says so. Omit, or
+   * pass null, for reads and for modes that confirm on their own (Delete,
+   * Bulk Delete Job).
+   */
+  writeConfirm?: WriteConfirmSpec | null;
 }
 
 export function UrlBar({
@@ -60,10 +71,12 @@ export function UrlBar({
   advisories,
   onAdvisoryFocus,
   bytes,
+  writeConfirm,
 }: UrlBarProps) {
   const ExecIcon = executeIcon ?? Play20Filled;
   const s = useStudioStyles();
   const fullUrl = `https://${ENV.host}${url}`;
+  const [{ productionSafeMode }] = usePersistedSettings();
 
   // Re-entry guard. `loading` only flips after the mode re-renders, so a
   // held / repeated Ctrl+Enter (or a click in the same frame) could start a
@@ -77,15 +90,24 @@ export function UrlBar({
   const execute = useCallback(() => {
     if (busyRef.current || loading || disabledReason) return;
     busyRef.current = true;
-    Promise.resolve()
-      .then(onExecute)
+    // Writes ask first (#241). The session is read now, not at render, so the
+    // confirmation names the connection the request will actually use. The
+    // re-entry guard stays held while the dialog is open.
+    const session = getSession();
+    const ask = needsWriteConfirmation(writeConfirm, session.environment, productionSafeMode);
+    Promise.resolve(
+      ask && writeConfirm
+        ? confirmWrite(writeConfirm, session, { productionSafeMode, verb: executeVerb })
+        : true,
+    )
+      .then((ok) => (ok ? onExecute() : undefined))
       .catch((e: unknown) => {
         console.error('Execute failed', e);
       })
       .finally(() => {
         busyRef.current = false;
       });
-  }, [disabledReason, loading, onExecute]);
+  }, [disabledReason, executeVerb, loading, onExecute, productionSafeMode, writeConfirm]);
 
   // Ctrl+Enter shortcut
   useEffect(() => {

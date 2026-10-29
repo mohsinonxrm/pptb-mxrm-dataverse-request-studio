@@ -872,6 +872,13 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
           method={state.method}
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={{
+            operation: 'Update Record',
+            table: state.table,
+            scope: { kind: 'records', count: 1 },
+            highImpact: false,
+          }}
           disabledReason={disabledReason ?? bypassBlocker}
           loading={loading}
           onExecute={onExecute}
