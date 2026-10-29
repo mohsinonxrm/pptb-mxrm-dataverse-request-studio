@@ -5,7 +5,7 @@ on:
   # and support/** (RELEASING.md).
   pull_request:
   push:
-    branches: [dev, main, "release/**", "support/**"]
+    branches: [dev, main, 'release/**', 'support/**']
 
 permissions:
   contents: read
