@@ -28,6 +28,7 @@ import {
 } from '../mock/metadata';
 import { attrRef } from '../engine/odataAttr';
 import { PaneHead } from './PaneHead';
+import { scopedColumns, useAdvancedFindOnly } from '../state/metadataScope';
 import { ApplyOverridesBanner } from './ApplyOverridesBanner';
 import { SortableList, SortableItem } from '../primitives/Sortable';
 import { MoreOptionsHint, useOptionSearch } from '../primitives/optionSearch';
@@ -61,6 +62,7 @@ export function OrderbyEditor({
 }: OrderbyEditorProps) {
   const s = useStudioStyles();
   const tbl = findTable(table);
+  const advancedFindOnly = useAdvancedFindOnly();
   if (!tbl) return null;
 
   // Per-type orderby warnings — sourced from spec §21 (order-rows.md):
@@ -214,7 +216,7 @@ export function OrderbyEditor({
                       // FilterEditor: honor IsValidForRead, hide companion
                       // *name / *yominame logical read-only columns. File and
                       // Image columns can't be sorted on.
-                      columns={tbl.columns
+                      columns={scopedColumns(tbl.columns, advancedFindOnly)
                         .filter((c) => c.isValidForRead !== false)
                         .filter((c) => c.attributeType !== 'File' && c.attributeType !== 'Image')
                         .filter((c) => !isCompanionLogicalReadOnly(c))}

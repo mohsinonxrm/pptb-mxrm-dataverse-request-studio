@@ -122,6 +122,7 @@ import Editor from '../monaco/MonacoEditor';
 import type { ThemeMode } from '../theme/theme';
 import type { CreateFieldValue, LookupFieldValue } from '../state/writeState';
 import type { RequestGroup } from '../registry/requestTypes';
+import { scopedColumns, useAdvancedFindOnly } from '../state/metadataScope';
 
 // ──────────────────────────────────────────────────────────────
 // System-managed columns we hide from the Create form.
@@ -484,11 +485,14 @@ export function FieldSetEditor({
     return pool;
   }, [writable, values, nullFields, filter, search, tbl, inWorkingSet]);
 
-  // Pool of fields available to add (writable, not currently visible)
+  // Pool of fields available to add (writable, not currently visible). It
+  // follows "Advanced Find only" (#44); required and filled-in fields always
+  // show, since they come from `writable`.
+  const advancedFindOnly = useAdvancedFindOnly();
   const addable = useMemo(() => {
     const visibleIds = new Set(visible.map((c) => c.logicalName));
-    return writable.filter((c) => !visibleIds.has(c.logicalName));
-  }, [writable, visible]);
+    return scopedColumns(writable, advancedFindOnly).filter((c) => !visibleIds.has(c.logicalName));
+  }, [writable, visible, advancedFindOnly]);
 
   if (!tbl) {
     return (

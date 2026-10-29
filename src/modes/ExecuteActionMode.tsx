@@ -161,7 +161,9 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
   );
 
   // Save / Load tracking
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   // Bound-record name cache — populated when the user picks via TargetEditor.

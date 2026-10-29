@@ -84,6 +84,12 @@ import { MoreOptionsHint, useOptionSearch } from '../../primitives/optionSearch'
 import { AntipatternIcon } from '../../primitives/AntipatternIcon';
 import { detectColumnAntipatterns } from '../../engine/antipatterns';
 import { AddressChips } from './AddressChips';
+import {
+  isColumnInScope,
+  isNavInScope,
+  scopedNavs,
+  useAdvancedFindOnly,
+} from '../../state/metadataScope';
 
 /**
  * Resolves the leaf `ColumnMeta` for a slash-delimited nav-path PLUS the
@@ -536,7 +542,10 @@ function AddMenu({
     levelAlias?: string,
   ) => void;
 }) {
-  const collections = table.navigationProperties.filter((n) => n.cardinality !== 'ManyToOne');
+  const advancedFindOnly = useAdvancedFindOnly();
+  const collections = scopedNavs(table.navigationProperties, advancedFindOnly).filter(
+    (n) => n.cardinality !== 'ManyToOne',
+  );
   // Every onAdd call below propagates the LEVEL's table + alias so that
   // FilterEditor.addToGroup seeds the new rule/group/function from the
   // correct entity's columns and prefixes lambda-scoped rules.
@@ -677,7 +686,10 @@ function AddLambdaPicker({
     levelAlias?: string,
   ) => void;
 }) {
-  const collections = table.navigationProperties.filter((n) => n.cardinality !== 'ManyToOne');
+  const advancedFindOnly = useAdvancedFindOnly();
+  const collections = scopedNavs(table.navigationProperties, advancedFindOnly).filter(
+    (n) => n.cardinality !== 'ManyToOne',
+  );
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
 
@@ -939,18 +951,22 @@ function RuleRow({
     return r.col ? r : { col: findColumn(table, lastSeg), ownerTable: table };
   })();
   const op = findOperator(rule.op);
+  // The pickers follow "Advanced Find only" (#44); the rule's own column
+  // stays offered so it keeps showing.
+  const advancedFindOnly = useAdvancedFindOnly();
   const noVal = op?.arity === 0;
   // Always-hidden types (File / Image — not filterable on content)
   const visibleColumns = useMemo(
     () =>
       table.columns.filter(
         (c) =>
+          (isColumnInScope(c, advancedFindOnly) || c.logicalName === rule.col) &&
           c.attributeType !== 'File' &&
           c.attributeType !== 'Image' &&
           c.isValidForRead !== false &&
           !isCompanionLogicalReadOnly(c),
       ),
-    [table],
+    [table, advancedFindOnly, rule.col],
   );
   // Symmetric inverse filter: when the user has picked a typed operator (e.g.
   // `contains`, which is String/Memo only), the column dropdown is narrowed to
@@ -1244,6 +1260,7 @@ function FunctionBlock({
 }) {
   const s = useStudioStyles();
   const op = findOperator(fn.op);
+  const advancedFindOnly = useAdvancedFindOnly();
   const lastSeg = fn.col.split('/').pop() ?? fn.col;
   const col = findColumn(table, lastSeg);
 
@@ -1259,6 +1276,7 @@ function FunctionBlock({
   const compatibleColumns = useMemo(() => {
     const visible = table.columns.filter(
       (c) =>
+        (isColumnInScope(c, advancedFindOnly) || c.logicalName === fn.col) &&
         c.attributeType !== 'File' &&
         c.attributeType !== 'Image' &&
         c.isValidForRead !== false &&
@@ -1267,7 +1285,7 @@ function FunctionBlock({
     const allowed = op?.allowedTypes;
     if (!allowed) return visible;
     return visible.filter((c) => allowed.includes(c.attributeType));
-  }, [table, op]);
+  }, [table, op, advancedFindOnly, fn.col]);
 
   const onColChange = (logicalName: string) =>
     onUpdate(fn.id, { col: logicalName, val: '', vals: undefined, values: undefined });
@@ -1529,7 +1547,12 @@ function LambdaBlock({
   gripProps?: GripProps;
 }) {
   const s = useStudioStyles();
-  const collections = parentTable.navigationProperties.filter((n) => n.cardinality !== 'ManyToOne');
+  const advancedFindOnly = useAdvancedFindOnly();
+  // The lambda's own navigation stays offered (#44).
+  const collections = parentTable.navigationProperties.filter(
+    (n) =>
+      n.cardinality !== 'ManyToOne' && (isNavInScope(n, advancedFindOnly) || n.name === node.nav),
+  );
   const nav = parentTable.navigationProperties.find((n) => n.name === node.nav);
   // Warm the selected nav's target entity. Re-renders this block (via
   // the live-table registry subscription) when the fetch resolves so

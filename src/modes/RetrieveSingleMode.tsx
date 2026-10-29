@@ -107,7 +107,9 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   // saved-request reload / pasted URL where no expand editor was opened.
   // `related.version` re-encodes `built` when a related table lands (#63).
   const related = useWarmReferencedTables(state.table || null, { expand: state.expand });
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);

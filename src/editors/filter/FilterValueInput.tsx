@@ -54,6 +54,7 @@ import { useLookupRecords } from '../../host/useLookupRecords';
 import { useColumnDetail } from '../../host/useColumnDetail';
 import { parseDateTimeValue } from '../dateTimeValue';
 import type { JSX } from 'react';
+import { isColumnInScope, useAdvancedFindOnly } from '../../state/metadataScope';
 
 // Filter date values are either `YYYY-MM-DD` or a UTC instant
 // (`toISOString`), whatever the column's behavior, so read them the
@@ -1183,6 +1184,7 @@ function ChoiceTagPicker({
 // ============================================================
 function ColumnRhsPicker({ rule, col, parentTable, onChange }: ValueInputProps): JSX.Element {
   const valueLabel = useContext(ValueLabelContext);
+  const advancedFindOnly = useAdvancedFindOnly();
   if (!parentTable || !col) {
     return (
       <Input
@@ -1194,8 +1196,12 @@ function ColumnRhsPicker({ rule, col, parentTable, onChange }: ValueInputProps):
       />
     );
   }
+  // Follows "Advanced Find only" (#44); the column already compared stays.
   const sameType = parentTable.columns.filter(
-    (c) => c.attributeType === col.attributeType && c.logicalName !== col.logicalName,
+    (c) =>
+      c.attributeType === col.attributeType &&
+      c.logicalName !== col.logicalName &&
+      (isColumnInScope(c, advancedFindOnly) || c.logicalName === rule.val),
   );
   const cur = sameType.find((c) => c.logicalName === rule.val);
 

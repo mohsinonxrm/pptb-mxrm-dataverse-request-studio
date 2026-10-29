@@ -171,7 +171,9 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   });
   // Entity list — used to validate saved-request loads against the
   // current org (block load if the entity has been uninstalled).
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);

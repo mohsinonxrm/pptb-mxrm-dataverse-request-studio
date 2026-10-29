@@ -61,7 +61,16 @@ export interface OrgScopeSelection {
  */
 export interface PersistedDisplaySettings extends DisplaySettings {
   scopeByOrg?: Record<string, OrgScopeSelection>;
+  /**
+   * 2 from 1.5.0. Before it, "Advanced Find only" did nothing and was saved
+   * as `true` by default, so a value stored without this marker is dropped
+   * once and the new default (off) applies (#44).
+   */
+  settingsRevision?: number;
 }
+
+/** The current `settingsRevision`. */
+export const SETTINGS_REVISION = 2;
 
 /**
  * The settings as seen from one org: that org's scope selection, or an
@@ -119,7 +128,8 @@ export const defaultDisplaySettings: DisplaySettings = {
   valueDisplayMode: 'formatted',
   columnWidths: {},
   entityScopeMode: 'publisher-solution',
-  advancedFindOnly: true,
+  // Off by default, as in FetchXML Studio (#44).
+  advancedFindOnly: false,
   gridDensity: 'medium',
   productionSafeMode: true,
   selectedPublisherIds: [],
@@ -139,6 +149,8 @@ export const DISPLAY_SETTINGS_KEY = settingsKey('displaySettings');
 export function mergeWithDefaults(
   stored: Partial<PersistedDisplaySettings> | undefined,
 ): PersistedDisplaySettings {
-  if (!stored) return { ...defaultDisplaySettings };
-  return { ...defaultDisplaySettings, ...stored };
+  if (!stored) return { ...defaultDisplaySettings, settingsRevision: SETTINGS_REVISION };
+  const migrated = { ...stored };
+  if ((stored.settingsRevision ?? 1) < 2) delete migrated.advancedFindOnly;
+  return { ...defaultDisplaySettings, ...migrated, settingsRevision: SETTINGS_REVISION };
 }

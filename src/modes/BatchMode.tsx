@@ -118,7 +118,9 @@ export function BatchMode({
   );
   const [state, setState] = useState<BatchState>(draft.state);
   const returnResponses = state.returnResponses ?? true;
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [activePath, setActivePath] = useState('overview');
   const [tab, setTab] = useState<MainTab>('builder');
   const [run, setRun] = useState<BatchRunResult | null>(null);

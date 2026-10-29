@@ -16,6 +16,7 @@ import { PaneHead } from './PaneHead';
 import { findTable, type NavProperty } from '../mock/metadata';
 import { useLiveTable } from '../host/useLiveMetadata';
 import type { RequestGroup } from '../registry/requestTypes';
+import { isNavInScope, useAdvancedFindOnly } from '../state/metadataScope';
 
 export interface NavPropertyPickerProps {
   table: string;
@@ -41,6 +42,9 @@ export function NavPropertyPicker({
   const tbl = findTable(table);
   const navProps = tbl?.navigationProperties ?? [];
   const current = navProps.find((n) => n.name === value);
+  // The options follow "Advanced Find only" (#44); the chosen one stays.
+  const advancedFindOnly = useAdvancedFindOnly();
+  const offered = navProps.filter((n) => isNavInScope(n, advancedFindOnly) || n.name === value);
 
   // Warm ONLY the currently-selected nav's target — the option rows can
   // safely render the raw logical name; loading 50+ targets up-front would
@@ -64,7 +68,7 @@ export function NavPropertyPicker({
             onOptionSelect={(_, d) => onChange(d.optionValue ?? null)}
             placeholder="Pick a navigation property…"
           >
-            {navProps.map((n) => (
+            {offered.map((n) => (
               <Option key={n.name} value={n.name} text={n.name}>
                 <NavOptionRow nav={n} forOperation={forOperation} />
               </Option>

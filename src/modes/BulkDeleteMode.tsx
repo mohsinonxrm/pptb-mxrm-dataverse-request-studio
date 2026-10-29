@@ -127,7 +127,9 @@ export function BulkDeleteMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType(MODE_ID);
   const [state, setState] = useState<BulkDeleteState>(() => ({ ...defaults(), dirty: new Set() }));
   const { table: liveTable } = useLiveTable(state.table || null);
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [activePath, setActivePath] = useState('target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);

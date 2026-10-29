@@ -33,7 +33,7 @@
 // component for the editing surface. Encoding is delegated to
 // `groupToOData(prefilter, table)`.
 
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   Button,
   Combobox,
@@ -55,13 +55,14 @@ import {
   Filter20Filled,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
-import { findTable } from '../mock/metadata';
+import { findTable, type ColumnMeta } from '../mock/metadata';
 import { NavPathColumnPicker } from '../primitives/NavPathColumnPicker';
 import { SortableList, SortableItem } from '../primitives/Sortable';
 import { PaneHead } from './PaneHead';
 import { FilterEditor } from './filter/FilterEditor';
 import { emptyTree, groupToOData, type FilterGroup } from './filter/filterTree';
 import type { RequestGroup } from '../registry/requestTypes';
+import { isColumnInScope, useAdvancedFindOnly } from '../state/metadataScope';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -181,29 +182,45 @@ export function ApplyEditor({
   // ── Column filters ──
   // groupby: per doc, DateTime is NOT supported. Memo / File / Image excluded
   //   because aggregating large blobs is meaningless server-side.
+  // The pickers follow "Advanced Find only" (#44), keeping the columns the
+  // spec already uses so they still resolve.
+  const advancedFindOnly = useAdvancedFindOnly();
+  const usedCols = useMemo(
+    () => new Set([...spec.groupby, ...spec.aggregates.map((a) => a.col)]),
+    [spec.groupby, spec.aggregates],
+  );
+  const offered = useCallback(
+    (c: ColumnMeta) => isColumnInScope(c, advancedFindOnly) || usedCols.has(c.logicalName),
+    [advancedFindOnly, usedCols],
+  );
   const groupableCols = useMemo(
     () =>
       tbl
         ? tbl.columns.filter(
             (c) =>
+              offered(c) &&
               c.attributeType !== 'DateTime' &&
               c.attributeType !== 'Memo' &&
               c.attributeType !== 'File' &&
               c.attributeType !== 'Image',
           )
         : [],
-    [tbl],
+    [tbl, offered],
   );
 
   // Per-function eligibility — derive once per render. The picker for each
   // aggregate row reads `colsFor(a.fn)` to scope choices.
   const colsFor = useMemo(
-    () => (fn: AggFn) => (tbl ? tbl.columns.filter((c) => isAggregateEligible(fn, c)) : []),
-    [tbl],
+    () => (fn: AggFn) =>
+      tbl ? tbl.columns.filter((c) => offered(c) && isAggregateEligible(fn, c)) : [],
+    [tbl, offered],
   );
   // Default seed for "Add scalar aggregate" — numeric columns are the safest
   // starting point.
-  const numericCols = useMemo(() => (tbl ? tbl.columns.filter(isNumeric) : []), [tbl]);
+  const numericCols = useMemo(
+    () => (tbl ? tbl.columns.filter((c) => offered(c) && isNumeric(c)) : []),
+    [tbl, offered],
+  );
 
   if (!tbl) return null;
 

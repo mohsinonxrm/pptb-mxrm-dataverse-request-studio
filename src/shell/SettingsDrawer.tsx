@@ -287,18 +287,18 @@ export function SettingsDrawer({
                 <Text className={styles.settingLabel}>
                   Advanced Find Only
                   <Tooltip
-                    content="When on, entities and attributes are limited to those marked IsValidForAdvancedFind — the same set exposed by Advanced Find in Model-Driven Apps. Turn off to access all entities and attributes."
+                    content="When on, the table, column and relationship pickers offer only what Advanced Find shows (IsValidForAdvancedFind). It doesn't restrict requests: a column already in a request keeps working, and Image and File columns are always offered."
                     relationship="description"
                   >
                     <Info16Regular style={{ color: tokens.colorNeutralForeground3 }} />
                   </Tooltip>
                 </Text>
                 <Text className={styles.settingDescription} block>
-                  Limit entities &amp; attributes to Advanced Find-eligible ones
+                  Limit the pickers to tables, columns and relationships Advanced Find shows
                 </Text>
                 {!settings.advancedFindOnly && (
                   <Text className={styles.disabledHint} block>
-                    All entities and attributes are shown — including non-queryable ones
+                    Off: the pickers offer every table, column and relationship.
                   </Text>
                 )}
               </div>

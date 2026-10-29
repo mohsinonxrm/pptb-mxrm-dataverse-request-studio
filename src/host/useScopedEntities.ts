@@ -21,6 +21,7 @@ import { metadata, subscribeMetadataReset, type EntityListItem } from './metadat
 import { useHostSession } from './HostContext';
 import { recheckConnection } from './pptbBridge';
 import { usePersistedSettings } from './usePersistedSettings';
+import { isEntityInScope } from '../state/metadataScope';
 
 export interface UseScopedEntitiesResult {
   entities: EntityListItem[];
@@ -155,12 +156,16 @@ export function useScopedEntities(): UseScopedEntitiesResult {
   }, [settings.entityScopeMode, solutionKey, connectionKey, attempt]);
 
   // ── Compose visible list ──
+  // "Advanced Find only" applies on top of the Query Scope, locally, so
+  // toggling it is instant (#44).
+  const afOnly = settings.advancedFindOnly;
   const visible = useMemo(() => {
-    if (settings.entityScopeMode === 'all') return all;
+    const inAf = (e: EntityListItem) => isEntityInScope(e, afOnly);
+    if (settings.entityScopeMode === 'all') return afOnly ? all.filter(inAf) : all;
     if (scopedNames === null) return [];
     const set = new Set(scopedNames);
-    return all.filter((e) => set.has(e.logicalName));
-  }, [all, scopedNames, settings.entityScopeMode]);
+    return all.filter((e) => set.has(e.logicalName) && inAf(e));
+  }, [all, scopedNames, settings.entityScopeMode, afOnly]);
 
   // needsSetup: scoped mode but no solutions chosen yet (entity list will be
   // empty until the user configures Settings → Query Scope).
