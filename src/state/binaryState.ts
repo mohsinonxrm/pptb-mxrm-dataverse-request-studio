@@ -104,6 +104,9 @@ export interface ManageImageState {
 
   source: BinarySource;
   fileName: string;
+  /** Size of the chosen file (bytes) for the column size check; missing on
+   *  requests saved before 1.5.0 (#222). */
+  fileSize?: number;
   bodyBase64: string;
   bodyUrl: string;
   mimeType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/bmp' | 'image/tiff';

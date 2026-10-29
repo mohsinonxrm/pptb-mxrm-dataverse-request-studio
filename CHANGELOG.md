@@ -51,6 +51,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🐛 Fixed
 
+- **Choosing a file no longer reads it into memory** ([#222]). Manage File,
+  Image and Attachment Data keep the file's name, size and type only: Execute
+  can't send binary content from inside ToolBox, and the Code tab uses a
+  placeholder for the bytes, so a large file used to freeze the tool for
+  nothing. Manage Image previews the chosen image through an object URL (up
+  to 5 MB). A pasted base64 body is capped at 10 MB, with a message.
+- **Non-ASCII file names work in generated upload code** ([#222]). The
+  `x-ms-file-name` header only takes ASCII (and `fetch` / XHR throw on such
+  a header), so a name like `报告.pdf` or `Résumé.docx` travels as the
+  `x-ms-file-name` query parameter instead, as Microsoft documents, in both
+  the single-request and chunked uploads.
 - **"Advanced Find only" works, and is off by default** ([#44]), matching
   FetchXML Studio:
   - Off: the table, column and relationship pickers offer everything.
@@ -96,6 +107,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   collections, cURL / fetch / XHR / C# / PowerShell code and the HTTP-action
   URIs write `%20`. The URL bar still shows spaces.
 
+[#222]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/222
 [#44]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/44
 [#109]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/109
 [#221]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/221
