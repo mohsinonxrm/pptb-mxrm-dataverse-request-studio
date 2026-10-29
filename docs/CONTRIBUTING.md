@@ -58,14 +58,19 @@ returns true only in the iframe.
 
 ## Branch model
 
-- **`dev`** — default working branch. All feature work, fixes, and refactors
-  target `dev`. PRs into `dev` should be small, focused, and pass the CI
-  checks (see [Pull requests](#pull-requests)).
-- **`main`** — protected. Only updated at release time by a PR from `dev`,
-  merged with a merge commit. A release is a `vX.Y.Z` (or `vX.Y.Z-beta.N`)
-  tag on that merge commit: the Release workflow publishes it to npm and
-  creates the GitHub Release. Nobody publishes by hand; see
-  [RELEASING.md](../RELEASING.md).
+- **`dev`** — default working branch, for the release after the one in beta.
+  All feature work, fixes, and refactors target `dev`. PRs into `dev` should
+  be small, focused, and pass the CI checks (see [Pull requests](#pull-requests)).
+- **`release/X.Y`** — the next release while it's in beta. Cut from `dev` at
+  the feature freeze; `vX.Y.0-beta.N` tags are made here (npm `beta`). Only
+  fixes for that release go here, then merge forward into `dev`.
+- **`main`** — the current stable release (npm `latest`). Updated by a PR
+  from `release/X.Y` (or a `hotfix/X.Y.Z` branch), merged with a merge
+  commit and tagged `vX.Y.Z`.
+
+The Release workflow publishes each tag to npm and creates the GitHub
+Release; nobody publishes by hand. Where a fix goes, and the full release
+lifecycle, are in [RELEASING.md](../RELEASING.md).
 
 ### Workflow
 
