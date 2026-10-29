@@ -48,6 +48,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     placeholder, aren't sent either.
   - A declined header prompt on Associate / Disassociate asks once and sends
     nothing, rather than falling back to a request without your headers.
+- **Execute Custom API and Custom Action list your own operations first**
+  ([#248]). A Dynamics org has well over a thousand of them, nearly all
+  Microsoft's. The Operation list now groups them:
+  - **Your org & ISVs** first, **Microsoft** below. Nothing is hidden, and
+    search covers both groups (publisher names too).
+  - Each one shows its solution's publisher, and so does the summary card.
+  - The Scope list counts your own operations per scope ("12 ops, 2 yours").
+  - Execute Action (WinOpportunity, QualifyLead, …) is unchanged.
 
 ### 🐛 Fixed
 
@@ -113,6 +121,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   URIs write `%20`. The URL bar still shows spaces.
 
 [#330]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/330
+[#248]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/248
 [#222]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/222
 [#44]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/44
 [#109]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/109
