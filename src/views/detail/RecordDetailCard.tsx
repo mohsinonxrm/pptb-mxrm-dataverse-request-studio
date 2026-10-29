@@ -283,7 +283,7 @@ function ScalarRow({ s }: { s: PartitionedScalar }) {
       >
         {displayKey}
         {isLookupWireForm && (
-          <Badge appearance="ghost" size="extra-small" style={{ marginLeft: 6 }}>
+          <Badge appearance="ghost" size="small" style={{ marginLeft: 6 }}>
             lookup
           </Badge>
         )}
@@ -319,7 +319,7 @@ function ScalarValue({ s }: { s: PartitionedScalar }) {
         {s.lookupTargetLogicalName && (
           <Badge
             appearance="tint"
-            size="extra-small"
+            size="small"
             icon={<PuzzlePiece16Regular />}
             style={{ marginLeft: 6, verticalAlign: 'middle' }}
           >
@@ -349,7 +349,7 @@ function ScalarValue({ s }: { s: PartitionedScalar }) {
       {s.lookupTargetLogicalName && (
         <Badge
           appearance="tint"
-          size="extra-small"
+          size="small"
           icon={<PuzzlePiece16Regular />}
           style={{ marginLeft: 6, verticalAlign: 'middle' }}
         >

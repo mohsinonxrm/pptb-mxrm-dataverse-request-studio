@@ -203,7 +203,7 @@ export function RequestTypePicker({
                         secondaryContent={
                           <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                             {!r.implemented && (
-                              <Badge size="extra-small" appearance="ghost">
+                              <Badge size="small" appearance="ghost">
                                 soon
                               </Badge>
                             )}
@@ -292,7 +292,7 @@ export function RequestTypePicker({
                           >
                             {r.name}
                             {!r.implemented && (
-                              <Badge size="extra-small" appearance="ghost">
+                              <Badge size="small" appearance="ghost">
                                 soon
                               </Badge>
                             )}

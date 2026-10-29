@@ -104,10 +104,10 @@ function NavOptionRow({
     <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: 600 }}>{nav.name}</span>
-        <Badge appearance="ghost" size="extra-small">
+        <Badge appearance="ghost" size="small">
           {cardinalityShort(nav.cardinality)}
         </Badge>
-        <Badge appearance="tint" color="brand" size="extra-small" style={{ marginLeft: 'auto' }}>
+        <Badge appearance="tint" color="brand" size="small" style={{ marginLeft: 'auto' }}>
           {verb}
         </Badge>
       </div>

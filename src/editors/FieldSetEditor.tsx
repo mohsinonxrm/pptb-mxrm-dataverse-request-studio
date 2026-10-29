@@ -820,7 +820,7 @@ function FieldRow({
               }
               relationship="description"
             >
-              <Badge appearance="tint" color="danger" size="extra-small">
+              <Badge appearance="tint" color="danger" size="small">
                 req
               </Badge>
             </Tooltip>
@@ -891,7 +891,7 @@ function FieldRow({
                 <Badge
                   appearance="filled"
                   color="warning"
-                  size="extra-small"
+                  size="small"
                   style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: 700 }}
                 >
                   null

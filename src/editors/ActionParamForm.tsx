@@ -194,7 +194,7 @@ export function ActionParamForm({
         sub={
           <>
             Required parameters first (marked{' '}
-            <Badge appearance="tint" color="danger" size="extra-small">
+            <Badge appearance="tint" color="danger" size="small">
               req
             </Badge>
             ). Optional parameters live in the accordion below.
@@ -452,7 +452,7 @@ function ParamRow({
             {param.name}
           </span>
           {param.required && (
-            <Badge appearance="tint" color="danger" size="extra-small">
+            <Badge appearance="tint" color="danger" size="small">
               req
             </Badge>
           )}
@@ -1245,12 +1245,7 @@ function ComplexTypeInput({
             <span style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 11 }}>
               {f.name} <span style={{ color: tokens.colorNeutralForeground3 }}>· {f.type}</span>
               {f.required && (
-                <Badge
-                  appearance="tint"
-                  color="danger"
-                  size="extra-small"
-                  style={{ marginLeft: 6 }}
-                >
+                <Badge appearance="tint" color="danger" size="small" style={{ marginLeft: 6 }}>
                   req
                 </Badge>
               )}

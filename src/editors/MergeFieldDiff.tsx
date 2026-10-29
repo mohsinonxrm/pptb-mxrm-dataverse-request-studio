@@ -362,7 +362,7 @@ function MergeRow({
               <Badge
                 appearance="tint"
                 color="success"
-                size="extra-small"
+                size="small"
                 style={{ alignSelf: 'flex-start' }}
               >
                 auto-fill
