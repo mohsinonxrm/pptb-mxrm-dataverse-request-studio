@@ -34,7 +34,7 @@ export function MainTabs({
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               Results
               {resultCount != null && (
-                <Badge size="extra-small" appearance="tint">
+                <Badge size="small" appearance="tint">
                   {resultCount}
                 </Badge>
               )}

@@ -826,7 +826,7 @@ function UrlShapeCard({
           <Badge
             appearance="tint"
             color="brand"
-            size="extra-small"
+            size="small"
             style={{ marginLeft: 'auto', fontWeight: 700 }}
           >
             ACTIVE

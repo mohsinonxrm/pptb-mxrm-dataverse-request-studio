@@ -51,6 +51,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🐛 Fixed
 
+- **Small labels are readable again** ([#330]). Badges such as "req",
+  "null", "File", "max 32 MB", "soon", "lookup" and the Results count used
+  Fluent's extra-small size, a 10px dot, so their text spilled out or was
+  cut off. They now use the small size, as the sidebar badges do since
+  [#200].
 - **Choosing a file no longer reads it into memory** ([#222]). Manage File,
   Image and Attachment Data keep the file's name, size and type only: Execute
   can't send binary content from inside ToolBox, and the Code tab uses a
@@ -107,6 +112,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   collections, cURL / fetch / XHR / C# / PowerShell code and the HTTP-action
   URIs write `%20`. The URL bar still shows spaces.
 
+[#330]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/330
 [#222]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/222
 [#44]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/44
 [#109]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/109
