@@ -513,7 +513,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
     case 'headers':
       pane = (
         <HeadersEditor
-          policy="function"
+          policy="impersonation"
           items={state.headers}
           setItems={(h) => set('headers', h, 'headers')}
           group="execute"

@@ -7,11 +7,16 @@ import {
   executeNextLink,
   executePredefined,
   executeRetrieveMultiple,
+  executeRetrieveSingle,
   readPreferHeaders,
 } from './dataverseExecutor';
 import { makeExpandSpec } from '../editors/ExpandEditor';
 import { emptyPrefer } from '../editors/PreferEditor';
-import type { PredefinedQueryState, RetrieveNextLinkState } from '../state/readState';
+import type {
+  PredefinedQueryState,
+  RetrieveNextLinkState,
+  RetrieveSingleState,
+} from '../state/readState';
 import { registerFixtureTables, retrieveMultipleState } from '../test/fixtures';
 
 // The bridge decides host capabilities once at module load; mock it so each
@@ -217,5 +222,45 @@ describe('read headers (#109)', () => {
     const { MSCRMCallerID: _c, 'X-Custom': _x, ...plain } = PANE;
     await executeRetrieveMultiple(paged(10, null), plain);
     expect(host.queryData).toHaveBeenCalledWith('/accounts?$top=10', undefined);
+  });
+});
+
+describe('Retrieve Single headers (#109)', () => {
+  const ID = '00000000-0000-0000-0000-0000000000a1';
+  const single = {
+    table: 'account',
+    recordId: ID,
+    select: [],
+    expand: [],
+    prefer: emptyPrefer(),
+    headers: [],
+    dirty: new Set(),
+  } as unknown as RetrieveSingleState;
+
+  it('sends If-None-Match, and a matching etag reads as 304 Not Modified, not an error', async () => {
+    host.queryData.mockRejectedValue(new Error('Dataverse queryData failed: HTTP 304'));
+    const r = await executeRetrieveSingle(single, { 'If-None-Match': 'W/"123"' });
+    expect(host.queryData).toHaveBeenCalledWith(`/accounts(${ID})`, { 'If-None-Match': 'W/"123"' });
+    expect(r.status).toBe(304);
+    expect(r.ok).toBe(true);
+    expect(r.statusText).toBe('Not Modified');
+  });
+
+  it("doesn't send the old If-None-Match: null default", async () => {
+    host.queryData.mockResolvedValue({ value: [{ accountid: ID }] });
+    await executeRetrieveSingle(single, { 'If-None-Match': 'null' });
+    expect(host.queryData).toHaveBeenCalledWith(`/accounts(${ID})`, undefined);
+  });
+
+  it('refuses the impersonation placeholder and both impersonation headers at once', async () => {
+    const zero = '00000000-0000-0000-0000-000000000000';
+    const r1 = await executeRetrieveSingle(single, { MSCRMCallerID: zero });
+    const r2 = await executeRetrieveSingle(single, {
+      MSCRMCallerID: ID,
+      CallerObjectId: ID,
+    });
+    expect(host.queryData).not.toHaveBeenCalled();
+    expect(JSON.stringify(r1.body)).toMatch(/needs the id of the user to run as/);
+    expect(JSON.stringify(r2.body)).toMatch(/Turn on one impersonation header, not both/);
   });
 });

@@ -27,24 +27,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Production safe mode** in Settings → Safety, on by default ([#241]).
 - **README: "What this tool changes"** lists every request that changes data,
   when it asks, and what DRS stores locally ([#241]).
-
-- **Read, Execute Function and Associate / Disassociate requests send
-  their headers** ([#109]). An allow-list, so a plain read still sends none
-  and never asks for consent:
+- **Read, Execute Function, Associate / Disassociate and Bulk Delete Job
+  requests send their headers** ([#109]). The Headers pane says which rows
+  Execute sends and marks the rest as Code tab only. Later pages of a
+  Retrieve Multiple send the first page's headers, so they run as the same
+  user. It's an allow-list, so a plain read still sends none and never asks
+  for consent:
   - impersonation (`MSCRMCallerID`, and a new `CallerObjectId` preset for
     the Microsoft Entra object id) in all of them;
-  - `If-None-Match` and `Consistency` on reads, and a `Prefer` that keeps
-    ToolBox's `odata.include-annotations="*"` (a Prefer header row is merged
-    in, the page size goes last);
+  - `If-None-Match` and `Consistency` on reads. A matching etag shows as
+    **304 Not Modified**, not as an error;
   - the bypass headers on Associate / Disassociate.
-  The Headers pane says which rows Execute sends and marks the rest as Code
-  tab only. Later pages of a Retrieve Multiple send the first page's
-  headers, so they run as the same user.
-- **Impersonation is never dropped silently** ([#109]). On a ToolBox older
-  than 1.2.7, which can't send headers, a request with an impersonation
-  header isn't sent, instead of running as you. A declined header prompt
-  on Associate / Disassociate asks once and sends nothing, rather than
-  falling back to a request without your headers.
+  The page size's `Prefer` still keeps ToolBox's
+  `odata.include-annotations="*"`; other preferences stay in the Code tab.
+- **Impersonation is never dropped silently** ([#109]).
+  - On a ToolBox older than 1.2.7, which can't send headers, a request with
+    an impersonation header isn't sent, instead of running as you. The same
+    goes for Associate / Disassociate with a bypass header.
+  - Both impersonation headers at once, or the presets' all-zero
+    placeholder, aren't sent either.
+  - A declined header prompt on Associate / Disassociate asks once and sends
+    nothing, rather than falling back to a request without your headers.
 
 ### 🐛 Fixed
 

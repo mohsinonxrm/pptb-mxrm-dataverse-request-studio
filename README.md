@@ -153,7 +153,7 @@ modes have their own HTTP / fetch / C# / PPTB outputs.
   Delete / Merge / Bulk Write / Execute Action / Execute Workflow headers
   (preconditions, `MSCRM.*` bypass, duplicate detection, impersonation) are
   sent as additional headers after you approve them once in ToolBox. The
-  read modes, Execute Function and Associate / Disassociate send an
+  read modes, Execute Function, Associate / Disassociate and Bulk Delete Job send an
   allow-list: impersonation (`MSCRMCallerID`, `CallerObjectId`) everywhere,
   plus `If-None-Match`, `Consistency` and the page size on reads, and the
   bypass headers on Associate / Disassociate; the Headers pane marks the

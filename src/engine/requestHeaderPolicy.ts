@@ -54,8 +54,12 @@ export function toWireHeaders(
   return byName.size > 0 ? Object.fromEntries(byName.values()) : undefined;
 }
 
-/** The modes that send an allow-list rather than every header. */
-export type HeaderPolicy = 'read' | 'relate' | 'function';
+/**
+ * The modes that send an allow-list rather than every header: the reads,
+ * Associate / Disassociate, and `impersonation` for Execute Function and
+ * the Bulk Delete Job.
+ */
+export type HeaderPolicy = 'read' | 'relate' | 'impersonation';
 
 /** Impersonation: by systemuserid, or by Microsoft Entra object id. */
 const IMPERSONATION = ['MSCRMCallerID', 'CallerObjectId'];
@@ -70,13 +74,17 @@ const BYPASS = [
 export const SENT_HEADERS: Record<HeaderPolicy, readonly string[]> = {
   read: [...IMPERSONATION, 'If-None-Match', 'Consistency'],
   relate: [...IMPERSONATION, ...BYPASS],
-  function: IMPERSONATION,
+  impersonation: IMPERSONATION,
 };
 
 const allowed = (policy: HeaderPolicy) => new Set(SENT_HEADERS[policy].map((n) => n.toLowerCase()));
 
+const same = (a: string, b: string) => a.trim().toLowerCase() === b.toLowerCase();
+
 export const isImpersonationHeader = (name: string): boolean =>
-  IMPERSONATION.some((n) => n.toLowerCase() === name.trim().toLowerCase());
+  IMPERSONATION.some((n) => same(name, n));
+
+export const isBypassHeader = (name: string): boolean => BYPASS.some((n) => same(name, n));
 
 /**
  * `If-None-Match: null` was Retrieve Single's default before 1.5.0. It never
@@ -84,7 +92,7 @@ export const isImpersonationHeader = (name: string): boolean =>
  * requests don't raise a consent prompt for it.
  */
 const isNoOp = (name: string, value: string) =>
-  name.trim().toLowerCase() === 'if-none-match' && value.trim().toLowerCase() === 'null';
+  same(name, 'if-none-match') && value.trim().toLowerCase() === 'null';
 
 /** The allow-listed part of a mode's composed headers; `undefined` when none. */
 export function allowedHeaders(
@@ -100,75 +108,48 @@ export function allowedHeaders(
   return out.length > 0 ? Object.fromEntries(out) : undefined;
 }
 
-/**
- * Enabled header rows Execute doesn't send under this policy (Code tab only).
- * Host-owned rows aren't listed: the host sends its own.
- */
-export function unsentHeaderNames(
-  policy: HeaderPolicy,
-  headers?: Record<string, string>,
-): string[] {
-  const wire = toWireHeaders(headers);
-  if (!wire) return [];
-  const ok = allowed(policy);
-  return Object.keys(wire).filter((name) => !ok.has(name.toLowerCase()));
-}
+const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ZERO_GUID = '00000000-0000-0000-0000-000000000000';
 
-/** Split a Prefer value on commas outside double quotes. */
-function preferTokens(value: string): string[] {
-  const out: string[] = [];
-  let cur = '';
-  let quoted = false;
-  for (const ch of value) {
-    if (ch === '"') quoted = !quoted;
-    if (ch === ',' && !quoted) {
-      out.push(cur);
-      cur = '';
-    } else cur += ch;
+/**
+ * Why the impersonation headers can't be sent as they are, or null:
+ * both kinds at once (Dataverse documents one or the other), or a value that
+ * isn't a user's id — the presets' all-zero placeholder included.
+ */
+export function impersonationProblem(headers?: Record<string, string>): string | null {
+  const rows = Object.entries(toWireHeaders(headers) ?? {}).filter(([n]) =>
+    isImpersonationHeader(n),
+  );
+  if (rows.length > 1) {
+    return `Turn on one impersonation header, not both (${rows.map(([n]) => n).join(' and ')}).`;
   }
-  out.push(cur);
-  return out.map((t) => t.trim()).filter(Boolean);
+  const [row] = rows;
+  if (row && (!GUID_RE.test(row[1].trim()) || row[1].trim() === ZERO_GUID)) {
+    return `${row[0]} needs the id of the user to run as (a GUID), not ${JSON.stringify(row[1])}.`;
+  }
+  return null;
 }
 
 /**
- * The `Prefer` a read sends, or `undefined` when the host's own will do.
- * The host's is `odata.include-annotations="*"`, which a custom Prefer
- * replaces, so it always comes first here: the grid needs the annotations.
- * The user's other preferences follow, and the page size goes last: Dataverse
- * rejects it ahead of `include-annotations` (0x80060888 "Invalid prefer
- * header", confirmed live). Annotation and `return=representation` tokens
- * from a Prefer header row are dropped (`*` already covers the first; the
- * second is for writes).
+ * The `Prefer` a read sends for its page size (#219), or `undefined`. The
+ * host's own is `odata.include-annotations="*"`, which a custom Prefer
+ * replaces, so it's sent again first: the grid needs the annotations. The
+ * page size goes last: Dataverse rejects it ahead of `include-annotations`
+ * (0x80060888 "Invalid prefer header", confirmed live). Other preferences
+ * stay in the Code tab, like the rest of the Prefer pane.
  */
-export function readPrefer(
-  maxpagesize: number | null | undefined,
-  preferRow?: string,
-): string | undefined {
-  const extra = preferTokens(preferRow ?? '').filter((t) => {
-    const k = t.toLowerCase();
-    return (
-      !k.startsWith('odata.include-annotations') &&
-      !k.startsWith('odata.maxpagesize') &&
-      k !== 'return=representation'
-    );
-  });
-  const pageSize = maxpagesize && maxpagesize > 0 ? [`odata.maxpagesize=${maxpagesize}`] : [];
-  if (extra.length === 0 && pageSize.length === 0) return undefined;
-  return ['odata.include-annotations="*"', ...extra, ...pageSize].join(',');
+export function readPrefer(maxpagesize: number | null | undefined): string | undefined {
+  return maxpagesize && maxpagesize > 0
+    ? `odata.include-annotations="*",odata.maxpagesize=${maxpagesize}`
+    : undefined;
 }
 
-/**
- * What a read sends: the allow-listed rows, plus `Prefer` when the page size
- * or a Prefer header row asks for more than the host's default.
- */
+/** What a read sends: the allow-listed rows, plus `Prefer` for a page size. */
 export function readRequestHeaders(
   headers: Record<string, string> | undefined,
   maxpagesize: number | null | undefined,
 ): Record<string, string> | undefined {
-  const preferRow = Object.entries(headers ?? {}).find(
-    ([name]) => name.trim().toLowerCase() === 'prefer',
-  )?.[1];
-  const prefer = readPrefer(maxpagesize, preferRow);
+  const prefer = readPrefer(maxpagesize);
   const sent = { ...allowedHeaders('read', headers), ...(prefer ? { Prefer: prefer } : {}) };
   return Object.keys(sent).length > 0 ? sent : undefined;
 }

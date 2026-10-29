@@ -90,6 +90,8 @@ import type {
 import { actions } from '../host/csdlProvider';
 import {
   allowedHeaders,
+  impersonationProblem,
+  isBypassHeader,
   isImpersonationHeader,
   readRequestHeaders,
   toWireHeaders,
@@ -386,24 +388,38 @@ async function timed<T>(
 }
 
 /**
- * On a host that can't send headers (before PPTB 1.2.7), an enabled
- * impersonation header would be dropped and the request would run as the
- * signed-in user. It isn't sent at all then (#109).
+ * Headers that can't be sent as they are, so the request isn't (#109):
+ *   • impersonation that isn't one user's id (both headers on, or the
+ *     presets' all-zero placeholder);
+ *   • on a host that can't send headers (before PPTB 1.2.7), an enabled
+ *     impersonation header — the request would run as the signed-in user —
+ *     and, with `bypass`, a bypass header — plug-ins would still run.
  */
-export function refuseDroppedImpersonation(headers?: Record<string, string>): ExecResult | null {
+export function refuseHeaderProblems(
+  headers?: Record<string, string>,
+  opts: { bypass?: boolean } = {},
+): ExecResult | null {
+  const refuse = (message: string) =>
+    mapError({ statusCode: 400, message: `Not sent: ${message}` }, 0);
+  const problem = impersonationProblem(headers);
+  if (problem) return refuse(problem);
   if (!isEmbedded() || hostSupportsAdditionalHeaders() || !headers) return null;
-  const name = Object.keys(headers).find(isImpersonationHeader);
-  if (!name) return null;
-  return mapError(
-    {
-      statusCode: 400,
-      message:
-        `Not sent: this version of Power Platform ToolBox can't send ${name}, so the request ` +
-        'would run as you, not as the user it names. Turn the header off to run it as yourself, ' +
-        'update ToolBox (1.2.7 or later), or copy the request from the Code tab.',
-    },
-    0,
-  );
+  const update = 'update ToolBox (1.2.7 or later), or copy the request from the Code tab.';
+  const caller = Object.keys(toWireHeaders(headers) ?? {}).find(isImpersonationHeader);
+  if (caller) {
+    return refuse(
+      `this version of Power Platform ToolBox can't send ${caller}, so the request would run ` +
+        `as you, not as the user it names. Turn the header off to run it as yourself, or ${update}`,
+    );
+  }
+  const bypass = opts.bypass && Object.keys(toWireHeaders(headers) ?? {}).find(isBypassHeader);
+  if (bypass) {
+    return refuse(
+      `this version of Power Platform ToolBox can't send ${bypass}, so plug-ins and flows would ` +
+        `still run. Turn the header off to run them, or ${update}`,
+    );
+  }
+  return null;
 }
 
 /** `toWireHeaders`, but only when the host can actually send them — so the
@@ -446,7 +462,7 @@ export async function executeRetrieveMultiple(
   s: RetrieveMultipleState,
   composed?: Record<string, string>,
 ): Promise<ExecResult> {
-  const dropped = refuseDroppedImpersonation(composed);
+  const dropped = refuseHeaderProblems(composed);
   if (dropped) return dropped;
   const headers = readHeaders(composed, s.prefer.maxpagesize);
   // Without the page size on the wire, dropping `$top` (as the Code tab
@@ -477,7 +493,7 @@ export async function executeRetrieveSingle(
   s: RetrieveSingleState,
   composed?: Record<string, string>,
 ): Promise<ExecResult> {
-  const dropped = refuseDroppedImpersonation(composed);
+  const dropped = refuseHeaderProblems(composed);
   if (dropped) return dropped;
   const refused = refuseUrlParts([['Record id', s.recordId]]);
   if (refused) return refused;
@@ -490,6 +506,12 @@ export async function executeRetrieveSingle(
   // Cast through unknown so TS lets us index a typed array shape that's
   // really just the OData response we know is a singleton in this code path.
   const res = await timed(() => dvHost.queryData(built.relativeNoBase, headers), headers);
+  // The host rejects every non-2xx, so a matching If-None-Match arrives as a
+  // failed 304. That's the answer the header asks for: the row hasn't
+  // changed since that etag.
+  if (isExecResult(res) && res.status === 304) {
+    return { ...ok(304, null, res.ms), ok: true, outcome: 'ok' };
+  }
   if (isExecResult(res)) return res;
   const v = res.value as unknown;
   const row = Array.isArray(v) ? (v[0] ?? null) : v && typeof v === 'object' ? v : null;
@@ -517,7 +539,7 @@ export async function executeAbsoluteUrl(
   maxpagesize?: number | null,
   composed?: Record<string, string>,
 ): Promise<ExecResult> {
-  const dropped = refuseDroppedImpersonation(composed);
+  const dropped = refuseHeaderProblems(composed);
   if (dropped) return dropped;
   const headers = readHeaders(composed, maxpagesize);
   let path = url;
@@ -536,7 +558,7 @@ export async function executePredefined(
   s: PredefinedQueryState,
   composed?: Record<string, string>,
 ): Promise<ExecResult> {
-  const dropped = refuseDroppedImpersonation(composed);
+  const dropped = refuseHeaderProblems(composed);
   if (dropped) return dropped;
   if (!s.queryId) {
     return mapError({ statusCode: 400, message: 'Pick a saved query first.' }, 0);
@@ -585,7 +607,7 @@ export async function executeCreate(
   s: CreateState,
   headers?: Record<string, string>,
 ): Promise<ExecResult> {
-  const dropped = refuseDroppedImpersonation(headers);
+  const dropped = refuseHeaderProblems(headers);
   if (dropped) return dropped;
   const body = buildCreateBody(s);
   const wire = sendable(headers);
@@ -676,7 +698,7 @@ export async function executeUpdate(
   s: UpdateState,
   headers?: Record<string, string>,
 ): Promise<ExecResult> {
-  const dropped = refuseDroppedImpersonation(headers);
+  const dropped = refuseHeaderProblems(headers);
   if (dropped) return dropped;
   if (!s.recordId) return mapError({ statusCode: 400, message: 'Pick a record to update.' }, 0);
   const refused = refuseUrlParts([['Record id', s.recordId]]);
@@ -721,7 +743,7 @@ export async function executeUpsert(
   s: UpsertState,
   headers?: Record<string, string>,
 ): Promise<ExecResult> {
-  const dropped = refuseDroppedImpersonation(headers);
+  const dropped = refuseHeaderProblems(headers);
   if (dropped) return dropped;
   // The host's `update()` is PATCH semantics, addressed by logical name +
   // GUID. For alt-key Upsert the address is `<entitySet>(<keyCol>='value')`
@@ -765,7 +787,7 @@ export async function executeDelete(
   s: DeleteState,
   headers?: Record<string, string>,
 ): Promise<ExecResult> {
-  const dropped = refuseDroppedImpersonation(headers);
+  const dropped = refuseHeaderProblems(headers);
   if (dropped) return dropped;
   if (!s.recordId) return mapError({ statusCode: 400, message: 'Pick a record to delete.' }, 0);
   const refused = refuseUrlParts([['Record id', s.recordId]]);
@@ -800,7 +822,7 @@ export async function executeMerge(
   s: MergeState,
   headers?: Record<string, string>,
 ): Promise<ExecResult> {
-  const dropped = refuseDroppedImpersonation(headers);
+  const dropped = refuseHeaderProblems(headers);
   if (dropped) return dropped;
   // Per docs: POST /Merge with { Target, Subordinate, UpdateContent, PerformParentingChecks }
   const refused = refuseUrlParts([
@@ -944,7 +966,7 @@ export async function executeAssociate(
   s: AssociateState,
   composed?: Record<string, string>,
 ): Promise<ExecResult> {
-  const dropped = refuseDroppedImpersonation(composed);
+  const dropped = refuseHeaderProblems(composed, { bypass: true });
   if (dropped) return dropped;
   const sourceId = s.sourceId;
   const navProperty = s.navProperty;
@@ -1007,7 +1029,7 @@ export async function executeDisassociate(
   s: DisassociateState,
   composed?: Record<string, string>,
 ): Promise<ExecResult> {
-  const dropped = refuseDroppedImpersonation(composed);
+  const dropped = refuseHeaderProblems(composed, { bypass: true });
   if (dropped) return dropped;
   // Cache narrowed locals — TS doesn't carry the null-check through closure
   // scope into the loop body otherwise.
@@ -1063,7 +1085,7 @@ export async function executeAction(
   s: ExecuteActionState,
   headers?: Record<string, string>,
 ): Promise<ExecResult> {
-  const dropped = refuseDroppedImpersonation(headers);
+  const dropped = refuseHeaderProblems(headers);
   if (dropped) return dropped;
   if (!s.actionName) return mapError({ statusCode: 400, message: 'Pick an action.' }, 0);
   const action = await actions.find(s.actionName);
@@ -1115,7 +1137,7 @@ export async function executeFunction(
   s: ExecuteFunctionState,
   composed?: Record<string, string>,
 ): Promise<ExecResult> {
-  const dropped = refuseDroppedImpersonation(composed);
+  const dropped = refuseHeaderProblems(composed);
   if (dropped) return dropped;
   if (!s.functionName) return mapError({ statusCode: 400, message: 'Pick a function.' }, 0);
   const action = await actions.find(s.functionName);
@@ -1161,7 +1183,7 @@ export async function executeFunction(
     );
   }
   // Impersonation headers only (#109).
-  const headers = sendable(allowedHeaders('function', composed));
+  const headers = sendable(allowedHeaders('impersonation', composed));
   const res = await timed(() => dvHost.queryData(path, headers), headers);
   if (isExecResult(res)) return res;
   return ok(200, res.value, res.ms);
@@ -1171,7 +1193,7 @@ export async function executeWorkflow(
   s: ExecuteWorkflowState,
   headers?: Record<string, string>,
 ): Promise<ExecResult> {
-  const dropped = refuseDroppedImpersonation(headers);
+  const dropped = refuseHeaderProblems(headers);
   if (dropped) return dropped;
   if (!s.workflowId || !s.entityId) {
     return mapError({ statusCode: 400, message: 'Pick a workflow and a record.' }, 0);

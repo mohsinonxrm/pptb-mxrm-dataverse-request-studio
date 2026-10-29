@@ -1,10 +1,11 @@
-// #109: which headers the read, relate and Execute Function modes send.
+// #109: which headers the read, relate, Execute Function and Bulk Delete
+// modes send.
 import { describe, expect, it } from 'vitest';
 import {
   allowedHeaders,
+  impersonationProblem,
   readPrefer,
   readRequestHeaders,
-  unsentHeaderNames,
 } from './requestHeaderPolicy';
 
 const ID = '00000000-0000-0000-0000-0000000000c1';
@@ -38,8 +39,11 @@ describe('allowedHeaders', () => {
     });
   });
 
-  it('Execute Function: impersonation only', () => {
-    expect(allowedHeaders('function', PANE)).toEqual({ MSCRMCallerID: ID, CallerObjectId: ID });
+  it('Execute Function and Bulk Delete: impersonation only', () => {
+    expect(allowedHeaders('impersonation', PANE)).toEqual({
+      MSCRMCallerID: ID,
+      CallerObjectId: ID,
+    });
   });
 
   it('matches names case-insensitively and skips the old If-None-Match: null default', () => {
@@ -50,47 +54,42 @@ describe('allowedHeaders', () => {
   });
 });
 
-describe('unsentHeaderNames', () => {
-  it('lists enabled rows Execute leaves to the Code tab, not host-owned or credential ones', () => {
-    expect(unsentHeaderNames('function', PANE)).toEqual([
-      'If-None-Match',
-      'Consistency',
-      'MSCRM.BypassBusinessLogicExecution',
-      'X-Custom',
-    ]);
+describe('impersonationProblem', () => {
+  it('passes one header with a user id, or none', () => {
+    expect(impersonationProblem({ MSCRMCallerID: ID })).toBeNull();
+    expect(impersonationProblem({ CallerObjectId: ID })).toBeNull();
+    expect(impersonationProblem({ Accept: 'application/json' })).toBeNull();
+    expect(impersonationProblem(undefined)).toBeNull();
+  });
+
+  it('refuses both at once, the placeholder, and a value that is not a GUID', () => {
+    expect(impersonationProblem({ MSCRMCallerID: ID, CallerObjectId: ID })).toBe(
+      'Turn on one impersonation header, not both (MSCRMCallerID and CallerObjectId).',
+    );
+    expect(impersonationProblem({ MSCRMCallerID: '00000000-0000-0000-0000-000000000000' })).toMatch(
+      /^MSCRMCallerID needs the id of the user to run as/,
+    );
+    expect(impersonationProblem({ CallerObjectId: 'someone@contoso.com' })).toMatch(
+      /^CallerObjectId needs the id/,
+    );
   });
 });
 
 describe('readPrefer', () => {
-  it('nothing beyond the host default: no Prefer, no prompt', () => {
+  it('only for a page size: annotations first, page size last', () => {
     expect(readPrefer(null)).toBeUndefined();
-    expect(
-      readPrefer(null, 'odata.include-annotations="OData.Community.Display.V1.FormattedValue"'),
-    ).toBeUndefined();
-  });
-
-  it('keeps every annotation first and the page size last', () => {
-    expect(readPrefer(25, 'odata.track-changes')).toBe(
-      'odata.include-annotations="*",odata.track-changes,odata.maxpagesize=25',
-    );
-  });
-
-  it('splits on commas outside quotes and drops annotation, page size and return tokens', () => {
-    expect(
-      readPrefer(
-        null,
-        'odata.include-annotations="a,b", return=representation, odata.maxpagesize=9, respond-async',
-      ),
-    ).toBe('odata.include-annotations="*",respond-async');
+    expect(readPrefer(0)).toBeUndefined();
+    expect(readPrefer(25)).toBe('odata.include-annotations="*",odata.maxpagesize=25');
   });
 });
 
 describe('readRequestHeaders', () => {
-  it('merges the allow-listed rows with the read Prefer', () => {
-    expect(readRequestHeaders({ MSCRMCallerID: ID, prefer: 'odata.track-changes' }, 10)).toEqual({
+  it('merges the allow-listed rows with the page-size Prefer; a Prefer row stays in the Code tab', () => {
+    expect(readRequestHeaders({ MSCRMCallerID: ID, Prefer: 'odata.track-changes' }, 10)).toEqual({
       MSCRMCallerID: ID,
-      Prefer: 'odata.include-annotations="*",odata.track-changes,odata.maxpagesize=10',
+      Prefer: 'odata.include-annotations="*",odata.maxpagesize=10',
     });
+    expect(readRequestHeaders({ Prefer: 'odata.track-changes' }, null)).toBeUndefined();
     expect(readRequestHeaders({ Accept: 'application/json' }, null)).toBeUndefined();
   });
 });

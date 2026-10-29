@@ -11,6 +11,7 @@ import type { AssociateState, DisassociateState } from '../state/relateState';
 
 const host = vi.hoisted(() => ({
   single: false,
+  additionalHeaders: true,
   queryData: vi.fn(),
   associate: vi.fn(),
   disassociate: vi.fn(),
@@ -20,7 +21,7 @@ const host = vi.hoisted(() => ({
 vi.mock('../host/pptbBridge', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../host/pptbBridge')>()),
   isEmbedded: () => true,
-  hostSupportsAdditionalHeaders: () => true,
+  hostSupportsAdditionalHeaders: () => host.additionalHeaders,
   dvHost: {
     queryData: host.queryData,
     associate: host.associate,
@@ -83,6 +84,7 @@ const declined = () => new Error('Additional headers were rejected by the user')
 
 beforeEach(() => {
   host.single = false;
+  host.additionalHeaders = true;
   host.queryData.mockReset().mockResolvedValue({ value: [] });
   host.associate.mockReset().mockResolvedValue(undefined);
   host.disassociate.mockReset().mockResolvedValue(undefined);
@@ -128,5 +130,22 @@ describe('single-valued', () => {
     const r = await executeDisassociate(disassoc, PANE);
     expect(host.update).toHaveBeenCalledTimes(1);
     expect((r.body as { error: { code: string } }).error.code).toBe(HEADER_CONSENT_DECLINED_CODE);
+  });
+});
+
+describe('older ToolBox (no header pass-through)', () => {
+  it("doesn't send a relate whose bypass header would be dropped", async () => {
+    host.additionalHeaders = false;
+    const r = await executeAssociate(assoc, {
+      'MSCRM.BypassCustomPluginExecution': 'true',
+    });
+    expect(host.associate).not.toHaveBeenCalled();
+    expect(JSON.stringify(r.body)).toMatch(/so plug-ins and flows would still run/);
+  });
+
+  it('sends one without allow-listed headers as before', async () => {
+    host.additionalHeaders = false;
+    await executeAssociate(assoc, { 'X-Custom': 'x' });
+    expect(host.associate).toHaveBeenCalledWith('account', SRC, 'nav', 'account', T1, undefined);
   });
 });
