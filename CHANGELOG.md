@@ -16,10 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Merge, Execute Action / Custom API / Custom Action, Execute Workflow, Bulk
     Write, `$batch` and ExecuteMultiple with writes, and multi-target
     Associate / Disassociate always ask.
-  - Create, Update, Upsert and single-target Associate / Disassociate ask on a
-    Production connection.
-  - On Production, and for more than 100 records anywhere, you type the table
-    (or operation) name before the button enables.
+  - Create, Update, Upsert, Delete and single-target Associate / Disassociate
+    ask on a Production connection.
+  - On Production, and for more than 100 records (or batch writes) anywhere,
+    you type the table (or operation) name before the button enables.
+  - If the connection changes while the confirmation is open, nothing is sent.
+  - The Bulk Delete Job confirmation names the environment too.
 - **The header shows the connection and its environment type** inside
   ToolBox too, with Production in red ([#241]).
 - **Production safe mode** in Settings → Safety, on by default ([#241]).

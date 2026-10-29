@@ -77,6 +77,8 @@ import type { ThemeMode } from '../theme/theme';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
 import { copyToClipboardSafe } from '../host/pptbBridge';
+import { useHostSession } from '../host/HostContext';
+import { EnvironmentBadge } from '../shell/confirmWrite';
 import { hashState, type SavedRequest } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
 import {
@@ -663,6 +665,8 @@ function ConfirmDialog({
   const [count, setCount] = useState<MatchCount | null>(null);
   const [typed, setTyped] = useState('');
   const [ackAll, setAckAll] = useState(false);
+  const host = useHostSession();
+  const envHost = host.environmentUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   useEffect(() => {
     let cancelled = false;
     void countMatching(state).then((c) => {
@@ -698,6 +702,21 @@ function ConfirmDialog({
                 what it already deleted.
               </MessageBarBody>
             </MessageBar>
+            {/* The environment the job runs in (#241). */}
+            {host.connected && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+                <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>Environment</Caption1>
+                <Text weight="semibold">{host.connectionName || envHost || '(no connection)'}</Text>
+                <EnvironmentBadge environment={host.environment} />
+                {host.connectionName && envHost && (
+                  <Caption1
+                    style={{ color: tokens.colorNeutralForeground3, wordBreak: 'break-all' }}
+                  >
+                    {envHost}
+                  </Caption1>
+                )}
+              </div>
+            )}
             <div>
               {count === null ? (
                 <Spinner size="tiny" label="Counting matching rows…" labelPosition="after" />

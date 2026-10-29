@@ -54,6 +54,9 @@ export function FrameHeader({
   // keep them in standalone mode (the local dev experience needs them).
   const host = useHostSession();
   const embedded = host.embedded;
+  // The connection name, else the environment's host name.
+  const connectionLabel =
+    host.connectionName || host.environmentUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   const env = getEnv();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, updateSettings] = usePersistedSettings();
@@ -101,7 +104,7 @@ export function FrameHeader({
       <div className={s.spacer} />
       {/* The connection the requests go to, also when embedded, with
           Production highlighted (#241). */}
-      {embedded && host.connected && (host.connectionName || host.environment) && (
+      {embedded && host.connected && (connectionLabel || host.environment) && (
         <Tooltip
           content={`Requests go to ${host.connectionName || 'this connection'}${
             host.environmentUrl ? ` (${host.environmentUrl.replace(/\/$/, '')})` : ''
@@ -120,17 +123,19 @@ export function FrameHeader({
               marginRight: 8,
             }}
           >
-            <span
-              style={{
-                fontSize: tokens.fontSizeBase200,
-                color: tokens.colorNeutralForeground2,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {host.connectionName}
-            </span>
+            {connectionLabel && (
+              <span
+                style={{
+                  fontSize: tokens.fontSizeBase200,
+                  color: tokens.colorNeutralForeground2,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {connectionLabel}
+              </span>
+            )}
             <EnvironmentBadge environment={host.environment} />
           </span>
         </Tooltip>

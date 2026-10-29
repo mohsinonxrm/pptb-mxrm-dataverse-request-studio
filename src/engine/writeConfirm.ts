@@ -13,13 +13,17 @@ export const TYPE_TO_CONFIRM_RECORD_THRESHOLD = 100;
 export type WriteScope =
   /** These records (the request's targets, or rows sent). */
   | { kind: 'records'; count: number }
-  /** Anything else, already worded (an unbound action, a batch's requests). */
-  | { kind: 'text'; text: string };
+  /**
+   * Anything else, already worded (an unbound action, a batch's requests).
+   * `count` is how many records or writes it touches, when known, so the
+   * more-than-100 rule applies to it too.
+   */
+  | { kind: 'text'; text: string; count?: number };
 
 /**
  * What a mode tells the Execute button about the request it's about to send.
  * `null` from a mode means the request doesn't change data (or the mode asks
- * on its own, like Delete's typed confirmation).
+ * on its own, like the Bulk Delete Job dialog).
  */
 export interface WriteConfirmSpec {
   /** The operation, as the user knows it: "Merge Records", "Execute Action CanBeReferenced". */
@@ -66,7 +70,7 @@ export function requiresTypedConfirmation(
   productionSafeMode: boolean,
 ): boolean {
   if (productionSafeMode && isProductionEnvironment(environment)) return true;
-  return spec.scope.kind === 'records' && spec.scope.count > TYPE_TO_CONFIRM_RECORD_THRESHOLD;
+  return (spec.scope.count ?? 0) > TYPE_TO_CONFIRM_RECORD_THRESHOLD;
 }
 
 /** The word to type: the given one, else the table, else the operation. */

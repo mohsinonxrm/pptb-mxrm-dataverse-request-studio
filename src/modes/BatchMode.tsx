@@ -143,6 +143,8 @@ export function BatchMode({
       scope: {
         kind: 'text',
         text: `${total} request${total === 1 ? '' : 's'}, ${writes} of them change${writes === 1 ? 's' : ''} data`,
+        // More than 100 writes needs the word typed, as for other bulk writes.
+        count: writes,
       },
       highImpact: true,
       confirmWord: type.id === 'execute-multiple' ? 'ExecuteMultiple' : 'batch',
@@ -272,7 +274,7 @@ export function BatchMode({
           'batch-deletes',
           'validation',
           `This batch deletes ${deletes} record${deletes === 1 ? '' : 's'}`,
-          'Deletes in a batch run without the Delete mode’s confirmation. Check the ids first.',
+          'The batch’s confirmation counts writes, not the records each delete removes, and there’s no typed record name as in the Delete mode. Check the ids first.',
           'overview',
         ),
       );

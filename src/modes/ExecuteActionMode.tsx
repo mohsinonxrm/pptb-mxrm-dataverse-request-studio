@@ -571,10 +571,13 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
             action
               ? {
                   operation: `${type.name} ${action.name}`,
-                  table: boundEntity ?? undefined,
-                  scope: boundEntity
-                    ? { kind: 'records', count: 1 }
-                    : { kind: 'text', text: 'Unbound: runs against the environment' },
+                  table: bindingEntity ?? undefined,
+                  scope:
+                    action.binding.kind === 'entity'
+                      ? { kind: 'records', count: 1 }
+                      : action.binding.kind === 'collection'
+                        ? { kind: 'text', text: `Bound to the ${bindingEntity} collection` }
+                        : { kind: 'text', text: 'Unbound: runs against the environment' },
                   highImpact: true,
                   confirmWord: action.name,
                 }

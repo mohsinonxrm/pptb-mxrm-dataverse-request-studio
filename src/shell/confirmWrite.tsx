@@ -96,7 +96,7 @@ export function confirmWrite(
   const prod = isProductionEnvironment(target.environment);
   const typed = requiresTypedConfirmation(spec, target.environment, options.productionSafeMode);
   return confirmDialog({
-    title: `${options.verb} ${spec.operation}?`,
+    title: `Confirm: ${spec.operation}`,
     wide: true,
     destructive: spec.highImpact || prod,
     confirmLabel: options.verb,

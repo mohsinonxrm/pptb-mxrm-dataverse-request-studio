@@ -249,7 +249,8 @@ function ConfirmView({
                     aria-label={`Type ${word} to confirm`}
                     autoFocus
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !blocked) settle(true);
+                      // Not while an IME is composing: that Enter commits the text.
+                      if (e.key === 'Enter' && !e.nativeEvent.isComposing && !blocked) settle(true);
                     }}
                   />
                 </Field>

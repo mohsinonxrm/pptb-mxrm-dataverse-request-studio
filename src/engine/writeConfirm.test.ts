@@ -66,6 +66,17 @@ describe('requiresTypedConfirmation', () => {
     expect(requiresTypedConfirmation(bulk(101), 'Production', false)).toBe(true);
   });
 
+  it('counts a worded scope when it carries a count (a batch with more than 100 writes)', () => {
+    const batch = (count?: number) => ({
+      operation: '$batch',
+      scope: { kind: 'text' as const, text: 'n requests', count },
+      highImpact: true,
+    });
+    expect(requiresTypedConfirmation(batch(100), 'Dev', true)).toBe(false);
+    expect(requiresTypedConfirmation(batch(101), 'Dev', true)).toBe(true);
+    expect(requiresTypedConfirmation(batch(), 'Dev', true)).toBe(false);
+  });
+
   it("doesn't require typing for a small high-impact write outside Production", () => {
     expect(requiresTypedConfirmation(merge, 'Dev', true)).toBe(false);
     expect(requiresTypedConfirmation(merge, 'Production', false)).toBe(false);

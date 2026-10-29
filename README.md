@@ -253,14 +253,15 @@ type at all times.
 |---|---|
 | **Merge**, **Execute Action / Custom API / Custom Action**, **Execute Workflow**, **Bulk Write**, `$batch` / **ExecuteMultiple** with any write, **Associate / Disassociate** with more than one target | Always |
 | **Create**, **Update**, **Upsert**, single-target **Associate / Disassociate** | On a Production connection, with **Production safe mode** on (the default; Settings → Safety) |
-| **Delete** | Always: type the record's name and acknowledge, in the mode itself |
-| **Bulk Delete Job** | Always: the confirmation counts the matching rows, and you type the table name |
+| **Delete** | Always for a whole row: type the record's name and acknowledge, in the mode itself. On a Production connection with safe mode on, the confirmation above as well |
+| **Bulk Delete Job** | Always: the confirmation names the environment, counts the matching rows, and you type the table name |
 | Reads (Retrieve, Predefined Query, Execute Function, downloads) | Never |
 
-On a Production connection with safe mode on, and for more than 100 records on
-any connection, you type the table name (or the operation name, for an unbound
-action) before the confirm button enables. Execute and Ctrl+Enter go through the
-same confirmation.
+On a Production connection with safe mode on, and for more than 100 records (or
+more than 100 writes in a batch) on any connection, you type the table name (or
+the action name, or `batch` / `ExecuteMultiple`) before the confirm button
+enables. Execute and Ctrl+Enter go through the same confirmation. If the
+connection changes while the confirmation is open, nothing is sent.
 
 What each request does in Dataverse is exactly what the URL bar and the Code
 tab show: one Web API request (or one per target for Associate / Disassociate,
