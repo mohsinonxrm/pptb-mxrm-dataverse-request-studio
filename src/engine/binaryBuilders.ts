@@ -83,10 +83,37 @@ export function pipelineCodegen(
 }
 
 // ──────────────────────────────────────────────────────────────
+// File names (#222)
+//
+// "You can also include the file name as a x-ms-file-name request header,
+// but this approach doesn't support file names outside the ASCII character
+// set. If you use the header, it takes precedence over the x-ms-file-name
+// query parameter." (Microsoft Learn, Use file column data.) Browsers
+// can't send such a header either: fetch / XHR throw. So a name outside
+// ASCII goes in the query parameter, percent-encoded, and no request
+// carries the header.
+// ──────────────────────────────────────────────────────────────
+
+/** True when `name` can travel in the `x-ms-file-name` header (printable ASCII). */
+export const isHeaderSafeFileName = (name: string): boolean => /^[\x20-\x7e]*$/.test(name);
+
+/** `?x-ms-file-name=<encoded>` for a name the header can't carry, else ''. */
+const fileNameQuery = (name: string): string =>
+  isHeaderSafeFileName(name) ? '' : `?x-ms-file-name=${encodeURIComponent(name)}`;
+
+/** `{ 'x-ms-file-name': name }` when the header can carry it, else {}. */
+const fileNameHeader = (name: string): Record<string, string> =>
+  isHeaderSafeFileName(name) ? { 'x-ms-file-name': name } : {};
+
+const NON_ASCII_NOTE =
+  " The file name has characters outside ASCII, which the x-ms-file-name header doesn't support, so it travels as the x-ms-file-name query parameter instead.";
+
+// ──────────────────────────────────────────────────────────────
 // File — single-request upload
 //
 //   PATCH /<set>(<id>)/<col>
-//   x-ms-file-name: <name>                 (HEADER only — no query param)
+//   x-ms-file-name: <name>                 (header; a non-ASCII name goes in
+//                                           the ?x-ms-file-name= query param)
 //   Content-Type: application/octet-stream
 //   <body: raw bytes (we surface as <base64 file bytes>)>
 //   → 204 NoContent
@@ -94,18 +121,21 @@ export function pipelineCodegen(
 export function buildFileSingleUpload(s: ManageFileState): BinaryPipelineStep[] {
   const segment = fileSegment(s);
   if (!segment) return [];
+  const fileName = s.fileName || 'file.bin';
   return [
     {
       n: 1,
       title: 'Upload file (single request)',
       method: 'PATCH',
-      relativeUrl: segment,
+      relativeUrl: `${segment}${fileNameQuery(fileName)}`,
       headers: {
-        'x-ms-file-name': s.fileName || 'file.bin',
+        ...fileNameHeader(fileName),
         'Content-Type': 'application/octet-stream',
       },
       body: '<base64 file bytes>',
-      detail: `Single request — server writes ${s.fileName || 'file.bin'} (${formatSize(s.fileSize)}) directly and responds 204 NoContent. Doc-recommended for files up to 128 MB; larger files require chunked upload or the messages path.`,
+      detail:
+        `Single request — server writes ${fileName} (${formatSize(s.fileSize)}) directly and responds 204 NoContent. Doc-recommended for files up to 128 MB; larger files require chunked upload or the messages path.` +
+        (isHeaderSafeFileName(fileName) ? '' : NON_ASCII_NOTE),
     },
   ];
 }
@@ -157,16 +187,19 @@ export function buildFileChunkedUpload(s: ManageFileState): BinaryPipelineStep[]
     method: 'PATCH',
     relativeUrl: '<upload-url-from-Location-header>',
     headers: {
-      'x-ms-file-name': fileName,
+      // A non-ASCII name was set by the init request's query parameter; the
+      // header would override it and can't carry it (#222).
+      ...fileNameHeader(fileName),
       'Content-Type': 'application/octet-stream',
       'Content-Range': `bytes ${firstByteStart}-${firstByteEnd}/${total}`,
       'Content-Length': String(firstChunkBytes),
     },
     body: '<chunk bytes>',
     detail:
-      chunkCount === 1
+      (chunkCount === 1
         ? 'Single chunk — server commits on receipt and returns 204 NoContent.'
-        : `Intermediate chunks return 206 PartialContent. Repeat with Content-Range stepping by ${chunkSize.toLocaleString()} bytes per chunk; the final chunk's Content-Length may be smaller.`,
+        : `Intermediate chunks return 206 PartialContent. Repeat with Content-Range stepping by ${chunkSize.toLocaleString()} bytes per chunk; the final chunk's Content-Length may be smaller.`) +
+      (isHeaderSafeFileName(fileName) ? '' : NON_ASCII_NOTE),
   });
 
   if (chunkCount > 1) {
@@ -177,7 +210,7 @@ export function buildFileChunkedUpload(s: ManageFileState): BinaryPipelineStep[]
       method: 'PATCH',
       relativeUrl: '<upload-url-from-Location-header>',
       headers: {
-        'x-ms-file-name': fileName,
+        ...fileNameHeader(fileName),
         'Content-Type': 'application/octet-stream',
         'Content-Range': `bytes <start>-<end>/${total}`,
         'Content-Length': '<chunk-size>',

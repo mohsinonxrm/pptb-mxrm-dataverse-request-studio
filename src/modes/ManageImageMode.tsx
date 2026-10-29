@@ -15,7 +15,7 @@
 // Reference docs:
 //   image-column-data · files-images-overview
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Table20Regular,
   Table20Filled,
@@ -72,6 +72,9 @@ import { checkUploadSize, type ManageImageState, type FileOperation } from '../s
  * source by ~33% — for the pre-flight advisory a rough estimate (with padding
  * accounted for) is enough; we don't need to actually decode.
  */
+/** Largest chosen image previewed (an object URL, not its bytes; #222). */
+const MAX_PREVIEW_BYTES = 5 * 1024 * 1024;
+
 function approxBytesFromBase64(b64: string): number {
   if (!b64) return 0;
   const padding = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
@@ -104,6 +107,7 @@ const initialState = (): ManageImageState => ({
   downloadSize: 'thumbnail',
   source: { kind: 'file' },
   fileName: '',
+  fileSize: 0,
   bodyBase64: '',
   bodyUrl: '',
   mimeType: 'image/png',
@@ -125,6 +129,25 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('manage-image');
   const draft = useModeDraft('manage-image', deserializeManageImage, initialState);
   const [state, setState] = useState(draft.state);
+  // The chosen image's preview: an object URL for the File, never its bytes
+  // in state (#222). Up to MAX_PREVIEW_BYTES; revoked when replaced and on
+  // unmount.
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const previewRef = useRef<string | null>(null);
+  const onFile = useCallback((f: File | null) => {
+    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    previewRef.current =
+      f && f.type.startsWith('image/') && f.size <= MAX_PREVIEW_BYTES
+        ? URL.createObjectURL(f)
+        : null;
+    setPreviewUrl(previewRef.current);
+  }, []);
+  useEffect(
+    () => () => {
+      if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    },
+    [],
+  );
   // Live-metadata subscription so child editors re-render when columns/relationships land.
   // The live table is a memo dependency below: build*() reads metadata via
   // findTable(), which is empty until the fetch lands — keying on `state`
@@ -176,7 +199,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
       ? 'Pick a source record.'
       : !state.imageColumn
         ? 'Pick an image column.'
-        : state.operation === 'upload' && !state.bodyBase64 && state.source.kind === 'file'
+        : state.operation === 'upload' && state.source.kind === 'file' && !state.fileName
           ? 'Pick an image file.'
           : state.operation === 'download' &&
               state.downloadSize === 'full' &&
@@ -527,8 +550,8 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
           setSource={(s) => set('source', s, 'source')}
           fileName={state.fileName}
           setFileName={(n) => set('fileName', n, 'source')}
-          fileSize={0}
-          setFileSize={() => undefined}
+          fileSize={state.fileSize ?? 0}
+          setFileSize={(n) => set('fileSize', n, 'source')}
           mimeType={state.mimeType}
           setMimeType={(m) => set('mimeType', m as ManageImageState['mimeType'], 'source')}
           bodyBase64={state.bodyBase64}
@@ -537,6 +560,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
           setBodyUrl={(u) => set('bodyUrl', u, 'source')}
           accept="image/png,image/jpeg,image/gif,image/bmp,image/tiff"
           group="binary"
+          onFile={onFile}
         />
       );
       break;
@@ -560,7 +584,10 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
             setSource={(s) => set('source', s, 'source')}
             setBodyBase64={(b) => set('bodyBase64', b, 'source')}
             setFileName={(n) => set('fileName', n, 'source')}
+            setFileSize={(n) => set('fileSize', n, 'source')}
             setMimeType={(m) => set('mimeType', m as ManageImageState['mimeType'], 'source')}
+            previewUrl={previewUrl}
+            onFile={onFile}
           />
           <BinaryPipelineCard
             steps={pipeline}
@@ -568,7 +595,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
             sizeAdvisory={
               state.operation === 'upload'
                 ? checkUploadSize(
-                    approxBytesFromBase64(state.bodyBase64),
+                    state.fileSize || approxBytesFromBase64(state.bodyBase64),
                     imageCol?.maxSizeInKB ? imageCol.maxSizeInKB * 1024 : undefined,
                     'image',
                   )
@@ -586,7 +613,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
           sizeAdvisory={
             state.operation === 'upload'
               ? checkUploadSize(
-                  approxBytesFromBase64(state.bodyBase64),
+                  state.fileSize || approxBytesFromBase64(state.bodyBase64),
                   imageCol?.maxSizeInKB ? imageCol.maxSizeInKB * 1024 : undefined,
                   'image',
                 )
@@ -691,7 +718,10 @@ function PreviewCard({
   setSource,
   setBodyBase64,
   setFileName,
+  setFileSize,
   setMimeType,
+  previewUrl,
+  onFile,
 }: {
   state: ManageImageState;
   imageCol: ImageColumnMeta | undefined;
@@ -699,9 +729,20 @@ function PreviewCard({
   setSource: (s: ManageImageState['source']) => void;
   setBodyBase64: (b: string) => void;
   setFileName: (n: string) => void;
+  setFileSize: (n: number) => void;
   setMimeType: (m: ManageImageState['mimeType']) => void;
+  previewUrl: string | null;
+  onFile: (f: File | null) => void;
 }) {
   const s = useStudioStyles();
+  // A chosen file previews through its object URL; pasted base64 (capped at
+  // MAX_PASTED_BASE64_BYTES) as a data URL (#222).
+  const preview =
+    state.source.kind === 'file'
+      ? previewUrl
+      : state.source.kind === 'base64' && state.bodyBase64
+        ? `data:${state.mimeType};base64,${state.bodyBase64}`
+        : null;
   const isThumb = imageCol?.isPrimaryImage && !imageCol?.canStoreFullImage;
 
   return (
@@ -740,22 +781,22 @@ function PreviewCard({
             style={{
               width: 144,
               height: 144,
-              background: state.bodyBase64
-                ? `url(data:${state.mimeType};base64,${state.bodyBase64}) center/cover`
+              background: preview
+                ? `url("${preview}") center/cover`
                 : tokens.colorNeutralBackground3,
               borderRadius: tokens.borderRadiusMedium,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: state.bodyBase64 ? '#fff' : tokens.colorNeutralForeground3,
+              color: preview ? '#fff' : tokens.colorNeutralForeground3,
               fontWeight: 700,
               fontSize: 40,
               border: `1px solid ${tokens.colorNeutralStroke2}`,
             }}
           >
-            {!state.bodyBase64 && initials}
+            {!preview && initials}
           </div>
-          {state.bodyBase64 && (
+          {(preview || (state.source.kind === 'file' && state.fileName)) && (
             <Caption1
               style={{ color: tokens.colorNeutralForeground3, display: 'block', marginTop: 4 }}
             >
@@ -772,8 +813,8 @@ function PreviewCard({
               setSource={setSource}
               fileName={state.fileName}
               setFileName={setFileName}
-              fileSize={0}
-              setFileSize={() => undefined}
+              fileSize={state.fileSize ?? 0}
+              setFileSize={setFileSize}
               mimeType={state.mimeType}
               setMimeType={(m) => setMimeType(m as ManageImageState['mimeType'])}
               bodyBase64={state.bodyBase64}
@@ -782,6 +823,7 @@ function PreviewCard({
               setBodyUrl={() => undefined}
               accept="image/png,image/jpeg,image/gif,image/bmp,image/tiff"
               group="binary"
+              onFile={onFile}
             />
           </div>
         )}

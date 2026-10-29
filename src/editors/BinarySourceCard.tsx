@@ -3,12 +3,16 @@
 // Source toggle: Upload file / From URL / Paste base64.
 //
 // We use a segmented Fluent v9 button group for the source toggle. When
-// "Upload file" is active we expose a file input + read it into memory as
-// base64 + bytes-count metadata. When "Paste base64" we let the user paste
-// raw base64. When "From URL" we just store the URL (informational — actual
-// fetch would happen client-side at execute time).
+// "Upload file" is active we keep only the file's name, size and type: the
+// bytes are never read (#222). Execute can't send binary content from
+// inside ToolBox and the Code tab uses placeholders, so a base64 copy in
+// state was only a way for a large file to freeze the tool. A mode that
+// previews the file gets the File itself through `onFile`. When "Paste
+// base64" we let the user paste raw base64, up to MAX_PASTED_BASE64_BYTES.
+// When "From URL" we just store the URL (informational — actual fetch would
+// happen client-side at execute time).
 
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import {
   Field,
   Input,
@@ -49,11 +53,17 @@ export interface BinarySourceCardProps {
   /** Restrict file picker to these MIME types (used for image uploads). */
   accept?: string;
   group?: RequestGroup;
+  /** The chosen file, for a preview (object URL); null when cleared. */
+  onFile?: (file: File | null) => void;
 }
+
+/** Largest pasted base64 body kept, decoded size (#222). */
+export const MAX_PASTED_BASE64_BYTES = 10 * 1024 * 1024;
 
 export function BinarySourceCard(props: BinarySourceCardProps) {
   const s = useStudioStyles();
   const inputRef = useRef<HTMLInputElement>(null);
+  const [pasteError, setPasteError] = useState<string | null>(null);
 
   return (
     <div className={mergeClasses(s.inlineCard)} style={{ padding: 12, maxWidth: 880 }}>
@@ -102,20 +112,15 @@ export function BinarySourceCard(props: BinarySourceCardProps) {
               type="file"
               accept={props.accept}
               style={{ fontSize: 12 }}
-              onChange={async (e) => {
+              onChange={(e) => {
                 const f = e.currentTarget.files?.[0];
                 if (!f) return;
+                // Name, size and type only — never the bytes (#222).
                 props.setFileName(f.name);
                 props.setFileSize(f.size);
                 if (f.type) props.setMimeType(f.type);
-                // Read base64 — strip the data: prefix so the wire payload is pure base64
-                const reader = new FileReader();
-                reader.onload = () => {
-                  const result = String(reader.result ?? '');
-                  const b64 = result.startsWith('data:') ? (result.split(',')[1] ?? '') : result;
-                  props.setBodyBase64(b64);
-                };
-                reader.readAsDataURL(f);
+                props.setBodyBase64('');
+                props.onFile?.(f);
               }}
             />
           </Field>
@@ -206,6 +211,8 @@ export function BinarySourceCard(props: BinarySourceCardProps) {
           </Field>
           <Field
             label="Base64 body"
+            validationState={pasteError ? 'error' : 'none'}
+            validationMessage={pasteError ?? undefined}
             hint={
               <span>
                 Raw base64-encoded bytes.{' '}
@@ -218,8 +225,18 @@ export function BinarySourceCard(props: BinarySourceCardProps) {
               rows={6}
               value={props.bodyBase64}
               onChange={(_, d) => {
+                // A huge paste would freeze the tool; the Code tab uses a
+                // placeholder for the body anyway (#222).
+                const size = estimateBase64Size(d.value);
+                if (size > MAX_PASTED_BASE64_BYTES) {
+                  setPasteError(
+                    `That's ${formatSize(size)} decoded; up to ${formatSize(MAX_PASTED_BASE64_BYTES)} can be pasted. Use Upload file for larger files.`,
+                  );
+                  return;
+                }
+                setPasteError(null);
                 props.setBodyBase64(d.value);
-                props.setFileSize(estimateBase64Size(d.value));
+                props.setFileSize(size);
               }}
               style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 11 }}
               placeholder="JVBERi0xLjQK…"
