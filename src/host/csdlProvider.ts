@@ -37,6 +37,13 @@
 
 import { dvHost } from './pptbBridge';
 import { activeOrg } from './activeOrg';
+import {
+  buildPublisherIndex,
+  resolvePublisher,
+  SOLUTION_PUBLISHERS_QUERY,
+  type PublisherIndex,
+  type SolutionPublisherRow,
+} from './messagePublishers';
 import type {
   CsdlAction,
   ActionParam,
@@ -88,6 +95,7 @@ const K_CSDL_PARSED = 'csdl:parsed';
 const K_CSDL_ACTIONS = 'csdl:actions';
 const K_CUSTOM_APIS = 'csdl:source:customapis';
 const K_CUSTOM_ACTIONS = 'csdl:source:workflows';
+const K_PUBLISHERS = 'csdl:source:publishers';
 
 /**
  * The most recently classified action list per org, for `findActionSync`.
@@ -113,6 +121,10 @@ const lastClassified = new Map<string, CsdlAction[]>();
  * — see `classifySource` — and the classified list is NOT cached: the next
  * load retries the failed lookup (the parsed CSDL stays cached, so only the
  * lookup is re-sent) and re-classifies.
+ *
+ * Custom APIs and custom process actions also get a `publisher` (#248) from
+ * the solutions lookup; when it fails they have none (the picker then lists
+ * them ungrouped), and the next load retries it the same way.
  */
 export async function fetchCsdlActions(): Promise<CsdlAction[]> {
   const org = activeOrg();
@@ -122,9 +134,15 @@ export async function fetchCsdlActions(): Promise<CsdlAction[]> {
     async () => {
       // Both are memoized, so a re-classification skips the CSDL download.
       const [parsed, sources] = await Promise.all([fetchParsedCsdl(org), fetchMessageSources(org)]);
-      const list = parsed.map((a) => ({ ...a, source: classifySource(a.name, sources) }));
+      const list = parsed.map((a) => classify(a, sources));
       lastClassified.set(org, list);
-      return { list, complete: sources.customApis !== null && sources.customActions !== null };
+      return {
+        list,
+        complete:
+          sources.customApis !== null &&
+          sources.customActions !== null &&
+          sources.publishers !== null,
+      };
     },
     (r) => r.complete,
   );
@@ -674,31 +692,48 @@ function typeMetadataFromRaw(raw: string): Partial<ActionParam> {
 //
 // Each lookup is independent: one that fails (no read privilege on the
 // table, or not embedded) is `null` and the name heuristic covers that half.
+//
+// Both lookups also keep each message's `solutionid`, which the solutions
+// lookup turns into a publisher (#248) — see `messagePublishers.ts`.
+
+/** Lower-cased message name → the `solutionid` of its customapi / workflow row. */
+type MessageSolutions = Map<string, string | undefined>;
 
 interface MessageSources {
-  /** Lower-cased Custom API unique names; null when the lookup failed. */
-  customApis: Set<string> | null;
-  /** Lower-cased custom process action message names; null when failed. */
-  customActions: Set<string> | null;
+  /** Custom API unique names; null when the lookup failed. */
+  customApis: MessageSolutions | null;
+  /** Custom process action message names; null when failed. */
+  customActions: MessageSolutions | null;
+  /** Solutions and their publishers; null when the lookup failed. */
+  publishers: PublisherIndex | null;
 }
 
-const NO_MESSAGE_SOURCES: MessageSources = { customApis: null, customActions: null };
+const NO_MESSAGE_SOURCES: MessageSources = {
+  customApis: null,
+  customActions: null,
+  publishers: null,
+};
 
 // Each lookup is memoized on its own and only when it succeeded: a failed
 // one (null) is retried by the next load rather than pinning the name
 // heuristic for the whole session.
 async function fetchMessageSources(org: string): Promise<MessageSources> {
-  const notFailed = (v: Set<string> | null) => v !== null;
-  const [customApis, customActions] = await Promise.all([
+  const notFailed = (v: unknown) => v !== null;
+  const [customApis, customActions, publishers] = await Promise.all([
     memoize(
       org,
       K_CUSTOM_APIS,
-      () => queryNames('customapis?$select=uniquename', (r) => [r.uniquename]),
+      () =>
+        queryRows('customapis?$select=uniquename,solutionid', (r) => [
+          r.uniquename,
+          str(r.solutionid),
+        ]),
       notFailed,
     ),
-    memoize(org, K_CUSTOM_ACTIONS, fetchCustomActionNames, notFailed),
+    memoize(org, K_CUSTOM_ACTIONS, fetchCustomActions, notFailed),
+    memoize(org, K_PUBLISHERS, fetchPublisherIndex, notFailed),
   ]);
-  return { customApis, customActions };
+  return { customApis, customActions, publishers };
 }
 
 /**
@@ -708,25 +743,26 @@ async function fetchMessageSources(org: string): Promise<MessageSources> {
  * `workflow` exposes no navigation property for it, so collect the
  * sdkmessage ids first and read their names in chunks of ids (#54).
  */
-async function fetchCustomActionNames(): Promise<Set<string> | null> {
-  const ids = await queryNames(
-    'workflows?$select=_sdkmessageid_value&$filter=category eq 3 and type eq 1',
-    (r) => [r._sdkmessageid_value],
+async function fetchCustomActions(): Promise<MessageSolutions | null> {
+  // sdkmessage id → the workflow's solutionid.
+  const ids = await queryRows(
+    'workflows?$select=_sdkmessageid_value,solutionid&$filter=category eq 3 and type eq 1',
+    (r) => [r._sdkmessageid_value, str(r.solutionid)],
   );
   if (!ids) return null;
-  const names = new Set<string>();
-  const all = [...ids];
+  const names: MessageSolutions = new Map();
+  const all = [...ids.keys()];
   for (let i = 0; i < all.length; i += SDKMESSAGE_CHUNK) {
     const filter = all
       .slice(i, i + SDKMESSAGE_CHUNK)
       .map((id) => `sdkmessageid eq ${id}`)
       .join(' or ');
-    const chunk = await queryNames(
-      `sdkmessages?$select=name&$filter=${encodeURIComponent(filter)}`,
-      (r) => [r.name],
+    const chunk = await queryRows(
+      `sdkmessages?$select=name,sdkmessageid&$filter=${encodeURIComponent(filter)}`,
+      (r) => [r.name, ids.get(String(r.sdkmessageid).toLowerCase())],
     );
     if (!chunk) return null;
-    for (const n of chunk) names.add(n);
+    for (const [name, solutionId] of chunk) names.set(name, solutionId);
   }
   return names;
 }
@@ -734,27 +770,39 @@ async function fetchCustomActionNames(): Promise<Set<string> | null> {
 /** sdkmessage ids per `$filter` — keeps the request URL well under limits. */
 const SDKMESSAGE_CHUNK = 50;
 
+async function fetchPublisherIndex(): Promise<PublisherIndex | null> {
+  const rows = await queryRows(SOLUTION_PUBLISHERS_QUERY, (r) => [
+    r.solutionid,
+    r as SolutionPublisherRow,
+  ]);
+  return rows && buildPublisherIndex([...rows.values()]);
+}
+
+const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
+
 /** Run an OData query (following `@odata.nextLink`) and collect the
- *  lower-cased string names `pick` returns per row. Null on any failure. */
-async function queryNames(
+ *  `[key, value]` pairs `pick` returns per row, keyed by the lower-cased
+ *  string key (rows without one are skipped). Null on any failure. */
+async function queryRows<T>(
   path: string,
-  pick: (row: Record<string, unknown>) => unknown[],
-): Promise<Set<string> | null> {
+  pick: (row: Record<string, unknown>) => [unknown, T],
+): Promise<Map<string, T> | null> {
   try {
-    const names = new Set<string>();
+    const rows = new Map<string, T>();
     let next: string | undefined = path;
-    // Page cap is a safety net; both tables are small in practice.
+    // Page cap is a safety net; these tables are small in practice.
     for (let page = 0; next && page < 50; page++) {
       const res = (await dvHost.queryData(next)) as {
         value?: Record<string, unknown>[];
         '@odata.nextLink'?: string;
       };
       for (const row of res.value ?? []) {
-        for (const n of pick(row)) if (typeof n === 'string' && n) names.add(n.toLowerCase());
+        const [key, value] = pick(row);
+        if (typeof key === 'string' && key) rows.set(key.toLowerCase(), value);
       }
       next = res['@odata.nextLink'] ? stripApiBase(res['@odata.nextLink']) : undefined;
     }
-    return names;
+    return rows;
   } catch (e) {
     console.warn(`[csdlProvider] message classification query failed (${path}):`, e);
     return null;
@@ -790,6 +838,16 @@ function classifySource(name: string, sources: MessageSources): CsdlAction['sour
   // custom-action half is unknown, so it's most likely a custom action.
   if (sources.customApis) return 'custom-action';
   return 'custom-api';
+}
+
+/** `a` with its source and, for a Custom API or Custom Action, its publisher. */
+function classify(a: CsdlAction, sources: MessageSources): CsdlAction {
+  const source = classifySource(a.name, sources);
+  if (source === 'oob' || !sources.publishers) return { ...a, source };
+  const key = a.name.toLowerCase();
+  const solutionId =
+    source === 'custom-api' ? sources.customApis?.get(key) : sources.customActions?.get(key);
+  return { ...a, source, publisher: resolvePublisher(a.name, solutionId, sources.publishers) };
 }
 
 /**

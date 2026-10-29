@@ -16,6 +16,7 @@ import {
   Field,
   Combobox,
   Option,
+  OptionGroup,
   Badge,
   Caption1,
   tokens,
@@ -28,6 +29,7 @@ import {
 import { Flash20Filled, Code20Filled, BoxMultiple20Regular } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
 import { type CsdlAction } from '../mock/actionsCsdl';
+import type { MessagePublisher } from '../host/messagePublishers';
 import { findTable } from '../mock/metadata';
 import {
   actions as actionsProvider,
@@ -101,21 +103,27 @@ export function ActionPicker({
 
   // ── Scope options (distinct binding entities) ──
   // Walks every op in `all` collecting unbound count + per-entity counts.
+  // With publishers (#248) it also counts the non-Microsoft ops per scope, so
+  // your own bound operations are easy to find among Microsoft's.
   const scopeOptions = useMemo(() => {
     let unboundCount = 0;
-    const entityCounts = new Map<string, number>();
+    let unboundYours = 0;
+    const entityCounts = new Map<string, { count: number; yours: number }>();
     for (const a of all) {
+      const yours = a.publisher && !a.publisher.microsoft ? 1 : 0;
       if (a.binding.kind === 'unbound') {
         unboundCount++;
+        unboundYours += yours;
       } else {
         const e = a.binding.entityType;
-        entityCounts.set(e, (entityCounts.get(e) ?? 0) + 1);
+        const c = entityCounts.get(e) ?? { count: 0, yours: 0 };
+        entityCounts.set(e, { count: c.count + 1, yours: c.yours + yours });
       }
     }
     const entities = Array.from(entityCounts.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([logicalName, count]) => ({ logicalName, count }));
-    return { unboundCount, entities };
+      .map(([logicalName, c]) => ({ logicalName, ...c }));
+    return { unboundCount, unboundYours, entities };
   }, [all]);
 
   // Filter scope-dropdown options by typed input. Lets the user actually
@@ -164,9 +172,26 @@ export function ActionPicker({
       (a) =>
         a.name.toLowerCase().includes(q) ||
         (a.displayName?.toLowerCase().includes(q) ?? false) ||
-        (a.description?.toLowerCase().includes(q) ?? false),
+        (a.description?.toLowerCase().includes(q) ?? false) ||
+        (a.publisher?.name.toLowerCase().includes(q) ?? false),
     );
   }, [inScope, opInput, isFilteringOp]);
+
+  // Custom APIs and Custom Actions carry a publisher (#248): list your org's
+  // and ISVs' first, Microsoft's below. Search covers both groups. Without
+  // publishers (OOB actions, or the solutions lookup failed) the list is flat.
+  const groups = useMemo(() => {
+    if (!filtered.some((a) => a.publisher)) return null;
+    return {
+      yours: filtered.filter((a) => !a.publisher?.microsoft),
+      microsoft: filtered.filter((a) => a.publisher?.microsoft),
+    };
+  }, [filtered]);
+  const optionFor = (a: CsdlAction) => (
+    <Option key={a.name} value={a.name} text={a.displayName ?? a.name}>
+      <ActionOptionRow action={a} />
+    </Option>
+  );
 
   // Sync the op-input text to the selected operation's display name when
   // the selection changes externally (mode switch, Save load, scope-
@@ -349,12 +374,12 @@ export function ActionPicker({
             {showUnboundOption && (
               <Option value={SCOPE_UNBOUND} text="Unbound">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Badge appearance="ghost" size="extra-small">
+                  <Badge appearance="ghost" size="small">
                     Unbound
                   </Badge>
                   <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-                    {scopeOptions.unboundCount} op{scopeOptions.unboundCount === 1 ? '' : 's'} ·
-                    invoked without a source record
+                    {scopeOptions.unboundCount} op{scopeOptions.unboundCount === 1 ? '' : 's'}
+                    {yoursSuffix(scopeOptions.unboundYours)} · invoked without a source record
                   </Caption1>
                 </div>
               </Option>
@@ -375,6 +400,7 @@ export function ActionPicker({
                     <span style={{ flexGrow: 1 }} />
                     <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
                       {s.count} op{s.count === 1 ? '' : 's'}
+                      {yoursSuffix(s.yours)}
                     </Caption1>
                   </div>
                 </Option>
@@ -431,11 +457,22 @@ export function ActionPicker({
             listbox={{ style: { maxHeight: 420 } }}
             style={{ width: '100%' }}
           >
-            {filtered.map((a) => (
-              <Option key={a.name} value={a.name} text={a.displayName ?? a.name}>
-                <ActionOptionRow action={a} />
-              </Option>
-            ))}
+            {groups ? (
+              <>
+                {groups.yours.length > 0 && (
+                  <OptionGroup label={`Your org & ISVs (${groups.yours.length})`}>
+                    {groups.yours.map(optionFor)}
+                  </OptionGroup>
+                )}
+                {groups.microsoft.length > 0 && (
+                  <OptionGroup label={`Microsoft (${groups.microsoft.length})`}>
+                    {groups.microsoft.map(optionFor)}
+                  </OptionGroup>
+                )}
+              </>
+            ) : (
+              filtered.map(optionFor)
+            )}
             {filtered.length === 0 && (
               <Option value="__none" text="" disabled>
                 <span style={{ color: tokens.colorNeutralForeground3, fontSize: 12 }}>
@@ -463,15 +500,16 @@ function ActionOptionRow({ action }: { action: CsdlAction }) {
         <span style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: 600 }}>
           {action.name}
         </span>
-        <Badge appearance="ghost" size="extra-small">
+        <Badge appearance="ghost" size="small">
           {action.kind}
         </Badge>
         {action.isComposable && (
-          <Badge appearance="ghost" size="extra-small">
+          <Badge appearance="ghost" size="small">
             composable
           </Badge>
         )}
-        <Badge appearance="tint" color="brand" size="extra-small" style={{ marginLeft: 'auto' }}>
+        {action.publisher && <PublisherBadge publisher={action.publisher} />}
+        <Badge appearance="tint" color="brand" size="small" style={{ marginLeft: 'auto' }}>
           {action.kind === 'Action' ? 'POST' : 'GET'}
         </Badge>
       </div>
@@ -567,7 +605,7 @@ function ActionSummaryCard({ action }: { action: CsdlAction }) {
               <Badge
                 key={p.name}
                 appearance="ghost"
-                size="extra-small"
+                size="small"
                 style={{ marginRight: 4, fontFamily: tokens.fontFamilyMonospace }}
               >
                 {p.name}: {p.type}
@@ -593,8 +631,44 @@ function ActionSummaryCard({ action }: { action: CsdlAction }) {
         <span>
           <Badge appearance="ghost">{action.source}</Badge>
         </span>
+        {action.publisher && (
+          <>
+            <span style={{ color: tokens.colorNeutralForeground3 }}>Publisher</span>
+            <span>
+              <PublisherBadge publisher={action.publisher} />
+            </span>
+          </>
+        )}
       </div>
     </div>
+  );
+}
+
+/** ", N yours" after a scope's op count when it has non-Microsoft ops (#248). */
+function yoursSuffix(yours: number): string {
+  return yours > 0 ? `, ${yours} yours` : '';
+}
+
+/** The solution publisher's friendly name (#248); long names are cut short. */
+function PublisherBadge({ publisher }: { publisher: MessagePublisher }) {
+  return (
+    <Badge
+      appearance="outline"
+      color={publisher.microsoft ? 'informative' : 'brand'}
+      size="small"
+      title={`Publisher: ${publisher.name}`}
+    >
+      <span
+        style={{
+          maxWidth: 200,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {publisher.name}
+      </span>
+    </Badge>
   );
 }
 
