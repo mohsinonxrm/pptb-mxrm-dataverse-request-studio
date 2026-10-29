@@ -166,7 +166,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.associate(state);
+    const res = await runtime.associate(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setLoading(false);
     setTab('results');
@@ -433,6 +433,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
     case 'headers':
       pane = (
         <HeadersEditor
+          policy="relate"
           items={state.headers}
           setItems={(h) => set('headers', h, 'headers')}
           group="relate"

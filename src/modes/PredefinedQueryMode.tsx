@@ -453,7 +453,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.predefined(state);
+    const res = await runtime.predefined(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setLoading(false);
     setTab('results');
@@ -1015,7 +1015,13 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
       );
       break;
     case 'headers':
-      pane = <HeadersEditor items={state.headers} setItems={(h) => set('headers', h, 'headers')} />;
+      pane = (
+        <HeadersEditor
+          policy="read"
+          items={state.headers}
+          setItems={(h) => set('headers', h, 'headers')}
+        />
+      );
       break;
   }
 

@@ -4,7 +4,8 @@
 // self-contained (lazy-loaded) addition.
 
 import { dvHost } from '../host/pptbBridge';
-import { mapError, type ExecResult } from './dataverseExecutor';
+import { mapError, refuseHeaderProblems, sendable, type ExecResult } from './dataverseExecutor';
+import { allowedHeaders } from './requestHeaderPolicy';
 import { jsonBytes } from './byteSize';
 import {
   COUNT_CAP,
@@ -48,18 +49,28 @@ export async function countMatching(s: BulkDeleteState): Promise<MatchCount> {
   }
 }
 
-export async function executeBulkDelete(s: BulkDeleteState): Promise<ExecResult> {
+export async function executeBulkDelete(
+  s: BulkDeleteState,
+  composed?: Record<string, string>,
+): Promise<ExecResult> {
   const { body, problems } = buildBulkDeleteBody(s, new Date());
   if (!body || problems.length) {
     return mapError({ statusCode: 400, message: problems[0] ?? 'Request incomplete.' }, 0);
   }
+  const refused = refuseHeaderProblems(composed);
+  if (refused) return refused;
+  // The job runs as the impersonated user when one is set (#109).
+  const wire = sendable(allowedHeaders('impersonation', composed));
   const t0 = performance.now();
   try {
-    const value = await dvHost.execute({
-      operationName: 'BulkDelete',
-      operationType: 'action',
-      parameters: body,
-    });
+    const value = await dvHost.execute(
+      {
+        operationName: 'BulkDelete',
+        operationType: 'action',
+        parameters: body,
+      },
+      wire,
+    );
     const ms = Math.round(performance.now() - t0);
     return {
       status: 200,
@@ -72,7 +83,7 @@ export async function executeBulkDelete(s: BulkDeleteState): Promise<ExecResult>
       headers: { 'OData-Version': '4.0' },
     };
   } catch (e) {
-    return mapError(e, Math.round(performance.now() - t0));
+    return mapError(e, Math.round(performance.now() - t0), wire);
   }
 }
 

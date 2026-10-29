@@ -27,6 +27,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Production safe mode** in Settings → Safety, on by default ([#241]).
 - **README: "What this tool changes"** lists every request that changes data,
   when it asks, and what DRS stores locally ([#241]).
+- **Read, Execute Function, Associate / Disassociate and Bulk Delete Job
+  requests send their headers** ([#109]). The Headers pane says which rows
+  Execute sends and marks the rest as Code tab only. Later pages of a
+  Retrieve Multiple send the first page's headers, so they run as the same
+  user. It's an allow-list, so a plain read still sends none and never asks
+  for consent:
+  - impersonation (`MSCRMCallerID`, and a new `CallerObjectId` preset for
+    the Microsoft Entra object id) in all of them;
+  - `If-None-Match` and `Consistency` on reads. A matching etag shows as
+    **304 Not Modified**, not as an error;
+  - the bypass headers on Associate / Disassociate.
+  The page size's `Prefer` still keeps ToolBox's
+  `odata.include-annotations="*"`; other preferences stay in the Code tab.
+- **Impersonation is never dropped silently** ([#109]).
+  - On a ToolBox older than 1.2.7, which can't send headers, a request with
+    an impersonation header isn't sent, instead of running as you. The same
+    goes for Associate / Disassociate with a bypass header.
+  - Both impersonation headers at once, or the presets' all-zero
+    placeholder, aren't sent either.
+  - A declined header prompt on Associate / Disassociate asks once and sends
+    nothing, rather than falling back to a request without your headers.
 
 ### 🐛 Fixed
 
@@ -51,10 +72,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ids, names or query trees would change the URL are skipped, and the import
   status says which and why. Copying or moving from another connection's
   library applies the same check.
+- **Retrieve Single no longer turns on `If-None-Match: null`** by default
+  ([#109]). Execute sends that header now, and `null` never matches an etag;
+  saved requests that have it still run without it.
 - **Exported URLs encode spaces** ([#221]). Postman, Insomnia and Bruno
   collections, cURL / fetch / XHR / C# / PowerShell code and the HTTP-action
   URIs write `%20`. The URL bar still shows spaces.
 
+[#109]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/109
 [#221]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/221
 [#241]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/241
 

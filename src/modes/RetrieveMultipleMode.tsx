@@ -310,6 +310,9 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // The page size the run's first page asked for. Later pages must ask for
   // the same one, even if the Prefer pane has changed since (#219).
   const runPageSizeRef = useRef<number | null>(null);
+  // The headers the run was sent with: later pages send the same ones, or a
+  // page after the first would run as the signed-in user (#109).
+  const runHeadersRef = useRef<Record<string, string> | undefined>(undefined);
   // Bumped by Stop to end a Retrieve All, keeping the rows already merged.
   const pagingIdRef = useRef(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -344,7 +347,8 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     const run = startRun();
     setLoading(true);
     runPageSizeRef.current = state.prefer.maxpagesize;
-    const res = await runtime.retrieveMultiple(state);
+    runHeadersRef.current = headerItemsToObject(state.headers, null);
+    const res = await runtime.retrieveMultiple(state, runHeadersRef.current);
     // A newer Execute (e.g. Refresh clicked mid-flight) owns the results now.
     if (runIdRef.current !== run) return;
     setResult(res);
@@ -421,7 +425,11 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     if (!nextLink || isLoadingMore) return;
     const status = beginPaging();
     try {
-      const more = await runtime.absoluteUrl(nextLink, runPageSizeRef.current);
+      const more = await runtime.absoluteUrl(
+        nextLink,
+        runPageSizeRef.current,
+        runHeadersRef.current,
+      );
       if (status() !== 'current') return;
       if (!more.ok) {
         setPageError(`Couldn't load the next page: ${describePageError(more)}`);
@@ -443,7 +451,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     try {
       const outcome = await retrieveAll({
         nextLink,
-        fetchPage: (url) => runtime.absoluteUrl(url, runPageSizeRef.current),
+        fetchPage: (url) => runtime.absoluteUrl(url, runPageSizeRef.current, runHeadersRef.current),
         commit: commitPages,
         status,
       });
@@ -1006,7 +1014,11 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
         break;
       case 'headers':
         pane = (
-          <HeadersEditor items={state.headers} setItems={(h) => set('headers', h, 'headers')} />
+          <HeadersEditor
+            policy="read"
+            items={state.headers}
+            setItems={(h) => set('headers', h, 'headers')}
+          />
         );
         break;
     }

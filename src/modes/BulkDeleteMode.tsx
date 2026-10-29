@@ -174,7 +174,7 @@ export function BulkDeleteMode({ themeMode }: { themeMode: ThemeMode }) {
   const onConfirmed = async () => {
     setConfirmOpen(false);
     setLoading(true);
-    const res = await executeBulkDelete(state);
+    const res = await executeBulkDelete(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setJobId(res.ok ? jobIdFromResult(res.body) : null);
     setLoading(false);
@@ -376,6 +376,7 @@ export function BulkDeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     case 'headers':
       pane = (
         <HeadersEditor
+          policy="impersonation"
           items={state.headers}
           setItems={(h) => set('headers', h, 'headers')}
           group={GROUP}

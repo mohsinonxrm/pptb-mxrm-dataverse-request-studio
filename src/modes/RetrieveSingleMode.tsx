@@ -81,9 +81,9 @@ const initialState = (): RetrieveSingleState => ({
   select: [],
   expand: [],
   prefer: { ...emptyPrefer(), formattedValues: true },
-  headers: defaultReadHeaders().map((h) =>
-    h.name === 'If-None-Match' ? { ...h, enabled: true } : h,
-  ),
+  // If-None-Match used to be on (`null`) by default. Execute sends it now
+  // (#109), and `null` never matches an etag, so it's off until you add one.
+  headers: defaultReadHeaders(),
   dirty: new Set(),
 });
 
@@ -257,7 +257,7 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   // ── Execute ───────────────────────────────────────────────────────
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.retrieveSingle(state);
+    const res = await runtime.retrieveSingle(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setLoading(false);
     setTab('results');
@@ -544,7 +544,11 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
         break;
       case 'headers':
         pane = (
-          <HeadersEditor items={state.headers} setItems={(h) => set('headers', h, 'headers')} />
+          <HeadersEditor
+            policy="read"
+            items={state.headers}
+            setItems={(h) => set('headers', h, 'headers')}
+          />
         );
         break;
     }

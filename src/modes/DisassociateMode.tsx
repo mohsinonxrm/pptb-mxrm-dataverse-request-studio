@@ -255,7 +255,7 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.disassociate(state);
+    const res = await runtime.disassociate(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setLoading(false);
     setTab('results');
@@ -493,6 +493,7 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
     case 'headers':
       pane = (
         <HeadersEditor
+          policy="relate"
           items={state.headers}
           setItems={(h) => set('headers', h, 'headers')}
           group="relate"

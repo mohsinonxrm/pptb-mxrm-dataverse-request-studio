@@ -169,7 +169,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.function(state);
+    const res = await runtime.function(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setLoading(false);
     setTab('results');
@@ -513,6 +513,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
     case 'headers':
       pane = (
         <HeadersEditor
+          policy="impersonation"
           items={state.headers}
           setItems={(h) => set('headers', h, 'headers')}
           group="execute"
