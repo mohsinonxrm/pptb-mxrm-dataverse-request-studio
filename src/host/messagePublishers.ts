@@ -60,14 +60,28 @@ const MICROSOFT_PUBLISHERS = new Set([
   'adxstudio',
 ]);
 
+// Microsoft's customization prefixes. A customer's or ISV's publisher can
+// start with "ms" too (Morgan Stanley, MSC), so a publisher row is matched
+// against this list rather than `ms*`.
+const MICROSOFT_PREFIXES = new Set([
+  'msdyn',
+  'msdynce',
+  'msdynmkt',
+  'msfp',
+  'msft',
+  'mspp',
+  'msa',
+  'mscrm',
+  'adx',
+]);
+
 /** True for a Microsoft publisher: a known one, or one that looks like it. */
 export function isMicrosoftPublisher(p: PublisherRow): boolean {
   const unique = (p.uniquename ?? '').toLowerCase();
   if (MICROSOFT_PUBLISHERS.has(unique)) return true;
   if (unique.startsWith('microsoft')) return true;
   if (/^(microsoft|dynamics 365)\b/i.test(p.friendlyname ?? '')) return true;
-  // Microsoft's prefixes: msdyn, msdynce, msdynmkt, msfp, msft, …, adx.
-  return /^(ms[a-z0-9]*|adx)$/i.test(p.customizationprefix ?? '');
+  return MICROSOFT_PREFIXES.has((p.customizationprefix ?? '').toLowerCase());
 }
 
 function toPublisher(p: PublisherRow): MessagePublisher {
@@ -107,6 +121,8 @@ export function resolvePublisher(
   }
   const prefix = /^([a-z][a-z0-9]*)_/i.exec(name)?.[1];
   if (!prefix) return { name: 'Microsoft', microsoft: true };
+  // No publisher has this prefix: only the name is left to go on, so any
+  // ms* prefix reads as Microsoft's, like the source heuristic.
   return (
     index.byPrefix.get(prefix.toLowerCase()) ?? {
       name: prefix,

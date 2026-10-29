@@ -26,6 +26,16 @@ const CATALOG: CsdlAction[] = [
   op('fab_Sync', { publisher: { name: 'Fabrikam ISV', microsoft: false } }),
   op('WinOpportunity', { source: 'oob' }),
   op('QualifyLead', { source: 'oob' }),
+  // Execute Function lists OOB functions and Custom API functions together.
+  op('WhoAmI', { kind: 'Function', source: 'oob' }),
+  op('contoso_GetScore', {
+    kind: 'Function',
+    publisher: { name: 'Contoso', microsoft: false },
+  }),
+  op('msdyn_GetKpi', {
+    kind: 'Function',
+    publisher: { name: 'Dynamics 365', microsoft: true },
+  }),
 ];
 
 vi.mock('../host/csdlProvider', () => ({
@@ -46,8 +56,9 @@ afterEach(() => {
   host = null;
 });
 
-const customApis = (a: CsdlAction) => a.source === 'custom-api';
-const oob = (a: CsdlAction) => a.source === 'oob';
+const oob = (a: CsdlAction) => a.source === 'oob' && a.kind === 'Action';
+const customApis = (a: CsdlAction) => a.source === 'custom-api' && a.kind === 'Action';
+const functions = (a: CsdlAction) => a.kind === 'Function';
 
 /** Mount with `value` picked (its Unbound scope is derived), then open the Operation list. */
 async function openOperations(filter: (a: CsdlAction) => boolean, value: string) {
@@ -77,7 +88,7 @@ const groupLabels = (body: HTMLElement) =>
 const optionNames = (body: HTMLElement) =>
   [...body.querySelectorAll('[role=option]')].map((o) => o.textContent ?? '');
 /** An option's operation name: its text up to the "Action" kind badge. */
-const opName = (text: string) => text.match(/^(\w+?)Action/)?.[1];
+const opName = (text: string) => text.match(/^(\w+?)(Action|Function)/)?.[1];
 
 describe('ActionPicker publisher groups (#248)', () => {
   it('lists your org & ISVs above Microsoft, with a publisher badge each', async () => {
@@ -112,6 +123,16 @@ describe('ActionPicker publisher groups (#248)', () => {
       scope.click();
     });
     expect(optionNames(document.body).join(' ')).toContain('4 ops, 2 yours');
+  });
+
+  it('files OOB functions under Microsoft when the list mixes them with Custom APIs', async () => {
+    const body = await openOperations(functions, 'WhoAmI');
+    expect(groupLabels(body)).toEqual(['Your org & ISVs (1)', 'Microsoft (2)']);
+    expect(optionNames(body).map((n) => opName(n))).toEqual([
+      'contoso_GetScore',
+      'WhoAmI',
+      'msdyn_GetKpi',
+    ]);
   });
 
   it('leaves OOB actions ungrouped', async () => {

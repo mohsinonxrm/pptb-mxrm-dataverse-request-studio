@@ -162,9 +162,15 @@ function fetchParsedCsdl(org: string): Promise<CsdlAction[]> {
 export async function fetchSourceClassificationStatus(): Promise<{
   customApis: boolean;
   customActions: boolean;
+  /** The solutions lookup behind the publisher groups (#248). */
+  publishers: boolean;
 }> {
   const s = await fetchMessageSources(activeOrg());
-  return { customApis: s.customApis !== null, customActions: s.customActions !== null };
+  return {
+    customApis: s.customApis !== null,
+    customActions: s.customActions !== null,
+    publishers: s.publishers !== null,
+  };
 }
 
 // ── Optional: provider object matching the metadata provider's shape ────
@@ -731,9 +737,25 @@ async function fetchMessageSources(org: string): Promise<MessageSources> {
       notFailed,
     ),
     memoize(org, K_CUSTOM_ACTIONS, fetchCustomActions, notFailed),
-    memoize(org, K_PUBLISHERS, fetchPublisherIndex, notFailed),
+    fetchPublishers(org),
   ]);
   return { customApis, customActions, publishers };
+}
+
+// A failed solutions lookup is usually a missing read privilege on solution
+// or publisher, which a retry won't fix. While it's missing the catalog
+// isn't cached, and every load (each picker mount, each Execute) would
+// re-send it, so wait a minute between attempts.
+const PUBLISHERS_RETRY_MS = 60_000;
+const publishersFailedAt = new Map<string, number>();
+
+async function fetchPublishers(org: string): Promise<PublisherIndex | null> {
+  const failedAt = publishersFailedAt.get(org);
+  if (failedAt !== undefined && Date.now() - failedAt < PUBLISHERS_RETRY_MS) return null;
+  const index = await memoize(org, K_PUBLISHERS, fetchPublisherIndex, (v) => v !== null);
+  if (index) publishersFailedAt.delete(org);
+  else publishersFailedAt.set(org, Date.now());
+  return index;
 }
 
 /**

@@ -188,12 +188,15 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
   // workflows tables (#54). When a lookup fails (no read privilege), that
   // half falls back to a name guess — say so in the sub-modes it affects.
   const [classificationNotice, setClassificationNotice] = useState<string | null>(null);
+  // Publisher groups (#248) need the solution table; without it the list is flat.
+  const [publishersMissing, setPublishersMissing] = useState(false);
   useEffect(() => {
     if (category === 'oob') return;
     let cancelled = false;
     fetchSourceClassificationStatus()
       .then((st) => {
         if (cancelled) return;
+        setPublishersMissing(!st.publishers);
         const missing = [
           !st.customApis ? 'customapis' : null,
           !st.customActions ? 'workflows' : null,
@@ -458,6 +461,14 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
                 Couldn't read the {classificationNotice} (you may lack read privilege), so Custom
                 APIs, custom process actions and OOB actions are partly told apart by name prefix.
                 Some messages may be listed under a different Execute mode.
+              </MessageBarBody>
+            </MessageBar>
+          )}
+          {category !== 'oob' && publishersMissing && (
+            <MessageBar layout="multiline" intent="info" style={{ marginBottom: 12 }}>
+              <MessageBarBody>
+                Couldn't read the solution table (you may lack read privilege), so operations aren't
+                grouped by publisher or badged with one.
               </MessageBarBody>
             </MessageBar>
           )}

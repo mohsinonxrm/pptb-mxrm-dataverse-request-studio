@@ -110,7 +110,7 @@ export function ActionPicker({
     let unboundYours = 0;
     const entityCounts = new Map<string, { count: number; yours: number }>();
     for (const a of all) {
-      const yours = a.publisher && !a.publisher.microsoft ? 1 : 0;
+      const yours = isYours(a) ? 1 : 0;
       if (a.binding.kind === 'unbound') {
         unboundCount++;
         unboundYours += yours;
@@ -180,11 +180,13 @@ export function ActionPicker({
   // Custom APIs and Custom Actions carry a publisher (#248): list your org's
   // and ISVs' first, Microsoft's below. Search covers both groups. Without
   // publishers (OOB actions, or the solutions lookup failed) the list is flat.
+  // A list that mixes both (Execute Function: OOB functions and Custom API
+  // functions) puts the OOB ones, which have no publisher, under Microsoft.
   const groups = useMemo(() => {
     if (!filtered.some((a) => a.publisher)) return null;
     return {
-      yours: filtered.filter((a) => !a.publisher?.microsoft),
-      microsoft: filtered.filter((a) => a.publisher?.microsoft),
+      yours: filtered.filter(isYours),
+      microsoft: filtered.filter((a) => !isYours(a)),
     };
   }, [filtered]);
   const optionFor = (a: CsdlAction) => (
@@ -642,6 +644,11 @@ function ActionSummaryCard({ action }: { action: CsdlAction }) {
       </div>
     </div>
   );
+}
+
+/** A Custom API / Custom Action from your org or an ISV (#248). */
+function isYours(a: CsdlAction): boolean {
+  return !!a.publisher && !a.publisher.microsoft;
 }
 
 /** ", N yours" after a scope's op count when it has non-Microsoft ops (#248). */

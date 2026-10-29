@@ -41,7 +41,10 @@ beforeEach(() => {
         ],
       };
     if (path.startsWith('workflows'))
-      return { value: [{ _sdkmessageid_value: MESSAGE, solutionid: ACTIVE }] };
+      // Upper-case GUIDs: the sdkmessage and solution ids still match.
+      return {
+        value: [{ _sdkmessageid_value: MESSAGE.toUpperCase(), solutionid: CONTOSO.toUpperCase() }],
+      };
     if (path.startsWith('sdkmessages'))
       return { value: [{ sdkmessageid: MESSAGE, name: 'new_MyAction' }] };
     if (path.startsWith('solutions')) {
@@ -86,7 +89,7 @@ const byName = (list: Awaited<ReturnType<typeof fetchCsdlActions>>, name: string
   list.find((a) => a.name === name);
 
 describe('fetchCsdlActions publishers (#248)', () => {
-  it('a failed solutions lookup leaves custom messages without a publisher, and is retried', async () => {
+  it('a failed solutions lookup leaves custom messages without a publisher, and is retried a minute later', async () => {
     solutionsFail = true;
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const first = await fetchCsdlActions();
@@ -95,9 +98,20 @@ describe('fetchCsdlActions publishers (#248)', () => {
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
 
-    // The next load retries the lookup (the list wasn't cached as complete).
+    // A missing privilege won't fix itself: the next load within a minute
+    // doesn't re-send the lookup.
     solutionsFail = false;
+    const solutionQueries = () =>
+      queryData.mock.calls.filter(([path]) => path.startsWith('solutions')).length;
+    expect(solutionQueries()).toBe(1);
+    expect(byName(await fetchCsdlActions(), 'contoso_DoThing')?.publisher).toBeUndefined();
+    expect(solutionQueries()).toBe(1);
+
+    // After a minute it's retried.
+    const now = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(now + 61_000);
     const list = await fetchCsdlActions();
+    expect(solutionQueries()).toBe(2);
     expect(byName(list, 'contoso_DoThing')).toMatchObject({
       source: 'custom-api',
       publisher: { name: 'Contoso', microsoft: false },
@@ -106,10 +120,11 @@ describe('fetchCsdlActions publishers (#248)', () => {
       source: 'custom-api',
       publisher: { name: 'Dynamics 365', microsoft: true },
     });
-    // A custom action in the Active solution: its prefix names the publisher.
+    // A custom action: workflow -> sdkmessage -> the workflow's solution.
+    // (By its prefix alone it would be the Default Publisher's.)
     expect(byName(list, 'new_MyAction')).toMatchObject({
       source: 'custom-action',
-      publisher: { name: 'Default Publisher for org1', microsoft: false },
+      publisher: { name: 'Contoso', microsoft: false },
     });
     // OOB actions get none.
     expect(byName(list, 'WinOpportunity')?.publisher).toBeUndefined();
@@ -118,5 +133,6 @@ describe('fetchCsdlActions publishers (#248)', () => {
     const calls = queryData.mock.calls.length;
     expect(await fetchCsdlActions()).toBe(list);
     expect(queryData.mock.calls.length).toBe(calls);
+    vi.restoreAllMocks();
   });
 });

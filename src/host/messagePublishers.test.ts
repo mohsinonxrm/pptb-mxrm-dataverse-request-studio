@@ -115,6 +115,21 @@ describe('isMicrosoftPublisher', () => {
         customizationprefix: 'dc',
       }),
     ).toBe(false);
+    // Nor is a customer's prefix that happens to start with "ms".
+    expect(
+      isMicrosoftPublisher({
+        uniquename: 'morganstanley',
+        friendlyname: 'Morgan Stanley',
+        customizationprefix: 'ms',
+      }),
+    ).toBe(false);
+    expect(
+      isMicrosoftPublisher({
+        uniquename: 'mscind',
+        friendlyname: 'MSC',
+        customizationprefix: 'msc',
+      }),
+    ).toBe(false);
   });
 });
 
