@@ -156,3 +156,66 @@ describe('executePredefined', () => {
     );
   });
 });
+
+describe('read headers (#109)', () => {
+  const CALLER = '00000000-0000-0000-0000-0000000000c1';
+  // What the read modes hand over: the Headers pane as a map.
+  const PANE = {
+    Accept: 'application/json',
+    'OData-MaxVersion': '4.0',
+    'OData-Version': '4.0',
+    MSCRMCallerID: CALLER,
+    'X-Custom': 'kept in the Code tab',
+  };
+
+  it('Retrieve Multiple sends impersonation, not other rows, and keeps $top without a page size', async () => {
+    await executeRetrieveMultiple(paged(10, null), PANE);
+    expect(host.queryData).toHaveBeenCalledWith('/accounts?$top=10', { MSCRMCallerID: CALLER });
+  });
+
+  it('with a page size, sends both, and $top stays out', async () => {
+    await executeRetrieveMultiple(paged(10, 50), PANE);
+    expect(host.queryData).toHaveBeenCalledWith('/accounts', { MSCRMCallerID: CALLER, ...PAGE_50 });
+  });
+
+  it('later pages run as the same caller', async () => {
+    await executeAbsoluteUrl(
+      'https://org.crm.dynamics.com/api/data/v9.2/accounts?$skiptoken=x',
+      null,
+      PANE,
+    );
+    expect(host.queryData).toHaveBeenCalledWith('accounts?$skiptoken=x', { MSCRMCallerID: CALLER });
+  });
+
+  it('Retrieve NextLink and Predefined Query send them too', async () => {
+    await executeNextLink(
+      {
+        url: 'https://org.crm.dynamics.com/api/data/v9.2/accounts?$skiptoken=y',
+        prefer: emptyPrefer(),
+        headers: [],
+        dirty: new Set(),
+      } as unknown as RetrieveNextLinkState,
+      PANE,
+    );
+    expect(host.queryData).toHaveBeenLastCalledWith('accounts?$skiptoken=y', {
+      MSCRMCallerID: CALLER,
+    });
+    await executePredefined(predefined(null, null), PANE);
+    expect(host.queryData).toHaveBeenLastCalledWith(`accounts?savedQuery=${QUERY_ID}`, {
+      MSCRMCallerID: CALLER,
+    });
+  });
+
+  it("doesn't run as you on a host that would drop the header (PPTB < 1.2.7)", async () => {
+    host.additionalHeaders = false;
+    const r = await executeRetrieveMultiple(paged(10, null), PANE);
+    expect(host.queryData).not.toHaveBeenCalled();
+    expect(r.ok).toBe(false);
+  });
+
+  it('a plain read still sends nothing (no consent prompt)', async () => {
+    const { MSCRMCallerID: _c, 'X-Custom': _x, ...plain } = PANE;
+    await executeRetrieveMultiple(paged(10, null), plain);
+    expect(host.queryData).toHaveBeenCalledWith('/accounts?$top=10', undefined);
+  });
+});

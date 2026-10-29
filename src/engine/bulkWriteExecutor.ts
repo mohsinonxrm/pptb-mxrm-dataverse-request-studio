@@ -4,7 +4,12 @@
 
 import { dvHost } from '../host/pptbBridge';
 import { jsonBytes } from './byteSize';
-import { mapError, sendable, type ExecResult } from './dataverseExecutor';
+import {
+  mapError,
+  refuseDroppedImpersonation,
+  sendable,
+  type ExecResult,
+} from './dataverseExecutor';
 import {
   buildBulkWriteBody,
   supportMessagesFor,
@@ -49,6 +54,8 @@ export async function executeBulkWrite(
   s: BulkWriteState,
   headers?: Record<string, string>,
 ): Promise<ExecResult> {
+  const dropped = refuseDroppedImpersonation(headers);
+  if (dropped) return dropped;
   const { body, issues } = buildBulkWriteBody(s);
   if (issues.length > 0) {
     return mapError(

@@ -152,10 +152,15 @@ modes have their own HTTP / fetch / C# / PPTB outputs.
 - **Request headers through PPTB 1.2.7+** — Create / Update / Upsert /
   Delete / Merge / Bulk Write / Execute Action / Execute Workflow headers
   (preconditions, `MSCRM.*` bypass, duplicate detection, impersonation) are
-  sent as additional headers after you approve them once in ToolBox, and so is
-  the page size of paged reads. On older hosts, write requests that depend on
-  a precondition or bypass header are blocked with an explanation.
-  `Authorization` / `Cookie` headers are never sent, saved or exported.
+  sent as additional headers after you approve them once in ToolBox. The
+  read modes, Execute Function and Associate / Disassociate send an
+  allow-list: impersonation (`MSCRMCallerID`, `CallerObjectId`) everywhere,
+  plus `If-None-Match`, `Consistency` and the page size on reads, and the
+  bypass headers on Associate / Disassociate; the Headers pane marks the
+  rest as Code tab only. On older hosts, requests that depend on a
+  precondition, bypass or impersonation header are blocked with an
+  explanation. `Authorization` / `Cookie` headers are never sent, saved or
+  exported.
 - **Antipattern advisories** — Surfaces real-time guidance per the
   [Microsoft query-antipatterns doc](https://learn.microsoft.com/en-us/power-apps/developer/data-platform/query-antipatterns):
   `FilteringOnCalculatedColumns`, `LargeAmountOfLogicalAttributes`, large-text
@@ -221,8 +226,8 @@ modes have their own HTTP / fetch / C# / PPTB outputs.
 
 - [Power Platform ToolBox](https://www.powerplatformtoolbox.com/) **1.2.0 or
   later** (the tool declares `minAPI: 1.2.0`). **1.2.7 or later** is
-  recommended: it sends the write and execute modes' request headers and the
-  page size, and is required for
+  recommended: it sends request headers (impersonation, preconditions,
+  bypass) and the page size, and is required for
   the `$batch` and ExecuteMultiple modes.
 - A connection to a Dataverse environment
 - For local development: **Node.js 22.22.2+, 24.15+ or 26+** and **npm** (see
@@ -468,6 +473,7 @@ Dataverse API)
 | `Prefer: return=representation` | ✅ (ToolBox always sends it on writes) |
 | Optimistic concurrency (`If-Match` / `If-None-Match`) | ✅ 1.2.7+ |
 | `MSCRM.*` bypass family (custom plug-ins, flows, async) | ✅ 1.2.7+ |
+| Impersonation (`MSCRMCallerID` / `CallerObjectId`) on every mode | ✅ 1.2.7+ |
 | Single-property PUT / DELETE | 📝 |
 | Alternate-key upsert | 📝 |
 | Associate / Disassociate (collection + single-valued) | ✅ |

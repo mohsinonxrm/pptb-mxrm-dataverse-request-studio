@@ -472,11 +472,32 @@ export const dvHost = {
     return h ? dv().execute(req, undefined, h) : dv().execute(req);
   },
 
-  // Relationships
-  associate: (primary: string, id: string, rel: string, target: string, targetId: string) =>
-    dv().associate(primary, id, rel, target, targetId),
-  disassociate: (primary: string, id: string, rel: string, targetId: string) =>
-    dv().disassociate(primary, id, rel, targetId),
+  // Relationships. Headers (1.2.7+): impersonation and bypass (#109).
+  associate: (
+    primary: string,
+    id: string,
+    rel: string,
+    target: string,
+    targetId: string,
+    headers?: DataverseAPI.AdditionalHeaders,
+  ) => {
+    const h = sendHeaders(headers);
+    return h
+      ? dv().associate(primary, id, rel, target, targetId, undefined, h)
+      : dv().associate(primary, id, rel, target, targetId);
+  },
+  disassociate: (
+    primary: string,
+    id: string,
+    rel: string,
+    targetId: string,
+    headers?: DataverseAPI.AdditionalHeaders,
+  ) => {
+    const h = sendHeaders(headers);
+    return h
+      ? dv().disassociate(primary, id, rel, targetId, undefined, h)
+      : dv().disassociate(primary, id, rel, targetId);
+  },
 
   // ── Metadata ────────────────────────────────────────────────────────
   // We expose three flavors:

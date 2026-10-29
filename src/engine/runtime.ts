@@ -82,11 +82,18 @@ const ownTable = (s: { table: string }) => s.table;
 
 // One dispatch wrapper per executor method.
 export const runtime = neverThrow({
-  retrieveMultiple: (s: RetrieveMultipleState) => liveRetrieveMultiple(s),
-  retrieveSingle: (s: RetrieveSingleState) => liveRetrieveSingle(s),
-  nextLink: (s: RetrieveNextLinkState) => liveNextLink(s),
-  absoluteUrl: (url: string, maxpagesize?: number | null) => liveAbsoluteUrl(url, maxpagesize),
-  predefined: (s: PredefinedQueryState) => livePredefined(s),
+  // Reads, relate and Execute Function: the mode's composed headers; the
+  // executor sends an allow-list of them (#109).
+  retrieveMultiple: (s: RetrieveMultipleState, headers?: Record<string, string>) =>
+    liveRetrieveMultiple(s, headers),
+  retrieveSingle: (s: RetrieveSingleState, headers?: Record<string, string>) =>
+    liveRetrieveSingle(s, headers),
+  nextLink: (s: RetrieveNextLinkState, headers?: Record<string, string>) =>
+    liveNextLink(s, headers),
+  absoluteUrl: (url: string, maxpagesize?: number | null, headers?: Record<string, string>) =>
+    liveAbsoluteUrl(url, maxpagesize, headers),
+  predefined: (s: PredefinedQueryState, headers?: Record<string, string>) =>
+    livePredefined(s, headers),
   create: afterWrite(
     (s: CreateState, headers?: Record<string, string>) => liveCreate(s, headers),
     everyTable,
@@ -107,14 +114,20 @@ export const runtime = neverThrow({
     (s: MergeState, headers?: Record<string, string>) => liveMerge(s, headers),
     ownTable,
   ),
-  associate: afterWrite((s: AssociateState) => liveAssociate(s), ownTable),
-  disassociate: afterWrite((s: DisassociateState) => liveDisassociate(s), ownTable),
+  associate: afterWrite(
+    (s: AssociateState, headers?: Record<string, string>) => liveAssociate(s, headers),
+    ownTable,
+  ),
+  disassociate: afterWrite(
+    (s: DisassociateState, headers?: Record<string, string>) => liveDisassociate(s, headers),
+    ownTable,
+  ),
   action: afterWrite(
     (s: ExecuteActionState, headers?: Record<string, string>) => liveAction(s, headers),
     everyTable,
   ),
   // Functions are side-effect free by definition — nothing to invalidate.
-  function: (s: ExecuteFunctionState) => liveFunction(s),
+  function: (s: ExecuteFunctionState, headers?: Record<string, string>) => liveFunction(s, headers),
   workflow: afterWrite(
     (s: ExecuteWorkflowState, headers?: Record<string, string>) => liveWorkflow(s, headers),
     everyTable,

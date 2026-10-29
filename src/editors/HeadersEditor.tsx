@@ -16,6 +16,7 @@ import type { RequestGroup } from '../registry/requestTypes';
 import { useHostSession } from '../host/HostContext';
 import { hostSupportsAdditionalHeaders } from '../host/pptbBridge';
 import { isCredentialHeader } from '../engine/sensitiveHeaders';
+import { SENT_HEADERS, isHostOwnedHeader, type HeaderPolicy } from '../engine/requestHeaderPolicy';
 
 export interface HeaderItem {
   id: string;
@@ -44,16 +45,32 @@ export const defaultReadHeaders = (): HeaderItem[] => [
   {
     id: newHid(),
     name: 'If-None-Match',
-    value: 'null',
+    value: '',
     enabled: false,
-    hint: 'For Retrieve Single — returns 304 if etag matches.',
+    hint: "Retrieve Single: put the row's @odata.etag here to get 304 Not Modified when it hasn't changed.",
   },
+  ...impersonationPresets(),
+];
+
+/**
+ * Impersonation presets, off by default: by the user's systemuserid, or by
+ * their Microsoft Entra object id (#109). Either way the signed-in user needs
+ * the prvActOnBehalfOfAnotherUser privilege.
+ */
+const impersonationPresets = (): HeaderItem[] => [
   {
     id: newHid(),
     name: 'MSCRMCallerID',
     value: '00000000-0000-0000-0000-000000000000',
     enabled: false,
-    hint: 'Impersonation — caller must hold the prvActOnBehalfOfAnotherUser privilege.',
+    hint: 'Impersonation by systemuserid — caller must hold the prvActOnBehalfOfAnotherUser privilege.',
+  },
+  {
+    id: newHid(),
+    name: 'CallerObjectId',
+    value: '00000000-0000-0000-0000-000000000000',
+    enabled: false,
+    hint: "Impersonation by the user's Microsoft Entra object id — same privilege.",
   },
 ];
 
@@ -92,13 +109,7 @@ export const defaultWriteHeaders = (): HeaderItem[] => [
     enabled: false,
     hint: 'Set to false to enable duplicate detection (default behavior suppresses it). Requires duplicate-detection rules to be configured for the entity.',
   },
-  {
-    id: newHid(),
-    name: 'MSCRMCallerID',
-    value: '00000000-0000-0000-0000-000000000000',
-    enabled: false,
-    hint: 'Impersonation — caller must hold the prvActOnBehalfOfAnotherUser privilege.',
-  },
+  ...impersonationPresets(),
 ];
 
 export function HeadersEditor({
@@ -106,6 +117,7 @@ export function HeadersEditor({
   setItems,
   group = 'read',
   sendsHeaders,
+  policy,
 }: {
   items: HeaderItem[];
   setItems: (items: HeaderItem[]) => void;
@@ -113,6 +125,8 @@ export function HeadersEditor({
   /** Execute sends these headers on PPTB 1.2.7+. Defaults to the write group;
    *  Bulk Write (#257), Execute Action and Execute Workflow (#266) send them too. */
   sendsHeaders?: boolean;
+  /** Execute sends only this policy's allow-list (reads, relate, Execute Function; #109). */
+  policy?: HeaderPolicy;
 }) {
   const s = useStudioStyles();
   const host = useHostSession();
@@ -122,6 +136,17 @@ export function HeadersEditor({
   const add = () => setItems([...items, { id: newHid(), name: '', value: '', enabled: true }]);
 
   const activeCount = items.filter((it) => it.enabled && it.name && it.value).length;
+  const canSend = host.embedded && hostSupportsAdditionalHeaders();
+  const sent = policy ? SENT_HEADERS[policy] : [];
+  /** An enabled row Execute doesn't send under the allow-list (Code tab only). */
+  const codeTabOnly = (it: HeaderItem) =>
+    !!policy &&
+    canSend &&
+    it.enabled &&
+    !!it.name.trim() &&
+    !isHostOwnedHeader(it.name) &&
+    !isCredentialHeader(it.name) &&
+    !sent.some((n) => n.toLowerCase() === it.name.trim().toLowerCase());
 
   return (
     <div>
@@ -137,7 +162,25 @@ export function HeadersEditor({
           modes that pass `sendsHeaders` (Bulk Write, Execute Action and
           Execute Workflow, #266). Every other mode still runs with the host's
           own headers. The values below are always emitted into the Code tab. */}
-      {(sendsHeaders ?? group === 'write') && host.embedded && hostSupportsAdditionalHeaders() ? (
+      {policy && canSend ? (
+        <MessageBar layout="multiline" intent="info" style={{ marginBottom: 14 }}>
+          <MessageBarBody>
+            <MessageBarTitle>
+              Execute sends {sent.join(', ')} through Power Platform ToolBox.
+            </MessageBarTitle>
+            {policy === 'read' ? (
+              <>
+                And a <code>Prefer</code> header when you set a page size, which keeps
+                ToolBox&apos;s <code>odata.include-annotations=&quot;*&quot;</code>.{' '}
+              </>
+            ) : null}
+            Other rows below go into the Code tab only. ToolBox builds <code>Authorization</code>,{' '}
+            <code>Accept</code> and the <code>OData-*</code> headers itself. If you haven&apos;t
+            approved additional request headers for this tool yet, ToolBox asks first; if you
+            reject, the request isn&apos;t sent.
+          </MessageBarBody>
+        </MessageBar>
+      ) : (sendsHeaders ?? group === 'write') && canSend ? (
         <MessageBar layout="multiline" intent="info" style={{ marginBottom: 14 }}>
           <MessageBarBody>
             <MessageBarTitle>
@@ -233,6 +276,11 @@ export function HeadersEditor({
             {it.hint && (
               <Caption1 style={{ gridColumn: '2 / span 2', color: tokens.colorNeutralForeground3 }}>
                 {it.hint}
+              </Caption1>
+            )}
+            {codeTabOnly(it) && (
+              <Caption1 style={{ gridColumn: '2 / span 2', color: tokens.colorNeutralForeground3 }}>
+                Code tab only: Execute doesn&apos;t send this header in this mode.
               </Caption1>
             )}
             {isCredentialHeader(it.name) && (
