@@ -33,7 +33,7 @@ export function BatchCodeView<F extends string>({
             icon={<Copy20Regular />}
             appearance="subtle"
             onClick={() =>
-              void copyText(code, 'Code', { toastOnSuccess: false }).then((ok) => {
+              void copyText(code, 'the code', { toastOnSuccess: false }).then((ok) => {
                 if (!ok) return;
                 setCopied(true);
                 setTimeout(() => setCopied(false), 1500);

@@ -155,11 +155,11 @@ export function ResultsCommandBar({
         'Set Prefer: odata.maxpagesize to enable server-side pagination.';
 
   const copyUrl = () => {
-    if (requestUrl) void copyText(requestUrl, 'Request URL');
+    if (requestUrl) void copyText(requestUrl, 'the request URL');
   };
 
   const copyJson = () => {
-    void copyText(JSON.stringify(body, null, 2), 'Response JSON');
+    void copyText(JSON.stringify(body, null, 2), 'the response JSON', { shown: false });
   };
 
   const copyTsv = () => {
@@ -186,6 +186,7 @@ export function ResultsCommandBar({
     void copyText(
       [header, ...lines].join('\n'),
       `${rows.length} ${rows.length === 1 ? 'row' : 'rows'}`,
+      { shown: false },
     );
   };
 

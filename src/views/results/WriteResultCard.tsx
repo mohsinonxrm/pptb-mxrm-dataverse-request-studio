@@ -271,7 +271,7 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
                 size="small"
                 appearance="subtle"
                 icon={<Copy20Regular />}
-                onClick={() => void copyText(resolvedId, 'Record ID')}
+                onClick={() => void copyText(resolvedId, 'the record ID')}
               >
                 Copy ID
               </Button>
@@ -286,7 +286,7 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
                     size="small"
                     appearance="subtle"
                     icon={<Copy20Regular />}
-                    onClick={() => void copyText(recordUrl, 'Record URL')}
+                    onClick={() => void copyText(recordUrl, 'the record URL')}
                   >
                     Copy URL
                   </Button>

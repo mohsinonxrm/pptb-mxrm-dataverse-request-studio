@@ -97,9 +97,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Inside ToolBox, the webview can refuse the browser clipboard, and a
   refused copy did nothing at all: you then pasted whatever was on the
   clipboard before. Every Copy button (URL bar, Code tab, results, write
-  result, previews, Power Automate, …) now uses ToolBox's own clipboard and
-  shows a short "Copied" note, or "Couldn't copy" with what to do instead.
-  Retrieve NextLink's Paste says when the clipboard can't be read.
+  result, previews, Power Automate, …) now uses ToolBox's own clipboard
+  inside ToolBox (the browser's outside it), and confirms the copy with a
+  short "Copied" note or on the button itself. When it fails, it says
+  "Couldn't copy" and what to do instead. Retrieve NextLink's Paste says
+  when the clipboard can't be read.
 - **Choosing a file no longer reads it into memory** ([#222]). Manage File,
   Image and Attachment Data keep the file's name, size and type only: Execute
   can't send binary content from inside ToolBox, and the Code tab uses a

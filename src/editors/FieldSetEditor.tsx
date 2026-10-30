@@ -2206,7 +2206,7 @@ function JsonEditPane({
             appearance="subtle"
             // z-index above Monaco's chrome so the copy button stays clickable.
             style={{ position: 'absolute', top: 6, right: 6, zIndex: 2 }}
-            onClick={() => void copyText(text, 'Body JSON')}
+            onClick={() => void copyText(text, 'the body JSON')}
           />
         </Tooltip>
       </div>

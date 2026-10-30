@@ -95,7 +95,7 @@ export function PowerAutomatePane({ spec }: PowerAutomatePaneProps) {
             size="small"
             appearance="outline"
             icon={<Copy20Regular />}
-            onClick={() => void copyText(allAsText, 'Fields')}
+            onClick={() => void copyText(allAsText, 'the fields', { shown: false })}
           >
             Copy all
           </Button>
@@ -168,7 +168,7 @@ function PARow({
   const onCopy = () => {
     if (!field.value) return;
     // The button shows "Copied"; a failure is still reported (#242).
-    void copyText(field.value, field.label, { toastOnSuccess: false }).then((ok) => {
+    void copyText(field.value, `the ${field.label} value`, { toastOnSuccess: false }).then((ok) => {
       if (!ok) return;
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);

@@ -13,30 +13,40 @@ export interface CopyOptions {
    * "Copied". A failure is always reported.
    */
   toastOnSuccess?: boolean;
+  /**
+   * The copied text is on screen, so a failure can suggest selecting it and
+   * pressing Ctrl+C. Off for text that isn't shown (results as TSV, …).
+   */
+  shown?: boolean;
 }
 
 /**
- * Copy `text` and tell the user how it went. `what` names it in the
- * messages ("URL", "Code", …). Resolves true when copied; never rejects.
+ * Copy `text` and tell the user how it went. `what` names it inside a
+ * sentence ("the URL", "3 rows"). Resolves true when copied; never rejects.
  */
 export async function copyText(
   text: string,
   what: string,
-  { toastOnSuccess = true }: CopyOptions = {},
+  { toastOnSuccess = true, shown = true }: CopyOptions = {},
 ): Promise<boolean> {
   try {
     await copyToClipboardSafe(text);
   } catch (e) {
     const reason = e instanceof Error ? e.message.trim().replace(/\.$/, '') : '';
     const why = reason ? ` (${reason})` : '';
-    notify(`${what} wasn't copied${why}. Select it and press Ctrl+C instead.`, {
+    const instead = shown ? 'Select it and press Ctrl+C instead.' : 'Try again in a moment.';
+    notify(`Couldn't copy ${what}${why}. ${instead}`, {
       title: "Couldn't copy",
       intent: 'error',
     });
     return false;
   }
   if (toastOnSuccess) {
-    notify(`${what} is on the clipboard.`, { title: 'Copied', intent: 'success', timeout: 2500 });
+    notify(`Copied ${what} to the clipboard.`, {
+      title: 'Copied',
+      intent: 'success',
+      timeout: 2500,
+    });
   }
   return true;
 }

@@ -358,7 +358,7 @@ function JsonPane({ body }: { body: unknown }) {
           appearance="subtle"
           size="small"
           style={{ position: 'absolute', top: 6, right: 6, zIndex: 1 }}
-          onClick={() => void copyText(json, 'JSON')}
+          onClick={() => void copyText(json, 'the JSON')}
         />
       </Tooltip>
       <pre

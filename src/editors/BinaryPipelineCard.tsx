@@ -155,7 +155,7 @@ function PipelineStepRow({ step }: { step: BinaryPipelineStep }) {
             size="small"
             appearance="subtle"
             icon={<Copy20Regular />}
-            onClick={() => void copyText(step.relativeUrl, 'URL')}
+            onClick={() => void copyText(step.relativeUrl, 'the URL')}
           />
         </Tooltip>
       </div>

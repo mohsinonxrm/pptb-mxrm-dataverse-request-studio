@@ -222,13 +222,13 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
     // browser's: say so rather than doing nothing (#242).
     const text = await readClipboardText();
     if (text?.trim()) set('url', text.trim(), 'url');
+    else if (text === null)
+      notify("The clipboard couldn't be read here. Click in the URL box and press Ctrl+V.", {
+        title: "Couldn't paste",
+        intent: 'warning',
+      });
     else
-      notify(
-        text === null
-          ? "The clipboard couldn't be read here. Click in the URL box and press Ctrl+V."
-          : 'The clipboard is empty.',
-        { title: "Couldn't paste", intent: 'warning' },
-      );
+      notify('The clipboard has no text to paste.', { title: 'Nothing to paste', intent: 'info' });
   };
 
   const sections = [

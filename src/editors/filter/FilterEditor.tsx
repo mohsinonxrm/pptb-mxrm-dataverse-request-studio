@@ -323,7 +323,7 @@ export function FilterEditor({
                 icon={<Copy20Regular />}
                 appearance="subtle"
                 size="small"
-                onClick={() => void copyText(odata, 'OData expression')}
+                onClick={() => void copyText(odata, 'the OData expression')}
               >
                 Copy
               </Button>

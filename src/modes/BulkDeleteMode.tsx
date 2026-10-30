@@ -880,7 +880,7 @@ function JobStatusPanel({ jobId, result }: { jobId: string; result: ExecResult }
         <Button
           icon={<Copy20Regular />}
           onClick={() =>
-            void copyText(jobId, 'Job id', { toastOnSuccess: false }).then(
+            void copyText(jobId, 'the job ID', { toastOnSuccess: false }).then(
               (ok) => ok && setCopied(true),
             )
           }

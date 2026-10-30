@@ -593,11 +593,22 @@ export async function copyToClipboardSafe(text: string): Promise<void> {
       );
     }
   }
+  // Inside ToolBox, its own error says more than the webview's refusal.
+  const failure = (fallback: unknown) =>
+    hostError === undefined
+      ? fallback
+      : hostError instanceof Error
+        ? hostError
+        : new Error(String(hostError));
   if (typeof navigator !== 'undefined' && navigator.clipboard) {
-    await navigator.clipboard.writeText(text);
-    return;
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (e) {
+      throw failure(e);
+    }
   }
-  throw hostError instanceof Error ? hostError : new Error('no clipboard is available');
+  throw failure(new Error('no clipboard is available'));
 }
 
 /**

@@ -55,7 +55,7 @@ export function FunctionUrlPreview({ built, useParamAliases }: FunctionUrlPrevie
             size="small"
             appearance="subtle"
             icon={<Copy20Regular />}
-            onClick={() => void copyText(built.relativeUrl, 'URL')}
+            onClick={() => void copyText(built.relativeUrl, 'the URL')}
           />
         </Tooltip>
       </div>

@@ -192,7 +192,7 @@ export function UrlBar({
           icon={<Copy20Regular />}
           appearance="subtle"
           size="small"
-          onClick={() => void copyText(fullUrl, 'URL')}
+          onClick={() => void copyText(fullUrl, 'the URL')}
         />
       </Tooltip>
       <Tooltip content="Open in new tab" relationship="label">

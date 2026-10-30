@@ -1113,9 +1113,10 @@ function BulkResult({ result, operation }: { result: ExecResult; operation: Bulk
             <Button
               icon={<Copy20Regular />}
               onClick={() =>
-                void copyText(ids.join('\n'), 'Ids', { toastOnSuccess: false }).then(
-                  (ok) => ok && setCopied(true),
-                )
+                void copyText(ids.join('\n'), 'the IDs', {
+                  toastOnSuccess: false,
+                  shown: false,
+                }).then((ok) => ok && setCopied(true))
               }
             >
               {copied ? 'Copied' : 'Copy ids'}

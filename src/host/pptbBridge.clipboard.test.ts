@@ -46,11 +46,23 @@ describe('copyToClipboardSafe', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const writeText = vi.fn(async () => {});
     setBrowserClipboard({ writeText });
-    const { copyToClipboardSafe } = await loadBridge(async () => {
+    const hostCopy = vi.fn(async () => {
       throw new Error('IPC refused');
     });
+    const { copyToClipboardSafe } = await loadBridge(hostCopy);
     await copyToClipboardSafe('code');
+    expect(hostCopy).toHaveBeenCalledWith('code');
     expect(writeText).toHaveBeenCalledWith('code');
+  });
+
+  it("reports ToolBox's error when the browser's refuses too", async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const hostCopy = vi.fn(async () => {
+      throw new Error('IPC refused');
+    });
+    setBrowserClipboard({ writeText: vi.fn(async () => Promise.reject(new Error('not focused'))) });
+    const { copyToClipboardSafe } = await loadBridge(hostCopy);
+    await expect(copyToClipboardSafe('code')).rejects.toThrow('IPC refused');
   });
 
   it("rejects with ToolBox's error when there's no browser clipboard to fall back to", async () => {

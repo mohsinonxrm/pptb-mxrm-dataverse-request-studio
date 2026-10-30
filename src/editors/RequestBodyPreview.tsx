@@ -45,7 +45,7 @@ export function RequestBodyPreview({
             size="small"
             appearance="subtle"
             icon={<Copy20Regular />}
-            onClick={() => void copyText(json, 'Body JSON')}
+            onClick={() => void copyText(json, 'the body JSON')}
             disabled={isEmpty}
           />
         </Tooltip>

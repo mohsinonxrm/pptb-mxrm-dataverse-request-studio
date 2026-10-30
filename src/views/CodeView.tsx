@@ -241,7 +241,7 @@ function CodePane({
                 icon={<Copy20Regular />}
                 appearance="subtle"
                 size="small"
-                onClick={() => void copyText(code, 'Code')}
+                onClick={() => void copyText(code, 'the code')}
               >
                 Copy
               </Button>
@@ -367,7 +367,7 @@ function EditorPane({
             icon={<Copy20Regular />}
             appearance="subtle"
             size="small"
-            onClick={() => void copyText(code, 'Code')}
+            onClick={() => void copyText(code, 'the code')}
           >
             Copy
           </Button>
