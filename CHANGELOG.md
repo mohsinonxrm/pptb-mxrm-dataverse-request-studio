@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
+- **The entity scope is a button in the header** ([#42]), after the request
+  type, instead of Settings → Query Scope. It reads **Choose scope** until you
+  pick one, then the scope itself (`Contoso › Sales Core v1.2.0`, `+1` for
+  more, or **All entities**), with the full list as a tooltip when it's cut
+  off. Its popover holds the entity source, publishers, solutions and
+  Advanced Find only, and changes apply right away, per environment as
+  before:
+  - removing a publisher also removes its solutions;
+  - solutions are grouped Unmanaged / Managed, show `Name vX.Y.Z`, and search
+    matches the name, unique name or version;
+  - on first run a tip points at the button, once per environment;
+  - without a scope, the entity picker is disabled and reads "Choose a scope
+    to list entities", and the pane's **Choose scope** opens the popover. With
+    one, it counts the entities in scope.
+
+  The same design as FetchXML Studio's and Command Bar Studio's. Settings
+  keeps a pointer to the button.
 - **Writes ask before they're sent** ([#241]). The confirmation names the
   target: the environment (connection name, URL and type, with Production
   highlighted), the operation, the table and the scope. Execute and Ctrl+Enter
@@ -220,6 +237,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     workflow arguments, request validation, the query advisories, mode
     drafts, the metadata cache and provider, and the ToolBox bridge's events.
 
+[#42]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/42
 [#347]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/347
 [#330]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/330
 [#242]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/242

@@ -4,7 +4,7 @@
 //   1. Calls WhoAmI to grab the current user id.
 //   2. Parallel `RetrieveUserPrivilegeByPrivilegeName` for prvReadPublisher /
 //      prvReadSolution / prvReadCustomization.
-//   3. Derives 5 mutually-exclusive booleans for the SettingsDrawer's
+//   3. Derives 5 mutually-exclusive booleans for the scope chip's
 //      scope-mode RadioGroup gating.
 //   4. Pre-warms the entity metadata cache on success — speeds up the
 //      first time the user opens the entity picker.

@@ -20,9 +20,17 @@ import {
 } from './pptbClient';
 import { pinMetadataCache } from './cache';
 import { useActiveOrg } from './activeOrg';
+import { subscribeMetadataReset } from './metadataProvider';
 
-export function useSolutionFilter() {
-  const [solutions, setSolutions] = useState<Solution[]>([]);
+const NONE: Solution[] = [];
+
+/** `enabled: false` skips the solution fetch (the scope chip in another mode). */
+export function useSolutionFilter(enabled = true) {
+  // Tagged with the org it came from, so another org's list never shows.
+  const [loadedFor, setLoadedFor] = useState<{ org: string; data: Solution[] }>({
+    org: '',
+    data: NONE,
+  });
   const [solutionsLoading, setSolutionsLoading] = useState(false);
   const [solutionsError, setSolutionsError] = useState<string | null>(null);
 
@@ -34,9 +42,14 @@ export function useSolutionFilter() {
 
   // Reload when the PPTB connection switches to another org (#52).
   const org = useActiveOrg();
+  const solutions = loadedFor.org === org ? loadedFor.data : NONE;
+  // …and after "Refresh metadata" clears the cache.
+  const [resets, setResets] = useState(0);
+  useEffect(() => subscribeMetadataReset(() => setResets((n) => n + 1)), []);
 
   // ── Load all solutions on mount ──
   useEffect(() => {
+    if (!enabled) return;
     let mounted = true;
 
     async function loadSolutions() {
@@ -46,7 +59,9 @@ export function useSolutionFilter() {
       // Cache key: empty array = "all solutions"
       const cached = metadataCache.getSolutions([]);
       if (cached) {
-        setSolutions(cached);
+        setLoadedFor({ org, data: cached });
+        setSolutionsLoading(false);
+        setSolutionsError(null);
         return;
       }
 
@@ -55,7 +70,7 @@ export function useSolutionFilter() {
         setSolutionsError(null);
         const data = await getAllSolutionsWithEntities();
         if (mounted) {
-          setSolutions(data);
+          setLoadedFor({ org, data });
           metadataCache.setSolutions([], data);
         }
       } catch (err) {
@@ -68,8 +83,10 @@ export function useSolutionFilter() {
     loadSolutions();
     return () => {
       mounted = false;
+      // A fetch cut short (org switch, disabled) isn't loading any more.
+      setSolutionsLoading(false);
     };
-  }, [org]);
+  }, [org, enabled, resets]);
 
   // ── Cascade solution → entities ──
   useEffect(() => {

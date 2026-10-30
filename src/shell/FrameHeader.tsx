@@ -27,7 +27,7 @@ import { useStudioStyles } from '../primitives/styles';
 import { RequestTypePicker } from '../primitives/RequestTypePicker';
 import { SettingsDrawer } from './SettingsDrawer';
 import { usePersistedSettings } from '../host/usePersistedSettings';
-import { useRegisterOpenSettings } from '../host/useOpenSettings';
+import { ScopeChip } from './ScopeChip';
 import { useAccessMode } from '../host/useAccessMode';
 import type { ThemeMode } from '../theme/theme';
 import { getEnv } from '../mock/environment';
@@ -61,9 +61,6 @@ export function FrameHeader({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, updateSettings] = usePersistedSettings();
   const { accessSummary } = useAccessMode();
-  // Register the open-settings callback so any component deep in the tree
-  // (e.g. TargetEditor's guidance banner) can open the drawer without prop-drilling.
-  useRegisterOpenSettings(() => setSettingsOpen(true));
   // The mode picker lives here, so this is also where result cards switch
   // modes from (e.g. WriteResultCard's "Retrieve this record", #3).
   useRegisterModeNavigator(setActiveId);
@@ -101,6 +98,8 @@ export function FrameHeader({
           </BreadcrumbItem>
         </Breadcrumb>
       </div>
+      {/* Where the entity pickers' entities come from (#42). */}
+      <ScopeChip accessSummary={accessSummary} />
       <div className={s.spacer} />
       {/* The connection the requests go to, also when embedded, with
           Production highlighted (#241). */}
@@ -217,7 +216,6 @@ export function FrameHeader({
         onClose={() => setSettingsOpen(false)}
         settings={settings}
         onSettingsChange={updateSettings}
-        accessSummary={accessSummary}
       />
     </header>
   );

@@ -1020,7 +1020,7 @@ function EntityPane({
 }) {
   const tbl = findTable(state.table);
   // The UNSCOPED entity list: Merge's tables are fixed by the platform, so
-  // the user's Query Scope (default: publisher solutions, none picked yet)
+  // the user's entity scope (default: publisher solutions, none picked yet)
   // must not hide them — it left this dropdown empty on a fresh install (#97).
   const { allEntities, allLoading } = useScopedEntities();
   // Cross-reference the docs-supported logical names against the live
