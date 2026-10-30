@@ -202,6 +202,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🔧 Internal
 
+- **Release model leftovers** ([#197]):
+  - `.github/dependabot.yml` sends grouped weekly updates into `dev` with a 14-day
+    cooldown, the same policy as FetchXML Studio and Command Bar Studio.
+    `RELEASING.md` describes it.
+  - `SECURITY.md` has the shared supported-versions table.
 - **Alternate-key column types go through the shared type lookup**
   ([#318]). Key columns typed separately (#64) now resolve the way every
   other column does, Image and File included. No visible change: a key
@@ -237,6 +242,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     workflow arguments, request validation, the query advisories, mode
     drafts, the metadata cache and provider, and the ToolBox bridge's events.
 
+[#197]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/197
 [#42]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/42
 [#347]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/347
 [#330]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/330
