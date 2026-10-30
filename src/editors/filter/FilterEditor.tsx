@@ -136,6 +136,7 @@ function findPendingNavTarget(rootTable: TableMeta, path: string): string | null
   return resolveNavPath(rootTable, path).pendingTarget ?? null;
 }
 import type { RequestGroup } from '../../registry/requestTypes';
+import { copyText } from '../../shell/copy';
 
 export interface FilterEditorProps {
   table: string;
@@ -322,7 +323,7 @@ export function FilterEditor({
                 icon={<Copy20Regular />}
                 appearance="subtle"
                 size="small"
-                onClick={() => navigator.clipboard?.writeText(odata)}
+                onClick={() => void copyText(odata, 'the OData expression')}
               >
                 Copy
               </Button>

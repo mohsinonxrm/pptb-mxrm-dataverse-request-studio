@@ -63,6 +63,7 @@ import {
   type ExportValueMode,
   type GridExportView,
 } from './exportResults';
+import { copyText } from '../../shell/copy';
 
 const useStyles = makeStyles({
   bar: {
@@ -154,11 +155,11 @@ export function ResultsCommandBar({
         'Set Prefer: odata.maxpagesize to enable server-side pagination.';
 
   const copyUrl = () => {
-    if (requestUrl) navigator.clipboard?.writeText(requestUrl);
+    if (requestUrl) void copyText(requestUrl, 'the request URL');
   };
 
   const copyJson = () => {
-    navigator.clipboard?.writeText(JSON.stringify(body, null, 2));
+    void copyText(JSON.stringify(body, null, 2), 'the response JSON', { shown: false });
   };
 
   const copyTsv = () => {
@@ -182,7 +183,11 @@ export function ResultsCommandBar({
         })
         .join('\t'),
     );
-    navigator.clipboard?.writeText([header, ...lines].join('\n'));
+    void copyText(
+      [header, ...lines].join('\n'),
+      `${rows.length} ${rows.length === 1 ? 'row' : 'rows'}`,
+      { shown: false },
+    );
   };
 
   const save = async (fileName: string, content: string, filter: { name: string; ext: string }) => {

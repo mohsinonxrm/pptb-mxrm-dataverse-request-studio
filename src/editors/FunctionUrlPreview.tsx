@@ -12,6 +12,7 @@ import { Copy20Regular, Link20Filled } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import type { BuiltRequest } from '../engine/urlBuilder';
 import { decodeForDisplay } from '../primitives/decodeForDisplay';
+import { copyText } from '../shell/copy';
 
 export interface FunctionUrlPreviewProps {
   built: BuiltRequest;
@@ -54,7 +55,7 @@ export function FunctionUrlPreview({ built, useParamAliases }: FunctionUrlPrevie
             size="small"
             appearance="subtle"
             icon={<Copy20Regular />}
-            onClick={() => navigator.clipboard?.writeText(built.relativeUrl)}
+            onClick={() => void copyText(built.relativeUrl, 'the URL')}
           />
         </Tooltip>
       </div>

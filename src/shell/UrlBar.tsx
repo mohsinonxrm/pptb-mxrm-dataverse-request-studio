@@ -15,6 +15,7 @@ import { usePersistedSettings } from '../host/usePersistedSettings';
 import { needsWriteConfirmation, type WriteConfirmSpec } from '../engine/writeConfirm';
 import { confirmWrite } from './confirmWrite';
 import { notify } from './dialogs';
+import { copyText } from './copy';
 
 export interface UrlBarProps {
   method: HttpMethod;
@@ -191,7 +192,7 @@ export function UrlBar({
           icon={<Copy20Regular />}
           appearance="subtle"
           size="small"
-          onClick={() => navigator.clipboard?.writeText(fullUrl)}
+          onClick={() => void copyText(fullUrl, 'the URL')}
         />
       </Tooltip>
       <Tooltip content="Open in new tab" relationship="label">

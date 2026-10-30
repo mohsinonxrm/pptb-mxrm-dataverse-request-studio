@@ -76,7 +76,6 @@ import type { RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
-import { copyToClipboardSafe } from '../host/pptbBridge';
 import { useHostSession } from '../host/HostContext';
 import { EnvironmentBadge } from '../shell/confirmWrite';
 import { hashState, type SavedRequest } from '../state/savedRequests';
@@ -103,6 +102,7 @@ import {
   type JobStatus,
   type MatchCount,
 } from '../engine/bulkDeleteExecutor';
+import { copyText } from '../shell/copy';
 
 const MODE_ID = 'bulk-delete' as const;
 const GROUP = 'bulk' as const;
@@ -879,7 +879,11 @@ function JobStatusPanel({ jobId, result }: { jobId: string; result: ExecResult }
         />
         <Button
           icon={<Copy20Regular />}
-          onClick={() => void copyToClipboardSafe(jobId).then(() => setCopied(true))}
+          onClick={() =>
+            void copyText(jobId, 'the job ID', { toastOnSuccess: false }).then(
+              (ok) => ok && setCopied(true),
+            )
+          }
         >
           {copied ? 'Copied' : 'Copy job id'}
         </Button>
