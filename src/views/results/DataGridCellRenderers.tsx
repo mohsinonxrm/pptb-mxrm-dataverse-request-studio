@@ -21,7 +21,7 @@ import type {
   StateColumnMeta,
   MultiSelectPicklistColumnMeta,
 } from '../../mock/metadata';
-import { parseDateTimeValue } from '../../editors/dateTimeValue';
+import { displayDateOf } from '../../editors/dateTimeValue';
 
 const useStyles = makeStyles({
   booleanCell: {
@@ -230,15 +230,21 @@ function DateTimeCellRenderer({
   if (!value) return <EmptyDash />;
   // By behavior (#106): a DateOnly `YYYY-MM-DD` is that calendar day (not
   // UTC midnight, which is the previous day west of UTC), and a time zone
-  // independent value shows the time as stored.
-  const d = parseDateTimeValue(String(value), col ?? {});
-  if (!d) return <EmptyDash />;
+  // independent value shows the time as stored, even in a DST gap (#337).
+  const shown = displayDateOf(String(value), col ?? {});
+  if (!shown) return <EmptyDash />;
+  const { date: d, timeZone } = shown;
 
   const isDateOnly = col?.format === 'DateOnly' || col?.dateTimeBehavior === 'DateOnly';
   if (isDateOnly) {
     return (
       <span className={s.dateCell}>
-        {d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+        {d.toLocaleDateString(undefined, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          timeZone,
+        })}
       </span>
     );
   }
@@ -250,6 +256,7 @@ function DateTimeCellRenderer({
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
+        timeZone,
       })}
     </span>
   );

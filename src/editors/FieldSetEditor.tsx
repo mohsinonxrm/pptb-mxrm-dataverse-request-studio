@@ -110,11 +110,11 @@ import { useColumnDetail } from '../host/useColumnDetail';
 import {
   behaviorHint,
   behaviorOf,
-  combineDateAndTime,
   isDateOnlyColumn,
   localZoneLabel,
   parseDateTimeValue,
-  serializeDateTimeValue,
+  withPickedDate,
+  withPickedTime,
 } from './dateTimeValue';
 // Monaco — same instance + worker setup as CodeView. The `loader.config`
 // side-effect lives in src/monaco/monacoSetup.ts, which the MonacoEditor
@@ -1364,12 +1364,14 @@ function DateTimeFieldInput({
       onChange('');
       return;
     }
-    // Keep the time already picked when the date changes.
-    onChange(serializeDateTimeValue(combineDateAndTime(d, isDateOnly ? null : current), col));
+    // Keep the time already picked when the date changes (as stored, #337).
+    onChange(withPickedDate(value, d, col));
   };
   const writeTime = (d: Date | null | undefined) => {
-    if (!d || !current) return;
-    onChange(serializeDateTimeValue(combineDateAndTime(current, d), col));
+    if (!d) return;
+    // Null when it's the time already shown: the picker reports on blur too.
+    const next = withPickedTime(value, d, col);
+    if (next !== null) onChange(next);
   };
 
   // What's on the wire — shown under the pickers so the zone is never a
