@@ -22,6 +22,7 @@ import {
   ChartMultiple20Filled,
   Link20Regular,
 } from '@fluentui/react-icons';
+import { tokens } from '@fluentui/react-components';
 import { Sidebar, type SidebarClauseItem } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
@@ -708,7 +709,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
         label: (
           <span>
             {it.nav}{' '}
-            <span style={{ opacity: 0.55, fontWeight: 400 }}>
+            <span style={{ color: tokens.colorNeutralForeground3, fontWeight: 400 }}>
               → {target?.displayName ?? nav?.targetEntity ?? '?'}
             </span>
           </span>

@@ -1,4 +1,4 @@
-import type { FC, ReactNode } from 'react';
+import { useId, type FC, type ReactNode } from 'react';
 import { useStudioStyles } from '../primitives/styles';
 import { ModeCard } from '../primitives/ModeCard';
 import { SectionHeader } from '../primitives/SectionHeader';
@@ -27,7 +27,7 @@ export interface SidebarClauseItem {
     | 'severe'
     | 'important';
   dirty?: boolean;
-  /** Children rendered with depth=1 */
+  /** Clauses nested under this one: a nested list, one level deeper */
   children?: SidebarClauseItem[];
 }
 
@@ -58,6 +58,7 @@ export function Sidebar({
   onRecentClick,
 }: SidebarProps) {
   const s = useStudioStyles();
+  const uid = useId();
   // A recent-run row is a button only when it can actually restore
   // something (#2): the mode wired a handler and the run has a snapshot.
   const isRestorable = (r: RecentRun) => !!onRecentClick && r.snapshot !== undefined;
@@ -66,23 +67,29 @@ export function Sidebar({
       <ModeCard type={type} urlPreview={urlPreview} />
 
       <div className={s.sidebarScroll}>
-        {sections.map((sec) => (
-          <span key={sec.id}>
-            <SectionHeader meta={sec.meta}>{sec.label}</SectionHeader>
-            <ClauseTreeList ariaLabel={sec.label}>
-              {sec.items.map((item) => (
-                <SidebarItemRenderer
-                  key={item.id}
-                  item={item}
-                  activeNode={activeNode}
-                  onSelect={onSelect}
-                  group={type.group}
-                  depth={0}
-                />
-              ))}
-            </ClauseTreeList>
-          </span>
-        ))}
+        {/* The clauses (#243): a list of buttons per section, each list
+            named by its heading. Nested clauses are nested lists. */}
+        <nav aria-label="Request structure">
+          {sections.map((sec) => (
+            <div key={sec.id}>
+              <SectionHeader id={`${uid}-${sec.id}`} meta={sec.meta}>
+                {sec.label}
+              </SectionHeader>
+              <ClauseTreeList labelledBy={`${uid}-${sec.id}`}>
+                {sec.items.map((item) => (
+                  <SidebarItemRenderer
+                    key={item.id}
+                    item={item}
+                    activeNode={activeNode}
+                    onSelect={onSelect}
+                    group={type.group}
+                    depth={0}
+                  />
+                ))}
+              </ClauseTreeList>
+            </div>
+          ))}
+        </nav>
 
         {/* Hide the entire Recent runs section until there are runs. An
             empty-state ("No runs yet…") block adds ~50px of dead chrome
@@ -151,9 +158,8 @@ function SidebarItemRenderer({
   group: any;
   depth: 0 | 1 | 2 | 3;
 }) {
-  const expandable = !!item.children?.length;
   return (
-    <span>
+    <li>
       <ClauseTreeItem
         icon={item.icon}
         iconFilled={item.iconFilled}
@@ -164,23 +170,25 @@ function SidebarItemRenderer({
         badge={item.badge}
         badgeAppearance={item.badgeAppearance}
         badgeColor={item.badgeColor}
-        expandable={expandable}
-        expanded={expandable}
         onSelect={() => onSelect(item.id)}
         group={group}
         depth={depth}
       />
-      {item.children?.map((child) => (
-        <SidebarItemRenderer
-          key={child.id}
-          item={child}
-          activeNode={activeNode}
-          onSelect={onSelect}
-          group={group}
-          depth={Math.min(3, depth + 1) as 0 | 1 | 2 | 3}
-        />
-      ))}
-    </span>
+      {!!item.children?.length && (
+        <ClauseTreeList>
+          {item.children.map((child) => (
+            <SidebarItemRenderer
+              key={child.id}
+              item={child}
+              activeNode={activeNode}
+              onSelect={onSelect}
+              group={group}
+              depth={Math.min(3, depth + 1) as 0 | 1 | 2 | 3}
+            />
+          ))}
+        </ClauseTreeList>
+      )}
+    </li>
   );
 }
 
