@@ -130,6 +130,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Retrieve Single no longer turns on `If-None-Match: null`** by default
   ([#109]). Execute sends that header now, and `null` never matches an etag;
   saved requests that have it still run without it.
+- **Time zone independent times in a DST gap keep their digits** ([#337]).
+  Such a time is stored as typed, with no conversion. When it fell in the
+  hour your clocks skip (02:30 on a spring-forward day), the results grid and
+  the Update / Merge comparison showed it an hour later, and changing only
+  its date, or just clicking into the time picker and out, sent the later
+  time. The time picker itself still shows it an hour on, because it can
+  only hold a local time.
 - **Exported URLs encode spaces** ([#221]). Postman, Insomnia and Bruno
   collections, cURL / fetch / XHR / C# / PowerShell code and the HTTP-action
   URIs write `%20`. The URL bar still shows spaces.
@@ -155,6 +162,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#44]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/44
 [#109]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/109
 [#221]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/221
+[#337]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/337
 [#241]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/241
 
 ## [1.4.0-beta.3] - 2026-10-27

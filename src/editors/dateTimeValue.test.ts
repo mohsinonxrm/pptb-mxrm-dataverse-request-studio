@@ -6,11 +6,14 @@ import {
   behaviorHint,
   behaviorOf,
   combineDateAndTime,
+  displayDateOf,
   formatDateTimeValue,
   isDateOnlyColumn,
   localZoneLabel,
   parseDateTimeValue,
   serializeDateTimeValue,
+  withPickedDate,
+  withPickedTime,
 } from './dateTimeValue';
 
 // Setting TZ at run time switches the zone Date and Intl use.
@@ -292,5 +295,74 @@ describe('formatDateTimeValue', () => {
   it('returns a value it cannot read as it is', () => {
     expect(formatDateTimeValue('garbage', USER_LOCAL)).toBe('garbage');
     expect(formatDateTimeValue('2026-02-31', DATE_ONLY)).toBe('2026-02-31');
+  });
+});
+
+describe('a time zone independent time in the DST gap (#337)', () => {
+  // 02:30 on 8 March 2026 doesn't exist in New York (clocks go 02:00 → 03:00).
+  const GAP = '2026-03-08T02:30:00Z';
+
+  it('is shown with its stored digits', () => {
+    inZone('America/New_York');
+    const shown = displayDateOf(GAP, TZI)!;
+    expect(shown.timeZone).toBe('UTC');
+    expect(shown.date.toISOString()).toBe('2026-03-08T02:30:00.000Z');
+    expect(formatDateTimeValue(GAP, TZI)).toBe(
+      new Date(Date.UTC(2026, 2, 8, 2, 30)).toLocaleString(undefined, { timeZone: 'UTC' }),
+    );
+  });
+
+  it("isn't rewritten when the time picker reports the time it shows (on blur)", () => {
+    inZone('America/New_York');
+    // The picker shows 03:30, the local Date the gap time became.
+    expect(withPickedTime(GAP, new Date(2026, 2, 8, 3, 30), TZI)).toBeNull();
+    // A different time is a deliberate pick.
+    expect(withPickedTime(GAP, new Date(2026, 2, 8, 4, 15), TZI)).toBe('2026-03-08T04:15:00Z');
+  });
+
+  it('keeps its stored time when only the date changes', () => {
+    inZone('America/New_York');
+    expect(withPickedDate(GAP, new Date(2026, 2, 9), TZI)).toBe('2026-03-09T02:30:00Z');
+  });
+});
+
+describe('withPickedDate', () => {
+  it('keeps the time already set, per behavior', () => {
+    inZone('America/New_York');
+    expect(withPickedDate('2026-05-01T23:30:00Z', new Date(2026, 4, 2), TZI)).toBe(
+      '2026-05-02T23:30:00Z',
+    );
+    // 15:45Z is 11:45 in New York on both days; the instant moves a day.
+    expect(withPickedDate('2026-03-08T15:45:00Z', new Date(2026, 2, 9), USER_LOCAL)).toBe(
+      '2026-03-09T15:45:00Z',
+    );
+  });
+
+  it('sends midnight when there was no value, and a date for date-only columns', () => {
+    inZone('America/New_York');
+    expect(withPickedDate(undefined, new Date(2026, 2, 9), TZI)).toBe('2026-03-09T00:00:00Z');
+    expect(withPickedDate('2026-03-08', new Date(2026, 2, 9), DATE_ONLY)).toBe('2026-03-09');
+    expect(withPickedDate('2026-03-08T00:00:00Z', new Date(2026, 2, 9), TZI_DATE)).toBe(
+      '2026-03-09T00:00:00Z',
+    );
+  });
+});
+
+describe('withPickedTime', () => {
+  it('sets the time on the date already picked, per behavior', () => {
+    inZone('America/New_York');
+    expect(withPickedTime('2026-05-01T23:30:00Z', new Date(2026, 0, 1, 8, 5), TZI)).toBe(
+      '2026-05-01T08:05:00Z',
+    );
+    // 08:05 in New York on 1 May is 12:05 UTC.
+    expect(withPickedTime('2026-05-01T16:00:00Z', new Date(2026, 0, 1, 8, 5), USER_LOCAL)).toBe(
+      '2026-05-01T12:05:00Z',
+    );
+  });
+
+  it('changes nothing without a date, or for the time already shown', () => {
+    inZone('America/New_York');
+    expect(withPickedTime(undefined, new Date(2026, 0, 1, 8, 5), TZI)).toBeNull();
+    expect(withPickedTime('2026-05-01T08:05:42Z', new Date(2026, 0, 1, 8, 5), TZI)).toBeNull();
   });
 });
