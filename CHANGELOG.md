@@ -84,6 +84,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now wait for the fetch instead of getting the old data, and a failed fetch
   is retried on the next use instead of the old data counting as fresh for
   another hour.
+- **Retrieve Multiple's checks run once the table's columns arrive**
+  ([#347]). A saved request loaded before its table's metadata showed no
+  advisories, and Execute wasn't blocked for a query Dataverse rejects, until
+  you changed something.
+- **Save and the Saved library use the current request and environment**
+  ([#347]). The header kept calling the handlers from when the mode last
+  published them, so they could read old data. Loading a saved Retrieve
+  Multiple request whose table this environment doesn't have now says so,
+  even when the table list arrived after the mode opened.
 - **Text follow-ups** ([#317]):
   - Associate and Disassociate say "Target record" when one target is
     picked or the relationship takes only one, in the pane and the sidebar,
@@ -211,6 +220,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     workflow arguments, request validation, the query advisories, mode
     drafts, the metadata cache and provider, and the ToolBox bridge's events.
 
+[#347]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/347
 [#330]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/330
 [#242]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/242
 [#317]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/317
