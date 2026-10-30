@@ -32,8 +32,9 @@
 //      name-prefix heuristic only as a fallback (see `classifySource`)
 //
 // Things we intentionally DON'T parse here:
-//   ❌ EntityType / ComplexType / EnumType — those come from the regular
-//      metadata endpoints (richer per-attribute info than the CSDL exposes)
+//   ❌ EntityType — tables come from the regular metadata endpoints (richer
+//      per-attribute info than the CSDL exposes). ComplexType and EnumType
+//      ARE parsed (first pass), for parameter and response shapes.
 //   ❌ NavigationProperty — same reason; relationships have their own typed
 //      metadata endpoint with cascade configuration
 

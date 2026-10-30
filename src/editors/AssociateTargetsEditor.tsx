@@ -110,7 +110,7 @@ export function AssociateTargetsEditor({
       <div>
         <PaneHead
           icon={Link20Filled}
-          title="Target records"
+          title={targetsTitle(false, targets.length)}
           sub="Pick a navigation property first."
           group={group}
         />

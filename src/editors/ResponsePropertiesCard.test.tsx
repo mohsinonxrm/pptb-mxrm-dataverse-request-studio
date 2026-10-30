@@ -8,6 +8,7 @@ import {
   ResponsePropertiesCard,
   collectionElementType,
   csdlComplexProperties,
+  returnKindLabel,
 } from './ResponsePropertiesCard';
 import { parseCsdl } from '../host/csdlProvider';
 
@@ -18,6 +19,9 @@ beforeAll(() => {
     <Schema Namespace="Microsoft.Dynamics.CRM" Alias="mscrm" xmlns="http://docs.oasis-open.org/odata/ns/edm">
       <ComplexType Name="BasePrivilege">
         <Property Name="Depth" Type="Edm.String" />
+      </ComplexType>
+      <ComplexType Name="new_DoThingResponse">
+        <Property Name="Result" Type="Edm.Int32" />
       </ComplexType>
       <ComplexType Name="RolePrivilegeItem" BaseType="mscrm.BasePrivilege">
         <Property Name="PrivilegeId" Type="Edm.Guid" />
@@ -72,10 +76,24 @@ describe('csdlComplexProperties for a collection (#317)', () => {
     ]);
   });
 
-  it('lists nothing for a collection of primitives, entities or unknown types', () => {
+  it('lists nothing for a collection of primitives or of types that are not complex', () => {
     expect(csdlComplexProperties('collection', 'Collection(Edm.String)')).toEqual([]);
     expect(csdlComplexProperties('collection', 'Collection(mscrm.account)')).toEqual([]);
     expect(csdlComplexProperties('collection', 'Collection(mscrm.Nope)')).toEqual([]);
+  });
+});
+
+describe('returnKindLabel', () => {
+  it('calls a prefixed response the CSDL has as a complex type complex (#317)', () => {
+    expect(returnKindLabel({ kind: 'entity', typeName: 'new_DoThingResponse' })).toBe('complex');
+  });
+
+  it('keeps every other kind', () => {
+    expect(returnKindLabel({ kind: 'entity', typeName: 'account' })).toBe('entity');
+    expect(returnKindLabel({ kind: 'complex', typeName: 'RolePrivilegeItem' })).toBe('complex');
+    expect(returnKindLabel({ kind: 'collection', typeName: 'Collection(Edm.Guid)' })).toBe(
+      'collection',
+    );
   });
 });
 
@@ -84,6 +102,24 @@ describe('ResponsePropertiesCard', () => {
     const text = render(op('collection', 'Collection(mscrm.RolePrivilegeItem)'));
     expect(text).toContain('Each item is a RolePrivilegeItem :');
     expect(text).toMatch(/Depth Edm\.String .*PrivilegeId Edm\.Guid .*BusinessUnitId Edm\.Guid/);
+  });
+
+  it('shows a fully qualified element type by its short name', () => {
+    const text = render(op('collection', 'Collection(Microsoft.Dynamics.CRM.RolePrivilegeItem)'));
+    expect(text).toContain('Each item is a RolePrivilegeItem :');
+  });
+
+  it('lists a Custom API response the parser calls an entity (#317)', () => {
+    const text = render(op('entity', 'new_DoThingResponse', 'custom-api'));
+    expect(text).toMatch(/Result Edm\.Int32/);
+    expect(text).not.toContain('Returns an entity instance');
+    expect(text).toContain(' complex new_DoThingResponse ');
+  });
+
+  it('keeps the entity text for a real entity', () => {
+    const text = render(op('entity', 'account'));
+    expect(text).toContain('Returns an entity instance');
+    expect(text).toContain(' entity account ');
   });
 
   it('keeps the generic collection text when the element type is unknown', () => {

@@ -112,6 +112,17 @@ export function csdlComplexProperties(
   return [...byName.values()];
 }
 
+/**
+ * The return type's kind to show. The parser calls a publisher-prefixed
+ * Custom API response (`msdyn_ActivateProcessesResponse`) an entity; when
+ * the CSDL has it as a complex type, say so (#317).
+ */
+export function returnKindLabel(rt: { kind: string; typeName: string }): string {
+  return rt.kind === 'entity' && csdlComplexProperties('entity', rt.typeName).length > 0
+    ? 'complex'
+    : rt.kind;
+}
+
 export interface ResponsePropertiesCardProps {
   action: CsdlAction;
   /** Pill text — defaults to "from $metadata" / "from Custom API def" based on source. */
@@ -156,7 +167,7 @@ export function ResponsePropertiesCard({ action, pillText }: ResponsePropertiesC
         <strong style={{ fontSize: 12 }}>Response properties</strong>
         <Badge appearance="ghost">{sourcePill}</Badge>
         <Badge appearance="tint" color="brand" style={{ marginLeft: 4 }}>
-          {rt.kind}
+          {returnKindLabel(rt)}
         </Badge>
         <span style={{ flexGrow: 1 }} />
         <Caption1
@@ -213,13 +224,17 @@ export function ResponsePropertiesCard({ action, pillText }: ResponsePropertiesC
             {schema.length > 0 && element && (
               <>
                 {' '}
-                Each item is a <code>{element.replace(/^mscrm\./, '')}</code>:
+                Each item is a{' '}
+                <code>{element.replace(/^(mscrm|Microsoft\.Dynamics\.CRM)\./, '')}</code>:
               </>
             )}
           </Caption1>
           {schema.length > 0 && table}
         </>
-      ) : rt.kind === 'entity' ? (
+      ) : rt.kind === 'entity' && schema.length === 0 ? (
+        // A publisher-prefixed Custom API response (`new_DoThingResponse`)
+        // is parsed as an entity too; when the CSDL has it as a complex
+        // type, the table below lists it (#317).
         <Caption1
           style={{ color: tokens.colorNeutralForeground3, display: 'block', padding: '6px 4px' }}
         >

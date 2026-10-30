@@ -625,7 +625,7 @@ function TargetPane({
       <div>
         <PaneHead
           icon={PersonAccounts20Filled}
-          title="Target record"
+          title={targetsTitle(false, state.targetIds.length)}
           sub="Pick a navigation property first."
           group="relate"
         />
