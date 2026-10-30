@@ -171,6 +171,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ([#318]). Key columns typed separately (#64) now resolve the way every
   other column does, Image and File included. No visible change: a key
   column can't be an Image or File column.
+- **Saved-request tests no longer re-import the store per test** ([#319]).
+  The store's startup (credential scrub, then read) is one function,
+  `startSavedStore()`, that the module runs at load and the tests call
+  directly. Those tests went from about 415 ms to about 20 ms each, so
+  they no longer time out when several test runs share the machine. One
+  test still loads the module afresh to check the startup wiring.
 - **Tests for the write path** ([#235]): 272 new tests, 804 in all.
   - A parity test checks, mode by mode, that Execute sends exactly what the
     Code tab shows: method, URL, body and headers, apart from the documented
@@ -187,6 +193,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#317]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/317
 [#334]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/334
 [#235]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/235
+[#319]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/319
 [#318]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/318
 [#248]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/248
 [#335]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/335
