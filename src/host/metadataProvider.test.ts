@@ -290,6 +290,25 @@ describe('getTable', () => {
     });
   });
 
+  it('types those key columns through attributeTypeOf, like every other column (#318)', async () => {
+    serveTable('new_doc', { keys: [key('akey_doc', ['new_ref', 'new_file', 'new_virtual'])] });
+    client.getAttributeTypes.mockResolvedValue([
+      { LogicalName: 'new_ref', AttributeType: 'String' },
+      {
+        LogicalName: 'new_file',
+        AttributeType: 'Virtual',
+        AttributeTypeName: { Value: 'FileType' },
+      },
+      {
+        LogicalName: 'new_virtual',
+        AttributeType: 'Virtual',
+        AttributeTypeName: { Value: 'MultiSelectPicklistType' },
+      },
+    ]);
+    const t = await metadata.getTable('new_doc');
+    expect(t?.alternateKeys?.[0].columnTypes).toEqual({ new_ref: 'String', new_file: 'File' });
+  });
+
   it('still builds the table when typing the missing key columns fails', async () => {
     serveTable('canvasapp', { keys: [key('akey_app', ['componentstate'])] });
     client.getAttributeTypes.mockRejectedValue(new Error('throttled'));

@@ -493,7 +493,9 @@ async function buildTable(logical: string): Promise<TableMeta | undefined> {
           const typed = await loader.loadAttributeTypes(logical, missing);
           const types = new Map<string, AttributeTypeCode>();
           for (const t of typed) {
-            const code = ATTRIBUTE_TYPE_MAP[t.AttributeType];
+            // Through attributeTypeOf like every other column, so Image /
+            // File (`Virtual` + AttributeTypeName) resolve the same (#318).
+            const code = attributeTypeOf(t);
             if (code) types.set(t.LogicalName, code);
           }
           for (const k of alternateKeys) {

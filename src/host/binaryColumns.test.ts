@@ -2,7 +2,12 @@
 // Advanced Find-eligible, so the attribute load dropped them and Manage
 // Image / File Data found no columns.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getEntityAttributes, isBinaryColumn, type AttributeMetadata } from './pptbClient';
+import {
+  getAttributeTypes,
+  getEntityAttributes,
+  isBinaryColumn,
+  type AttributeMetadata,
+} from './pptbClient';
 import { attributeTypeOf, enrichBinaryColumns, mapAttribute } from './metadataProvider';
 import { mustSupplyOnCreate } from '../engine/fieldBody';
 import type { ColumnMeta } from '../mock/metadata';
@@ -196,5 +201,27 @@ describe('mustSupplyOnCreate', () => {
     expect(
       mustSupplyOnCreate(required(mapAttribute(attr('name', 'String', 'StringType', true))!)),
     ).toBe(true);
+  });
+});
+
+// #318: the key-column type lookup asks for AttributeTypeName too, so
+// attributeTypeOf can tell Image / File columns apart.
+describe('getAttributeTypes', () => {
+  afterEach(() => {
+    delete (window as { dataverseAPI?: unknown }).dataverseAPI;
+  });
+
+  it('asks for AttributeTypeName with the type', async () => {
+    const queryData = vi.fn(async (_query: string) => ({
+      LogicalName: 'new_file',
+      AttributeType: 'Virtual',
+      AttributeTypeName: { Value: 'FileType' },
+    }));
+    (window as unknown as { dataverseAPI: unknown }).dataverseAPI = { queryData };
+    const rows = await getAttributeTypes('new_doc', ['new_file']);
+    expect(queryData.mock.calls[0][0]).toMatch(
+      /Attributes\(LogicalName='new_file'\)\?\$select=LogicalName,AttributeType,AttributeTypeName$/,
+    );
+    expect(attributeTypeOf(rows[0])).toBe('File');
   });
 });
