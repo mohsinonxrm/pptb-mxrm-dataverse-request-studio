@@ -45,7 +45,7 @@ import { notify } from '../shell/dialogs';
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from '../editors/PaneHead';
 import { NavPropertyPicker } from '../editors/NavPropertyPicker';
-import { AssociateTargetsEditor } from '../editors/AssociateTargetsEditor';
+import { AssociateTargetsEditor, targetsTitle } from '../editors/AssociateTargetsEditor';
 import { TargetEditor } from '../editors/TargetEditor';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
@@ -394,11 +394,7 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
           id: 'target',
           icon: PersonAccounts20Regular,
           iconFilled: PersonAccounts20Filled,
-          label: isSingle
-            ? 'Target — implicit'
-            : state.targetIds.length > 1
-              ? 'Target records'
-              : 'Target record',
+          label: isSingle ? 'Target — implicit' : targetsTitle(false, state.targetIds.length),
           badge: isSingle ? '∅' : state.targetIds.length || null,
           badgeAppearance: 'tint' as const,
           badgeColor: state.targetIds.length > 0 ? ('success' as const) : ('subtle' as const),

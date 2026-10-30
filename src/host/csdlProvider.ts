@@ -8,7 +8,9 @@
 //   typed inputs (Edm.Int32 → SpinButton, EntityReference → record picker,
 //   OptionSetValue → Combobox, etc).
 //
-//   In standalone mode we ship a curated mock in `src/mock/actionsCsdl.ts`.
+//   `src/mock/actionsCsdl.ts` holds only the types; there's no sample
+//   catalog. Standalone, the load fails and the pickers say so, so no
+//   operation (or its response card) shows outside PPTB (#317).
 //   In PPTB the source of truth is the live `$metadata` EDMX document —
 //   accessible via `dvHost.metadata.getCSDLDocument()` (typed as
 //   `getCSDLDocument(): Promise<string>` per @pptb/types).

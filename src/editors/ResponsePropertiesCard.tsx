@@ -77,16 +77,27 @@ const KNOWN_RESPONSE_SCHEMAS: Record<
   ],
 };
 
+/** The element type of `Collection(<type>)`, or null for anything else (#317). */
+export function collectionElementType(typeName: string): string | null {
+  const m = /^Collection\((.+)\)$/.exec(typeName.trim());
+  return m ? m[1].trim() : null;
+}
+
 /**
  * Properties of a return type from the loaded CSDL, base types first (a
  * derived property with the same name wins). Tried for `entity` too: the
  * parser calls any lowercase `mscrm.<name>` an entity, which includes
- * publisher-prefixed Custom API responses (`new_DoThingResponse`).
+ * publisher-prefixed Custom API responses (`new_DoThingResponse`). For a
+ * `Collection(<type>)`, the properties of one item (#317).
  */
 export function csdlComplexProperties(
   kind: string,
   typeName: string,
 ): Array<{ name: string; type: string }> {
+  if (kind === 'collection') {
+    const element = collectionElementType(typeName);
+    return element ? csdlComplexProperties('complex', element) : [];
+  }
   if (kind !== 'complex' && kind !== 'entity') return [];
   const byName = new Map<string, { name: string; type: string }>();
   const seen = new Set<string>();
@@ -116,6 +127,27 @@ export function ResponsePropertiesCard({ action, pillText }: ResponsePropertiesC
     KNOWN_RESPONSE_SCHEMAS[rt.typeName] ?? csdlComplexProperties(rt.kind, rt.typeName);
   const sourcePill =
     pillText ?? (action.source === 'custom-api' ? 'from Custom API def' : 'from $metadata');
+  const element = rt.kind === 'collection' ? collectionElementType(rt.typeName) : null;
+  const table = (
+    <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 11 }}>
+      <thead>
+        <Tr header>
+          <Th>Name</Th>
+          <Th>Type</Th>
+          <Th>Notes</Th>
+        </Tr>
+      </thead>
+      <tbody>
+        {schema.map((prop) => (
+          <Tr key={prop.name}>
+            <Td mono>{prop.name}</Td>
+            <Td>{prop.type}</Td>
+            <Td>{prop.notes ?? ''}</Td>
+          </Tr>
+        ))}
+      </tbody>
+    </table>
+  );
 
   return (
     <div className={mergeClasses(s.inlineCard)} style={{ padding: 12, maxWidth: 980 }}>
@@ -171,13 +203,22 @@ export function ResponsePropertiesCard({ action, pillText }: ResponsePropertiesC
           </tbody>
         </table>
       ) : rt.kind === 'collection' ? (
-        <Caption1
-          style={{ color: tokens.colorNeutralForeground3, display: 'block', padding: '6px 4px' }}
-        >
-          Returns a collection — body envelope is{' '}
-          <code>{'{ "@odata.context": "…", "value": [...] }'}</code>. Composable functions accept{' '}
-          <code>$select</code> / <code>$filter</code> on the URL to scope columns.
-        </Caption1>
+        <>
+          <Caption1
+            style={{ color: tokens.colorNeutralForeground3, display: 'block', padding: '6px 4px' }}
+          >
+            Returns a collection — body envelope is{' '}
+            <code>{'{ "@odata.context": "…", "value": [...] }'}</code>. Composable functions accept{' '}
+            <code>$select</code> / <code>$filter</code> on the URL to scope columns.
+            {schema.length > 0 && element && (
+              <>
+                {' '}
+                Each item is a <code>{element.replace(/^mscrm\./, '')}</code>:
+              </>
+            )}
+          </Caption1>
+          {schema.length > 0 && table}
+        </>
       ) : rt.kind === 'entity' ? (
         <Caption1
           style={{ color: tokens.colorNeutralForeground3, display: 'block', padding: '6px 4px' }}
@@ -187,26 +228,7 @@ export function ResponsePropertiesCard({ action, pillText }: ResponsePropertiesC
           entity envelope with <code>@odata.etag</code>.
         </Caption1>
       ) : schema.length > 0 ? (
-        <table
-          style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 11 }}
-        >
-          <thead>
-            <Tr header>
-              <Th>Name</Th>
-              <Th>Type</Th>
-              <Th>Notes</Th>
-            </Tr>
-          </thead>
-          <tbody>
-            {schema.map((prop) => (
-              <Tr key={prop.name}>
-                <Td mono>{prop.name}</Td>
-                <Td>{prop.type}</Td>
-                <Td>{prop.notes ?? ''}</Td>
-              </Tr>
-            ))}
-          </tbody>
-        </table>
+        table
       ) : (
         <Caption1
           style={{
