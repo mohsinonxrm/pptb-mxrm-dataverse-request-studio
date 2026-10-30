@@ -13,7 +13,8 @@ export function SectionHeader({
 }) {
   const s = useStudioStyles();
   return (
-    <div className={s.sectionH}>
+    // A heading (#243): screen-reader users can jump between sidebar sections.
+    <div className={s.sectionH} role="heading" aria-level={2}>
       <span id={id}>{children}</span>
       {/* Meta counter ("3 active", "2 of 5") is 11px — sits comfortably
           below the 12px label without sacrificing visual hierarchy. 9px

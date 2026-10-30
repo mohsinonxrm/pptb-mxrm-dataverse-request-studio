@@ -38,6 +38,7 @@ import {
   LineHorizontal320Filled,
   Link20Regular,
 } from '@fluentui/react-icons';
+import { tokens } from '@fluentui/react-components';
 import { Sidebar, type SidebarClauseItem } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
@@ -74,7 +75,6 @@ import { usePublishSaveContext } from '../state/SaveContext';
 import { takeModeHandoff } from '../state/modeHandoff';
 import type { Advisory } from '../primitives/advisories';
 import { isRecordGuid } from '../primitives/guid';
-import { tokens } from '@fluentui/react-components';
 
 const initialState = (): RetrieveSingleState => ({
   table: '',

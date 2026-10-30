@@ -69,7 +69,7 @@ export function Sidebar({
       <div className={s.sidebarScroll}>
         {/* The clauses (#243): a list of buttons per section, each list
             named by its heading. Nested clauses are nested lists. */}
-        <nav aria-label="Request clauses">
+        <nav aria-label="Request structure">
           {sections.map((sec) => (
             <div key={sec.id}>
               <SectionHeader id={`${uid}-${sec.id}`} meta={sec.meta}>

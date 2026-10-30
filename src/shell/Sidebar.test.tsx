@@ -30,7 +30,7 @@ const SECTIONS: SidebarSection[] = [
         badge: '2',
         dirty: true,
         children: [
-          { id: 'filter:0', icon: Filter20Regular, label: 'name eq x' },
+          { id: 'filter:0', icon: Filter20Regular, label: 'name eq x', children: [] },
           {
             id: 'filter:1',
             icon: Filter20Regular,
@@ -84,7 +84,7 @@ describe('Sidebar clause list (#243)', () => {
   it('uses a nav of lists and buttons, with no tree roles or expand state', () => {
     const { host } = mount('top');
     const nav = host.querySelector('nav')!;
-    expect(nav.getAttribute('aria-label')).toBe('Request clauses');
+    expect(nav.getAttribute('aria-label')).toBe('Request structure');
     expect(host.querySelector('[role=tree], [role=treeitem], [role=group]')).toBeNull();
     expect(host.querySelector('[aria-expanded], [aria-selected]')).toBeNull();
     // Every list item is an <li> directly in a <ul>.
@@ -93,8 +93,13 @@ describe('Sidebar clause list (#243)', () => {
       for (const c of ul.children) expect(c.tagName).toBe('LI');
   });
 
-  it('names each section list by its heading', () => {
+  it('gives each section a heading that names its list', () => {
     const { host } = mount('top');
+    const headings = [...host.querySelectorAll('nav [role=heading]')];
+    expect(headings.map((h) => [h.textContent, h.getAttribute('aria-level')])).toEqual([
+      ['Target', '2'],
+      ['Query structure· 2 active', '2'],
+    ]);
     const lists = [...host.querySelectorAll('nav > div > ul')];
     expect(
       lists.map((ul) => document.getElementById(ul.getAttribute('aria-labelledby')!)?.textContent),
@@ -119,6 +124,24 @@ describe('Sidebar clause list (#243)', () => {
     );
   });
 
+  it('renders no empty list for a clause with no children', () => {
+    const { host } = mount('top');
+    expect(button(host, 'name eq x').closest('li')!.querySelector('ul')).toBeNull();
+    for (const ul of host.querySelectorAll('nav ul')) expect(ul.children.length).toBeGreaterThan(0);
+  });
+
+  it('keeps every clause in the Tab order', () => {
+    const { host } = mount('top');
+    const buttons = [...host.querySelectorAll<HTMLButtonElement>('nav button')];
+    expect(buttons).toHaveLength(6);
+    for (const b of buttons) {
+      expect(b.disabled).toBe(false);
+      expect(b.getAttribute('tabindex')).toBeNull();
+      b.focus();
+      expect(document.activeElement).toBe(b);
+    }
+  });
+
   it('marks the open clause with aria-current and selects on click', () => {
     const { host, onSelect } = mount('filter:1');
     const current = [...host.querySelectorAll('[aria-current]')];
@@ -134,6 +157,8 @@ describe('Sidebar clause list (#243)', () => {
     const filter = button(host, '$filter');
     expect(filter.textContent).toContain('(modified)');
     expect(filter.querySelector('[aria-label]')).toBeNull();
+    const dot = [...filter.querySelectorAll('span')].find((e) => e.textContent === '•')!;
+    expect(dot.getAttribute('aria-hidden')).toBe('true');
     const set = button(host, 'Account').querySelector('[role=img]')!;
     expect(set.getAttribute('aria-label')).toBe('Set');
   });

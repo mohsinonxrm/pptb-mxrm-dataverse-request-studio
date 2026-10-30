@@ -62,10 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The sidebar works with a screen reader and the keyboard** ([#243]). It
   announced itself as a tree, but arrow keys did nothing, nested clauses
   were read as top-level ones, and every parent said "expanded" although
-  nothing collapses. It's now a "Request clauses" navigation landmark:
-  - each section is a list named by its heading, and nested clauses (an
-    `$expand` relationship's clauses, required parameters, Bulk Write rows)
-    are nested lists, so their level is read;
+  nothing collapses. It's now a "Request structure" navigation landmark:
+  - each section has a heading and is a list named by it, and nested
+    clauses (an `$expand` relationship's clauses, required parameters, Bulk
+    Write rows) are nested lists, so their level is read;
   - Tab moves between clauses, Enter or Space opens one, and the open one
     is marked as current;
   - the chevrons, which looked collapsible but weren't, are gone;

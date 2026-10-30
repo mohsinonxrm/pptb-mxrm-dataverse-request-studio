@@ -22,6 +22,7 @@ import {
   ChartMultiple20Filled,
   Link20Regular,
 } from '@fluentui/react-icons';
+import { tokens } from '@fluentui/react-components';
 import { Sidebar, type SidebarClauseItem } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
@@ -82,7 +83,6 @@ import {
   type PageBatch,
   type PagingStatus,
 } from '../views/results/pagedResults';
-import { tokens } from '@fluentui/react-components';
 
 // Empty initial state — the studio is a request *builder*; seeding it with
 // mock data confused users in PPTB ("why are there pre-filled rules against
