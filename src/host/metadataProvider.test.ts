@@ -31,6 +31,7 @@ vi.mock('./pptbClient', async (importOriginal) => ({
 
 import { metadata, subscribeMetadataReset } from './metadataProvider';
 import { loadEntityAttributes } from './dataverseMetadata';
+import { __subscribeLiveTables } from '../mock/metadata';
 
 type Rels = {
   oneToMany: RelationshipMetadata[];
@@ -484,6 +485,44 @@ describe('invalidateTable', () => {
     await loadEntityAttributes('contact');
     expect(client.getEntityAttributes).toHaveBeenCalledTimes(1);
     expect(client.getEntityAttributes).toHaveBeenCalledWith('account', false);
+  });
+
+  it('the next read rebuilds the table, and other tables stay registered (#335)', async () => {
+    serveTable('account');
+    const old = await metadata.getTable('account');
+    const contact = await metadata.getTable('contact');
+    metadata.invalidateTable('account');
+    expect(metadata.peekTable('account')).toBeUndefined();
+    expect(metadata.peekTable('contact')).toBe(contact);
+    vi.clearAllMocks();
+    serveTable('account');
+    const fresh = await metadata.getTable('account');
+    expect(fresh).toBeDefined();
+    expect(fresh).not.toBe(old);
+    expect(client.getEntityMetadata).toHaveBeenCalledWith('account');
+  });
+
+  it("a build still running when the table is invalidated doesn't put it back (#335)", async () => {
+    serveTable('account');
+    const reply = deferred<EntityMetadata>();
+    client.getEntityMetadata.mockReturnValueOnce(reply.promise);
+    const stale = metadata.getTable('account');
+    metadata.invalidateTable('account');
+    reply.resolve(entity('account', 'stale'));
+    await stale;
+    expect(metadata.peekTable('account')).toBeUndefined();
+    const fresh = await metadata.getTable('account');
+    expect(fresh?.displayName).toBe('account label');
+  });
+
+  it('tells the registry listeners, so open editors refetch (#335)', async () => {
+    serveTable('account');
+    await metadata.getTable('account');
+    const seen = vi.fn();
+    const off = __subscribeLiveTables(seen);
+    metadata.invalidateTable('account');
+    off();
+    expect(seen).toHaveBeenCalled();
   });
 });
 

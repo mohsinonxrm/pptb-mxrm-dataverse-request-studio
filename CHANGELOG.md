@@ -95,6 +95,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a header), so a name like `报告.pdf` or `Résumé.docx` travels as the
   `x-ms-file-name` query parameter instead, as Microsoft documents, in both
   the single-request and chunked uploads.
+- **Invalidating one table's metadata now refetches it** ([#335]). The next
+  read used to return the old table from the in-memory registry. Nothing
+  invalidates a single table yet, so this changes nothing you can see today.
 - **"Advanced Find only" works, and is off by default** ([#44]), matching
   FetchXML Studio:
   - Off: the table, column and relationship pickers offer everything.
@@ -164,6 +167,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#334]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/334
 [#235]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/235
 [#248]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/248
+[#335]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/335
 [#222]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/222
 [#44]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/44
 [#336]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/336

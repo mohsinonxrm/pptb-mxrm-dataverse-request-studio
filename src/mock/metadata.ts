@@ -584,6 +584,10 @@ export function __subscribeLiveTables(cb: () => void): () => void {
   __liveListeners.add(cb);
   return () => __liveListeners.delete(cb);
 }
+/** Removes one of the active org's tables (#335). */
+export function __unregisterLiveTable(logicalName: string): void {
+  if (liveTablesOf().delete(logicalName)) notifyLiveTables();
+}
 /** Clears the active org's tables. */
 export function __clearLiveTables(): void {
   liveTablesOf().clear();
