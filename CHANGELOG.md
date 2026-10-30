@@ -112,6 +112,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Action / Function / Workflow, Predefined Query and the file, image and
   attachment modes. The other modes already checked. The executor refuses
   them too, so a value like `x)/other_nav` can't send a different request.
+- **A query function on a related table's column is caught inside `any` /
+  `all` too** ([#336]). Dataverse rejects a function such as `EqualUserId`
+  whose column runs through a relationship
+  (`PropertyName='parentcustomerid_account/ownerid'`). Outside a lambda
+  this already blocked Execute with an explanation; inside one it wasn't
+  checked, so the request was sent and failed.
 - **Filter values are typed** ([#221]). A number, GUID or date column's
   value goes into `$filter` unquoted only when it is one. Anything else is
   quoted and escaped, and Execute is blocked with a message naming the value,
@@ -153,6 +159,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#248]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/248
 [#222]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/222
 [#44]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/44
+[#336]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/336
 [#109]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/109
 [#221]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/221
 [#241]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/241

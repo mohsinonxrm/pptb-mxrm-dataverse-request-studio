@@ -393,9 +393,10 @@ function validateFilterNode(
     // Nav-path inside `PropertyName` (e.g. `primarycontactid/ownerid`)
     // is rejected (tests 7.7 / 7.8). The column picker doesn't surface
     // nav-paths for function nodes, but if state arrives with one
-    // (legacy / paste / hand-edit) we should warn.
-    if (node.col && node.col.includes('/') && !node.col.startsWith((lambdaAlias ?? '') + '/')) {
-      // Strip any pure alias prefix; what's left must be a nav-path.
+    // (legacy / paste / hand-edit) we should warn. Inside a lambda the
+    // alias goes first, and the rest is checked the same way (#336).
+    if (node.col && node.col.includes('/')) {
+      // Strip the lambda alias; a `/` left over is a nav-path.
       const stripped =
         lambdaAlias && node.col.startsWith(lambdaAlias + '/')
           ? node.col.slice(lambdaAlias.length + 1)

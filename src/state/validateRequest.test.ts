@@ -172,6 +172,16 @@ describe('Dataverse function columns', () => {
     expect(run({ filter })).toEqual([]);
   });
 
+  it('blocks a navigation path inside a lambda, after the alias (#336)', () => {
+    const f = fn('EqualUserId', 'c/parentcustomerid_account/ownerid');
+    const out = errors({ filter: group([lambda('contact_customer_accounts', 'c', [f])]) });
+    const a = out.find((x) => x.id === `fn-nav-path-EqualUserId-${f.id}`);
+    expect(a?.title).toBe(
+      'Nav-path `parentcustomerid_account/ownerid` in `PropertyName` is rejected.',
+    );
+    expect(disabledReasonFromAdvisories(out)).not.toBeNull();
+  });
+
   it('marks a hierarchy function as information only, so Execute is not blocked', () => {
     const f = fn('Above', 'accountid', { val: '00000000-0000-0000-0000-000000000001' });
     const out = run({ filter: group([f]) });
