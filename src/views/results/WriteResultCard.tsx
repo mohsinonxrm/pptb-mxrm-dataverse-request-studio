@@ -46,6 +46,7 @@ import {
   type ExecResult,
   type RelateTargetResult,
 } from '../../engine/dataverseExecutor';
+import { copyText } from '../../shell/copy';
 
 export type WriteOperation =
   | 'create'
@@ -270,7 +271,7 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
                 size="small"
                 appearance="subtle"
                 icon={<Copy20Regular />}
-                onClick={() => navigator.clipboard?.writeText(resolvedId)}
+                onClick={() => void copyText(resolvedId, 'Record ID')}
               >
                 Copy ID
               </Button>
@@ -285,7 +286,7 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
                     size="small"
                     appearance="subtle"
                     icon={<Copy20Regular />}
-                    onClick={() => navigator.clipboard?.writeText(recordUrl)}
+                    onClick={() => void copyText(recordUrl, 'Record URL')}
                   >
                     Copy URL
                   </Button>

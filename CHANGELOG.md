@@ -93,6 +93,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     publisher prefix (`msdyn_ActivateProcessesResponse`) lists its
     properties and is labelled complex, instead of being described as an
     entity. On a Dynamics org that's several hundred operations.
+- **Copy buttons go through ToolBox and say whether they worked** ([#242]).
+  Inside ToolBox, the webview can refuse the browser clipboard, and a
+  refused copy did nothing at all: you then pasted whatever was on the
+  clipboard before. Every Copy button (URL bar, Code tab, results, write
+  result, previews, Power Automate, …) now uses ToolBox's own clipboard and
+  shows a short "Copied" note, or "Couldn't copy" with what to do instead.
+  Retrieve NextLink's Paste says when the clipboard can't be read.
 - **Choosing a file no longer reads it into memory** ([#222]). Manage File,
   Image and Attachment Data keep the file's name, size and type only: Execute
   can't send binary content from inside ToolBox, and the Code tab uses a
@@ -190,6 +197,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     drafts, the metadata cache and provider, and the ToolBox bridge's events.
 
 [#330]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/330
+[#242]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/242
 [#317]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/317
 [#334]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/334
 [#235]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/235

@@ -81,7 +81,7 @@ import type { RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
-import { copyToClipboardSafe, isEmbedded } from '../host/pptbBridge';
+import { isEmbedded } from '../host/pptbBridge';
 import { hashState, type SavedRequest } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
 import {
@@ -104,6 +104,7 @@ import {
   type SerializedBulkWriteState,
 } from '../engine/bulkWrite';
 import { checkBulkSupport, executeBulkWrite, idsFromResult } from '../engine/bulkWriteExecutor';
+import { copyText } from '../shell/copy';
 
 const MODE_ID = 'bulk-write' as const;
 const GROUP = 'bulk' as const;
@@ -1111,7 +1112,11 @@ function BulkResult({ result, operation }: { result: ExecResult; operation: Bulk
           <div>
             <Button
               icon={<Copy20Regular />}
-              onClick={() => void copyToClipboardSafe(ids.join('\n')).then(() => setCopied(true))}
+              onClick={() =>
+                void copyText(ids.join('\n'), 'Ids', { toastOnSuccess: false }).then(
+                  (ok) => ok && setCopied(true),
+                )
+              }
             >
               {copied ? 'Copied' : 'Copy ids'}
             </Button>

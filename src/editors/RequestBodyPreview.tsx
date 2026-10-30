@@ -5,6 +5,7 @@
 import { Caption1, Tooltip, Button, Badge, tokens, mergeClasses } from '@fluentui/react-components';
 import { Copy20Regular, Code20Filled } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
+import { copyText } from '../shell/copy';
 
 export interface RequestBodyPreviewProps {
   /** The JSON body to preview. */
@@ -44,7 +45,7 @@ export function RequestBodyPreview({
             size="small"
             appearance="subtle"
             icon={<Copy20Regular />}
-            onClick={() => navigator.clipboard?.writeText(json)}
+            onClick={() => void copyText(json, 'Body JSON')}
             disabled={isEmpty}
           />
         </Tooltip>

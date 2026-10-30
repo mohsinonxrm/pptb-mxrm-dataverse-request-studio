@@ -124,6 +124,7 @@ import type { ThemeMode } from '../theme/theme';
 import type { CreateFieldValue, LookupFieldValue } from '../state/writeState';
 import type { RequestGroup } from '../registry/requestTypes';
 import { scopedColumns, useAdvancedFindOnly } from '../state/metadataScope';
+import { copyText } from '../shell/copy';
 
 // ──────────────────────────────────────────────────────────────
 // System-managed columns we hide from the Create form.
@@ -2205,7 +2206,7 @@ function JsonEditPane({
             appearance="subtle"
             // z-index above Monaco's chrome so the copy button stays clickable.
             style={{ position: 'absolute', top: 6, right: 6, zIndex: 2 }}
-            onClick={() => navigator.clipboard?.writeText(text)}
+            onClick={() => void copyText(text, 'Body JSON')}
           />
         </Tooltip>
       </div>

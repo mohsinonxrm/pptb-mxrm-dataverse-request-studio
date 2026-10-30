@@ -28,6 +28,7 @@ import { ENV } from '../mock/environment';
 import type { BinaryPipelineStep } from '../engine/binaryBuilders';
 import type { HttpMethod } from '../registry/requestTypes';
 import type { SizeAdvisory } from '../state/binaryState';
+import { copyText } from '../shell/copy';
 
 export interface BinaryPipelineCardProps {
   steps: BinaryPipelineStep[];
@@ -154,7 +155,7 @@ function PipelineStepRow({ step }: { step: BinaryPipelineStep }) {
             size="small"
             appearance="subtle"
             icon={<Copy20Regular />}
-            onClick={() => navigator.clipboard?.writeText(step.relativeUrl)}
+            onClick={() => void copyText(step.relativeUrl, 'URL')}
           />
         </Tooltip>
       </div>

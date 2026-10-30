@@ -64,6 +64,8 @@ import type { ThemeMode } from '../theme/theme';
 import { getEnv } from '../mock/environment';
 import type { Advisory } from '../primitives/advisories';
 import { decodeForDisplay } from '../primitives/decodeForDisplay';
+import { readClipboardText } from '../host/pptbBridge';
+import { notify } from '../shell/dialogs';
 
 const initialState = (): RetrieveNextLinkState => ({
   url: '',
@@ -216,12 +218,17 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
       : null;
 
   const onPaste = async () => {
-    try {
-      const text = await navigator.clipboard?.readText();
-      if (text) set('url', text.trim(), 'url');
-    } catch {
-      // Clipboard access denied (e.g. focus required). No-op — user can paste manually.
-    }
+    // ToolBox has no clipboard read, and the webview may refuse the
+    // browser's: say so rather than doing nothing (#242).
+    const text = await readClipboardText();
+    if (text?.trim()) set('url', text.trim(), 'url');
+    else
+      notify(
+        text === null
+          ? "The clipboard couldn't be read here. Click in the URL box and press Ctrl+V."
+          : 'The clipboard is empty.',
+        { title: "Couldn't paste", intent: 'warning' },
+      );
   };
 
   const sections = [

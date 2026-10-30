@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { Button, Caption1, Tab, TabList, Tooltip, tokens } from '@fluentui/react-components';
 import { Code20Regular, Copy20Regular } from '@fluentui/react-icons';
 import { PaneHead } from '../../editors/PaneHead';
-import { copyToClipboardSafe } from '../../host/pptbBridge';
+import { copyText } from '../../shell/copy';
 
 export function BatchCodeView<F extends string>({
   formats,
@@ -33,7 +33,8 @@ export function BatchCodeView<F extends string>({
             icon={<Copy20Regular />}
             appearance="subtle"
             onClick={() =>
-              void copyToClipboardSafe(code).then(() => {
+              void copyText(code, 'Code', { toastOnSuccess: false }).then((ok) => {
+                if (!ok) return;
                 setCopied(true);
                 setTimeout(() => setCopied(false), 1500);
               })
