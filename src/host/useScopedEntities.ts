@@ -1,4 +1,4 @@
-// useScopedEntities — entity list narrowed by the user's Settings drawer
+// useScopedEntities — entity list narrowed by the user's scope chip
 // selections. Switches data source by `settings.entityScopeMode`:
 //
 //   - 'all':                returns the unfiltered list from listEntities().
@@ -27,7 +27,7 @@ export interface UseScopedEntitiesResult {
   entities: EntityListItem[];
   /**
    * The full, unscoped entity list. For pickers whose choices are fixed by
-   * the platform rather than by the user's Query Scope (e.g. Merge, which
+   * the platform rather than by the user's entity scope (e.g. Merge, which
    * only supports account / contact / lead / incident).
    */
   allEntities: EntityListItem[];
@@ -39,7 +39,7 @@ export interface UseScopedEntitiesResult {
   retry: () => void;
   /**
    * True when the entity list is empty because the user has not yet
-   * configured the Query Scope in Settings (scoped mode with no solutions
+   * picked a scope with the header's scope chip (scoped mode with no solutions
    * selected). Used by TargetEditor to show a first-run guidance banner.
    * Always false when entityScopeMode === 'all'.
    */
@@ -156,7 +156,7 @@ export function useScopedEntities(): UseScopedEntitiesResult {
   }, [settings.entityScopeMode, solutionKey, connectionKey, attempt]);
 
   // ── Compose visible list ──
-  // "Advanced Find only" applies on top of the Query Scope, locally, so
+  // "Advanced Find only" applies on top of the entity scope, locally, so
   // toggling it is instant (#44).
   const afOnly = settings.advancedFindOnly;
   const visible = useMemo(() => {
@@ -168,7 +168,7 @@ export function useScopedEntities(): UseScopedEntitiesResult {
   }, [all, scopedNames, settings.entityScopeMode, afOnly]);
 
   // needsSetup: scoped mode but no solutions chosen yet (entity list will be
-  // empty until the user configures Settings → Query Scope).
+  // empty until the user picks a scope with the scope chip).
   const needsSetup =
     settings.entityScopeMode !== 'all' && settings.selectedSolutionIds.length === 0;
 

@@ -1,7 +1,7 @@
 // DisplaySettings — persisted, cross-mode preferences.
 //
 // Includes display flags (logical names, value-display mode) plus the
-// active publisher / solution selections sourced from the Settings drawer.
+// active publisher / solution selections made with the header's scope chip.
 // Persisted across reloads so the user's scope sticks.
 //
 // Results-grid column widths (#12) are stored here too, keyed per table —
@@ -46,6 +46,11 @@ export interface DisplaySettings {
    * chosen yet (entity list will be empty in scoped modes).
    */
   selectedSolutionIds: string[];
+  /**
+   * The environments (org hosts) where the scope chip's first-run tip was
+   * dismissed (#42). It shows once per environment, until a scope is set.
+   */
+  scopeTipDismissed: string[];
 }
 
 /** Publisher / solution selection for one org — the GUIDs are per environment. */
@@ -134,6 +139,7 @@ export const defaultDisplaySettings: DisplaySettings = {
   productionSafeMode: true,
   selectedPublisherIds: [],
   selectedSolutionIds: [],
+  scopeTipDismissed: [],
 };
 
 /** Settings namespace prefix. Exported for any future settings keys. */

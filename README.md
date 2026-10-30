@@ -242,6 +242,20 @@ Install it from the tool gallery or load it as a custom tool. Prereleases are
 published to npm under the `beta` tag (for example `1.4.0-beta.1`) and use the
 gold Insider icon.
 
+### Choose the entity scope
+
+The entity pickers list the entities in the scope shown on the **scope button**
+in the header, after the request type. On first run it reads **Choose scope**
+and a tip points at it. Open it to pick where entities come from:
+
+- **Publisher → solution** (default): one or more publishers, then their
+  solutions;
+- **Solution only**: one or more solutions;
+- **All entities**: everything in the environment.
+
+**Advanced Find only** is there too. Changes apply right away, and the scope is
+remembered per environment.
+
 ---
 
 ## ✏️ What this tool changes
@@ -282,9 +296,9 @@ from the Code tab.
   library per environment (`drs:saved-requests:v1:<host>`). If a library can't
   be read, it's copied to a backup key instead of being overwritten. Export and
   Import write and read JSON files you pick.
-- **Settings** (logical names, value display, scope, Advanced Find, density,
-  column widths, Production safe mode) — in ToolBox's settings store for this
-  tool.
+- **Settings** (logical names, value display, entity scope, Advanced Find,
+  density, column widths, Production safe mode) — in ToolBox's settings store
+  for this tool.
 - **Exports** (CSV, JSON, Postman, Insomnia, Bruno, OpenAPI) — only to files you
   choose. Credential headers (`Authorization`, cookies) are never saved or
   exported.

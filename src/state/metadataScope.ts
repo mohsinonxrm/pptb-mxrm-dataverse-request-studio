@@ -1,7 +1,7 @@
 // Which tables, columns and relationships the pickers offer (#44), matching
 // FetchXML Studio (its #119) so both tools behave the same.
 //
-// "Advanced Find only" (Settings → Query Scope, off by default) keeps what
+// "Advanced Find only" (in the scope chip, off by default) keeps what
 // Advanced Find shows: `IsValidForAdvancedFind`, "whether the item is shown
 // in Advanced Find" (Microsoft Learn). It isn't a query restriction: items
 // Advanced Find hides query fine, which is what lets DRS build requests

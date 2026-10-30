@@ -1,24 +1,11 @@
-// SettingsDrawer — Fluent v9 OverlayDrawer hosting query-scope + display
-// preferences.
+// SettingsDrawer — Fluent v9 OverlayDrawer hosting display, safety and
+// metadata preferences.
 //
-// Three sections:
-//
-//   1. Query Scope
-//      - Entity Source RadioGroup (publisher-solution / solution-only / all)
-//        gated by AccessSummary (privilege check)
-//      - Publisher multi-pick (TagPicker)         [publisher-solution only]
-//      - Solution multi-pick (TagPicker)          [publisher-solution + solution-only]
-//      - Advanced Find Only Switch
-//
-//   2. Display
-//      - Use Logical Names Switch
-//      - Value Display Mode Dropdown (Formatted / Raw / Both)
-//
-// Publisher / solution pickers live here in the drawer (rather than in the
-// toolbar). Selections are persisted on DisplaySettings so they survive
-// reloads.
+// Sections: Entity scope (a pointer to the header's scope chip, which owns
+// the publisher / solution pickers since #42), Display, Safety, Metadata.
+// Everything is persisted on DisplaySettings so it survives reloads.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   DrawerBody,
   DrawerHeader,
@@ -32,31 +19,15 @@ import {
   Dropdown,
   Option,
   Divider,
-  Radio,
-  RadioGroup,
-  Tooltip,
-  Caption1,
   Spinner,
-  TagPicker,
-  TagPickerControl,
-  TagPickerGroup,
-  TagPickerInput,
-  TagPickerList,
-  TagPickerOption,
-  useTagPickerFilter,
-  Tag,
 } from '@fluentui/react-components';
 import {
   Dismiss24Regular,
   Settings20Regular,
-  Info16Regular,
   ArrowClockwise20Regular,
 } from '@fluentui/react-icons';
-import type { DisplaySettings, ValueDisplayMode, EntityScopeMode } from '../state/displaySettings';
-import type { AccessSummary, Solution } from '../host/pptbClient';
+import type { DisplaySettings, ValueDisplayMode } from '../state/displaySettings';
 import { metadata } from '../host/metadataProvider';
-import { usePublisherFilter } from '../host/usePublisherFilter';
-import { useSolutionFilter } from '../host/useSolutionFilter';
 
 const useStyles = makeStyles({
   drawer: { width: '360px' },
@@ -91,17 +62,6 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground3,
   },
   dropdown: { minWidth: '160px' },
-  radioGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    rowGap: tokens.spacingVerticalXS,
-    marginTop: tokens.spacingVerticalXS,
-  },
-  disabledHint: {
-    fontSize: tokens.fontSizeBase100,
-    color: tokens.colorNeutralForegroundDisabled,
-    fontStyle: 'italic',
-  },
 });
 
 export interface SettingsDrawerProps {
@@ -109,16 +69,9 @@ export interface SettingsDrawerProps {
   settings: DisplaySettings;
   onClose: () => void;
   onSettingsChange: (settings: DisplaySettings) => void;
-  accessSummary?: AccessSummary | null;
 }
 
-export function SettingsDrawer({
-  open,
-  settings,
-  onClose,
-  onSettingsChange,
-  accessSummary,
-}: SettingsDrawerProps) {
+export function SettingsDrawer({ open, settings, onClose, onSettingsChange }: SettingsDrawerProps) {
   const styles = useStyles();
 
   const handleLogicalNamesChange = useCallback(
@@ -142,34 +95,6 @@ export function SettingsDrawer({
     [settings, onSettingsChange],
   );
 
-  const handleEntityScopeModeChange = useCallback(
-    (mode: EntityScopeMode) => {
-      onSettingsChange({ ...settings, entityScopeMode: mode });
-    },
-    [settings, onSettingsChange],
-  );
-
-  const handleAdvancedFindOnlyChange = useCallback(
-    (checked: boolean) => {
-      onSettingsChange({ ...settings, advancedFindOnly: checked });
-    },
-    [settings, onSettingsChange],
-  );
-
-  const handlePublisherIdsChange = useCallback(
-    (ids: string[]) => {
-      onSettingsChange({ ...settings, selectedPublisherIds: ids });
-    },
-    [settings, onSettingsChange],
-  );
-
-  const handleSolutionIdsChange = useCallback(
-    (ids: string[]) => {
-      onSettingsChange({ ...settings, selectedSolutionIds: ids });
-    },
-    [settings, onSettingsChange],
-  );
-
   // Refresh metadata — drops every cache entry and re-fetches the
   // currently-loaded tables in place. Used when entity/attribute/relationship
   // definitions change in the environment mid-session (the cache TTL is 1h).
@@ -184,12 +109,6 @@ export function SettingsDrawer({
       setRefreshing(false);
     }
   }, []);
-
-  // Privilege gating — when AccessSummary hasn't loaded yet we allow all
-  // options (deferred validation).
-  const canUsePublisherSolution = !accessSummary || accessSummary.fullFilterMode;
-  const canUseSolutionOnly =
-    !accessSummary || accessSummary.fullFilterMode || accessSummary.solutionsOnlyMode;
 
   return (
     <OverlayDrawer
@@ -217,98 +136,12 @@ export function SettingsDrawer({
         </DrawerHeaderTitle>
       </DrawerHeader>
       <DrawerBody>
-        {/* ── Section: Query Scope ─────────────────────────────── */}
+        {/* ── Section: Entity scope (#42) ───────────────────────── */}
         <div className={styles.section}>
-          <Text className={styles.sectionTitle}>Query Scope</Text>
-
-          <div className={styles.settingItem}>
-            <Text className={styles.settingLabel}>
-              Entity Source
-              <Tooltip
-                content="Controls how the entity list is populated in the toolbar. Scoped modes are faster; 'All Entities' loads every entity in the environment."
-                relationship="description"
-              >
-                <Info16Regular style={{ color: tokens.colorNeutralForeground3 }} />
-              </Tooltip>
-            </Text>
-            <Text className={styles.settingDescription} block>
-              How to scope the entity picker
-            </Text>
-            <RadioGroup
-              className={styles.radioGroup}
-              value={settings.entityScopeMode}
-              onChange={(_e, data) => handleEntityScopeModeChange(data.value as EntityScopeMode)}
-            >
-              <Tooltip
-                content={
-                  !canUsePublisherSolution ? 'Requires prvReadPublisher + prvReadSolution' : ''
-                }
-                relationship="description"
-                positioning="before"
-              >
-                <Radio
-                  value="publisher-solution"
-                  label="Publisher → Solution (default)"
-                  disabled={!canUsePublisherSolution}
-                />
-              </Tooltip>
-              <Tooltip
-                content={!canUseSolutionOnly ? 'Requires prvReadSolution' : ''}
-                relationship="description"
-                positioning="before"
-              >
-                <Radio value="solution-only" label="Solution only" disabled={!canUseSolutionOnly} />
-              </Tooltip>
-              <Radio value="all" label="All Entities" />
-            </RadioGroup>
-          </div>
-
-          {/* Publisher + Solution pickers — only meaningful in scoped modes. */}
-          {settings.entityScopeMode === 'publisher-solution' && (
-            <PublisherSolutionPickers
-              selectedPublisherIds={settings.selectedPublisherIds}
-              selectedSolutionIds={settings.selectedSolutionIds}
-              onPublisherIdsChange={handlePublisherIdsChange}
-              onSolutionIdsChange={handleSolutionIdsChange}
-            />
-          )}
-          {settings.entityScopeMode === 'solution-only' && (
-            <SolutionOnlyPicker
-              selectedSolutionIds={settings.selectedSolutionIds}
-              onSolutionIdsChange={handleSolutionIdsChange}
-            />
-          )}
-
-          <Divider style={{ marginBottom: tokens.spacingVerticalM }} />
-
-          <div className={styles.settingItem}>
-            <div className={styles.settingRow}>
-              <div>
-                <Text className={styles.settingLabel}>
-                  Advanced Find Only
-                  <Tooltip
-                    content="When on, the table, column and relationship pickers offer only what Advanced Find shows (IsValidForAdvancedFind). It doesn't restrict requests: a column already in a request keeps working, and Image and File columns are always offered."
-                    relationship="description"
-                  >
-                    <Info16Regular style={{ color: tokens.colorNeutralForeground3 }} />
-                  </Tooltip>
-                </Text>
-                <Text className={styles.settingDescription} block>
-                  Limit the pickers to tables, columns and relationships Advanced Find shows
-                </Text>
-                {!settings.advancedFindOnly && (
-                  <Text className={styles.disabledHint} block>
-                    Off: the pickers offer every table, column and relationship.
-                  </Text>
-                )}
-              </div>
-              <Switch
-                aria-label="Advanced Find Only"
-                checked={settings.advancedFindOnly}
-                onChange={(_e, data) => handleAdvancedFindOnlyChange(data.checked)}
-              />
-            </div>
-          </div>
+          <Text className={styles.sectionTitle}>Entity scope</Text>
+          <Text className={styles.settingDescription} block>
+            Set the entity scope from the scope button.
+          </Text>
         </div>
 
         <Divider />
@@ -415,271 +248,5 @@ export function SettingsDrawer({
         </div>
       </DrawerBody>
     </OverlayDrawer>
-  );
-}
-
-// ───────────────────────────────────────────────────────────────────────
-// Publisher → Solution cascade picker (entityScopeMode === 'publisher-solution')
-// ───────────────────────────────────────────────────────────────────────
-function PublisherSolutionPickers({
-  selectedPublisherIds,
-  selectedSolutionIds,
-  onPublisherIdsChange,
-  onSolutionIdsChange,
-}: {
-  selectedPublisherIds: string[];
-  selectedSolutionIds: string[];
-  onPublisherIdsChange: (ids: string[]) => void;
-  onSolutionIdsChange: (ids: string[]) => void;
-}) {
-  // The hook owns its own internal selection state. We sync settings →
-  // hook on mount and hook → settings on any user change below.
-  const filter = usePublisherFilter();
-  const { publishers, publishersLoading, publishersError, solutions, updateSelectedPublishers } =
-    filter;
-
-  // Sync persisted selections into the hook on mount + when settings change.
-  useEffect(() => {
-    updateSelectedPublishers(selectedPublisherIds);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPublisherIds.join('|')]);
-
-  const publisherById = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const p of publishers) m.set(p.publisherid, p.friendlyname || p.uniquename);
-    return m;
-  }, [publishers]);
-  const solutionLabels = useSolutionLabels(solutions);
-
-  return (
-    <>
-      <div style={{ marginTop: tokens.spacingVerticalM, marginBottom: tokens.spacingVerticalM }}>
-        <Text style={{ fontWeight: tokens.fontWeightSemibold, display: 'block', marginBottom: 4 }}>
-          Publisher
-        </Text>
-        <Caption1
-          style={{ color: tokens.colorNeutralForeground3, display: 'block', marginBottom: 6 }}
-        >
-          Pick one or more publishers — only their solutions appear below.
-        </Caption1>
-        {publishersLoading && (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '4px 0' }}>
-            <Spinner size="extra-small" />
-            <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-              Loading publishers…
-            </Caption1>
-          </div>
-        )}
-        {publishersError && (
-          <Caption1 style={{ color: tokens.colorPaletteRedForeground1 }}>
-            {publishersError}
-          </Caption1>
-        )}
-        <MultiPicker
-          values={selectedPublisherIds}
-          options={publishers.map((p) => p.publisherid)}
-          labelByKey={publisherById}
-          placeholder="Search publishers…"
-          onChange={onPublisherIdsChange}
-        />
-      </div>
-
-      <div style={{ marginBottom: tokens.spacingVerticalM }}>
-        <Text style={{ fontWeight: tokens.fontWeightSemibold, display: 'block', marginBottom: 4 }}>
-          Solution
-        </Text>
-        <Caption1
-          style={{ color: tokens.colorNeutralForeground3, display: 'block', marginBottom: 6 }}
-        >
-          {selectedPublisherIds.length === 0
-            ? 'Pick a publisher first to populate this list.'
-            : `${solutions.length} solution${solutions.length === 1 ? '' : 's'} from the selected publisher${selectedPublisherIds.length === 1 ? '' : 's'}.`}
-        </Caption1>
-        <MultiPicker
-          values={selectedSolutionIds}
-          options={solutions.map((s) => s.solutionid)}
-          {...solutionLabels}
-          placeholder="Search solutions…"
-          onChange={onSolutionIdsChange}
-          disabled={selectedPublisherIds.length === 0}
-        />
-      </div>
-    </>
-  );
-}
-
-// ───────────────────────────────────────────────────────────────────────
-// Solution-only picker (entityScopeMode === 'solution-only')
-// ───────────────────────────────────────────────────────────────────────
-function SolutionOnlyPicker({
-  selectedSolutionIds,
-  onSolutionIdsChange,
-}: {
-  selectedSolutionIds: string[];
-  onSolutionIdsChange: (ids: string[]) => void;
-}) {
-  const { solutions, solutionsLoading, solutionsError } = useSolutionFilter();
-  const solutionLabels = useSolutionLabels(solutions);
-
-  return (
-    <div style={{ marginTop: tokens.spacingVerticalM, marginBottom: tokens.spacingVerticalM }}>
-      <Text style={{ fontWeight: tokens.fontWeightSemibold, display: 'block', marginBottom: 4 }}>
-        Solution
-      </Text>
-      <Caption1
-        style={{ color: tokens.colorNeutralForeground3, display: 'block', marginBottom: 6 }}
-      >
-        Pick one or more solutions to scope the entity list to their components.
-      </Caption1>
-      {solutionsLoading && (
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '4px 0' }}>
-          <Spinner size="extra-small" />
-          <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>Loading solutions…</Caption1>
-        </div>
-      )}
-      {solutionsError && (
-        <Caption1 style={{ color: tokens.colorPaletteRedForeground1 }}>{solutionsError}</Caption1>
-      )}
-      <MultiPicker
-        values={selectedSolutionIds}
-        options={solutions.map((s) => s.solutionid)}
-        {...solutionLabels}
-        placeholder="Search solutions…"
-        onChange={onSolutionIdsChange}
-      />
-    </div>
-  );
-}
-
-// ───────────────────────────────────────────────────────────────────────
-// Solution labels (#40)
-// ───────────────────────────────────────────────────────────────────────
-// Display names alone are ambiguous — a patch shares its parent's friendly
-// name. Options get a secondary line with the unique name, version and
-// managed state (all already selected by the solution queries), selected
-// tags carry the version, and search matches the unique name too.
-
-function useSolutionLabels(solutions: Solution[]): {
-  labelByKey: Map<string, string>;
-  detailByKey: Map<string, string>;
-  tagLabelByKey: Map<string, string>;
-} {
-  return useMemo(() => {
-    const labelByKey = new Map<string, string>();
-    const detailByKey = new Map<string, string>();
-    const tagLabelByKey = new Map<string, string>();
-    for (const s of solutions) {
-      const label = s.friendlyname || s.uniquename;
-      // `version` only — `solutionpackageversion` is the package format
-      // version (e.g. "9.2"), not the solution's own version.
-      const version = s.version || undefined;
-      const managed = s.ismanaged === undefined ? undefined : s.ismanaged ? 'Managed' : 'Unmanaged';
-      labelByKey.set(s.solutionid, label);
-      detailByKey.set(
-        s.solutionid,
-        [s.uniquename, version && `v${version}`, managed].filter(Boolean).join(' · '),
-      );
-      tagLabelByKey.set(s.solutionid, version ? `${label} (v${version})` : label);
-    }
-    return { labelByKey, detailByKey, tagLabelByKey };
-  }, [solutions]);
-}
-
-// ───────────────────────────────────────────────────────────────────────
-// Reusable Fluent v9 TagPicker (filterable multi-select over string keys)
-// ───────────────────────────────────────────────────────────────────────
-function MultiPicker({
-  values,
-  options,
-  labelByKey,
-  detailByKey,
-  tagLabelByKey,
-  placeholder,
-  disabled,
-  onChange,
-}: {
-  values: string[];
-  options: string[];
-  labelByKey: Map<string, string>;
-  /** Optional secondary line under each option; also searchable. */
-  detailByKey?: Map<string, string>;
-  /** Optional label for selected tags (defaults to `labelByKey`). */
-  tagLabelByKey?: Map<string, string>;
-  placeholder?: string;
-  disabled?: boolean;
-  onChange: (next: string[]) => void;
-}) {
-  const [query, setQuery] = useState('');
-
-  const children = useTagPickerFilter({
-    query,
-    options,
-    noOptionsElement: <TagPickerOption value="__no-matches">No matches</TagPickerOption>,
-    renderOption: (key) => (
-      <TagPickerOption key={key} value={key} text={labelByKey.get(key) ?? key}>
-        {detailByKey?.get(key) ? (
-          // Detail as a true second line under the name. Fluent's
-          // `secondaryContent` renders a squeezed right-hand column instead.
-          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <span>{labelByKey.get(key) ?? key}</span>
-            <Caption1 style={{ color: tokens.colorNeutralForeground3, wordBreak: 'break-all' }}>
-              {detailByKey.get(key)}
-            </Caption1>
-          </div>
-        ) : (
-          (labelByKey.get(key) ?? key)
-        )}
-      </TagPickerOption>
-    ),
-    filter: (key) => {
-      if (values.includes(key)) return false;
-      const q = query.toLowerCase();
-      const label = labelByKey.get(key) ?? key;
-      const detail = detailByKey?.get(key) ?? '';
-      return label.toLowerCase().includes(q) || detail.toLowerCase().includes(q);
-    },
-  });
-
-  return (
-    <TagPicker
-      disabled={disabled}
-      selectedOptions={values}
-      onOptionSelect={(_e, data) => {
-        if (data.value === '__no-matches') return;
-        onChange(data.selectedOptions);
-        setQuery('');
-      }}
-    >
-      <TagPickerControl style={{ minWidth: 0 }}>
-        <TagPickerGroup aria-label="Selected">
-          {values.map((k) => (
-            <Tag
-              key={k}
-              value={k}
-              shape="rounded"
-              size="small"
-              dismissible
-              dismissIcon={{ 'aria-label': 'remove' }}
-              title={detailByKey?.get(k)}
-              // Long names + version must not overflow the picker.
-              style={{ maxWidth: '100%' }}
-              primaryText={{
-                style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-              }}
-            >
-              {tagLabelByKey?.get(k) ?? labelByKey.get(k) ?? k}
-            </Tag>
-          ))}
-        </TagPickerGroup>
-        <TagPickerInput
-          aria-label="Pick option"
-          placeholder={values.length === 0 ? placeholder : ''}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          disabled={disabled}
-        />
-      </TagPickerControl>
-      <TagPickerList>{children}</TagPickerList>
-    </TagPicker>
   );
 }
