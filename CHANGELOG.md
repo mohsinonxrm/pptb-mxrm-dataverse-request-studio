@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0-beta.1] - 2026-10-30
+
+The first 1.5.0 beta. Writes now ask before they're sent, naming the
+environment, and Production gets a safe mode that's on by default ([#241]).
+Read and execute requests send their headers, and impersonation is never
+dropped silently ([#109]). The entity scope moves from Settings to a button in
+the header ([#42]). Ids, names and filter values are checked and typed before
+they go into a URL ([#221]). There are also accessibility, metadata-cache and
+copy fixes, and 272 new tests for the write path.
+
+Still a **prerelease** on the npm `beta` tag, with the gold Insider icon.
+Power Platform ToolBox **1.2.7 or later** is recommended: older hosts can't
+send request headers, so a request with an impersonation header isn't sent
+on them.
+
 ### ✨ Added
 
 - **The entity scope is a button in the header** ([#42]), after the request
