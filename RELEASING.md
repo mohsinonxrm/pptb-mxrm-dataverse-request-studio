@@ -40,6 +40,26 @@ For example, with 1.4 stable, 1.5 in beta and 1.6 in development: `main` is 1.4.
   can't wait.
 - Give the PR the milestone of the release that ships it, and an assignee.
 
+## Dependency updates
+
+`.github/dependabot.yml` is the same policy as FetchXML Studio's and Command Bar Studio's:
+
+- Every Monday, Dependabot opens PRs into `dev` for npm packages and GitHub Actions.
+- A new version is proposed only once it has been **published for 14 days** (cooldown).
+- Minor and patch updates are grouped: Fluent UI, Monaco, `@pptb/*`, dnd-kit, build
+  tooling, and all Actions. A **major arrives as its own PR**, so it's upgraded
+  deliberately.
+- Majors of React 18 and of `eslint` / `@eslint/js` are ignored.
+  - React 18 is intentional, as in the other studios.
+  - eslint 10 waits for `eslint-plugin-jsx-a11y`, which peer-requires eslint 9 or lower.
+- **Security updates** come from the repository's Dependabot security updates setting and
+  skip the cooldown.
+
+Dependabot PRs follow *Every PR*, except that they don't need a CHANGELOG entry. When an
+update changes the shipped bundle for a reason users care about (a security fix in a
+runtime dependency), add one under *Security* in the release-prep PR. Delete the branch
+after merging or closing; the repository doesn't delete head branches automatically.
+
 ## Where a fix goes
 
 **Fix on the oldest supported branch that has the bug, then merge forward:**
