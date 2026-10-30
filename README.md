@@ -231,8 +231,9 @@ modes have their own HTTP / fetch / C# / PPTB outputs.
 ### Installation
 
 Dataverse Request Studio is available as a tool in Power Platform ToolBox.
-Install it from the tool gallery or load it as a custom tool. Prereleases are
-published to npm under the `beta` tag (for example `1.4.0-beta.1`) and use the
+Install it from the tool gallery or load it as a custom tool. Stable releases
+are published to npm under the `latest` tag. Prereleases of the next version
+are published under the `beta` tag (for example `1.5.0-beta.1`) and use the
 gold Insider icon.
 
 ---
