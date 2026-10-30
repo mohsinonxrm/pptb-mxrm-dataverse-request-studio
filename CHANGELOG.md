@@ -278,6 +278,110 @@ on them.
 [#337]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/337
 [#241]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/241
 
+## [1.4.0] - 2026-10-30
+
+The first stable release since 1.1.4, and the biggest so far. The work planned
+for v1.2.0, v1.3.0 and v1.4.0 ships together, so there are no 1.2.x or 1.3.x
+releases. It was iterated through `1.4.0-beta.1` to `1.4.0-beta.3` (detailed
+below), and each beta was verified end to end in Power Platform ToolBox
+against live Dataverse environments.
+
+Request headers and page sizes on Execute need **Power Platform ToolBox 1.2.7
+or later**. On older versions DRS keeps working and explains what can't be
+sent.
+
+### ✨ Added
+
+- **Four new modes:** Bulk Write (`CreateMultiple` / `UpdateMultiple` /
+  `UpsertMultiple`), Bulk Delete Job, `$batch` (change sets with `$n`
+  references) and ExecuteMultiple ([#8], [#10], [#9], [#11]).
+- **Request headers through ToolBox 1.2.7+:** the Headers pane, `Prefer`
+  (page size, annotations) and `If-Match` are sent on Execute, and the write,
+  Execute Action and Execute Workflow modes send impersonation and bypass
+  headers, after a one-time approval in ToolBox ([#43], [#23], [#266]).
+- **A reworked results grid:** paging that honours your page size, Retrieve all
+  that pauses every 50,000 rows, CSV / JSON export and Copy as TSV ([#12],
+  [#219], [#223]).
+- **A portable saved-request library:** export / import, other connections'
+  libraries, and requests that never overwrite or silently lose each other.
+- **Smaller additions:** an OpenAPI 3 document in the Code tab, Recent runs that
+  restore a request, Predefined Query over a row's related records, and Execute
+  Workflow's declared input arguments ([#28], [#2], [#5], [#4]).
+
+### 🔄 Changed
+
+- **Update sends `If-Match: *` by default** on ToolBox 1.2.7+, so an Update of a
+  record that doesn't exist fails instead of creating it.
+- **Execute Custom API / Custom Action list every operation by type**, and each
+  mode keeps its unsaved request when you switch modes.
+- **In-app dialogs** replace the browser's native confirm / alert boxes, and
+  errors show the real status.
+- **Faster startup:** Monaco and the less-used modes load on demand.
+
+### 🛡️ Security and data safety
+
+- **Credential headers are never sent, saved or exported** ([#217]).
+- **CSV export and Copy as TSV neutralise spreadsheet formulas** ([#239]).
+- **The Monaco editor bundles DOMPurify 3.4.17**, and CI and the release
+  workflow check it.
+- **Writes can't create records by accident:** Update and single-valued
+  Associate / Disassociate guard against it on every ToolBox version.
+
+### 🐛 Fixed since the last stable release
+
+Dozens of fixes, listed under each beta below. The ones found while testing the
+betas:
+- Manage Image Data and Manage File Data list their columns ([#305]).
+- Malformed ETags are caught before they're sent ([#264]).
+- A startup race that could leave DRS without a connection ([#281]).
+- Execute Workflow can retry a failed workflow list ([#306]).
+
+### ⚠️ Known issues
+
+- **`$batch` continue-on-error:** ToolBox's `$batch` response parser fails when
+  a failed request is followed by more requests. DRS explains it and suggests
+  putting requests that might fail last ([#198]).
+- **Execute modes on very large environments:** ToolBox 1.2.7 and 1.2.8 can't
+  load a `$metadata` document over 16 MB. The fix is merged in ToolBox
+  ([PowerPlatformToolBox/desktop-app#737](https://github.com/PowerPlatformToolBox/desktop-app/pull/737));
+  until a ToolBox release includes it, DRS explains the limit ([#79]).
+- **ToolBox VS Code extension:** Monaco's workers may run on the main thread,
+  so JSON IntelliSense may not work there ([#255]).
+- **Tool icon:** ToolBox draws SVG tool icons as a single-colour mask until
+  [PowerPlatformToolBox/desktop-app#738](https://github.com/PowerPlatformToolBox/desktop-app/pull/738)
+  ships ([#25]).
+- **Sidebar keyboard navigation:** the clause tree has no arrow-key model yet
+  ([#243]).
+- **Binary modes** (file / image / attachment) compose the request and its
+  code, but Execute returns 501 because ToolBox doesn't expose those
+  operations.
+
+[#2]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/2
+[#4]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/4
+[#5]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/5
+[#8]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/8
+[#9]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/9
+[#10]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/10
+[#11]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/11
+[#12]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/12
+[#23]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/23
+[#25]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/25
+[#28]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/28
+[#43]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/43
+[#79]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/79
+[#198]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/198
+[#217]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/217
+[#219]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/219
+[#223]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/223
+[#239]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/239
+[#243]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/243
+[#255]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/255
+[#264]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/264
+[#266]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/266
+[#281]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/281
+[#305]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/305
+[#306]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/306
+
 ## [1.4.0-beta.3] - 2026-10-27
 
 The third 1.4.0 beta fixes what a full regression pass on beta.2 turned up
