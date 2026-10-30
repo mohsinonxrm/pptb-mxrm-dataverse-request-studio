@@ -97,6 +97,7 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
 
 // Default cap = Organization.MaxUploadFileSize default per doc (5 MB).
@@ -248,6 +249,10 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedId(keepId);
     setLastSavedHash(keepHash);
   };
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(
       () => ({
@@ -255,11 +260,10 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: 'manage-attachment' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       }),
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- onSaved / onLoadSaved are new closures each render (setters only); depending on them would re-publish every render
-      [currentSerialized, isDirty, lastSavedId],
+      [currentSerialized, isDirty, lastSavedId, onSavedLatest, onLoadSavedLatest],
     ),
   );
 

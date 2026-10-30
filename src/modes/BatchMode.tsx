@@ -43,6 +43,7 @@ import { ENV } from '../mock/environment';
 import { adv, disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { hashState, type SavedRequest } from '../state/savedRequests';
 import { lastPublishedRequest, usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import {
   API_BASE,
@@ -407,6 +408,10 @@ export function BatchMode({
   };
   // Always published (like Retrieve Multiple) so the Saved library is
   // reachable from an empty batch.
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       return {
@@ -414,11 +419,10 @@ export function BatchMode({
         modeId,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId]),
+    }, [currentSerialized, modeId, isDirty, lastSavedId, onSavedLatest, onLoadSavedLatest]),
   );
 
   // ── Sidebar ──

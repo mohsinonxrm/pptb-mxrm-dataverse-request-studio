@@ -68,6 +68,7 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
 import type { ThemeMode } from '../theme/theme';
 // Live-metadata hook: subscribes to the registry so child editors
 // (SelectEditor, FilterEditor, OrderbyEditor, ExpandEditor, lambdas)
@@ -287,6 +288,10 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // the hook clears on unmount so a stale mode doesn't bleed across
   // mode switches. The setter is stable, so React only re-runs the
   // effect when the value object identity changes — which we want.
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(
       () => ({
@@ -294,11 +299,10 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: 'retrieve-multiple' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       }),
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- onSaved / onLoadSaved are new closures each render; depending on them would re-publish every render
-      [currentSerialized, isDirty, lastSavedId],
+      [currentSerialized, isDirty, lastSavedId, onSavedLatest, onLoadSavedLatest],
     ),
   );
 
@@ -606,7 +610,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
       ...nestingAdvisories,
       ...relatedMetadataAdvisories(related.pending, related.failed),
     ];
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- related.pending / failed are new arrays every render; keyed on their joined contents
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- related.pending / failed are new arrays every render, so keyed on their joined contents; liveTable re-runs it when the table's metadata lands
   }, [
     state.table,
     state.select,
@@ -617,6 +621,11 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     state.top,
     relatedPendingKey,
     relatedFailedKey,
+    // The detectors and validateRequest read the table through findTable().
+    // A saved request loaded before its table's metadata arrives would
+    // otherwise keep the empty result, and no Execute blocker, until the
+    // request changed.
+    liveTable,
   ]);
 
   const blockerReason = disabledReasonFromAdvisories(advisories);

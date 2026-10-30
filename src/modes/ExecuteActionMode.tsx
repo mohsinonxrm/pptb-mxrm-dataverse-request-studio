@@ -55,6 +55,7 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
 
 export type ActionCategory = 'oob' | 'custom-api' | 'custom-action';
@@ -331,6 +332,10 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
     setLastSavedHash(keepHash);
   };
 
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.actionName) return null;
@@ -339,11 +344,17 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
         modeId: 'exec-action' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.actionName]),
+    }, [
+      currentSerialized,
+      isDirty,
+      lastSavedId,
+      state.actionName,
+      onSavedLatest,
+      onLoadSavedLatest,
+    ]),
   );
 
   const sections = [
