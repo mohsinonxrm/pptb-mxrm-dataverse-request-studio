@@ -339,3 +339,67 @@ describe('loaders: failures are not cached', () => {
     expect(client.getSolutionComponents).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('an expired entry being refetched (#334)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T09:00:00Z'));
+  });
+
+  it('callers wait for the refetch instead of getting the expired data', async () => {
+    client.getEntityAttributes.mockResolvedValueOnce([attribute('old')]);
+    await loadEntityAttributes('account');
+    vi.advanceTimersByTime(HOUR + 1);
+    const reply = deferred<AttributeMetadata[]>();
+    client.getEntityAttributes.mockReturnValueOnce(reply.promise);
+    const first = loadEntityAttributes('account');
+    // Mid-refetch: the expired data isn't served as fresh.
+    expect(metadataCache.getEntityAttributes('account_false')).toBeUndefined();
+    const second = loadEntityAttributes('account');
+    reply.resolve([attribute('new')]);
+    expect(await first).toEqual([attribute('new')]);
+    expect(await second).toEqual([attribute('new')]);
+    expect(client.getEntityAttributes).toHaveBeenCalledTimes(2);
+  });
+
+  it('a failed attribute refetch leaves the entry expired, so the next load retries', async () => {
+    client.getEntityAttributes.mockResolvedValueOnce([attribute('old')]);
+    await loadEntityAttributes('account');
+    vi.advanceTimersByTime(HOUR + 1);
+    client.getEntityAttributes.mockRejectedValueOnce(new Error('throttled'));
+    await expect(loadEntityAttributes('account')).rejects.toThrow('throttled');
+    expect(metadataCache.getEntityAttributes('account_false')).toBeUndefined();
+    client.getEntityAttributes.mockResolvedValueOnce([attribute('new')]);
+    expect(await loadEntityAttributes('account')).toEqual([attribute('new')]);
+    expect(client.getEntityAttributes).toHaveBeenCalledTimes(3);
+  });
+
+  it('a failed entity-list refetch leaves the list expired, so the next load retries', async () => {
+    client.getAllEntities.mockResolvedValueOnce([entity('old')]);
+    await loadAllEntities();
+    vi.advanceTimersByTime(HOUR + 1);
+    client.getAllEntities.mockRejectedValueOnce(new Error('offline'));
+    await expect(loadAllEntities()).rejects.toThrow('offline');
+    expect(metadataCache.getAllEntities()).toBeUndefined();
+    client.getAllEntities.mockResolvedValueOnce([entity('new')]);
+    expect(await loadAllEntities()).toEqual([entity('new')]);
+    expect(client.getAllEntities).toHaveBeenCalledTimes(3);
+  });
+
+  it("a fresh entry is served at once while another table's refetch is in flight", async () => {
+    client.getEntityAttributes.mockResolvedValueOnce([attribute('contactid')]);
+    await loadEntityAttributes('contact');
+    vi.advanceTimersByTime(HOUR - 1);
+    client.getEntityAttributes.mockResolvedValueOnce([attribute('accountid')]);
+    await loadEntityAttributes('account');
+    vi.advanceTimersByTime(2);
+    // contact has expired, account hasn't.
+    const reply = deferred<AttributeMetadata[]>();
+    client.getEntityAttributes.mockReturnValueOnce(reply.promise);
+    const contact = loadEntityAttributes('contact');
+    expect(await loadEntityAttributes('account')).toEqual([attribute('accountid')]);
+    reply.resolve([attribute('contactid2')]);
+    expect(await contact).toEqual([attribute('contactid2')]);
+    expect(client.getEntityAttributes).toHaveBeenCalledTimes(3);
+  });
+});
