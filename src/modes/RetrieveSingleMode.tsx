@@ -74,6 +74,7 @@ import { usePublishSaveContext } from '../state/SaveContext';
 import { takeModeHandoff } from '../state/modeHandoff';
 import type { Advisory } from '../primitives/advisories';
 import { isRecordGuid } from '../primitives/guid';
+import { tokens } from '@fluentui/react-components';
 
 const initialState = (): RetrieveSingleState => ({
   table: '',
@@ -392,7 +393,7 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
         label: (
           <span>
             {it.nav}{' '}
-            <span style={{ opacity: 0.55, fontWeight: 400 }}>
+            <span style={{ color: tokens.colorNeutralForeground3, fontWeight: 400 }}>
               → {target?.displayName ?? nav?.targetEntity ?? '?'}
             </span>
           </span>

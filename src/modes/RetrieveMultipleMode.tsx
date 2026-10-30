@@ -82,6 +82,7 @@ import {
   type PageBatch,
   type PagingStatus,
 } from '../views/results/pagedResults';
+import { tokens } from '@fluentui/react-components';
 
 // Empty initial state — the studio is a request *builder*; seeding it with
 // mock data confused users in PPTB ("why are there pre-filled rules against
@@ -708,7 +709,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
         label: (
           <span>
             {it.nav}{' '}
-            <span style={{ opacity: 0.55, fontWeight: 400 }}>
+            <span style={{ color: tokens.colorNeutralForeground3, fontWeight: 400 }}>
               → {target?.displayName ?? nav?.targetEntity ?? '?'}
             </span>
           </span>

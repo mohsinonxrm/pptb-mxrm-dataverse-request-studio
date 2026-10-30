@@ -1,16 +1,18 @@
 import type { FC, ReactNode } from 'react';
 import { Badge, mergeClasses } from '@fluentui/react-components';
-import {
-  ChevronRight20Regular,
-  ChevronDown20Regular,
-  Checkmark16Filled,
-} from '@fluentui/react-icons';
+import { Checkmark16Filled } from '@fluentui/react-icons';
 import { useStudioStyles } from './styles';
 import { groupColorVar } from '../theme/theme';
 import type { RequestGroup } from '../registry/requestTypes';
 
-// Replaces Fluent's TreeItemLayout entirely. Owns:
-// chev / icon / label / aside (badge) / dirty marker / click handler.
+// One clause in the sidebar (#243): a button in a plain list, inside the
+// sidebar's <nav>. Tab moves between clauses, Enter or Space opens one, and
+// the open one has aria-current. Nested clauses ($expand clauses, required
+// parameters, Bulk Write rows) sit in a nested list, so screen readers
+// announce their level.
+// The sidebar used to claim role="tree" without the tree keyboard model,
+// and its chevrons looked collapsible, but nothing ever collapsed.
+// Owns: icon / label / aside (badge) / dirty marker / click handler.
 export interface ClauseTreeItemProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   icon: FC<any>;
@@ -36,10 +38,6 @@ export interface ClauseTreeItemProps {
     | 'subtle'
     | 'severe'
     | 'important';
-  /** Whether this row expands children */
-  expandable?: boolean;
-  expanded?: boolean;
-  onToggle?: () => void;
   /** Click swaps the right pane */
   onSelect?: () => void;
   /** Indent depth (0 default, 1+ for nested children) */
@@ -60,9 +58,6 @@ export function ClauseTreeItem(props: ClauseTreeItemProps) {
     badge,
     badgeAppearance = 'tint',
     badgeColor = 'brand',
-    expandable,
-    expanded,
-    onToggle,
     onSelect,
     depth = 0,
     group = 'read',
@@ -80,9 +75,7 @@ export function ClauseTreeItem(props: ClauseTreeItemProps) {
   return (
     <button
       type="button"
-      role="treeitem"
-      aria-selected={selected || undefined}
-      aria-expanded={expandable ? !!expanded : undefined}
+      aria-current={selected ? 'true' : undefined}
       className={mergeClasses(s.cti, indentClass, selected && s.ctiSelected)}
       onClick={onSelect}
     >
@@ -93,25 +86,8 @@ export function ClauseTreeItem(props: ClauseTreeItemProps) {
           aria-hidden
         />
       )}
-      <span
-        onClick={(e) => {
-          if (expandable && onToggle) {
-            e.stopPropagation();
-            onToggle();
-          }
-        }}
-        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-      >
-        {expandable ? (
-          expanded ? (
-            <ChevronDown20Regular className={s.ctiChev} />
-          ) : (
-            <ChevronRight20Regular className={s.ctiChev} />
-          )
-        ) : (
-          <span style={{ width: 14 }} aria-hidden />
-        )}
-      </span>
+      {/* First grid column, where the chevron used to be; keeps the icons aligned. */}
+      <span aria-hidden />
       <ResolvedIcon
         className={s.ctiIcon}
         style={{ color: selected ? groupColorVar(group) : undefined, opacity: selected ? 1 : 0.85 }}
@@ -119,9 +95,13 @@ export function ClauseTreeItem(props: ClauseTreeItemProps) {
       <span className={mergeClasses(s.ctiLabel, code && s.ctiCodeLabel)}>{label}</span>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifySelf: 'end' }}>
         {dirty && (
-          <span className={s.ctiDirty} aria-label="Modified">
-            •
-          </span>
+          <>
+            <span className={s.ctiDirty} aria-hidden>
+              •
+            </span>
+            {/* A plain span can't carry aria-label, so say it in text. */}
+            <span className={s.srOnly}>(modified)</span>
+          </>
         )}
         {badge !== undefined &&
           badge !== null &&
@@ -135,6 +115,7 @@ export function ClauseTreeItem(props: ClauseTreeItemProps) {
               appearance="tint"
               color="success"
               icon={<Checkmark16Filled />}
+              role="img"
               aria-label="Set"
             />
           ) : (
@@ -156,16 +137,18 @@ export function ClauseTreeItem(props: ClauseTreeItemProps) {
   );
 }
 
+/** A list of clauses: a sidebar section, or the clauses nested under one. */
 export function ClauseTreeList({
   children,
-  ariaLabel,
+  labelledBy,
 }: {
   children: ReactNode;
-  ariaLabel?: string;
+  /** Id of the section heading that names the list. */
+  labelledBy?: string;
 }) {
   const s = useStudioStyles();
   return (
-    <ul role="tree" aria-label={ariaLabel} className={s.ctiList}>
+    <ul aria-labelledby={labelledBy} className={s.ctiList}>
       {children}
     </ul>
   );

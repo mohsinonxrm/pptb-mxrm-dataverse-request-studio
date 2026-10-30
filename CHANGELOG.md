@@ -59,6 +59,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🐛 Fixed
 
+- **The sidebar works with a screen reader and the keyboard** ([#243]). It
+  announced itself as a tree, but arrow keys did nothing, nested clauses
+  were read as top-level ones, and every parent said "expanded" although
+  nothing collapses. It's now a "Request clauses" navigation landmark:
+  - each section is a list named by its heading, and nested clauses (an
+    `$expand` relationship's clauses, required parameters, Bulk Write rows)
+    are nested lists, so their level is read;
+  - Tab moves between clauses, Enter or Space opens one, and the open one
+    is marked as current;
+  - the chevrons, which looked collapsible but weren't, are gone;
+  - the "modified" marker and the ✓ badge are read out;
+  - keyboard focus shows a ring inside the sidebar;
+  - the table name after an expanded relationship (`primarycontactid →
+    Contact`) has enough contrast to read.
 - **Small labels are readable again** ([#330]). Badges such as "req",
   "null", "File", "max 32 MB", "soon", "lookup" and the Results count used
   Fluent's extra-small size, a 10px dot, so their text spilled out or was

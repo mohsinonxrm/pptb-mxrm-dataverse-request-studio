@@ -155,6 +155,13 @@ export const useStudioStyles = makeStyles({
     ':hover': {
       backgroundColor: tokens.colorNeutralBackground1Hover,
     },
+    // Inset, so the sidebar's scroll box doesn't clip it (#243).
+    ':focus-visible': {
+      outlineWidth: '2px',
+      outlineStyle: 'solid',
+      outlineColor: tokens.colorStrokeFocus2,
+      outlineOffset: '-2px',
+    },
   },
   ctiSelected: {
     backgroundColor: tokens.colorBrandBackground2,
@@ -190,11 +197,17 @@ export const useStudioStyles = makeStyles({
     whiteSpace: 'nowrap',
     flexShrink: 0,
   },
-  ctiChev: {
-    width: '14px',
-    height: '14px',
-    color: tokens.colorNeutralForeground3,
-    flexShrink: 0,
+  // Text for screen readers only.
+  srOnly: {
+    position: 'absolute',
+    width: '1px',
+    height: '1px',
+    margin: '-1px',
+    padding: 0,
+    overflow: 'hidden',
+    clip: 'rect(0 0 0 0)',
+    whiteSpace: 'nowrap',
+    border: 0,
   },
   ctiIcon: {
     width: '16px',
