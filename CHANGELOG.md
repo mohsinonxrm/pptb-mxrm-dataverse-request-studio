@@ -78,6 +78,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Fluent's extra-small size, a 10px dot, so their text spilled out or was
   cut off. They now use the small size, as the sidebar badges do since
   [#200].
+- **Expired metadata is refetched, not served as fresh** ([#334]). The table
+  list, and the columns of a table not yet loaded this session, are cached
+  for an hour. When that hour is up and they're fetched again, other pickers
+  now wait for the fetch instead of getting the old data, and a failed fetch
+  is retried on the next use instead of the old data counting as fresh for
+  another hour.
 - **Choosing a file no longer reads it into memory** ([#222]). Manage File,
   Image and Attachment Data keep the file's name, size and type only: Execute
   can't send binary content from inside ToolBox, and the Code tab uses a
@@ -155,6 +161,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     drafts, the metadata cache and provider, and the ToolBox bridge's events.
 
 [#330]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/330
+[#334]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/334
 [#235]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/235
 [#248]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/248
 [#222]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/222
