@@ -134,7 +134,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   collections, cURL / fetch / XHR / C# / PowerShell code and the HTTP-action
   URIs write `%20`. The URL bar still shows spaces.
 
+### 🔧 Internal
+
+- **Tests for the write path** ([#235]): 272 new tests, 804 in all.
+  - A parity test checks, mode by mode, that Execute sends exactly what the
+    Code tab shows: method, URL, body and headers, apart from the documented
+    differences (headers the host builds, the reads' allow-list and page
+    size).
+  - The write executors' refusals: PUT of one column, alternate-key Upsert,
+    single-property Delete, unsafe ids, and impersonation on an older
+    ToolBox.
+  - Modules that had no tests: date and time values, the bypass headers,
+    workflow arguments, request validation, the query advisories, mode
+    drafts, the metadata cache and provider, and the ToolBox bridge's events.
+
 [#330]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/330
+[#235]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/235
 [#248]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/248
 [#222]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/222
 [#44]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/44
