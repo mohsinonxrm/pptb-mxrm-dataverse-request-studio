@@ -13,7 +13,13 @@
 // loaders short-circuit on cache hit.
 
 import * as loader from './dataverseMetadata';
-import { __registerLiveTable, __clearLiveTables, findTable, getLiveTables } from '../mock/metadata';
+import {
+  __registerLiveTable,
+  __clearLiveTables,
+  __unregisterLiveTable,
+  findTable,
+  getLiveTables,
+} from '../mock/metadata';
 import type {
   TableMeta,
   ColumnMeta,
@@ -418,7 +424,10 @@ async function buildTable(logical: string): Promise<TableMeta | undefined> {
   const existing = buildInFlight.get(flightKey);
   if (existing) return existing;
 
-  const promise = (async () => {
+  // Assigned before the build's first await, so the build can tell whether
+  // it's still the current one when it lands (#335).
+  let promise!: Promise<TableMeta | undefined>;
+  promise = (async () => {
     try {
       // Basic load: 3 HTTP requests per entity, period.
       //   1. Entity metadata (PrimaryIdAttribute, EntitySetName, …)
@@ -520,8 +529,15 @@ async function buildTable(logical: string): Promise<TableMeta | undefined> {
       // Publish into the synchronous registry — this is what makes the
       // ~22 editors that call `findTable(logical)` synchronously see the
       // live data (after a re-render triggered by mode-level
-      // `useLiveTable`).
-      __registerLiveTable(built, org);
+      // `useLiveTable`). Not when the table was invalidated while this
+      // build ran (its slot is gone): its responses may predate whatever
+      // prompted that, so it mustn't put the old table back, and what it
+      // cached on the way is dropped too (#335).
+      if (buildInFlight.get(flightKey) === promise) {
+        __registerLiveTable(built, org);
+      } else if (org === activeOrg()) {
+        metadataCache.clearEntity(logical);
+      }
       return built;
     } catch (e) {
       console.error(`[metadataProvider] getTable('${logical}') failed:`, e);
@@ -557,6 +573,10 @@ export const metadata: MetadataProvider = {
   invalidateTable(logical: string): void {
     metadataCache.clearEntity(logical);
     buildInFlight.delete(`${activeOrg()}|${logical}`);
+    // `getTable` reads the registry first, so drop the table there too, or
+    // the next read would return the old one (#335). Listeners refetch, as
+    // after `invalidateAll`.
+    __unregisterLiveTable(logical);
   },
 
   invalidateAll(): void {
