@@ -352,7 +352,7 @@ beforeEach(() => {
   host.calls.length = 0;
 });
 
-async function run<T>(exec: () => Promise<{ ok: boolean; status: number; body?: unknown }>) {
+async function run(exec: () => Promise<{ ok: boolean; status: number; body?: unknown }>) {
   const res = await exec();
   expect(res.ok, JSON.stringify(res.body)).toBe(true);
 }

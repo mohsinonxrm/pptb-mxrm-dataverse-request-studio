@@ -295,6 +295,9 @@ export function ResultsGrid({
   const filtering = isFiltering(debouncedQuery, debouncedFilters);
 
   // ── Container ResizeObserver ──
+  // Keyed on the empty state: the grid's container / header nodes only
+  // exist once there are rows, so re-attach when that flips.
+  const noRows = allRows.length === 0;
   useEffect(() => {
     const node = containerRef.current;
     if (!node) return;
@@ -306,7 +309,7 @@ export function ResultsGrid({
     });
     obs.observe(node);
     return () => obs.disconnect();
-  }, [allRows.length === 0]);
+  }, [noRows]);
 
   // ── Header ResizeObserver ──
   useEffect(() => {
@@ -315,7 +318,7 @@ export function ResultsGrid({
     const obs = new ResizeObserver(() => setHeaderHeight(node.offsetHeight));
     obs.observe(node);
     return () => obs.disconnect();
-  }, [allRows.length === 0]);
+  }, [noRows]);
 
   // ── Clear selection when results change ──
   useEffect(() => {

@@ -32,7 +32,6 @@ import {
   ArrowUpload20Filled,
   ArrowDownload20Filled,
   Delete20Filled,
-  Warning20Filled,
 } from '@fluentui/react-icons';
 import {
   RadioGroup,
@@ -163,7 +162,9 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
   const [loading, setLoading] = useState(false);
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildManageImage(state), [state, liveTable]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const pipeline = useMemo(() => manageImagePipeline(state), [state, liveTable]);
   const tbl = findTable(state.table);
   const imageCol = useMemo(

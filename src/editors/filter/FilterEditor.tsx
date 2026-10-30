@@ -977,15 +977,6 @@ function RuleRow({
       ),
     [table, advancedFindOnly, rule.col],
   );
-  // Symmetric inverse filter: when the user has picked a typed operator (e.g.
-  // `contains`, which is String/Memo only), the column dropdown is narrowed to
-  // columns whose AttributeType is in op.allowedTypes. `eq`/`ne` and null-check
-  // allow every type so the picker shows the full list.
-  const columnsForCurrentOp = useMemo(() => {
-    const allowed = op?.allowedTypes;
-    if (!allowed) return visibleColumns;
-    return visibleColumns.filter((c) => allowed.includes(c.attributeType));
-  }, [visibleColumns, op]);
   // Operators valid for plain rule rows: comparison, string, null-check
   const validOps = useMemo(() => {
     if (!col) return OPERATORS.filter((o) => ['comparison', 'string'].includes(o.category));

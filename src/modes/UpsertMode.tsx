@@ -137,7 +137,9 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildUpsert(state), [state, liveTable]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const body = useMemo(() => buildUpsertBody(state), [state, liveTable]);
   const tbl = findTable(state.table);
 
@@ -416,14 +418,6 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
   );
 
   const returnRep = state.prefer.returnRepresentation;
-  const concurrencyBadge =
-    state.concurrency.kind === 'update-only'
-      ? 'If-Match: *'
-      : state.concurrency.kind === 'etag'
-        ? 'If-Match: etag'
-        : state.concurrency.kind === 'create-only'
-          ? 'If-None-Match: *'
-          : 'no precondition';
   const keyBadge = state.key.kind === 'guid' ? 'GUID' : 'alt key';
 
   const sections = [

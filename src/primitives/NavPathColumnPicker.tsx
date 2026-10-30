@@ -238,40 +238,6 @@ function navWalk(
 }
 
 /**
- * Resolves an externally-committed value (the path that went on the wire).
- * Convention: the LAST segment is the leaf column; everything before is
- * a sequence of N:1 nav segments. So we navWalk all but the last, then
- * look up the leaf on the deepest entity.
- */
-function resolveExternalPath(
-  rootTable: string,
-  path: string,
-): {
-  tables: TableMeta[];
-  current: TableMeta | undefined;
-  leaf?: ColumnMeta;
-  pendingTarget?: string;
-} {
-  if (!path) {
-    const root = findTable(rootTable);
-    return { tables: root ? [root] : [], current: root };
-  }
-  const segs = path.split('/');
-  const navSegs = segs.slice(0, -1);
-  const leafSeg = segs[segs.length - 1];
-  const walked = navWalk(rootTable, navSegs);
-  if (!walked.current) {
-    return {
-      tables: walked.tables,
-      current: undefined,
-      pendingTarget: walked.pendingTarget,
-    };
-  }
-  const leaf = walked.current.columns.find((c) => c.logicalName === leafSeg);
-  return { tables: walked.tables, current: walked.current, leaf };
-}
-
-/**
  * Display label for a path segment, given the parent entity it sits on
  * and the desired naming mode.
  */
@@ -417,8 +383,8 @@ export function NavPathColumnPicker({
   };
 
   // ── Trigger label ──
-  // External `value` follows the "navs… + leaf" convention. Resolve via
-  // resolveExternalPath so every segment is labeled in the right scope.
+  // External `value` follows the "navs… + leaf" convention. Resolve each
+  // segment in its own table's scope so every segment is labeled right.
   const triggerLabel = useMemo(() => {
     if (!value) return placeholder;
     const segs = value.split('/');

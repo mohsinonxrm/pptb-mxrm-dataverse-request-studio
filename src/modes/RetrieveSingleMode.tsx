@@ -224,6 +224,8 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   // RetrieveSingle's gates are tight — a missing or malformed recordId is
   // the only common error class. Surfacing it via the URL bar drawer keeps
   // the failure mode consistent with the bigger modes (no silent disable).
+  const relatedPendingKey = related.pending.join(',');
+  const relatedFailedKey = related.failed.join(',');
   const advisories: Advisory[] = useMemo(() => {
     const out: Advisory[] = [];
     if (state.table && !state.recordId) {
@@ -249,13 +251,7 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
     out.push(...relatedMetadataAdvisories(related.pending, related.failed));
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    state.table,
-    state.recordId,
-    tbl?.displayName,
-    related.pending.join(','),
-    related.failed.join(','),
-  ]);
+  }, [state.table, state.recordId, tbl?.displayName, relatedPendingKey, relatedFailedKey]);
 
   // ── Execute ───────────────────────────────────────────────────────
   const onExecute = async () => {

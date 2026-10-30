@@ -15,7 +15,6 @@ import {
   Combobox,
   Option,
   Tooltip,
-  Button,
   tokens,
   Textarea,
   Persona,
@@ -38,7 +37,7 @@ import {
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { DatePicker } from '@fluentui/react-datepicker-compat';
 import { TimePicker } from '@fluentui/react-timepicker-compat';
-import { Add20Regular, Delete20Regular, Database20Regular } from '@fluentui/react-icons';
+import { Add20Regular, Database20Regular } from '@fluentui/react-icons';
 import type { OperatorDef } from './operators';
 import {
   columnOptions,
@@ -1112,6 +1111,7 @@ function ChoiceTagPicker({
   onChange: (v: string[]) => void;
   placeholder?: string;
 }) {
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- columnOptions() is a new array for Boolean / option-less columns; these small memos just recompute then
   const options = columnOptions(col) ?? [];
   const [query, setQuery] = useState('');
 

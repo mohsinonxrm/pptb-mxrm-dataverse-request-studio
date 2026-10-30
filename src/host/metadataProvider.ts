@@ -427,6 +427,7 @@ async function buildTable(logical: string): Promise<TableMeta | undefined> {
   // Assigned before the build's first await, so the build can tell whether
   // it's still the current one when it lands (#335).
   let promise!: Promise<TableMeta | undefined>;
+  // eslint-disable-next-line prefer-const -- as `const`, reading it inside its own initializer is TS2454
   promise = (async () => {
     try {
       // Basic load: 3 HTTP requests per entity, period.

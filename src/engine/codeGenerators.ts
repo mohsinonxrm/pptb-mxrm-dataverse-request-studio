@@ -502,7 +502,7 @@ function genFetchMulti(i: CodegenInputs): string {
 // Each association / disassociation is its own HTTP call per the docs:
 //   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/associate-disassociate-entities-using-web-api
 //
-// For more than a handful of targets, prefer a \$batch request — sending
+// For more than a handful of targets, prefer a $batch request — sending
 // many small requests in sequence is slower and not transactional.
 
 (async () => {
@@ -555,7 +555,7 @@ console.log('Next page:', page.value);
   // endpoints directly; the documented path is Xrm.WebApi.online.execute() with
   // a request descriptor OR fall back to fetch. We surface the fetch loop.
   if (i.multiRequests && i.multiRequests.length > 1) {
-    return `// Xrm.WebApi doesn't expose Associate / Disassociate \$ref endpoints
+    return `// Xrm.WebApi doesn't expose Associate / Disassociate $ref endpoints
 // directly — the documented path is Xrm.WebApi.online.execute() with a
 // request descriptor, or fall back to a fetch loop. We emit the fetch loop:
 
@@ -683,7 +683,7 @@ ${xrmFunctionMembers(i, fn, '    ')}
   // No Xrm.WebApi helper; fall through to a fetch loop. Documented in the
   // multi-request comment block.
   if (isRef) {
-    return `// Xrm.WebApi has no direct support for \$ref endpoints (Associate /
+    return `// Xrm.WebApi has no direct support for $ref endpoints (Associate /
 // Disassociate). Use the documented Xrm.WebApi.online.execute() pattern
 // with a CreateAssociation / DisassociateRecords descriptor, OR fall back
 // to a fetch loop — see the fetch tab for the multi-request version.
@@ -2015,13 +2015,17 @@ Console.WriteLine(json);
  * end the literal or change its meaning (#244).
  */
 function csharpString(s: string): string {
-  return s
-    .replace(/\\/g, '\\\\')
-    .replace(/"/g, '\\"')
-    .replace(/\r/g, '\\r')
-    .replace(/\n/g, '\\n')
-    .replace(/\t/g, '\\t')
-    .replace(/[\u0000-\u001f]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
+  return (
+    s
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/\r/g, '\\r')
+      .replace(/\n/g, '\\n')
+      .replace(/\t/g, '\\t')
+      // Other control characters, as \uXXXX like JSON.
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u001f]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`)
+  );
 }
 
 /** Escape a JSON string for inclusion inside a C# verbatim string literal (@"…"). */

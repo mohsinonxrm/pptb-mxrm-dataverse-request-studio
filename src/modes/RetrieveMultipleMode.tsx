@@ -296,8 +296,8 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
         lastSavedId,
         onSaved,
         onLoadSaved,
-        // eslint-disable-next-line react-hooks/exhaustive-deps
       }),
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- onSaved / onLoadSaved are new closures each render; depending on them would re-publish every render
       [currentSerialized, isDirty, lastSavedId],
     ),
   );
@@ -487,6 +487,8 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // ── Advisories — query antipatterns + stripped wildcards ────────────
   // Detection runs on every render (cheap — pure tree walks); the
   // AdvisoryDrawer + URL-bar consume the result.
+  const relatedPendingKey = related.pending.join(',');
+  const relatedFailedKey = related.failed.join(',');
   const advisories = useMemo(() => {
     // When $apply is on, the top-level $filter is silently ignored by Dataverse
     // and the active filter is the apply.prefilter (filter() stage). Feed the
@@ -604,6 +606,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
       ...nestingAdvisories,
       ...relatedMetadataAdvisories(related.pending, related.failed),
     ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- related.pending / failed are new arrays every render; keyed on their joined contents
   }, [
     state.table,
     state.select,
@@ -612,8 +615,8 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     state.expand,
     state.apply,
     state.top,
-    related.pending.join(','),
-    related.failed.join(','),
+    relatedPendingKey,
+    relatedFailedKey,
   ]);
 
   const blockerReason = disabledReasonFromAdvisories(advisories);

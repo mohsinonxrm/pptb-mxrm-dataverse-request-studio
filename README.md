@@ -228,7 +228,9 @@ modes have their own HTTP / fetch / C# / PPTB outputs.
   later** (the tool declares `minAPI: 1.2.0`). **1.2.7 or later** is
   recommended: it sends request headers (impersonation, preconditions,
   bypass) and the page size, and is required for
-  the `$batch` and ExecuteMultiple modes.
+  the `$batch` and ExecuteMultiple modes. DRS detects what the host can do
+  at runtime, so `minAPI` stays at 1.2.0 rather than locking out older
+  hosts (#273).
 - A connection to a Dataverse environment
 - For local development: **Node.js 22.22.2+, 24.15+ or 26+** and **npm** (see
   `engines` in `package.json`)
@@ -323,8 +325,8 @@ npm run preview
 # Validate manifest against PPTB registry rules
 npm run validate
 
-# Pre-publish: validate → build
-npm run finalize-package
+# Lint (ESLint, no warnings allowed)
+npm run lint
 ```
 
 ### Standalone vs PPTB-embedded

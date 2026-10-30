@@ -398,6 +398,7 @@ function GuidPicker({
     if (selectedId === lastEmittedRef.current) return;
     lastEmittedRef.current = selectedId;
     setRaw(selectedId ?? '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setRaw is a new function each render; sync only when the parent's selectedId changes
   }, [selectedId]);
 
   const normalized = useMemo(() => parseGuid(raw), [raw]);

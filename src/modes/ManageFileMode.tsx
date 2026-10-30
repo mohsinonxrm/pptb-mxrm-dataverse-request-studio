@@ -17,7 +17,6 @@
 //   files-images-overview · file-column-data · attachment-annotation-files · getfilesasurl
 
 import { useMemo, useState } from 'react';
-import { Warning20Filled } from '@fluentui/react-icons';
 import {
   Table20Regular,
   Table20Filled,
@@ -41,7 +40,6 @@ import {
   RadioGroup,
   Radio,
   Caption1,
-  Badge,
   tokens,
   mergeClasses,
   SpinButton,
@@ -136,7 +134,9 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
   const [loading, setLoading] = useState(false);
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildManageFile(state), [state, liveTable]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const pipeline = useMemo(() => manageFilePipeline(state), [state, liveTable]);
   const tbl = findTable(state.table);
   const fileCol = useMemo(

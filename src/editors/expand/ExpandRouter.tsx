@@ -85,7 +85,7 @@ export function ExpandRouter({
   const walked: Walk = (() => {
     let entity = rootEntity;
     let siblings = rootExpand;
-    let breadcrumb: { label: string; path: string }[] = [
+    const breadcrumb: { label: string; path: string }[] = [
       { label: findTable(rootEntity)?.displayName ?? rootEntity, path: 'expand' },
     ];
     // The cardinality of the most-recently-stepped-into expand. When we

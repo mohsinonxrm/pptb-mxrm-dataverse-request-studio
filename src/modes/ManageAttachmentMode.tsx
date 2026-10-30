@@ -257,8 +257,8 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
         lastSavedId,
         onSaved,
         onLoadSaved,
-        // eslint-disable-next-line react-hooks/exhaustive-deps
       }),
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- onSaved / onLoadSaved are new closures each render (setters only); depending on them would re-publish every render
       [currentSerialized, isDirty, lastSavedId],
     ),
   );

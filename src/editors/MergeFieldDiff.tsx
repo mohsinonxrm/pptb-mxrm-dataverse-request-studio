@@ -50,7 +50,6 @@ import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from './PaneHead';
 import {
   findTable,
-  findColumn,
   columnOptions,
   isLookupLike,
   isCompanionLogicalReadOnly,

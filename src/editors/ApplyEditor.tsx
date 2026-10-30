@@ -195,20 +195,6 @@ export function ApplyEditor({
       (c.isValidForRead !== false && isColumnInScope(c, advancedFindOnly)),
     [advancedFindOnly, usedCols],
   );
-  const groupableCols = useMemo(
-    () =>
-      tbl
-        ? tbl.columns.filter(
-            (c) =>
-              offered(c) &&
-              c.attributeType !== 'DateTime' &&
-              c.attributeType !== 'Memo' &&
-              c.attributeType !== 'File' &&
-              c.attributeType !== 'Image',
-          )
-        : [],
-    [tbl, offered],
-  );
 
   // Per-function eligibility — derive once per render. The picker for each
   // aggregate row reads `colsFor(a.fn)` to scope choices.
@@ -222,6 +208,21 @@ export function ApplyEditor({
   const numericCols = useMemo(
     () => (tbl ? tbl.columns.filter((c) => offered(c) && isNumeric(c)) : []),
     [tbl, offered],
+  );
+
+  // ── Pipeline preview — built from the encoder so the user sees the
+  //    actual wire format and not a hand-pretty-printed version. These two
+  //    hooks run before the `!tbl` return below: called after it, a table
+  //    arriving after the first render changed the hook count, which React
+  //    throws on (found by react-hooks/rules-of-hooks, #273). ──
+  const pipelinePreview = useMemo(() => applyToOData(spec, tbl) || '(empty)', [spec, tbl]);
+
+  // Stable ids for the aggregate row DnD. Legacy persisted aggregates may
+  // lack an `id` — fall back to a positional-but-stable token. Memo keyed
+  // on the spec.aggregates length+content so we don't churn ids each render.
+  const aggIds = useMemo(
+    () => spec.aggregates.map((a, i) => a.id ?? `__agg_${i}__`),
+    [spec.aggregates],
   );
 
   if (!tbl) return null;
@@ -270,18 +271,6 @@ export function ApplyEditor({
     setSpec({ ...spec, aggregates: spec.aggregates.map((a, j) => (j === i ? { ...a, ...p } : a)) });
   const rmAgg = (i: number) =>
     setSpec({ ...spec, aggregates: spec.aggregates.filter((_, j) => j !== i) });
-
-  // ── Pipeline preview — built from the encoder so the user sees the
-  //    actual wire format and not a hand-pretty-printed version. ──
-  const pipelinePreview = useMemo(() => applyToOData(spec, tbl) || '(empty)', [spec, tbl]);
-
-  // Stable ids for the aggregate row DnD. Legacy persisted aggregates may
-  // lack an `id` — fall back to a positional-but-stable token. Memo keyed
-  // on the spec.aggregates length+content so we don't churn ids each render.
-  const aggIds = useMemo(
-    () => spec.aggregates.map((a, i) => a.id ?? `__agg_${i}__`),
-    [spec.aggregates],
-  );
 
   // ── Render ──
   return (

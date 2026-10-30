@@ -133,7 +133,9 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
   // unknown — warn, but don't treat it as "empty" and block Execute (#57).
   const [currentLookupError, setCurrentLookupError] = useState<string | null>(null);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildDisassociate(state), [state, liveTable]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const requests = useMemo(() => buildDisassociateRequests(state), [state, liveTable]);
   const tbl = findTable(state.table);
   const nav = state.navProperty
