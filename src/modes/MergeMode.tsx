@@ -25,7 +25,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Table20Regular,
   Table20Filled,
   PersonAccounts20Regular,
   PersonAccounts20Filled,
@@ -196,9 +195,11 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
   const pendingLookupTargets = subLookupTargets.filter((t) => !findTable(t));
   const failedPending = pendingLookupTargets.filter((t) => failedLookupTargets.includes(t));
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildMerge(state), [state, liveTable]);
   // Keyed on the pending targets too, so the body rebuilds once they load.
   const pendingKey = pendingLookupTargets.join('|');
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable / pendingKey rebuild the body once the table and lookup targets' metadata land
   const body = useMemo(() => buildMergeBody(state), [state, liveTable, pendingKey]);
 
   // ── Live row fetches ──

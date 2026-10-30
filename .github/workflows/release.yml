@@ -71,6 +71,10 @@ jobs:
       - run: npm run build
       - name: Check the bundled DOMPurify
         run: node .github/scripts/check-dompurify.mjs
+      - name: Check package contents
+        run: |
+          npm pack --dry-run --json --silent > "$RUNNER_TEMP/pack.json"
+          node .github/scripts/check-pack.mjs "$RUNNER_TEMP/pack.json"
       - name: Publish to npm
         env:
           DIST_TAG: ${{ steps.channel.outputs.dist_tag }}

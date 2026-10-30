@@ -171,7 +171,9 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
       ? pickerPick.name
       : '';
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildUpdate(state), [state, liveTable]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const body = useMemo(() => buildUpdateBody(state), [state, liveTable]);
   const tbl = findTable(state.table);
 

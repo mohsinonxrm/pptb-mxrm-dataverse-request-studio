@@ -186,6 +186,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   directly. Those tests went from about 415 ms to about 20 ms each, so
   they no longer time out when several test runs share the machine. One
   test still loads the module afresh to check the startup wiring.
+- **ESLint and a package check in CI** ([#273]), as in FetchXML Studio and
+  Command Bar Studio:
+  - `npm run lint` runs ESLint (recommended JS / TypeScript rules, React
+    hooks, jsx-a11y) with no warnings allowed, in CI. It also stops direct
+    `navigator.clipboard` use (#242). Fixing its findings removed dead code
+    and caught a crash: the `$apply` editor called two hooks after an early
+    return, so React threw when a table's metadata arrived after the
+    editor first rendered.
+  - CI and the release workflow check what `npm pack` would publish: the
+    files ToolBox needs, no sources or source maps, and a size budget.
+  - `npm run finalize-package` is gone; CI and the release workflow cover
+    it. `minAPI` stays at 1.2.0: DRS detects what the host can do at
+    runtime.
 - **Tests for the write path** ([#235]): 272 new tests, 804 in all.
   - A parity test checks, mode by mode, that Execute sends exactly what the
     Code tab shows: method, URL, body and headers, apart from the documented
@@ -203,6 +216,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#317]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/317
 [#334]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/334
 [#235]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/235
+[#273]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/273
 [#319]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/319
 [#318]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/318
 [#248]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/248

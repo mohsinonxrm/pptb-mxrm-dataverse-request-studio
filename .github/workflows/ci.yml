@@ -25,6 +25,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run lint
       - run: npm run format:check
       - run: npm test
       - run: npm run build
@@ -38,4 +39,9 @@ jobs:
       # Monaco ships its own DOMPurify; vite.config.ts swaps in the npm one.
       - name: Check the bundled DOMPurify
         run: node .github/scripts/check-dompurify.mjs
+      # What would be published: required files present, nothing dev-only, size budget (#273).
+      - name: Check package contents
+        run: |
+          npm pack --dry-run --json --silent > "$RUNNER_TEMP/pack.json"
+          node .github/scripts/check-pack.mjs "$RUNNER_TEMP/pack.json"
       - run: npm run validate

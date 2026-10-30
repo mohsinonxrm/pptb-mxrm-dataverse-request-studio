@@ -153,11 +153,6 @@ const KNOWN_QUERY_OPTIONS = new Set([
   '$apply',
 ]);
 
-/** Every Dataverse query function defined in the operator registry. */
-const KNOWN_DV_FUNCTIONS = new Set(
-  OPERATORS.filter((o) => o.kind.startsWith('dv-fn-')).map((o) => o.id),
-);
-
 /** Aggregate functions DRS's ApplyEditor can model. `countdistinct` is
  *  valid OData but not modeled by DRS — pasted requests using it must be
  *  rewritten manually. */
@@ -913,7 +908,7 @@ function tokenize(input: string): Tok[] {
       continue;
     }
     // Classify number vs ident — pure number/decimal/scientific.
-    if (/^-?\d[\d.eE+\-]*$/.test(s)) {
+    if (/^-?\d[\d.eE+-]*$/.test(s)) {
       out.push({ kind: 'number', value: s });
     } else {
       out.push({ kind: 'ident', value: s });

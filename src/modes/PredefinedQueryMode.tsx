@@ -274,6 +274,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   // Related-collection target (#5): the source table's entity set is part of
   // the URL, so its metadata landing must rebuild it too.
   const { table: liveSource } = useLiveTable(state.related?.sourceTable || null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable / liveSource rebuild the URL once the table and related source metadata land (#5, #78)
   const built = useMemo(() => buildPredefinedQuery(state), [state, liveTable, liveSource]);
   const tbl = findTable(state.table);
   const selectedQuery = queries.find((q) => q.id === state.queryId) ?? null;

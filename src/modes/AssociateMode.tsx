@@ -119,8 +119,11 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
   // the WriteResultCard success narrative.
   const [sourceName, setSourceName] = useState<string>('');
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildAssociate(state), [state, liveTable]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const body = useMemo(() => buildAssociateBody(state), [state, liveTable]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const requests = useMemo(() => buildAssociateRequests(state), [state, liveTable]);
 
   const tbl = findTable(state.table);

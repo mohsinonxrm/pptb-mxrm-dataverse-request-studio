@@ -42,6 +42,8 @@ const file = (fileName: string, uploadMethod: ManageFileState['uploadMethod']) =
 
 /** What a browser would do with the step's headers. */
 const sendable = (headers: Record<string, string> = {}) =>
+  // Latin-1 only, as fetch / XHR require of a header value.
+  // eslint-disable-next-line no-control-regex
   Object.values(headers).every((v) => /^[\x00-\xff]*$/.test(v));
 
 describe('isHeaderSafeFileName', () => {

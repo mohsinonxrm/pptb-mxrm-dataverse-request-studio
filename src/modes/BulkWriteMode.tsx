@@ -144,7 +144,9 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
 
   const tbl = findTable(state.table);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildBulkWrite(state), [state, liveTable]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const { body, issues } = useMemo(() => buildBulkWriteBody(state), [state, liveTable]);
   const info = OPERATION_INFO[state.operation];
 

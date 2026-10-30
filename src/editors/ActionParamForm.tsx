@@ -16,7 +16,7 @@
 //
 // Reference: https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/use-web-api-actions
 
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import {
   Input,
   SpinButton,
@@ -28,13 +28,6 @@ import {
   Caption1,
   Badge,
   Tag,
-  TagPicker,
-  TagPickerControl,
-  TagPickerGroup,
-  TagPickerInput,
-  TagPickerList,
-  TagPickerOption,
-  useTagPickerFilter,
   MessageBar,
   MessageBarBody,
   tokens,
@@ -54,7 +47,6 @@ import {
   Settings20Filled,
   Document20Regular,
   FormNew20Regular,
-  FormNew20Filled,
   Code20Regular,
   Open20Regular,
   Link20Regular,
@@ -492,7 +484,7 @@ function ParamInput(props: Parameters<typeof ParamInputBody>[0]) {
 }
 
 function ParamInputBody({
-  action,
+  action: _action,
   param,
   value,
   onChange,

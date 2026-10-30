@@ -89,7 +89,6 @@ import {
   type MoneyColumnMeta,
   type DecimalColumnMeta,
   type DoubleColumnMeta,
-  type BigIntColumnMeta,
   type BooleanColumnMeta,
   type LookupColumnMeta,
   type CustomerColumnMeta,
@@ -1515,6 +1514,7 @@ function MultiChoiceTagPicker({
   value: number[] | undefined;
   onChange: (v: number[]) => void;
 }) {
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- columnOptions() is a new array for Boolean / option-less columns; these small memos just recompute then
   const options = columnOptions(col) ?? [];
   const [query, setQuery] = useState('');
   const selected = (value ?? []).map(String);

@@ -28,7 +28,6 @@ export interface ClauseTreeItemProps {
   /** Right-aligned badge (count or sub) */
   badge?: ReactNode;
   badgeAppearance?: 'tint' | 'ghost' | 'filled' | 'outline';
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   badgeColor?:
     | 'brand'
     | 'danger'

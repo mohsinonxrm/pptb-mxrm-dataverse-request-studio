@@ -1,6 +1,5 @@
 import { useStudioStyles } from './styles';
 import { methodColorVar } from '../theme/theme';
-import { tokens } from '@fluentui/react-components';
 import type { HttpMethod } from '../registry/requestTypes';
 
 export function MethodPill({
