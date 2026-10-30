@@ -677,24 +677,30 @@ export interface EntityKeyMetadata {
  * Used for alternate-key columns that the basic (IsValidForAdvancedFind)
  * attribute load leaves out (#64). Attributes that fail to load are omitted.
  */
+/** What `getAttributeTypes` returns per column: enough for `attributeTypeOf` (#318). */
+export type AttributeTypeRow = Pick<
+  AttributeMetadata,
+  'LogicalName' | 'AttributeType' | 'AttributeTypeName'
+>;
+
 export async function getAttributeTypes(
   logicalName: string,
   attributeNames: string[],
-): Promise<{ LogicalName: string; AttributeType: string }[]> {
+): Promise<AttributeTypeRow[]> {
   if (!isDataverseAvailable()) throw new Error('PPTB Dataverse API not available');
   const results = await Promise.all(
     attributeNames.map(async (a) => {
       try {
-        return await throttledMetadataQuery<{ LogicalName: string; AttributeType: string }>(
+        return await throttledMetadataQuery<AttributeTypeRow>(
           `EntityDefinitions(LogicalName='${logicalName}')/Attributes(LogicalName='${a}')` +
-            `?$select=LogicalName,AttributeType`,
+            `?$select=LogicalName,AttributeType,AttributeTypeName`,
         );
       } catch {
         return null;
       }
     }),
   );
-  return results.filter((r): r is { LogicalName: string; AttributeType: string } => !!r);
+  return results.filter((r): r is AttributeTypeRow => !!r);
 }
 
 export async function getEntityKeys(logicalName: string): Promise<EntityKeyMetadata[]> {
