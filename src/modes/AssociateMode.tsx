@@ -44,7 +44,7 @@ import { notify } from '../shell/dialogs';
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from '../editors/PaneHead';
 import { NavPropertyPicker } from '../editors/NavPropertyPicker';
-import { AssociateTargetsEditor } from '../editors/AssociateTargetsEditor';
+import { AssociateTargetsEditor, targetsTitle } from '../editors/AssociateTargetsEditor';
 import { TargetEditor } from '../editors/TargetEditor';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
@@ -300,7 +300,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
           id: 'targets',
           icon: PersonAccounts20Regular,
           iconFilled: PersonAccounts20Filled,
-          label: singleValued ? 'Target record' : 'Target records',
+          label: targetsTitle(singleValued, state.targets.length),
           badge: state.targets.length || null,
           badgeAppearance: 'tint' as const,
           badgeColor: state.targets.length > 0 ? ('success' as const) : ('subtle' as const),

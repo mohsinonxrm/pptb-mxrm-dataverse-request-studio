@@ -31,6 +31,7 @@ import { PaneHead } from './PaneHead';
 import { type CsdlAction } from '../mock/actionsCsdl';
 import type { MessagePublisher } from '../host/messagePublishers';
 import { findTable } from '../mock/metadata';
+import { returnKindLabel } from './ResponsePropertiesCard';
 import {
   actions as actionsProvider,
   isCsdlSizeLimitError,
@@ -78,8 +79,8 @@ export function ActionPicker({
   const [opInput, setOpInput] = useState<string>('');
 
   // Live CSDL load — actionsProvider routes to dvHost.metadata.getCSDLDocument()
-  // in PPTB (cached for the session) and falls back to the mock catalog in
-  // standalone. We load once on mount; the provider's internal cache makes
+  // in PPTB (cached for the session); standalone there's no catalog and the
+  // load fails (#317). We load once on mount; the provider's internal cache makes
   // repeat mounts free. The CSDL XML is 1-5 MB → first load may take 1-2s.
   const [loaded, setLoaded] = useState<CsdlAction[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -626,7 +627,7 @@ function ActionSummaryCard({ action }: { action: CsdlAction }) {
               fontFamily: tokens.fontFamilyBase,
             }}
           >
-            ({action.returnType.kind})
+            ({returnKindLabel(action.returnType)})
           </Caption1>
         </span>
         <span style={{ color: tokens.colorNeutralForeground3 }}>Source</span>

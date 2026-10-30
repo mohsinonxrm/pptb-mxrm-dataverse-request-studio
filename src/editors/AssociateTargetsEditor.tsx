@@ -41,6 +41,11 @@ import { findTable, type NavProperty } from '../mock/metadata';
 import { RecordPicker } from '../primitives/RecordPicker';
 import type { RequestGroup } from '../registry/requestTypes';
 
+/** The pane title: singular for a single-valued relationship or one queued target (#317). */
+export function targetsTitle(singleValued: boolean, count: number): string {
+  return singleValued || count === 1 ? 'Target record' : 'Target records';
+}
+
 export interface AssociateTargetsEditorProps {
   /** Source table — used to look up the nav prop metadata. */
   table: string;
@@ -105,7 +110,7 @@ export function AssociateTargetsEditor({
       <div>
         <PaneHead
           icon={Link20Filled}
-          title="Target records"
+          title={targetsTitle(false, targets.length)}
           sub="Pick a navigation property first."
           group={group}
         />
@@ -144,7 +149,7 @@ export function AssociateTargetsEditor({
     <div>
       <PaneHead
         icon={Link20Filled}
-        title={singleValued ? 'Target record' : 'Target records'}
+        title={targetsTitle(singleValued, targets.length)}
         sub={
           <span>
             {sub ??

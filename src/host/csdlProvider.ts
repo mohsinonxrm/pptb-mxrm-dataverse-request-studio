@@ -8,7 +8,9 @@
 //   typed inputs (Edm.Int32 → SpinButton, EntityReference → record picker,
 //   OptionSetValue → Combobox, etc).
 //
-//   In standalone mode we ship a curated mock in `src/mock/actionsCsdl.ts`.
+//   `src/mock/actionsCsdl.ts` holds only the types; there's no sample
+//   catalog. Standalone, the load fails and the pickers say so, so no
+//   operation (or its response card) shows outside PPTB (#317).
 //   In PPTB the source of truth is the live `$metadata` EDMX document —
 //   accessible via `dvHost.metadata.getCSDLDocument()` (typed as
 //   `getCSDLDocument(): Promise<string>` per @pptb/types).
@@ -30,8 +32,9 @@
 //      name-prefix heuristic only as a fallback (see `classifySource`)
 //
 // Things we intentionally DON'T parse here:
-//   ❌ EntityType / ComplexType / EnumType — those come from the regular
-//      metadata endpoints (richer per-attribute info than the CSDL exposes)
+//   ❌ EntityType — tables come from the regular metadata endpoints (richer
+//      per-attribute info than the CSDL exposes). ComplexType and EnumType
+//      ARE parsed (first pass), for parameter and response shapes.
 //   ❌ NavigationProperty — same reason; relationships have their own typed
 //      metadata endpoint with cascade configuration
 

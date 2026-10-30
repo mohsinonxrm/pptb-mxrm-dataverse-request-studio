@@ -84,6 +84,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now wait for the fetch instead of getting the old data, and a failed fetch
   is retried on the next use instead of the old data counting as fresh for
   another hour.
+- **Text follow-ups** ([#317]):
+  - Associate and Disassociate say "Target record" when one target is
+    picked or the relationship takes only one, in the pane and the sidebar,
+    and "Target records" otherwise.
+  - An action or function that returns `Collection(<type>)` lists one item's
+    properties when the type is known, and a Custom API response with a
+    publisher prefix (`msdyn_ActivateProcessesResponse`) lists its
+    properties and is labelled complex, instead of being described as an
+    entity. On a Dynamics org that's several hundred operations.
 - **Choosing a file no longer reads it into memory** ([#222]). Manage File,
   Image and Attachment Data keep the file's name, size and type only: Execute
   can't send binary content from inside ToolBox, and the Code tab uses a
@@ -171,6 +180,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     drafts, the metadata cache and provider, and the ToolBox bridge's events.
 
 [#330]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/330
+[#317]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/317
 [#334]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/334
 [#235]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/235
 [#248]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/248
