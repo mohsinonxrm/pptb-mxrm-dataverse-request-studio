@@ -82,6 +82,7 @@ import type { ThemeMode } from '../theme/theme';
 import { useLiveTable, useWarmReferencedTables } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
 import { pageSizeIsSent } from '../host/pptbBridge';
+import { serviceProtectionLimit } from '../engine/serviceProtection';
 import { topLevelRowCount } from '../views/results/flattenExpansions';
 import {
   mergePage,
@@ -342,6 +343,9 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   const [pageError, setPageError] = useState<string | null>(null);
   // Why the last Retrieve all paused with pages left (#223).
   const [pagingNotice, setPagingNotice] = useState<string | null>(null);
+  // Retrieve all paused on throttling (#269): scrolling mustn't page on its
+  // own until Continue, a new run, or Retrieve all asks again.
+  const [throttledPause, setThrottledPause] = useState(false);
   // Rows in the current result, and the run's Recent runs entry, so paging
   // keeps that entry's row count in step with the grid (#211).
   const rowCountRef = useRef(0);
@@ -352,6 +356,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     setIsLoadingMore(false);
     setPageError(null);
     setPagingNotice(null);
+    setThrottledPause(false);
     rowCountRef.current = 0;
     runRecentIdRef.current = null;
     return runIdRef.current;
@@ -465,6 +470,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     setIsLoadingMore(true);
     setPageError(null);
     setPagingNotice(null);
+    setThrottledPause(false);
     return (): PagingStatus =>
       runIdRef.current !== run
         ? 'superseded'
@@ -485,7 +491,12 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
       );
       if (status() !== 'current') return;
       if (!more.ok) {
-        setPageError(`Couldn't load the next page: ${describePageError(more)}`);
+        const throttled = serviceProtectionLimit(more);
+        setPageError(
+          throttled
+            ? `Couldn't load the next page: Dataverse is throttling requests (${throttled.limit}). ${throttled.advice}`
+            : `Couldn't load the next page: ${describePageError(more)}`,
+        );
         return;
       }
       commitPages(pageOf(more));
@@ -508,7 +519,17 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
         commit: commitPages,
         status,
       });
-      if (outcome.kind === 'failed') {
+      const throttled = outcome.kind === 'failed' ? serviceProtectionLimit(outcome.error) : null;
+      if (throttled) {
+        // Throttling passes (#269): a pause with Continue, from the page
+        // that was refused, rather than an error. Rows so far are kept.
+        setThrottledPause(true);
+        setPagingNotice(
+          `Retrieve all paused: Dataverse is throttling requests (${throttled.limit}). ` +
+            `${rowCountRef.current.toLocaleString()} rows are loaded. ${throttled.advice} ` +
+            'Continue picks up from the next page.',
+        );
+      } else if (outcome.kind === 'failed') {
         setPageError(`Retrieve all stopped at a failed page: ${describePageError(outcome.error)}`);
       } else if (outcome.kind === 'paused') {
         setPagingNotice(
@@ -1133,8 +1154,9 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
             orderby={state.orderby}
             requestUrl={runUrl}
             isLoadingMore={isLoadingMore}
+            loading={loading}
             onRefresh={onExecute}
-            onLoadMore={pageError ? undefined : fetchOneMorePage}
+            onLoadMore={pageError || throttledPause ? undefined : fetchOneMorePage}
             onRetrieveAll={retrieveAllPages}
             onStopLoadingMore={stopLoadingMore}
             loadMoreError={pageError}
