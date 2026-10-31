@@ -20,6 +20,7 @@ export type CodeFormat =
   | 'xhr'
   | 'powerautomate'
   | 'csharp'
+  | 'python'
   | 'powershell'
   | 'curl'
   | 'json'
@@ -32,6 +33,7 @@ export const FORMAT_LABELS: Record<CodeFormat, string> = {
   xhr: 'XMLHttpRequest',
   powerautomate: 'Power Automate',
   csharp: 'C#',
+  python: 'Python',
   powershell: 'PowerShell',
   curl: 'cURL',
   json: 'JSON',
@@ -47,6 +49,7 @@ export const FORMAT_LANG: Record<CodeFormat, string> = {
   // into the Dataverse "List rows" / "Get a row by ID" action — not JSON.
   powerautomate: 'plaintext',
   csharp: 'csharp',
+  python: 'python',
   powershell: 'powershell',
   curl: 'shell',
   json: 'json',
@@ -163,6 +166,8 @@ export function generateCode(fmt: CodeFormat, i: CodegenInputs): string {
       return genPowerAutomate(i);
     case 'csharp':
       return genCsharp(i);
+    case 'python':
+      return genPython(i);
     case 'powershell':
       return genPowershell(i);
     case 'curl':
@@ -2049,6 +2054,169 @@ function methodCsharp(m: string): string {
     default:
       return 'Get';
   }
+}
+
+// ────────────────────────────────────────────────────────────
+// Python — requests
+// ────────────────────────────────────────────────────────────
+function genPython(i: CodegenInputs): string {
+  if (i.multiRequests && i.multiRequests.length > 1) return genPythonMulti(i);
+  const url = fullUrl(i);
+  const hasBody = !isBodyless(i.method);
+  const headerLines = pyDictLines(stripAuth(i.headers), '    ');
+  const bodyDecl = !hasBody
+    ? ''
+    : i.rawBody
+      ? `# ${pyComment(i.rawBody)}: the file content.\nwith open("<path-to-file>", "rb") as f:\n    file_bytes = f.read()\n\n`
+      : `payload = ${formatPyValue(i.body ?? {}, '')}\n\n`;
+  const bodyArg = !hasBody ? '' : i.rawBody ? ',\n    data=file_bytes' : ',\n    json=payload';
+  return `# Dataverse Web API — Python (requests)
+# pip install requests. Replace <access-token> with a bearer token for
+# https://${ENV.host} (msal or azure-identity can get one).
+
+import requests
+
+ACCESS_TOKEN = "<access-token>"
+
+url = ${pyStr(url)}
+headers = {
+    "Authorization": "Bearer " + ACCESS_TOKEN,
+${headerLines}}
+
+${bodyDecl}res = requests.request(
+    ${pyStr(i.method)},
+    url,
+    headers=headers${bodyArg},
+    timeout=60,
+)
+
+if not res.ok:
+    try:
+        message = res.json()["error"]["message"]
+    except (ValueError, KeyError, TypeError):
+        message = res.reason
+    raise SystemExit(f"Dataverse {res.status_code}: {message}")
+
+# 204 No Content (e.g. Delete) doesn't carry a body
+if res.status_code == 204 or not res.content:
+    print("Status:", res.status_code)
+elif "json" in res.headers.get("Content-Type", ""):
+    data = res.json()
+    print(data)
+    if isinstance(data, dict) and isinstance(data.get("value"), list):
+        print(f"Returned {len(data['value'])} record(s)")
+        if "@odata.count" in data:
+            print("@odata.count:", data["@odata.count"])
+        if "@odata.nextLink" in data:
+            print("nextLink:", data["@odata.nextLink"])
+elif res.headers.get("Content-Type", "").startswith("text/"):
+    print(res.text)
+else:
+    print(f"{len(res.content)} bytes ({res.headers.get('Content-Type')})")
+`;
+}
+
+/** Multi-request Python — one call per request, sent in order on one Session. */
+function genPythonMulti(i: CodegenInputs): string {
+  const reqs = i.multiRequests ?? [];
+  const headerLines = pyDictLines(stripAuth(i.headers), '    ');
+  const calls = reqs
+    .map((r) => {
+      const fields = [`"method": ${pyStr(r.method)}`, `"url": ${pyStr(multiUrl(r))}`];
+      const own = Object.entries(r.headers ?? {}).filter(([, v]) => v);
+      if (own.length > 0) {
+        fields.push(`"headers": {${own.map(([k, v]) => `${pyStr(k)}: ${pyStr(v)}`).join(', ')}}`);
+      }
+      if (r.rawBody) fields.push(`"data": ${pyStr(r.rawBody)}`);
+      else if (r.body) fields.push(`"json": ${formatPyValue(r.body, '    ')}`);
+      const desc = r.description ? `    # ${pyComment(r.description)}\n` : '';
+      const note = r.rawBody ? '  # replace with the bytes' : '';
+      return `${desc}    {${fields.join(', ')}},${note}`;
+    })
+    .join('\n');
+  return `# Dataverse Web API — Python (requests), multi-request
+# One call per request, sent in order. pip install requests and replace
+# <access-token> with a bearer token for https://${ENV.host}.
+
+import requests
+
+ACCESS_TOKEN = "<access-token>"
+
+calls = [
+${calls}
+]
+
+session = requests.Session()
+session.headers.update({
+    "Authorization": "Bearer " + ACCESS_TOKEN,
+${headerLines}})
+
+ok = 0
+for call in calls:
+    res = session.request(
+        call["method"],
+        call["url"],
+        headers=call.get("headers"),
+        json=call.get("json"),
+        data=call.get("data"),
+        timeout=60,
+    )
+    if res.ok:
+        ok += 1
+    else:
+        print(f"{call['method']} {call['url']} -> {res.status_code} {res.reason}")
+print(f"{ok}/{len(calls)} requests succeeded")
+`;
+}
+
+/**
+ * A double-quoted Python string literal. JSON's escapes (\\ \" \n \r \t \b
+ * \f \uXXXX) mean the same in Python, and JSON.stringify escapes every
+ * control character, so its output is a valid Python literal for any input.
+ */
+export function pyStr(s: string): string {
+  return JSON.stringify(s);
+}
+
+/**
+ * Text safe for a `#` comment: a line break would end it, and Python refuses
+ * source that contains a NUL, so control characters become spaces. A lone
+ * surrogate can't be saved as UTF-8, so it becomes U+FFFD.
+ */
+function pyComment(s: string): string {
+  return (
+    s
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ')
+      .replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, '\ufffd')
+  );
+}
+
+/** `"key": "value",` lines for a dict literal, each ending in a newline. */
+function pyDictLines(headers: Record<string, string>, indent: string): string {
+  return Object.entries(headers)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${indent}${pyStr(k)}: ${pyStr(v)},\n`)
+    .join('');
+}
+
+/** A JSON value as a Python literal: None / True / False, dicts and lists. */
+function formatPyValue(v: unknown, indent: string): string {
+  if (v === null || v === undefined) return 'None';
+  if (typeof v === 'boolean') return v ? 'True' : 'False';
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : 'None';
+  if (typeof v === 'string') return pyStr(v);
+  const next = indent + '    ';
+  if (Array.isArray(v)) {
+    if (v.length === 0) return '[]';
+    return `[\n${v.map((x) => `${next}${formatPyValue(x, next)},`).join('\n')}\n${indent}]`;
+  }
+  if (typeof v === 'object') {
+    const entries = Object.entries(v as Record<string, unknown>).filter(([, x]) => x !== undefined);
+    if (entries.length === 0) return '{}';
+    return `{\n${entries.map(([k, x]) => `${next}${pyStr(k)}: ${formatPyValue(x, next)},`).join('\n')}\n${indent}}`;
+  }
+  return pyStr(String(v));
 }
 
 // ────────────────────────────────────────────────────────────

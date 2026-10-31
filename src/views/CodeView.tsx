@@ -52,6 +52,7 @@ const FORMATS: CodeFormat[] = [
   'xhr',
   'powerautomate',
   'csharp',
+  'python',
   'powershell',
   'curl',
   'json',

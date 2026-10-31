@@ -119,6 +119,7 @@ describe('generateCode — every format', () => {
     'xhr',
     'powerautomate',
     'csharp',
+    'python',
     'powershell',
     'curl',
     'json',

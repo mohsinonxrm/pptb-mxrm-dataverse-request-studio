@@ -23,10 +23,11 @@ React 18, Fluent UI v9, TypeScript, and live Dataverse metadata integration.
 
 DRS ships with **23 request modes** in 7 groups. Every mode is
 metadata-driven and generates the correct OData / Web API shape. The
-single-request modes emit ready-to-copy code in ten formats: `fetch`, `Xrm.WebApi`,
-`Xrm.WebApi.executeMultiple`, `XMLHttpRequest`, Power Automate, C#, PowerShell,
-cURL, JSON, and an OpenAPI 3 document; the `$batch` and ExecuteMultiple
-modes have their own HTTP / fetch / C# / PPTB outputs.
+single-request modes emit ready-to-copy code in eleven formats: `fetch`,
+`Xrm.WebApi`, `Xrm.WebApi.executeMultiple`, `XMLHttpRequest`, Power Automate,
+C#, Python (`requests`), PowerShell, cURL, JSON, and an OpenAPI 3 document.
+`$batch` has its own HTTP / fetch / Python / PPTB outputs, and ExecuteMultiple
+has C# / HTTP / Python / PPTB.
 
 ### 📖 Read group
 
@@ -418,7 +419,7 @@ src/
     executeBuilders.ts       — action / function / workflow body builders
     binaryBuilders.ts        — file / image / attachment pipelines
     codeGenerators.ts        — fetch, Xrm.WebApi (+ executeMultiple), XHR,
-                               Power Automate, C#, PowerShell, cURL, JSON
+                               Power Automate, C#, Python, PowerShell, cURL, JSON
     openApiGenerator.ts      — OpenAPI 3 document for the current request
     collectionFormats.ts, savedToCollection.ts
                              — Postman / Insomnia / Bruno collection export

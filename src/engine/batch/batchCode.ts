@@ -2,6 +2,7 @@
 //
 //   http   — the raw POST /$batch request: outer headers + multipart body
 //   fetch  — JavaScript that posts that body (run with your own token)
+//   python — the same with Python requests
 //   pptb   — the dataverseAPI.executeBatch / executeTransaction calls DRS
 //            makes for this batch, in order (one per change set / run of
 //            independent requests)
@@ -10,11 +11,12 @@ import { API_BASE, type CompiledItem, type DispatchSegment } from './batchModel'
 import { CRLF, encodeBatch, type EncodableGroup } from './multipart';
 import { toHostRequest } from './batchExecutor';
 
-export type BatchCodeFormat = 'http' | 'fetch' | 'pptb';
+export type BatchCodeFormat = 'http' | 'fetch' | 'python' | 'pptb';
 
 export const BATCH_CODE_LABELS: Record<BatchCodeFormat, string> = {
   http: 'HTTP ($batch)',
   fetch: 'fetch (JavaScript)',
+  python: 'Python (requests)',
   pptb: 'PPTB dataverseAPI',
 };
 
@@ -95,6 +97,43 @@ export function generateBatchCode(fmt: BatchCodeFormat, input: BatchCodeInput): 
         '// The response is multipart/mixed too: one part per request, change sets nested.',
         `console.log(res.status, res.headers.get('Content-Type'));`,
         `console.log(await res.text());`,
+      ].join('\n');
+    }
+    case 'python': {
+      const lines = encoded.body.split(CRLF);
+      if (lines[lines.length - 1] === '') lines.pop();
+      const headerLines = outerHeaders(encoded.contentType, input.continueOnError)
+        .filter((h) => !h.startsWith('If-None-Match'))
+        .map((h) => {
+          const i = h.indexOf(':');
+          return `    ${JSON.stringify(h.slice(0, i))}: ${JSON.stringify(h.slice(i + 1).trim())},`;
+        });
+      // JSON string literals are valid Python string literals.
+      return [
+        '# Dataverse $batch — Python (requests). Every line of the body must end in CRLF.',
+        '# pip install requests and replace <access-token> with a bearer token.',
+        '',
+        'import requests',
+        '',
+        'ACCESS_TOKEN = "<access-token>"',
+        '',
+        'body = "\\r\\n".join([',
+        ...lines.map((l) => `    ${JSON.stringify(l)},`),
+        ']) + "\\r\\n"',
+        '',
+        'res = requests.post(',
+        `    ${JSON.stringify(`${org}${API_BASE}/$batch`)},`,
+        '    headers={',
+        '        "Authorization": "Bearer " + ACCESS_TOKEN,',
+        ...headerLines.map((h) => `    ${h}`),
+        '    },',
+        '    data=body.encode("utf-8"),',
+        '    timeout=120,',
+        ')',
+        '',
+        '# The response is multipart/mixed too: one part per request, change sets nested.',
+        'print(res.status_code, res.headers.get("Content-Type"))',
+        'print(res.text)',
       ].join('\n');
     }
     case 'pptb': {
