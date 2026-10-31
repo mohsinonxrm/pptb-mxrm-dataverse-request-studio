@@ -1074,6 +1074,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
             result={result}
             mode="multi"
             table={state.table}
+            requestUrl={built.relativeUrl}
             // Pass the layoutxml column order so the results grid columns
             // match what Dynamics 365 / Sales Hub shows for the same view.
             // Without this the grid falls back to JSON-key order, which on

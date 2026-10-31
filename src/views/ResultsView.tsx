@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   TabList,
   Tab,
@@ -20,6 +20,10 @@ import {
   ErrorCircle20Regular,
   LockClosed20Regular,
   ShieldDismiss20Regular,
+  Filter20Regular,
+  FilterDismiss20Regular,
+  Link20Regular,
+  DocumentCopy20Regular,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import { StatusPill } from '../primitives/StatusPill';
@@ -40,6 +44,20 @@ import { WriteResultCard, type WriteResultContext } from './results/WriteResultC
 import type { ExpandSpec } from '../editors/ExpandEditor';
 import type { OrderbySpec } from '../editors/OrderbyEditor';
 import { copyText } from '../shell/copy';
+import { ENV } from '../mock/environment';
+import { useScopedEntities } from '../host/useScopedEntities';
+import {
+  describeMissingPrivilege,
+  errorReport,
+  missingPrivilege,
+  notFoundSegment,
+  suggestEntitySet,
+} from './results/nextSteps';
+
+/** The request URL as sent: modes pass it relative to the org host. */
+function absoluteUrl(url: string | undefined): string | undefined {
+  return url && url.startsWith('/') ? `https://${ENV.host}${url}` : url;
+}
 
 export type ResultsTab = 'data' | 'json' | 'headers';
 
@@ -64,6 +82,11 @@ export function ResultsView({
   onDismissLoadMoreNotice,
   writeContext,
   preferredColumnOrder,
+  method = 'GET',
+  onEditFilter,
+  onRunWithoutFilter,
+  onUseEntitySet,
+  notice,
 }: {
   result: ExecResult | null;
   table?: string;
@@ -111,6 +134,17 @@ export function ResultsView({
    * column order. Ignored when `select` is non-empty.
    */
   preferredColumnOrder?: string[];
+  /** HTTP method of the request, for the error report (#291). */
+  method?: string;
+  /** 0 rows: open the $filter node in the builder (#291). */
+  onEditFilter?: () => void;
+  /** 0 rows: drop the $filter and run again (#291). */
+  onRunWithoutFilter?: () => void;
+  /** 404 on an unknown entity set: switch the request to the suggested
+   *  set (#291). Without it the suggestion is shown as text only. */
+  onUseEntitySet?: (segment: string, entitySet: string) => void;
+  /** A message bar above the results, e.g. "Ran without $filter". */
+  notice?: ReactNode;
 }) {
   const [tab, setTab] = useState<ResultsTab>('data');
   // Grid-local UI state. We hoist it here (not inside ResultsGrid) so the
@@ -145,8 +179,39 @@ export function ResultsView({
   // baked into WriteResultCard (412 = "ETag stale" / "precondition failed",
   // 409 = duplicate-detect, etc.), so we fall through and let it render.
   if (!result.ok && !writeContext) {
-    return <ErrorState result={result} />;
+    return (
+      <ErrorState
+        result={result}
+        method={method}
+        requestUrl={absoluteUrl(requestUrl)}
+        onUseEntitySet={onUseEntitySet}
+      />
+    );
   }
+
+  // 0 rows (#291): the grid's empty state offers the next step.
+  const emptyActions = (
+    <>
+      {onEditFilter && (
+        <Button icon={<Filter20Regular />} onClick={onEditFilter}>
+          Edit $filter
+        </Button>
+      )}
+      {onRunWithoutFilter && (
+        <Button icon={<FilterDismiss20Regular />} onClick={onRunWithoutFilter}>
+          Run without $filter
+        </Button>
+      )}
+      {requestUrl && (
+        <Button
+          icon={<Link20Regular />}
+          onClick={() => void copyText(absoluteUrl(requestUrl) ?? '', 'the request URL')}
+        >
+          Copy request URL
+        </Button>
+      )}
+    </>
+  );
 
   // Detect more-pages from the envelope's @odata.nextLink annotation,
   // and the server-emitted @odata.count (when $count=true was set).
@@ -241,6 +306,8 @@ export function ResultsView({
         />
       )}
 
+      {notice}
+
       {loadMoreError && (
         <MessageBar intent="error" layout="multiline">
           <MessageBarBody>{loadMoreError} Rows already loaded are kept.</MessageBarBody>
@@ -315,6 +382,7 @@ export function ResultsView({
               serverTotal={serverTotal}
               preferredColumnOrder={preferredColumnOrder}
               onViewChange={setGridView}
+              emptyActions={emptyActions}
             />
           ))}
         {tab === 'json' && <JsonPane body={result.body} />}
@@ -441,7 +509,44 @@ function isResponseSizeLimitError(message: string | undefined): boolean {
   return !!message && /16777216|exceeds the maximum size/i.test(message);
 }
 
-function ErrorState({ result }: { result: ExecResult }) {
+/** "Did you mean …?" for a 404 on an entity set the user mistyped (#291).
+ *  Only tables inside the current scope are offered. Its own component, so
+ *  the entity list is read only when there's a segment to match. */
+function EntitySetSuggestion({
+  segment,
+  onUse,
+}: {
+  segment: string;
+  onUse?: (segment: string, entitySet: string) => void;
+}) {
+  const { entities } = useScopedEntities();
+  const match = suggestEntitySet(segment, entities);
+  if (!match) return null;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <Caption1 style={{ color: tokens.colorNeutralForeground1 }}>
+        Did you mean <code>{match.entitySetName}</code> ({match.displayName || match.logicalName})?
+      </Caption1>
+      {onUse && (
+        <Button size="small" onClick={() => onUse(segment, match.entitySetName)}>
+          Use {match.entitySetName}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function ErrorState({
+  result,
+  method,
+  requestUrl,
+  onUseEntitySet,
+}: {
+  result: ExecResult;
+  method?: string;
+  requestUrl?: string;
+  onUseEntitySet?: (segment: string, entitySet: string) => void;
+}) {
   const Icon =
     result.status === 401
       ? LockClosed20Regular
@@ -501,12 +606,19 @@ function ErrorState({ result }: { result: ExecResult }) {
             : result.status === 0
               ? 'Request failed'
               : `Error · ${result.status}`;
+  // #291: name the missing privilege when the 403 message has one.
+  const privilege = !notSent && result.status === 403 ? missingPrivilege(err?.message) : null;
+  // #291: an entity set Dataverse couldn't resolve. Matched on the message,
+  // since the host often reports no status for it.
+  const segment = notSent ? null : notFoundSegment(err?.message);
   const advice = notSent
     ? notSent.advice
     : result.status === 401
-      ? 'Sign in to refresh your access token, then re-run.'
+      ? 'Your sign-in for this connection has expired or was revoked. Open Connection Manager in Power Platform ToolBox, sign in to the connection again, then run the request again.'
       : result.status === 403
-        ? 'Caller is missing a required privilege. Check role assignments.'
+        ? privilege
+          ? describeMissingPrivilege(privilege)
+          : 'Your user is missing a privilege this request needs. Check your security roles with a Dataverse administrator.'
         : result.status === 404
           ? 'Record (or entity) not found. Verify the GUID and entity set.'
           : result.status === 501
@@ -565,6 +677,25 @@ function ErrorState({ result }: { result: ExecResult }) {
             {nestedExpandTopHint}
           </Caption1>
         )}
+        {segment && <EntitySetSuggestion segment={segment} onUse={onUseEntitySet} />}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <Button
+            icon={<DocumentCopy20Regular />}
+            onClick={() =>
+              void copyText(errorReport({ result, method, requestUrl }), 'the error report')
+            }
+          >
+            Copy error report
+          </Button>
+          {requestUrl && (
+            <Button
+              icon={<Link20Regular />}
+              onClick={() => void copyText(requestUrl, 'the request URL')}
+            >
+              Copy request URL
+            </Button>
+          )}
+        </div>
         {err && (
           // `whiteSpace: pre-wrap` keeps `\n` breaks but wraps the rest;
           // `wordBreak: break-word` + `overflowWrap: anywhere` break long

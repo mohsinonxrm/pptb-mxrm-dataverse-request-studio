@@ -55,6 +55,7 @@ import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/Pref
 import { HeadersEditor, defaultReadHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
+import { replacePathSegment } from '../views/results/nextSteps';
 import { topLevelRowCount } from '../views/results/flattenExpansions';
 import { findRequestType } from '../registry/requestTypes';
 import { runtime, type ExecResult } from '../engine/runtime';
@@ -481,7 +482,17 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
       >
         {tab === 'builder' && pane}
         {tab === 'code' && <CodeView themeMode={themeMode} inputs={codeInputs} />}
-        {tab === 'results' && <ResultsView result={result} mode="next" />}
+        {tab === 'results' && (
+          <ResultsView
+            result={result}
+            mode="next"
+            requestUrl={state.url.trim() || undefined}
+            onUseEntitySet={(segment, entitySet) => {
+              set('url', replacePathSegment(state.url, segment, entitySet), 'url');
+              setTab('builder');
+            }}
+          />
+        )}
       </MainTabs>
     </ModeShell>
   );

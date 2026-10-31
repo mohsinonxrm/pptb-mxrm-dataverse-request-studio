@@ -592,7 +592,14 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
       <MainTabs tab={tab} onTabChange={setTab} resultCount={result?.outcome === 'ok' ? 1 : null}>
         {tab === 'builder' && pane}
         {tab === 'code' && <CodeView themeMode={themeMode} inputs={codeInputs} />}
-        {tab === 'results' && <ResultsView result={result} mode="single" table={state.table} />}
+        {tab === 'results' && (
+          <ResultsView
+            result={result}
+            mode="single"
+            table={state.table}
+            requestUrl={built.relativeUrl}
+          />
+        )}
       </MainTabs>
     </ModeShell>
   );
