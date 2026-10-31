@@ -1,4 +1,6 @@
-import { useId, type FC, type ReactNode } from 'react';
+import { useId, useState, type FC, type ReactNode } from 'react';
+import { Button } from '@fluentui/react-components';
+import { History16Regular } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import { ModeCard } from '../primitives/ModeCard';
 import { SectionHeader } from '../primitives/SectionHeader';
@@ -6,6 +8,10 @@ import { ClauseTreeList, ClauseTreeItem } from '../primitives/ClauseTreeItem';
 import { MethodPill } from '../primitives/MethodPill';
 import type { RequestType } from '../registry/requestTypes';
 import type { RecentRun } from '../state/readState';
+import { useModeHistory } from '../state/runHistory';
+import { RunHistoryDialog } from './RunHistoryDialog';
+import { runDetail, timeAgo } from './runLabels';
+import { notify } from './dialogs';
 
 export interface SidebarClauseItem {
   id: string; // selectable key
@@ -62,6 +68,20 @@ export function Sidebar({
   // A recent-run row is a button only when it can actually restore
   // something (#2): the mode wired a handler and the run has a snapshot.
   const isRestorable = (r: RecentRun) => !!onRecentClick && r.snapshot !== undefined;
+  // A kept run had its caller id removed (#226): say so, since the restored
+  // request now runs as the signed-in user.
+  const restore = (r: RecentRun) => {
+    onRecentClick?.(r);
+    if (r.impersonationCleared) {
+      notify(
+        'This run impersonated another user. History doesn’t keep the caller id, so the restored request runs as you: set MSCRMCallerID or CallerObjectId again in Headers to impersonate.',
+        { title: 'Impersonation not restored' },
+      );
+    }
+  };
+  // Every run kept for this mode and environment (#226); the sidebar lists the latest.
+  const history = useModeHistory(type.id, recents);
+  const [historyOpen, setHistoryOpen] = useState(false);
   return (
     <aside className={s.sidebar}>
       <ModeCard type={type} urlPreview={urlPreview} />
@@ -97,7 +117,13 @@ export function Sidebar({
             time the user clicks Execute. */}
         {recents.length > 0 && (
           <>
-            <SectionHeader meta={`${recents.length} run${recents.length === 1 ? '' : 's'}`}>
+            <SectionHeader
+              meta={
+                history.length > recents.length
+                  ? `${recents.length} of ${history.length}`
+                  : `${recents.length} run${recents.length === 1 ? '' : 's'}`
+              }
+            >
               Recent runs
             </SectionHeader>
             <div style={{ padding: '4px 0' }}>
@@ -113,11 +139,11 @@ export function Sidebar({
                       ? `Restore run: ${r.method} ${r.url}, status ${r.status || 'error'}`
                       : undefined
                   }
-                  onClick={() => isRestorable(r) && onRecentClick?.(r)}
+                  onClick={() => isRestorable(r) && restore(r)}
                   onKeyDown={(e) => {
                     if (isRestorable(r) && (e.key === 'Enter' || e.key === ' ')) {
                       e.preventDefault();
-                      onRecentClick?.(r);
+                      restore(r);
                     }
                   }}
                 >
@@ -136,10 +162,28 @@ export function Sidebar({
                   </span>
                 </div>
               ))}
+              <Button
+                appearance="subtle"
+                size="small"
+                icon={<History16Regular />}
+                onClick={() => setHistoryOpen(true)}
+                style={{ marginTop: 2 }}
+              >
+                {history.length > recents.length
+                  ? `Show all ${history.length} runs`
+                  : 'Search runs'}
+              </Button>
             </div>
           </>
         )}
       </div>
+      <RunHistoryDialog
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        modeName={type.name}
+        runs={history}
+        onRestore={onRecentClick ? restore : undefined}
+      />
     </aside>
   );
 }
@@ -190,37 +234,4 @@ function SidebarItemRenderer({
       )}
     </li>
   );
-}
-
-function timeAgo(ts: number): string {
-  const s = Math.floor((Date.now() - ts) / 1000);
-  if (s < 60) return 'just now';
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m} min ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h} hr ago`;
-  const d = Math.floor(h / 24);
-  return `${d}d ago`;
-}
-
-/** Modes whose runs return rows. */
-const ROW_MODES = new Set([
-  'retrieve-multiple',
-  'retrieve-single',
-  'retrieve-nextlink',
-  'predefined-query',
-]);
-
-/**
- * The tail of a Recent runs line: the mode's own summary, or a row count for
- * reads. A row count means nothing for a write ("204 · 1 rows") or for a
- * function / download, so those show the status alone unless the mode gave
- * a summary (#309).
- */
-export function runDetail(r: Pick<RecentRun, 'modeId' | 'summary' | 'rowCount'>): string {
-  if (r.summary) return ` · ${r.summary}`;
-  if (!ROW_MODES.has(r.modeId)) return '';
-  const n = r.rowCount;
-  if (n === undefined) return ' · — rows';
-  return ` · ${n.toLocaleString()} ${n === 1 ? 'row' : 'rows'}`;
 }

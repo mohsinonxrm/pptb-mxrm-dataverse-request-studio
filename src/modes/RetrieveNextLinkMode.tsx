@@ -60,13 +60,14 @@ import { topLevelRowCount } from '../views/results/flattenExpansions';
 import { findRequestType } from '../registry/requestTypes';
 import { runtime, type ExecResult } from '../engine/runtime';
 import { buildRetrieveNextLink } from '../engine/urlBuilder';
-import type { RetrieveNextLinkState, RecentRun } from '../state/readState';
+import type { RetrieveNextLinkState } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { getEnv } from '../mock/environment';
 import type { Advisory } from '../primitives/advisories';
 import { decodeForDisplay } from '../primitives/decodeForDisplay';
 import { readClipboardText } from '../host/pptbBridge';
 import { notify } from '../shell/dialogs';
+import { useRecentRuns } from '../state/runHistory';
 
 const initialState = (): RetrieveNextLinkState => ({
   url: '',
@@ -155,7 +156,8 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
   // The URL the shown result came from: the builder may have changed since (#291).
   const [runUrl, setRunUrl] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('retrieve-nextlink');
 
   const built = useMemo(() => buildRetrieveNextLink(state), [state]);
   const analysis = useMemo(() => analyzeNextLink(state.url, env.host), [state.url, env.host]);

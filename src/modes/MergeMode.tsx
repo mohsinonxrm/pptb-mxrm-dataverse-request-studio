@@ -96,6 +96,7 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { isRecordGuid } from '../primitives/guid';
+import { useRecentRuns } from '../state/runHistory';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -147,7 +148,8 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('merge');
 
   // Save / Load tracking
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);

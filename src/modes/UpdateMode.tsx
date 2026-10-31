@@ -99,6 +99,7 @@ import { useLatestCallback } from '../primitives/useLatestCallback';
 import { rawBodyBlocker, sentFieldValues } from '../engine/fieldBody';
 import { isRecordGuid } from '../primitives/guid';
 import { isColumnInScope, useAdvancedFindOnly } from '../state/metadataScope';
+import { useRecentRuns } from '../state/runHistory';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -156,7 +157,8 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('update');
 
   // Last-saved tracking → Save button dirty/clean state, library checkmark.
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);

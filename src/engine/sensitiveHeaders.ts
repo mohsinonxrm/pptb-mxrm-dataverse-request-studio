@@ -63,11 +63,46 @@ function isHeaderRow(x: unknown): x is HeaderRowLike {
  * nothing was removed.
  */
 export function stripCredentialRows<T>(state: T): T {
+  return mapHeaderRows(state, (row) => (isCredentialHeader(row.name) ? null : row));
+}
+
+/** The impersonation presets' blank value (HeadersEditor). */
+const NO_CALLER = '00000000-0000-0000-0000-000000000000';
+
+/**
+ * A mode state for the run history (#226). Credential rows are removed, as
+ * for a saved request. Impersonation rows are kept but reset to the disabled
+ * blank preset: a history the user never chose to keep doesn't hold who they
+ * impersonated, and a restored request has its presets back, off.
+ * `cleared` says whether a caller id was actually removed.
+ */
+export function stripHistoryRows<T>(state: T): { state: T; cleared: boolean } {
+  let cleared = false;
+  const out = mapHeaderRows(state, (row) => {
+    if (isCredentialHeader(row.name)) return null;
+    if (!impersonationVar(row.name)) return row;
+    const value = row.value.trim();
+    if (value && value !== NO_CALLER) cleared = true;
+    return row.value === NO_CALLER && !row.enabled
+      ? row
+      : { ...row, value: NO_CALLER, enabled: false };
+  });
+  return { state: out, cleared };
+}
+
+/** `state` with every header row passed through `fn` (null removes it), at any depth. */
+function mapHeaderRows<T>(state: T, fn: (row: HeaderRowLike) => HeaderRowLike | null): T {
   const walk = (v: unknown): unknown => {
     if (Array.isArray(v)) {
       if (v.length > 0 && v.every(isHeaderRow)) {
-        const kept = v.filter((row) => !isCredentialHeader(row.name));
-        return kept.length === v.length ? v : kept;
+        let changed = false;
+        const kept: HeaderRowLike[] = [];
+        for (const row of v) {
+          const next = fn(row);
+          if (next !== row) changed = true;
+          if (next) kept.push(next);
+        }
+        return changed ? kept : v;
       }
       let changed = false;
       const out = v.map((item) => {

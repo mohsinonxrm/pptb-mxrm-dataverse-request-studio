@@ -102,6 +102,7 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
+import { useRecentRuns } from '../state/runHistory';
 
 const initialState = (): ManageImageState => ({
   // Empty initial state — user picks everything from live metadata.
@@ -166,7 +167,8 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('manage-image');
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildManageImage(state), [state, liveTable]);

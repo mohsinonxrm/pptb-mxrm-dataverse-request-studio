@@ -180,8 +180,11 @@ modes have their own HTTP / fetch / C# / PPTB outputs.
   dirty-state detection. Export / import as JSON, export as a Postman /
   Insomnia / Bruno collection, and copy or move requests from other
   connections. A library that can't be read is never overwritten.
-- **Recent runs** — click a run to restore it into its mode. Each mode keeps
-  its unsaved request when you switch modes.
+- **Recent runs** — click a run to restore it into its mode. Runs are kept
+  across restarts, per environment (the last 200, without response bodies or
+  credential / impersonation headers), and **Show all** searches them. Turn
+  the history off or clear it in Settings. Each mode keeps its unsaved request
+  when you switch modes.
 - **Results** — CSV export (formulas neutralised for spreadsheets), JSON
   export, Copy as TSV, and response-size hints.
 - **Accessibility** — labelled inputs, readable badges and live-region

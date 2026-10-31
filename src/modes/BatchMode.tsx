@@ -38,7 +38,6 @@ import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
 import { findRequestType } from '../registry/requestTypes';
 import type { ThemeMode } from '../theme/theme';
-import type { RecentRun } from '../state/readState';
 import { ENV } from '../mock/environment';
 import { adv, disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { hashState, type SavedRequest } from '../state/savedRequests';
@@ -84,6 +83,7 @@ import { BatchGroupPane, BatchOverviewPane } from './batch/BatchPanes';
 import { BatchResultsView, type ResultRow } from './batch/BatchResultsView';
 import { BatchCodeView } from './batch/BatchCodeView';
 import { AddFromSavedDialog } from './batch/AddFromSavedDialog';
+import { useRecentRuns } from '../state/runHistory';
 
 const CODE_FORMATS: BatchCodeFormat[] = ['http', 'fetch', 'pptb'];
 type EmCodeFormat = 'csharp' | BatchCodeFormat;
@@ -126,7 +126,8 @@ export function BatchMode({
   const [tab, setTab] = useState<MainTab>('builder');
   const [run, setRun] = useState<BatchRunResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns(modeId);
   const [savedOpen, setSavedOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);

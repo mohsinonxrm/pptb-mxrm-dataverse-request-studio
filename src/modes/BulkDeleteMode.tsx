@@ -72,7 +72,6 @@ import { findTable, type TableMeta } from '../mock/metadata';
 import { ENV } from '../mock/environment';
 import { findRequestType } from '../registry/requestTypes';
 import type { ExecResult } from '../engine/runtime';
-import type { RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
@@ -105,6 +104,7 @@ import {
   type MatchCount,
 } from '../engine/bulkDeleteExecutor';
 import { copyText } from '../shell/copy';
+import { useRecentRuns } from '../state/runHistory';
 
 const MODE_ID = 'bulk-delete' as const;
 const GROUP = 'bulk' as const;
@@ -138,7 +138,8 @@ export function BulkDeleteMode({ themeMode }: { themeMode: ThemeMode }) {
   const [jobId, setJobId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns(MODE_ID);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(undefined);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);

@@ -1,5 +1,5 @@
 // SettingsDrawer — Fluent v9 OverlayDrawer hosting display, safety and
-// metadata preferences.
+// metadata preferences, and the request history (#226).
 //
 // Sections: Entity scope (a pointer to the header's scope chip, which owns
 // the publisher / solution pickers since #42), Display, Safety, Metadata.
@@ -25,9 +25,12 @@ import {
   Dismiss24Regular,
   Settings20Regular,
   ArrowClockwise20Regular,
+  Delete20Regular,
 } from '@fluentui/react-icons';
 import type { DisplaySettings, ValueDisplayMode } from '../state/displaySettings';
 import { metadata } from '../host/metadataProvider';
+import { clearAllHistory, setHistoryEnabled } from '../state/runHistory';
+import { useConfirm } from './dialogs';
 
 const useStyles = makeStyles({
   drawer: { width: '360px' },
@@ -87,6 +90,28 @@ export function SettingsDrawer({ open, settings, onClose, onSettingsChange }: Se
     },
     [settings, onSettingsChange],
   );
+
+  // Request history (#226). Turning it off also clears what was kept: off
+  // means nothing about past runs stays on this computer.
+  const handleKeepHistoryChange = useCallback(
+    (checked: boolean) => {
+      // Before the clear, so a run still in flight isn't written afterwards.
+      setHistoryEnabled(checked);
+      if (!checked) clearAllHistory();
+      onSettingsChange({ ...settings, keepRunHistory: checked });
+    },
+    [settings, onSettingsChange],
+  );
+  const askConfirm = useConfirm();
+  const handleClearHistory = useCallback(async () => {
+    const ok = await askConfirm({
+      title: 'Clear request history?',
+      message: 'Every kept run is removed, for every environment. Saved requests are not affected.',
+      confirmLabel: 'Clear history',
+      destructive: true,
+    });
+    if (ok) clearAllHistory();
+  }, [askConfirm]);
 
   const handleValueDisplayModeChange = useCallback(
     (mode: ValueDisplayMode) => {
@@ -216,6 +241,40 @@ export function SettingsDrawer({ open, settings, onClose, onSettingsChange }: Se
               />
             </div>
           </div>
+        </div>
+
+        <Divider />
+
+        {/* ── Section: Request history (#226) ──────────────────── */}
+        <div className={styles.section} style={{ marginTop: tokens.spacingVerticalL }}>
+          <Text className={styles.sectionTitle}>Request history</Text>
+
+          <div className={styles.settingItem}>
+            <div className={styles.settingRow}>
+              <div>
+                <Text className={styles.settingLabel}>Keep request history</Text>
+                <Text className={styles.settingDescription} block>
+                  Recent runs survive restarts: the last 200 runs per environment, on this computer.
+                  Response bodies, credentials and impersonation headers are never kept. Turning
+                  this off clears the history.
+                </Text>
+              </div>
+              <Switch
+                aria-label="Keep request history"
+                checked={settings.keepRunHistory}
+                onChange={(_e, data) => handleKeepHistoryChange(data.checked)}
+              />
+            </div>
+          </div>
+          <Button
+            appearance="outline"
+            size="small"
+            icon={<Delete20Regular />}
+            disabled={!settings.keepRunHistory}
+            onClick={handleClearHistory}
+          >
+            Clear history
+          </Button>
         </div>
 
         <Divider />

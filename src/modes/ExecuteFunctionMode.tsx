@@ -69,6 +69,7 @@ import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
 import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
 import { invalidFunctionParamReason } from '../engine/executeBuilders';
+import { useRecentRuns } from '../state/runHistory';
 
 // Empty initial state — no pre-seeded function. User picks from the live
 // CSDL once it loads.
@@ -92,7 +93,8 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('exec-function');
 
   // Async live function lookup. actionsProvider caches the parsed CSDL.
   const [fn, setFn] = useState<CsdlAction | undefined>(undefined);

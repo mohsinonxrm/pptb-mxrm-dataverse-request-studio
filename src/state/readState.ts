@@ -86,4 +86,9 @@ export interface RecentRun {
    * modes without a serializer (e.g. Retrieve NextLink).
    */
   snapshot?: unknown;
+  /**
+   * The kept copy of this run had its impersonation caller id removed
+   * (#226), so restoring it runs as the signed-in user unless it's set again.
+   */
+  impersonationCleared?: boolean;
 }

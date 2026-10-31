@@ -33,9 +33,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unchanged.
 - **Open on any advisory shows the Builder and focuses the field** ([#294]),
   from any tab, in every mode.
+- **Recent runs survive a reload or restart** ([#226]). Each mode keeps its
+  runs against each environment: the last 200 runs, with the request, status,
+  row count, duration and time. Response bodies are never kept, and neither
+  are credential or impersonation headers.
+  - Under Recent runs, **Show all** (or **Search runs**) opens the mode's
+    history: search by URL, status or method, and click a run to restore it.
+  - Settings → **Request history** turns it off (which also clears it) or
+    clears it.
 
 [#291]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/291
 [#294]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/294
+[#226]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/226
 
 ## [1.5.0-beta.1] - 2026-10-30
 

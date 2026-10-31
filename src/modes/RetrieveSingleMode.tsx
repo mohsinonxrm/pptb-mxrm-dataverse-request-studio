@@ -76,6 +76,7 @@ import { useLatestCallback } from '../primitives/useLatestCallback';
 import { takeModeHandoff } from '../state/modeHandoff';
 import type { Advisory } from '../primitives/advisories';
 import { isRecordGuid } from '../primitives/guid';
+import { useRecentRuns } from '../state/runHistory';
 
 const initialState = (): RetrieveSingleState => ({
   table: '',
@@ -118,7 +119,8 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   // The URL the shown result came from: the builder may have changed since (#291).
   const [runUrl, setRunUrl] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('retrieve-single');
 
   // Last-saved tracking — drives the Save button's primary/subtle state
   // and lights up the checkmark next to the current entry in the library.

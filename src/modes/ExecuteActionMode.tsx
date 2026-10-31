@@ -58,6 +58,7 @@ import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
 import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
+import { useRecentRuns } from '../state/runHistory';
 
 export type ActionCategory = 'oob' | 'custom-api' | 'custom-action';
 
@@ -123,7 +124,8 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns(config.registryId);
 
   // Async live action lookup. The actionsProvider caches the parsed CSDL for
   // the session, so this is one fetch on first action pick — every subsequent

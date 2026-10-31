@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { runDetail } from './Sidebar';
+import { runDetail } from './runLabels';
 import { csdlComplexProperties } from '../editors/ResponsePropertiesCard';
 import { parseCsdl } from '../host/csdlProvider';
 

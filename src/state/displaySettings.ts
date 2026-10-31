@@ -51,6 +51,12 @@ export interface DisplaySettings {
    * dismissed (#42). It shows once per environment, until a scope is set.
    */
   scopeTipDismissed: string[];
+  /**
+   * Keep each mode's runs across reloads (#226): the last 200 runs per
+   * environment, without response bodies or credential / impersonation
+   * headers. Off keeps Recent runs for this session only.
+   */
+  keepRunHistory: boolean;
 }
 
 /** Publisher / solution selection for one org — the GUIDs are per environment. */
@@ -140,6 +146,7 @@ export const defaultDisplaySettings: DisplaySettings = {
   selectedPublisherIds: [],
   selectedSolutionIds: [],
   scopeTipDismissed: [],
+  keepRunHistory: true,
 };
 
 /** Settings namespace prefix. Exported for any future settings keys. */

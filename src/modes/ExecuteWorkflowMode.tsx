@@ -69,6 +69,7 @@ import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
 import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
+import { useRecentRuns } from '../state/runHistory';
 
 // Workflow shape used by the picker — the wire response fields are
 // camelCased differently per the OData convention (workflowid not Id, etc).
@@ -99,7 +100,8 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('exec-workflow');
 
   const built = useMemo(() => buildExecuteWorkflow(state), [state]);
   const body = useMemo(() => buildExecuteWorkflowBody(state), [state]);
