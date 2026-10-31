@@ -343,6 +343,9 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   const [pageError, setPageError] = useState<string | null>(null);
   // Why the last Retrieve all paused with pages left (#223).
   const [pagingNotice, setPagingNotice] = useState<string | null>(null);
+  // Retrieve all paused on throttling (#269): scrolling mustn't page on its
+  // own until Continue, a new run, or Retrieve all asks again.
+  const [throttledPause, setThrottledPause] = useState(false);
   // Rows in the current result, and the run's Recent runs entry, so paging
   // keeps that entry's row count in step with the grid (#211).
   const rowCountRef = useRef(0);
@@ -353,6 +356,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     setIsLoadingMore(false);
     setPageError(null);
     setPagingNotice(null);
+    setThrottledPause(false);
     rowCountRef.current = 0;
     runRecentIdRef.current = null;
     return runIdRef.current;
@@ -466,6 +470,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     setIsLoadingMore(true);
     setPageError(null);
     setPagingNotice(null);
+    setThrottledPause(false);
     return (): PagingStatus =>
       runIdRef.current !== run
         ? 'superseded'
@@ -518,6 +523,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
       if (throttled) {
         // Throttling passes (#269): a pause with Continue, from the page
         // that was refused, rather than an error. Rows so far are kept.
+        setThrottledPause(true);
         setPagingNotice(
           `Retrieve all paused: Dataverse is throttling requests (${throttled.limit}). ` +
             `${rowCountRef.current.toLocaleString()} rows are loaded. ${throttled.advice} ` +
@@ -1148,8 +1154,9 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
             orderby={state.orderby}
             requestUrl={runUrl}
             isLoadingMore={isLoadingMore}
+            loading={loading}
             onRefresh={onExecute}
-            onLoadMore={pageError ? undefined : fetchOneMorePage}
+            onLoadMore={pageError || throttledPause ? undefined : fetchOneMorePage}
             onRetrieveAll={retrieveAllPages}
             onStopLoadingMore={stopLoadingMore}
             loadMoreError={pageError}

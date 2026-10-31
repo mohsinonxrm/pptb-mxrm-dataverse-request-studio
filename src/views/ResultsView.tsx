@@ -96,6 +96,7 @@ export function ResultsView({
   onRunWithoutFilter,
   onUseEntitySet,
   notice,
+  loading = false,
 }: {
   result: ExecResult | null;
   table?: string;
@@ -154,6 +155,8 @@ export function ResultsView({
   onUseEntitySet?: (segment: string, entitySet: string) => void;
   /** A message bar above the results, e.g. "Ran without $filter". */
   notice?: ReactNode;
+  /** A run is in flight: Try again waits for it (#269). */
+  loading?: boolean;
 }) {
   const [tab, setTab] = useState<ResultsTab>('data');
   // Grid-local UI state. We hoist it here (not inside ResultsGrid) so the
@@ -199,6 +202,7 @@ export function ResultsView({
           requestUrl={absoluteUrl(requestUrl)}
           onUseEntitySet={onUseEntitySet}
           onRetry={onRefresh}
+          retrying={loading}
         />
       </div>
     );
@@ -557,6 +561,7 @@ function ErrorState({
   requestUrl,
   onUseEntitySet,
   onRetry,
+  retrying = false,
 }: {
   result: ExecResult;
   method?: string;
@@ -564,6 +569,8 @@ function ErrorState({
   onUseEntitySet?: (segment: string, entitySet: string) => void;
   /** Run the request again; offered when Dataverse throttled it (#269). */
   onRetry?: () => void;
+  /** The retry is running. Dataverse asks clients not to send more until it ends. */
+  retrying?: boolean;
 }) {
   const Icon =
     result.status === 401
@@ -618,7 +625,7 @@ function ErrorState({
   const title = notSent
     ? notSent.title
     : throttled
-      ? `Throttled: ${throttled.limit} · 429`
+      ? `Throttled: ${throttled.limit} · ${result.status || 429}`
       : result.status === 401
         ? 'Unauthorized · 401'
         : result.status === 403
@@ -706,8 +713,13 @@ function ErrorState({
         {segment && <EntitySetSuggestion segment={segment} onUse={onUseEntitySet} />}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
           {throttled && onRetry && (
-            <Button appearance="primary" icon={<ArrowClockwise20Regular />} onClick={onRetry}>
-              Try again
+            <Button
+              appearance="primary"
+              icon={retrying ? <Spinner size="tiny" /> : <ArrowClockwise20Regular />}
+              disabled={retrying}
+              onClick={onRetry}
+            >
+              {retrying ? 'Trying again…' : 'Try again'}
             </Button>
           )}
           {throttled && (

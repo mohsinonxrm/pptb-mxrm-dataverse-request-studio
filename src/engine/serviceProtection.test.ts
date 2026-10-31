@@ -14,19 +14,19 @@ describe('service protection limits (#269)', () => {
       '0x80072322',
       'Number of requests exceeded the limit of 6000 over time window of 300 seconds.',
       'number of requests',
-      /6,000 requests in 5 minutes/,
+      /about 6,000 requests per user in 5 minutes/,
     ],
     [
       '0x80072321',
       'Combined execution time of incoming requests exceeded limit of 1,200,000 milliseconds over time window of 300 seconds.',
       'execution time',
-      /20 minutes of server time/,
+      /about 20 minutes of server time/,
     ],
     [
       '0x80072326',
       'Number of concurrent requests exceeded the limit of 52.',
       'concurrent requests',
-      /52 of your requests/,
+      /the limit is 52 or more/,
     ],
   ])('%s maps to 429 and names its limit', (code, message, limit, advice) => {
     const r = mapError(hostError(code, message), 12);

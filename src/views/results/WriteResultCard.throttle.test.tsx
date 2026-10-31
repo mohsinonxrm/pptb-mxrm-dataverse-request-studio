@@ -37,6 +37,18 @@ describe('WriteResultCard throttled (#269)', () => {
     );
     expect(host!.textContent).toContain('Throttled: concurrent requests');
     expect(host!.textContent).toContain("Dataverse didn't run this update.");
-    expect(host!.textContent).toContain('More than 52 of your requests were running at once.');
+    expect(host!.textContent).toContain('Too many requests were running at once');
+  });
+
+  it('names the operation readably', () => {
+    const result = mapError(new Error('0x80072322: Number of requests exceeded the limit.'), 4);
+    act(() =>
+      root!.render(
+        <FluentProvider theme={webLightTheme}>
+          <WriteResultCard result={result} ctx={{ operation: 'action', table: '' }} />
+        </FluentProvider>,
+      ),
+    );
+    expect(host!.textContent).toContain("Dataverse didn't run this action call.");
   });
 });

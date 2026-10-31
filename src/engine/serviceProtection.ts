@@ -22,17 +22,17 @@ const LIMITS: Record<string, Omit<ServiceProtectionLimit, 'code'>> = {
   '0x80072322': {
     limit: 'number of requests',
     advice:
-      'You sent more than 6,000 requests in 5 minutes. Wait a few minutes before sending more. To move many rows, use a larger page size, Bulk Write or $batch: each counts as one request.',
+      'Dataverse allows about 6,000 requests per user in 5 minutes. Wait a few minutes before sending more. Fewer, larger requests help: a bigger page size, or modest Bulk Write and $batch sizes (a batch is one request, but its work counts toward the execution-time limit).',
   },
   '0x80072321': {
     limit: 'execution time',
     advice:
-      'Your requests took more than 20 minutes of server time in 5 minutes. Wait a few minutes, then make each request lighter: fewer columns ($select), simpler filters, smaller pages or smaller batches.',
+      'Requests used about 20 minutes of server time in 5 minutes. Wait a few minutes, then make each request lighter: fewer columns ($select), simpler filters, smaller pages or smaller batches.',
   },
   '0x80072326': {
     limit: 'concurrent requests',
     advice:
-      'More than 52 of your requests were running at once. Try again in a moment, once the others finish.',
+      'Too many requests were running at once (the limit is 52 or more). Try again in a moment, once the others finish.',
   },
 };
 
@@ -41,9 +41,9 @@ const GENERIC: Omit<ServiceProtectionLimit, 'code'> = {
   advice: 'Dataverse is throttling requests from your user. Wait a few minutes, then try again.',
 };
 
-/** Shared by every app signed in as the same user, not just this tool. */
+/** Not just this tool: everything signed in as the same user counts. */
 export const SERVICE_PROTECTION_SCOPE =
-  'The limits count every app and flow signed in as you, over the last 5 minutes.';
+  'Dataverse counts these limits per user on each server, so other apps and flows signed in as you count too.';
 
 export const SERVICE_PROTECTION_DOCS =
   'https://learn.microsoft.com/power-apps/developer/data-platform/api-limits';

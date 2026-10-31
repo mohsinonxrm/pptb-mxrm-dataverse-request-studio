@@ -66,6 +66,23 @@ export type WriteOperation =
   | 'manage-image'
   | 'manage-attachment';
 
+/** How an operation reads in a sentence: "Dataverse didn't run this update". */
+const OPERATION_NOUN: Record<WriteOperation, string> = {
+  create: 'create',
+  update: 'update',
+  upsert: 'upsert',
+  delete: 'delete',
+  merge: 'merge',
+  associate: 'associate',
+  disassociate: 'disassociate',
+  action: 'action call',
+  function: 'function call',
+  workflow: 'workflow run',
+  'manage-file': 'file request',
+  'manage-image': 'image request',
+  'manage-attachment': 'attachment request',
+};
+
 export interface WriteResultContext {
   operation: WriteOperation;
   /** Target table logical name — drives RecordDetailCard if body present. */
@@ -427,7 +444,7 @@ function buildNarrative(
     if (throttled) {
       return {
         title: `Throttled: ${throttled.limit}`,
-        body: `Dataverse didn't run this ${ctx.operation}. ${throttled.advice} ${SERVICE_PROTECTION_SCOPE}`,
+        body: `Dataverse didn't run this ${OPERATION_NOUN[ctx.operation]}. ${throttled.advice} ${SERVICE_PROTECTION_SCOPE}`,
       };
     }
     if (result.status === 412) {

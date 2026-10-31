@@ -158,6 +158,8 @@ describe('Retrieve all, throttled (#269)', () => {
       /^Retrieve all paused: Dataverse is throttling requests \(number of requests\)\. 4 rows are loaded\./,
     );
     expect(host.props!.result?.body?.value).toHaveLength(4);
+    // Scrolling doesn't page on its own while paused.
+    expect(host.props!.onLoadMore).toBeUndefined();
 
     // Continue: the refused page is asked for again.
     host.page.mockResolvedValueOnce(okPage(1));
