@@ -252,7 +252,9 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
     [state.bypass],
   );
   const advisories = [...blockers, ...bypassAdvisories];
-  const disabledReason = disabledReasonFromAdvisories(advisories);
+  // The tooltip names the checklist blocker first, as before; bypass errors
+  // only when nothing else blocks (#294).
+  const disabledReason = blockers[0]?.title ?? disabledReasonFromAdvisories(bypassAdvisories);
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeCreate(state), [state]);

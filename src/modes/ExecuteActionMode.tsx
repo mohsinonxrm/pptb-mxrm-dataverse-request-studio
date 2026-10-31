@@ -252,7 +252,8 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
       when: bindingEntity && !bindingTable,
       id: 'action-binding-metadata',
       title: `Can't build the URL yet — ${bindingEntity} table metadata isn't loaded.`,
-      focusNode: 'binding',
+      // The source record when one is needed; otherwise the action picker.
+      focusNode: requiresBoundRecord ? 'target' : 'pick',
     },
     {
       when: missingRequired.length > 0,

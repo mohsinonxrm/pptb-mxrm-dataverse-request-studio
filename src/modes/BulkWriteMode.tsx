@@ -226,24 +226,24 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
   );
   // Execute blockers, as advisories with a way to the fix (#294).
   const blocker = bulkBlocker(state, issues, support);
-  const advisories = [
-    ...firstBlocker([
-      {
-        when: blocker,
-        id: blocker?.id ?? '',
-        title: blocker?.reason ?? '',
-        focusNode: blocker?.focusNode,
-      },
-      {
-        when: support.state === 'checking',
-        id: 'bulk-checking',
-        title: `Checking ${state.operation} availability…`,
-        focusNode: 'operation',
-      },
-    ]),
-    ...bypassAdvisories,
-  ];
-  const disabledReason = disabledReasonFromAdvisories(advisories);
+  const blockers = firstBlocker([
+    {
+      when: blocker,
+      id: blocker?.id ?? '',
+      title: blocker?.reason ?? '',
+      focusNode: blocker?.focusNode,
+    },
+    {
+      when: support.state === 'checking',
+      id: 'bulk-checking',
+      title: `Checking ${state.operation} availability…`,
+      focusNode: 'operation',
+    },
+  ]);
+  const advisories = [...blockers, ...bypassAdvisories];
+  // The tooltip names the checklist blocker first, as before; bypass errors
+  // only when nothing else blocks (#294).
+  const disabledReason = blockers[0]?.title ?? disabledReasonFromAdvisories(bypassAdvisories);
 
   // ── Execute ──
   const onExecute = async () => {

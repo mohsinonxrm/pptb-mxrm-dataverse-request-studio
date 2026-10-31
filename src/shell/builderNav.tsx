@@ -60,32 +60,57 @@ const FOCUS_NODE_ATTR = 'data-focus-node';
  *  only once metadata arrives. About half a second at 60 fps. */
 const MAX_FRAMES = 30;
 
+/** Anything else focusable, for a marked node whose input is a button. */
+const FOCUSABLE_SELECTOR = 'button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Only the latest Open moves focus; an older one still waiting gives up. */
+let openSeq = 0;
+
 /**
  * Once the pane has rendered, focus the first field of `nodeId`'s element
  * when the pane marks one, otherwise the pane's first field, otherwise the
- * pane body itself (it's focusable for this).
+ * pane body itself (made focusable just for this).
  */
 export function focusBuilderField(nodeId?: string, doc: Document = document) {
+  const seq = ++openSeq;
+  const before = doc.activeElement;
   let frames = 0;
   const attempt = () => {
+    if (seq !== openSeq) return;
+    // The user moved on to another field meanwhile: leave their focus alone.
+    const now = doc.activeElement;
+    if (now !== before && now instanceof HTMLElement && now.matches(FIELD_SELECTOR)) return;
     const body = doc.querySelector<HTMLElement>(`[${BUILDER_BODY_ATTR}]`);
     const marked = nodeId
       ? body?.querySelector<HTMLElement>(`[${FOCUS_NODE_ATTR}="${CSS.escape(nodeId)}"]`)
       : null;
     const field = marked?.querySelector<HTMLElement>(FIELD_SELECTOR);
-    // The mode's state update renders the pane in the first frame. A pane
-    // that marks its nodes may need a little longer for this node's fields.
-    const marksNodes = !!body?.querySelector(`[${FOCUS_NODE_ATTR}]`);
-    if (frames++ < 2 || (marksNodes && !field && frames < MAX_FRAMES)) {
+    // The mode's state update renders the pane in the first frame. A marked
+    // node may get its fields a little later, once metadata arrives.
+    if (frames++ < 2 || (marked && !field && frames < MAX_FRAMES)) {
       requestAnimationFrame(attempt);
       return;
     }
     if (!body) return;
-    const target = field ?? marked ?? body.querySelector<HTMLElement>(FIELD_SELECTOR) ?? body;
+    const target =
+      field ??
+      marked?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) ??
+      body.querySelector<HTMLElement>(FIELD_SELECTOR) ??
+      focusableBody(body);
     target.focus();
     target.scrollIntoView?.({ block: 'nearest' });
   };
   requestAnimationFrame(attempt);
+}
+
+/** The pane body, focusable until focus leaves it. It isn't permanently, so
+ *  the browser still treats it as a keyboard-scrollable region. */
+function focusableBody(body: HTMLElement): HTMLElement {
+  if (!body.hasAttribute('tabindex')) {
+    body.setAttribute('tabindex', '-1');
+    body.addEventListener('blur', () => body.removeAttribute('tabindex'), { once: true });
+  }
+  return body;
 }
 
 /** The drawer's Open: show the Builder, select the node, focus its field. */

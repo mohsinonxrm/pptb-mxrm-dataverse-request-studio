@@ -289,7 +289,8 @@ export function BatchMode({
     }
     return out;
   }, [compiled, unavailable]);
-  const disabledReason = disabledReasonFromAdvisories(advisories);
+  // Without a host that can send a batch, the tooltip says so first, as before.
+  const disabledReason = unavailable ?? disabledReasonFromAdvisories(advisories);
   const needsConsent =
     compiled.items.some((c) => c.wire && Object.keys(c.wire.headers).length > 0) ||
     (state.continueOnError && plan.some((s) => !s.transaction));

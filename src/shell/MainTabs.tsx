@@ -44,8 +44,8 @@ export function MainTabs({
           </Tab>
         </TabList>
       </div>
-      {/* Focusable, so an advisory's Open can land on a pane with no field. */}
-      <div className={s.mainBody} data-builder-body="" tabIndex={-1}>
+      {/* An advisory's Open finds the pane's fields here (#294). */}
+      <div className={s.mainBody} data-builder-body="">
         {/* Pane-level boundary (#19): a crash in one tab (e.g. the Results
             grid or the code generator) keeps the mode, its state and the
             other tabs usable. Switching tabs clears the error. */}

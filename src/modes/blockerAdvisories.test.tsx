@@ -64,6 +64,7 @@ import { BatchMode } from './BatchMode';
 import { BulkWriteMode } from './BulkWriteMode';
 import { BulkDeleteMode } from './BulkDeleteMode';
 import { SaveContextRoot, type SaveContextValue } from '../state/SaveContext';
+import { serializeManageAttachment, type SavedRequest } from '../state/savedRequests';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.ResizeObserver ??= class {
@@ -133,6 +134,9 @@ const MODES: [string, ComponentType, string, string][] = [
   ['Bulk Delete', () => <BulkDeleteMode themeMode="light" />, 'bd-table', 'target'],
 ];
 
+// One component for the whole test: an inline one would remount (and reset) on each render.
+const AttachmentMode = () => <ManageAttachmentMode themeMode="light" />;
+
 describe('Execute blockers as advisories (#294)', () => {
   it.each(MODES)('%s: the blocker leads to its sidebar node', (_, Mode, id, focusNode) => {
     render(Mode);
@@ -140,17 +144,56 @@ describe('Execute blockers as advisories (#294)', () => {
     expect(errors.map((a) => a.id)).toContain(id);
     const blocker = errors.find((a) => a.id === id)!;
     expect(blocker.focusNode).toBe(focusNode);
-    // The Execute tooltip names the blocker (or counts them).
-    expect(host.urlBar?.disabledReason).toBe(
-      errors.length === 1
-        ? blocker.title
-        : `${errors.length} blockers — open Advisories to review.`,
+    // The Execute tooltip still names the blocker itself.
+    expect(host.urlBar?.disabledReason).toBe(blocker.title);
+    expectOpens(focusNode);
+  });
+
+  it('Manage Attachment: an annotation upload without an id opens the Parent pane', () => {
+    render(AttachmentMode);
+    act(() =>
+      published!.onLoadSaved({
+        id: 's1',
+        name: 'Annotation',
+        modeId: 'manage-attachment',
+        orgScope: 'default',
+        savedAt: 1,
+        state: serializeManageAttachment({
+          target: 'annotation',
+          recordId: null,
+          parentActivityId: null,
+          parentEntityLogical: null,
+          parentEntityId: null,
+          operation: 'upload',
+          uploadMethod: { kind: 'inline-base64' },
+          downloadMethod: { kind: 'single-request' },
+          source: { kind: 'file' },
+          fileName: 'note.txt',
+          fileSize: 1,
+          mimeType: 'text/plain',
+          bodyBase64: '',
+          bodyUrl: '',
+          subject: '',
+          noteText: '',
+          headers: [],
+          dirty: new Set(),
+        }),
+      } as SavedRequest),
     );
-    // The node exists in this mode's sidebar, and Open selects it.
-    const ids = nodeIds(host.sidebar!.sections.flatMap((s) => s.items));
-    expect(ids).toContain(focusNode);
-    act(() => host.urlBar!.onAdvisoryFocus!(focusNode));
-    render(Mode);
-    expect(host.sidebar!.activeNode).toBe(focusNode);
+    render(AttachmentMode);
+    const blocker = host.urlBar!.advisories!.find((a) => a.id === 'attach-annotation-id');
+    // The id is typed in the Parent pane; Target only picks attachment or annotation.
+    expect(blocker?.focusNode).toBe('parent');
+    expectOpens('parent');
   });
 });
+
+/** The node is in the mode's sidebar, Open selects it, and its pane renders. */
+function expectOpens(focusNode: string) {
+  const ids = nodeIds(host.sidebar!.sections.flatMap((s) => s.items));
+  expect(ids).toContain(focusNode);
+  act(() => host.urlBar!.onAdvisoryFocus!(focusNode));
+  expect(host.sidebar!.activeNode).toBe(focusNode);
+  // A node the pane router doesn't know would leave the Builder blank.
+  expect(document.querySelector('[data-builder-body]')?.textContent?.trim()).not.toBe('');
+}

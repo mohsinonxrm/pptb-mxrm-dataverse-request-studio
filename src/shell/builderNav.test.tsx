@@ -36,7 +36,14 @@ function Mode({ withField, marked = false }: { withField: boolean; marked?: bool
   const [tab, setTab] = useState<MainTab>('results');
   const [node, setNode] = useState('target');
   return (
-    <ModeShell sidebar={<span>node:{node}</span>} urlBar={<OpenButton onSelect={setNode} />}>
+    <ModeShell
+      sidebar={
+        <span>
+          node:{node} <input aria-label="Elsewhere" />
+        </span>
+      }
+      urlBar={<OpenButton onSelect={setNode} />}
+    >
       <MainTabs tab={tab} onTabChange={setTab}>
         {tab === 'builder' ? (
           <div>
@@ -96,6 +103,21 @@ describe('useOpenAdvisoryNode (#294)', () => {
     act(() => openButton().click());
     await focusMoved();
     expect(document.activeElement?.getAttribute('aria-label')).toBe('Header value');
+  });
+
+  it('leaves focus alone when the user moved to another field meanwhile', async () => {
+    act(() =>
+      root!.render(
+        <FluentProvider theme={webLightTheme}>
+          <Mode withField />
+        </FluentProvider>,
+      ),
+    );
+    act(() => openButton().click());
+    const elsewhere = hostEl!.querySelector<HTMLInputElement>('input[aria-label="Elsewhere"]')!;
+    elsewhere.focus();
+    await act(async () => await new Promise((r) => setTimeout(r, 200)));
+    expect(document.activeElement).toBe(elsewhere);
   });
 
   it('focuses the pane itself when it has no field', async () => {

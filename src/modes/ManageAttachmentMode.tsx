@@ -187,13 +187,14 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
       when: state.operation === 'upload' && state.target === 'annotation' && !state.recordId,
       id: 'attach-annotation-id',
       title: 'Provide a caller-generated annotationid (Annotations require an explicit GUID).',
-      focusNode: 'target',
+      // The ids are typed in the Parent pane; Target only picks attachment or annotation.
+      focusNode: 'parent',
     },
     {
       when: state.operation !== 'upload' && !state.recordId,
       id: 'attach-record',
       title: `Pick the existing ${state.target} record.`,
-      focusNode: 'target',
+      focusNode: 'parent',
     },
     {
       when:
@@ -215,7 +216,7 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
       when: urlPartProblem,
       id: 'attach-url-part',
       title: urlPartProblem ?? '',
-      focusNode: urlPartProblem?.startsWith('Parent') ? 'parent' : 'target',
+      focusNode: 'parent',
     },
   ]);
   const disabledReason = disabledReasonFromAdvisories(blockers);

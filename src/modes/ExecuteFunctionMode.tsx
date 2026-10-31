@@ -172,7 +172,8 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
       when: bindingEntity && !bindingTable,
       id: 'function-binding-metadata',
       title: `Can't build the URL yet — ${bindingEntity} table metadata isn't loaded.`,
-      focusNode: 'binding',
+      // The source record when one is needed; otherwise the action picker.
+      focusNode: requiresBoundRecord ? 'target' : 'pick',
     },
     {
       when: missingRequired.length > 0,
@@ -190,7 +191,10 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
       when: urlPartProblem,
       id: 'function-url-part',
       title: urlPartProblem ?? '',
-      focusNode: urlPartProblem?.startsWith('Bound') ? 'target' : 'params',
+      // 'Parameter <name>: …' names the param; each has its own node.
+      focusNode: urlPartProblem?.startsWith('Bound')
+        ? 'target'
+        : `param:${/^Parameter (\S+):/.exec(urlPartProblem ?? '')?.[1] ?? ''}`,
     },
   ]);
   const disabledReason = disabledReasonFromAdvisories(advisories);
