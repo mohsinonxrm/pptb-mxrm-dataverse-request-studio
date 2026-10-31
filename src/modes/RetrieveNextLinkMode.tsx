@@ -152,6 +152,8 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
   const [activeNode, setActiveNode] = useState<ClauseId>('url');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
+  // The URL the shown result came from: the builder may have changed since (#291).
+  const [runUrl, setRunUrl] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
@@ -190,6 +192,7 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
   const onExecute = async () => {
     if (!analysis.ok) return;
     setLoading(true);
+    setRunUrl(state.url.trim());
     const res = await runtime.nextLink(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setLoading(false);
@@ -486,9 +489,16 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
           <ResultsView
             result={result}
             mode="next"
-            requestUrl={state.url.trim() || undefined}
+            requestUrl={runUrl || undefined}
             onUseEntitySet={(segment, entitySet) => {
-              set('url', replacePathSegment(state.url, segment, entitySet), 'url');
+              // Fix the URL in the builder; if it was edited since the run and no
+              // longer has the segment, fix the URL that ran instead.
+              const fixed = replacePathSegment(state.url, segment, entitySet);
+              set(
+                'url',
+                fixed !== state.url ? fixed : replacePathSegment(runUrl ?? '', segment, entitySet),
+                'url',
+              );
               setTab('builder');
             }}
           />

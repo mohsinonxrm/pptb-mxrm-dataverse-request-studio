@@ -47,13 +47,23 @@ export function missingPrivilege(message: string | undefined): MissingPrivilege 
 
 /** One sentence naming the missing privilege, for the 403 card. */
 export function describeMissingPrivilege(p: MissingPrivilege): string {
+  // Only an access right (SecLib::AccessCheckEx): a record-level check. The
+  // user often holds the privilege, but at too narrow a depth, or the record
+  // isn't theirs or shared with them.
+  if (!p.privilege) {
+    return (
+      `Your user doesn't have ${p.access} access to this record${p.entity ? ` (${p.entity})` : ''}. ` +
+      'A security role may grant it at too narrow a depth (for example User rather than ' +
+      "Business Unit), or the record isn't owned by or shared with you."
+    );
+  }
   const what = p.access
     ? `${p.access} access${p.entity ? ` on ${p.entity}` : ''}`
     : p.entity
       ? `access on ${p.entity}`
       : '';
-  const name = p.privilege ? `the ${p.privilege} privilege` : '';
-  const missing = name && what ? `${name} (${what})` : name || what;
+  const name = `the ${p.privilege} privilege`;
+  const missing = what ? `${name} (${what})` : name;
   return `Your user is missing ${missing}. A Dataverse administrator can add it to one of your security roles.`;
 }
 

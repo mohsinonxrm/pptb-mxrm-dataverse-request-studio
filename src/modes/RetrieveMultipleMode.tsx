@@ -189,6 +189,9 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // The $filter "Run without $filter" cleared, until Restore or the next run (#291).
   const [removedFilter, setRemovedFilter] = useState<RetrieveMultipleState['filter'] | null>(null);
   const runWithoutFilterRef = useRef(false);
+  // The URL the shown result came from, for Copy request URL and the error
+  // report: the builder may have changed since (#291).
+  const [runUrl, setRunUrl] = useState<string | undefined>(undefined);
 
   // ── Saved-request persistence (localStorage) ──
   // Track the last-saved id + the hash of state at that save so we can
@@ -357,6 +360,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     startRun();
     setLoading(false);
     setResult(null);
+    setRemovedFilter(null);
   };
 
   // `keepRemovedFilter` is only `true` for the run that "Run without
@@ -365,6 +369,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     if (keepRemovedFilter !== true) setRemovedFilter(null);
     const run = startRun();
     setLoading(true);
+    setRunUrl(built.relativeUrl);
     runPageSizeRef.current = state.prefer.maxpagesize;
     runHeadersRef.current = headerItemsToObject(state.headers, null);
     const res = await runtime.retrieveMultiple(state, runHeadersRef.current);
@@ -398,7 +403,8 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // ── 0 rows: next steps (#291) ──
   // "Run without $filter" clears the builder's $filter, so the builder, the
   // URL and Recent runs all show what ran, and runs once that state has
-  // rendered. The results then offer Restore, which puts the $filter back.
+  // rendered. The results then offer Restore, which puts the $filter back,
+  // until the next run, a reset, or a new $filter in the builder.
   const filterActionsOn = filterCount > 0 && !state.apply.enabled;
   const runWithoutFilter = () => {
     setRemovedFilter(state.filter);
@@ -411,9 +417,12 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     if (f) setState((s) => ({ ...s, filter: f }));
   };
   useEffect(() => {
-    if (!runWithoutFilterRef.current) return;
-    runWithoutFilterRef.current = false;
-    void onExecute(true);
+    if (runWithoutFilterRef.current) {
+      runWithoutFilterRef.current = false;
+      void onExecute(true);
+    } else if (countRules(state.filter) > 0) {
+      setRemovedFilter(null);
+    }
     // Runs on the render that has the cleared $filter; onExecute reads it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.filter]);
@@ -1120,7 +1129,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
             select={state.select}
             expand={state.expand}
             orderby={state.orderby}
-            requestUrl={built.relativeUrl}
+            requestUrl={runUrl}
             isLoadingMore={isLoadingMore}
             onRefresh={onExecute}
             onLoadMore={pageError ? undefined : fetchOneMorePage}
@@ -1140,7 +1149,11 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
                   }
                 : undefined
             }
-            onRunWithoutFilter={filterActionsOn ? runWithoutFilter : undefined}
+            // Same gate as Execute: nothing runs while a run is in flight
+            // or the request has a blocker.
+            onRunWithoutFilter={
+              filterActionsOn && !loading && !disabledReason ? runWithoutFilter : undefined
+            }
             notice={
               removedFilter && filterCount === 0 ? (
                 <MessageBar intent="info" layout="multiline">

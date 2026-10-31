@@ -253,6 +253,8 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   const [activeNode, setActiveNode] = useState<ClauseId>('target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
+  // The URL the shown result came from: the builder may have changed since (#291).
+  const [runUrl, setRunUrl] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
@@ -457,6 +459,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const onExecute = async () => {
     setLoading(true);
+    setRunUrl(built.relativeUrl);
     const res = await runtime.predefined(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setLoading(false);
@@ -1074,7 +1077,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
             result={result}
             mode="multi"
             table={state.table}
-            requestUrl={built.relativeUrl}
+            requestUrl={runUrl}
             // Pass the layoutxml column order so the results grid columns
             // match what Dynamics 365 / Sales Hub shows for the same view.
             // Without this the grid falls back to JSON-key order, which on

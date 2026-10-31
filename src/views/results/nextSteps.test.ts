@@ -40,12 +40,15 @@ describe('missingPrivilege (#291)', () => {
     expect(missingPrivilege('is missing prvAppendContact privilege')?.access).toBe('Append');
   });
 
-  it('falls back to AccessRights when no privilege is named', () => {
+  it('falls back to AccessRights, and explains a record-level check', () => {
     const p = missingPrivilege(
       'SecLib::AccessCheckEx failed. Returned hr = -2147187962, ObjectTypeCode: 1, AccessRights: WriteAccess',
     );
     expect(p).toEqual({ access: 'Write' });
-    expect(describeMissingPrivilege(p!)).toMatch(/^Your user is missing Write access\./);
+    // Not "add the privilege": the user may hold it at too narrow a depth.
+    expect(describeMissingPrivilege(p!)).toBe(
+      "Your user doesn't have Write access to this record. A security role may grant it at too narrow a depth (for example User rather than Business Unit), or the record isn't owned by or shared with you.",
+    );
   });
 
   it('returns null when the message names nothing', () => {

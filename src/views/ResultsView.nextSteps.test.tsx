@@ -16,6 +16,11 @@ vi.mock('../shell/copy', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../shell/copy')>()),
   copyText: host.copy,
 }));
+// A connected org, so URLs are absolute (without one they read https:///…).
+vi.mock('../mock/environment', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../mock/environment')>()),
+  ENV: { name: 'Test', host: 'org.crm.dynamics.com', apiBase: '/api/data/v9.2', user: '' },
+}));
 vi.mock('../host/useScopedEntities', () => ({
   useScopedEntities: () => ({
     entities: host.entities,
@@ -176,10 +181,10 @@ describe('ResultsView next steps (#291)', () => {
     expect(button('Use accounts')).toBeUndefined();
   });
 
-  it('every error: Copy error report has the request and no headers', () => {
+  it('every error: Copy error report has the request, and masks a quoted token', () => {
     render(
       <ResultsView
-        result={failed(400, 'Bad filter', '0x80060888')}
+        result={failed(400, 'Bad filter near Bearer eyJ0eXAi.secret-token', '0x80060888')}
         mode="multi"
         requestUrl="/api/data/v9.2/accounts?$filter=bad"
       />,
@@ -187,8 +192,45 @@ describe('ResultsView next steps (#291)', () => {
     act(() => button('Copy error report')!.click());
     const [report, what] = host.copy.mock.calls[0] as unknown as [string, string];
     expect(what).toBe('the error report');
-    expect(report).toContain(`Request: GET https://${ENV.host}/api/data/v9.2/accounts?$filter=bad`);
+    expect(report).toContain(
+      'Request: GET https://org.crm.dynamics.com/api/data/v9.2/accounts?$filter=bad',
+    );
     expect(report).toContain('Code: 0x80060888');
-    expect(report).not.toContain('secret-token');
+    expect(report).toContain('Message: Bad filter near Bearer [removed]');
+    expect(report).not.toMatch(/secret-token|eyJ0eXAi|Authorization/);
+  });
+
+  it('keeps the notice above an error, so a failed Run without $filter can be undone', () => {
+    render(
+      <ResultsView
+        result={failed(0, 'Dataverse response exceeds the maximum size (16 MB)')}
+        mode="multi"
+        notice={<button type="button">Restore $filter</button>}
+      />,
+    );
+    expect(button('Restore $filter')).toBeDefined();
+    expect(hostEl!.textContent).toContain('Request failed');
+  });
+
+  it('offers no 0-row actions when the mode wires none', () => {
+    render(
+      <ResultsView
+        result={{
+          status: 200,
+          statusText: 'OK',
+          ms: 5,
+          bytes: 20,
+          ok: true,
+          outcome: 'ok',
+          body: { value: [] },
+          headers: {},
+        }}
+        mode="next"
+      />,
+    );
+    expect(hostEl!.textContent).toContain('No records matched');
+    for (const t of ['Edit $filter', 'Run without $filter', 'Copy request URL']) {
+      expect(button(t)).toBeUndefined();
+    }
   });
 });

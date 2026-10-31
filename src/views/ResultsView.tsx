@@ -54,7 +54,8 @@ import {
   suggestEntitySet,
 } from './results/nextSteps';
 
-/** The request URL as sent: modes pass it relative to the org host. */
+/** The request URL as sent: modes pass it relative to the org host. Like the
+ *  URL bar, it reads `https:///…` when there's no connection. */
 function absoluteUrl(url: string | undefined): string | undefined {
   return url && url.startsWith('/') ? `https://${ENV.host}${url}` : url;
 }
@@ -179,18 +180,23 @@ export function ResultsView({
   // baked into WriteResultCard (412 = "ETag stale" / "precondition failed",
   // 409 = duplicate-detect, etc.), so we fall through and let it render.
   if (!result.ok && !writeContext) {
+    // The notice stays above an error too: after a failed "Run without
+    // $filter" it's the only way to get the $filter back.
     return (
-      <ErrorState
-        result={result}
-        method={method}
-        requestUrl={absoluteUrl(requestUrl)}
-        onUseEntitySet={onUseEntitySet}
-      />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {notice}
+        <ErrorState
+          result={result}
+          method={method}
+          requestUrl={absoluteUrl(requestUrl)}
+          onUseEntitySet={onUseEntitySet}
+        />
+      </div>
     );
   }
 
   // 0 rows (#291): the grid's empty state offers the next step.
-  const emptyActions = (
+  const emptyActions = (onEditFilter || onRunWithoutFilter || requestUrl) && (
     <>
       {onEditFilter && (
         <Button icon={<Filter20Regular />} onClick={onEditFilter}>

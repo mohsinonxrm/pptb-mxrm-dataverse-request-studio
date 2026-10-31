@@ -11,6 +11,7 @@ const host = vi.hoisted(() => ({
   liveTable: undefined as unknown,
   retrieve: vi.fn(),
   props: null as null | {
+    requestUrl?: string;
     onEditFilter?: () => void;
     onRunWithoutFilter?: () => void;
     notice?: ReactNode;
@@ -134,10 +135,23 @@ describe('RetrieveMultipleMode next steps (#291)', () => {
     expect(host.props?.notice).toBeFalsy();
   });
 
-  it('Edit $filter goes back to the builder', async () => {
+  it('Edit $filter opens the $filter in the builder', async () => {
     await runWithFilter();
     act(() => host.props!.onEditFilter!());
     expect(hostEl!.querySelector('[data-testid=results]')).toBeNull();
+    expect(hostEl!.textContent).toContain('Combine rules with AND / OR');
+  });
+
+  it('reports the URL that ran, not the builder after later edits', async () => {
+    await runWithFilter();
+    expect(host.props?.requestUrl).toContain('$filter=');
+    act(() => host.props!.onRunWithoutFilter!());
+    await flush();
+    expect(host.props?.requestUrl).not.toContain('$filter=');
+    // Restore changes the builder only; the shown result still came from
+    // the unfiltered URL.
+    act(() => button('Restore $filter')!.click());
+    expect(host.props?.requestUrl).not.toContain('$filter=');
   });
 
   it('Run without $filter clears it, runs, and Restore puts it back', async () => {
