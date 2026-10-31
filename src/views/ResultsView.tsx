@@ -208,6 +208,9 @@ export function ResultsView({
     );
   }
 
+  // Count only (#272): the body is the number of matching rows.
+  if (typeof result.body === 'number') return <CountResult result={result} count={result.body} />;
+
   // 0 rows (#291): the grid's empty state offers the next step.
   const emptyActions = (onEditFilter || onRunWithoutFilter || requestUrl) && (
     <>
@@ -419,6 +422,41 @@ export function ResultsView({
 
 // ResultsHeader was removed — status pill + ms + bytes + row count now live
 // in the grid's bottom info bar (see ResultsGrid `infoBar`).
+
+/** Dataverse's count limits (standard, elastic), for a response that doesn't say it hit one. */
+const COUNT_CAPS = new Set([5000, 500]);
+
+/** A Count only result (#272): the number, and whether Dataverse stopped counting. */
+function CountResult({ result, count }: { result: ExecResult; count: number }) {
+  const s = useStudioStyles();
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <StatusPill status="success" code={result.status} ms={result.ms} />
+      </div>
+      <div className={s.emptyState} role="status">
+        <Text size={900} weight="semibold" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {count.toLocaleString()}
+        </Text>
+        <Caption1>matching row{count === 1 ? '' : 's'}</Caption1>
+        {(result.countLimitExceeded ?? COUNT_CAPS.has(count)) && (
+          <Caption1 style={{ color: tokens.colorNeutralForeground3, maxWidth: 440 }}>
+            Dataverse stops counting at 5,000 rows (500 for elastic tables),{' '}
+            {result.countLimitExceeded ? 'and more rows match.' : 'so there may be more.'} The{' '}
+            <code>RetrieveTotalRecordCount</code> function gives a total from the last 24 hours.
+          </Caption1>
+        )}
+        <Button
+          appearance="subtle"
+          icon={<Copy20Regular />}
+          onClick={() => void copyText(String(count), 'the count')}
+        >
+          Copy count
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function DetailPane({ body, table }: { body: unknown; table: string }) {
   if (!body || typeof body !== 'object') return null;

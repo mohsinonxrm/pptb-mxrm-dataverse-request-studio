@@ -60,6 +60,8 @@ export interface ParsedRequest {
   orderby: OrderbySpec[];
   top: number | null;
   countOn: boolean;
+  /** The URL ended in `/$count` (#272). */
+  countOnly?: boolean;
   expand: ExpandSpec[];
   apply?: ApplySpec;
 }
@@ -97,6 +99,8 @@ const DOCS = {
     'https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/query-data-web-api',
   joinTables:
     'https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/query/join-tables',
+  countRows:
+    'https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/query/count-rows',
   // Unknown-column errors ($select / $orderby): column names and the
   // `_<lookup>_value` form are explained on Select columns (#309).
   attrMetadata:
@@ -183,9 +187,20 @@ export async function parseODataUrl(
   const warnings: ParseIssue[] = [];
   const errors: ParseIssue[] = [];
   try {
-    const { entitySet, query } = splitUrl(rawUrl);
+    const { entitySet, query, countOnly, countPath } = splitUrl(rawUrl);
     if (!entitySet) {
       errors.push(iss('Could not extract an entity-set name from the URL.', DOCS.queryOptions));
+      return { ok: false, warnings, errors };
+    }
+    // Count only counts a table's rows; loading `<set>` alone would count
+    // every row of it instead of the related ones (#272).
+    if (countPath) {
+      errors.push(
+        iss(
+          `Count only counts a table's rows, so '${countPath}/$count' can't be loaded. Count the related table with a $filter on its lookup instead.`,
+          DOCS.countRows,
+        ),
+      );
       return { ok: false, warnings, errors };
     }
 
@@ -214,6 +229,17 @@ export async function parseODataUrl(
         iss(
           'Dropped `$skiptoken` — it is the paging cursor from an @odata.nextLink. The builder loads the query itself (first page); to follow this exact page, use Retrieve NextLink.',
           DOCS.queryOptions,
+        ),
+      );
+    }
+
+    // `<set>/$count?$filter=…`: Dataverse rejects the filter there, so Count
+    // only sends it with `$count=true` instead (#272).
+    if (countOnly && '$filter' in opts) {
+      warnings.push(
+        iss(
+          "Dataverse doesn't accept $filter on /$count, so Count only sends this $filter with $count=true and shows @odata.count.",
+          DOCS.countRows,
         ),
       );
     }
@@ -279,6 +305,7 @@ export async function parseODataUrl(
       orderby,
       top,
       countOn,
+      ...(countOnly ? { countOnly } : {}),
       expand,
       apply,
     };
@@ -593,7 +620,13 @@ function columnExistsOnTable(table: TableMeta, name: string): boolean {
 
 // ── URL splitting helpers ───────────────────────────────────────────────
 
-function splitUrl(rawUrl: string): { entitySet: string; query: string } {
+function splitUrl(rawUrl: string): {
+  entitySet: string;
+  query: string;
+  countOnly: boolean;
+  /** The path before `/$count` when it's more than a table, e.g. `accounts(<id>)/contacts`. */
+  countPath?: string;
+} {
   let s = rawUrl.trim();
   // Strip absolute prefix (https://<host>/api/data/vX.Y/) or any leading slash.
   s = s.replace(/^https?:\/\/[^/]+/, '');
@@ -609,10 +642,13 @@ function splitUrl(rawUrl: string): { entitySet: string; query: string } {
     }
   }
   const qIdx = s.indexOf('?');
-  if (qIdx < 0) return { entitySet: stripKeyPart(s), query: '' };
-  const entitySet = stripKeyPart(s.slice(0, qIdx));
-  const query = s.slice(qIdx + 1);
-  return { entitySet, query };
+  let path = qIdx < 0 ? s : s.slice(0, qIdx);
+  const query = qIdx < 0 ? '' : s.slice(qIdx + 1);
+  // `<set>/$count`: Count only (#272).
+  const countOnly = path.endsWith('/$count');
+  if (countOnly) path = path.slice(0, -'/$count'.length);
+  const countPath = countOnly && /[(/]/.test(path) ? path : undefined;
+  return { entitySet: stripKeyPart(path), query, countOnly, ...(countPath ? { countPath } : {}) };
 }
 
 /** `accounts(<guid>)` → `accounts` — keys aren't relevant for retrieve-multiple. */

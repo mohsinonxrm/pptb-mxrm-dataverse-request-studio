@@ -50,11 +50,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     **Continue** asks for the refused page again.
   - Waiting the exact `Retry-After` time needs response headers, which
     ToolBox doesn't pass through yet.
+- **Count only in Retrieve Multiple** ([#272]). Under $count, **Count only**
+  shows just the number of rows matching your $filter, with **Copy count**.
+  It asks for one row with `$count=true` and reads `@odata.count`, because
+  Dataverse rejects $filter on `<set>/$count` and ToolBox can't read that
+  plain-text answer. Dataverse counts up to 5,000 rows (500 for elastic
+  tables); past that, the result says more rows match. Pasting a `/$count` URL
+  turns Count only on.
 
 [#291]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/291
 [#294]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/294
 [#226]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/226
 [#269]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/269
+[#272]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/272
 
 ## [1.5.0-beta.1] - 2026-10-30
 

@@ -46,6 +46,7 @@ import { jsonBytes } from './byteSize';
 import { hasCollectionInvolvedNestedExpand } from '../editors/expand/expandTree';
 import {
   buildRetrieveMultiple,
+  COUNT_ONLY_PREFER,
   buildRetrieveSingle,
   buildCreateBody,
   buildUpdate,
@@ -126,6 +127,9 @@ export interface ExecResult {
   /** Associate / Disassociate on a collection-valued nav property: one
    *  entry per target, in request order (#99). Absent for every other op. */
   targets?: RelateTargetResult[];
+  /** Count only (#272): Dataverse stopped counting at its limit (5,000, or
+   *  500 for elastic tables). Absent when the response didn't say. */
+  countLimitExceeded?: boolean;
 }
 
 /**
@@ -469,6 +473,7 @@ export async function executeRetrieveMultiple(
 ): Promise<ExecResult> {
   const dropped = refuseHeaderProblems(composed);
   if (dropped) return dropped;
+  if (s.countOnly) return executeCount(s, composed);
   const headers = readHeaders(composed, s.prefer.maxpagesize);
   // Without the page size on the wire, dropping `$top` (as the Code tab
   // does) would leave the query uncapped: up to 5,000 rows (#219). Except
@@ -479,6 +484,56 @@ export async function executeRetrieveMultiple(
   const res = await timed(() => dvHost.queryData(built.relativeNoBase, headers), headers);
   if (isExecResult(res)) return res;
   return ok(200, res.value, res.ms);
+}
+
+/** Code on a count-only response that carried no `@odata.count`. */
+export const COUNT_UNREADABLE_CODE = 'DRS.CountUnreadable';
+
+/** `@odata.count` and whether Dataverse stopped counting at its limit. */
+export function readCount(body: unknown): { count: number; limitExceeded?: boolean } | null {
+  if (!body || typeof body !== 'object') return null;
+  const b = body as Record<string, unknown>;
+  const count = b['@odata.count'];
+  if (typeof count !== 'number' || !Number.isInteger(count) || count < 0) return null;
+  const exceeded = b['@Microsoft.Dynamics.CRM.totalrecordcountlimitexceeded'];
+  return typeof exceeded === 'boolean' ? { count, limitExceeded: exceeded } : { count };
+}
+
+/**
+ * Count only (#272): one row with `$count=true` (see buildRetrieveMultiple).
+ * The request's own headers go with it (impersonation, say), but never a
+ * page size. The result's body is the count itself.
+ */
+async function executeCount(
+  s: RetrieveMultipleState,
+  composed?: Record<string, string>,
+): Promise<ExecResult> {
+  const sent = readHeaders(composed, null);
+  // Sent headers replace the host's own Prefer, which asks for every
+  // annotation; ask again for the one that says the count is capped.
+  const headers = sent ? { ...sent, Prefer: COUNT_ONLY_PREFER } : undefined;
+  const built = buildRetrieveMultiple(s);
+  const res = await timed(() => dvHost.queryData(built.relativeNoBase, headers), headers);
+  if (isExecResult(res)) return res;
+  const read = readCount(res.value);
+  if (!read) {
+    // Dataverse answered 200, so say that, but there's no count to show.
+    return {
+      ...failure(
+        200,
+        {
+          code: COUNT_UNREADABLE_CODE,
+          message: "Dataverse answered without @odata.count, so there's no count to show.",
+        },
+        res.ms,
+      ),
+      outcome: 'error',
+    };
+  }
+  return {
+    ...ok(200, read.count, res.ms),
+    ...(read.limitExceeded !== undefined ? { countLimitExceeded: read.limitExceeded } : {}),
+  };
 }
 
 /**
