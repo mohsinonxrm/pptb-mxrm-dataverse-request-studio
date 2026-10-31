@@ -13,6 +13,12 @@ export interface RetrieveMultipleState {
   orderby: OrderbySpec[];
   top: number | null;
   countOn: boolean;
+  /**
+   * Count only (#272): just the number of rows matching $filter (up to
+   * 5,000), read from `@odata.count` on a one-row request. The other clauses
+   * aren't sent. Optional, so saved requests from before it read as off.
+   */
+  countOnly?: boolean;
   expand: ExpandSpec[];
   apply: ApplySpec;
   prefer: PreferSpec;

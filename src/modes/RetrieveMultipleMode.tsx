@@ -34,7 +34,7 @@ import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { detectRetrieveMultipleAntipatterns } from '../engine/antipatterns';
 import { collectStrippedWildcards } from '../editors/filter/filterTree';
-import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
+import { adv, disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { validateRequest } from '../state/validateRequest';
 import { ModeShell } from '../shell/ModeShell';
 import { notify } from '../shell/dialogs';
@@ -56,7 +56,7 @@ import { ResultsView } from '../views/ResultsView';
 import { countRules, newId } from '../editors/filter/filterTree';
 import { findTable } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
-import { buildRetrieveMultiple } from '../engine/urlBuilder';
+import { buildRetrieveMultiple, COUNT_ONLY_PREFER } from '../engine/urlBuilder';
 import { relatedMetadataAdvisories } from '../engine/navPath';
 // Phase 1 wiring: routes through `runtime.retrieveMultiple` which auto-picks
 // the live (dvHost.queryData) or mock executor based on `isEmbedded()`. The
@@ -92,6 +92,9 @@ import {
   type PagingStatus,
 } from '../views/results/pagedResults';
 import { useRecentRuns } from '../state/runHistory';
+
+/** Sidebar nodes whose clauses Count only (#272) doesn't send. */
+const COUNT_ONLY_DROPPED = /^(select|orderby|top|expand|apply|prefer)(\/|$)/;
 
 // Empty initial state — the studio is a request *builder*; seeding it with
 // mock data confused users in PPTB ("why are there pre-filled rules against
@@ -400,6 +403,10 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
           status: res.status,
           ms: res.ms,
           rowCount: topLevelRowCount(res.body),
+          // Count only (#272): the body is the count.
+          ...(typeof res.body === 'number'
+            ? { summary: `${res.body.toLocaleString()} matching row${res.body === 1 ? '' : 's'}` }
+            : {}),
         },
         ...rs,
       ].slice(0, 8),
@@ -563,8 +570,10 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   const advisories = useMemo(() => {
     // When $apply is on, the top-level $filter is silently ignored by Dataverse
     // and the active filter is the apply.prefilter (filter() stage). Feed the
-    // correct one to the wildcard / antipattern detectors.
-    const activeFilter = state.apply.enabled ? state.apply.prefilter : state.filter;
+    // correct one to the wildcard / antipattern detectors. Count only (#272)
+    // never sends $apply, so its $filter is the one that counts.
+    const activeFilter =
+      state.apply.enabled && !state.countOnly ? state.apply.prefilter : state.filter;
     const stripped = collectStrippedWildcards(activeFilter).map((w) => ({
       col: w.col,
       raw: w.raw,
@@ -671,14 +680,50 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
       });
     }
 
-    return [
+    const all = [
       ...antipatterns,
       ...validations,
       ...nestingAdvisories,
       ...relatedMetadataAdvisories(related.pending, related.failed),
     ];
+    if (!state.countOnly) return all;
+    // Count only (#272) sends $filter and nothing else, so advice about the
+    // other clauses doesn't apply, and can't block Execute.
+    return [
+      ...all.filter((a) => !a.focusNode || !COUNT_ONLY_DROPPED.test(a.focusNode)),
+      adv.info(
+        'count-only',
+        'validation',
+        'Count only: just $filter is sent',
+        <>
+          The request asks for one row with <code>$count=true</code> and shows{' '}
+          <code>@odata.count</code>: the number of rows matching $filter, up to 5,000 (500 for
+          elastic tables). $select, $orderby, $expand, $top, $apply and the page size aren&apos;t
+          sent. (Dataverse doesn&apos;t accept $filter on <code>/$count</code>.)
+        </>,
+        'count',
+      ),
+      ...(state.apply.enabled
+        ? [
+            adv.warn(
+              'count-only-apply',
+              'validation',
+              "$apply isn't sent with Count only",
+              <>
+                The count is of the rows matching $filter
+                {state.apply.prefilter.rules.length > 0
+                  ? "; the $apply filter() stage doesn't narrow it. Put those conditions in $filter"
+                  : ''}
+                . Turn $apply off, or Count only off for the aggregate.
+              </>,
+              'filter',
+            ),
+          ]
+        : []),
+    ];
     // eslint-disable-next-line react-hooks/exhaustive-deps -- related.pending / failed are new arrays every render, so keyed on their joined contents; liveTable re-runs it when the table's metadata lands
   }, [
+    state.countOnly,
     state.table,
     state.select,
     state.filter,
@@ -704,8 +749,9 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
       : (blockerReason ?? null);
 
   // Per the aggregate-data docs, $apply overrides $select / $filter / $orderby / $expand / $count.
-  // Hoisted here so the sidebar + right-pane router both reference the same flag.
-  const applyActive = state.apply.enabled;
+  // Hoisted here so the sidebar + right-pane router both reference the same flag. Count only
+  // (#272) doesn't send $apply, so nothing is overridden then.
+  const applyActive = state.apply.enabled && !state.countOnly;
 
   // ── Sidebar tree for $expand (recursive) ────────────────────
   // Sub-clause visibility per the join-tables.md rules:
@@ -882,7 +928,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
           label: '$count',
           code: true,
           dirty: state.dirty.has('count'),
-          ...overrideBadge(state.countOn ? 'on' : null),
+          ...overrideBadge(state.countOnly ? 'only' : state.countOn ? 'on' : null),
         },
         {
           id: 'expand',
@@ -974,6 +1020,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
                 orderby: [],
                 top: 50,
                 countOn: false,
+                countOnly: undefined,
                 expand: [],
                 apply: emptyApply(),
                 dirty: new Set(['target']),
@@ -996,6 +1043,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
                 orderby: [],
                 top: 50,
                 countOn: false,
+                countOnly: undefined,
                 expand: [],
                 apply: emptyApply(),
                 dirty: new Set(['target']),
@@ -1014,6 +1062,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
                 orderby: parsed.orderby,
                 top: parsed.top,
                 countOn: parsed.countOn,
+                countOnly: parsed.countOnly ? true : undefined,
                 expand: parsed.expand,
                 apply: parsed.apply ?? emptyApply(),
                 dirty: new Set(['target']),
@@ -1072,6 +1121,8 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
           <CountEditor
             countOn={state.countOn}
             setCountOn={(b) => set('countOn', b, 'count')}
+            countOnly={!!state.countOnly}
+            setCountOnly={(b) => set('countOnly', b ? true : undefined, 'count')}
             applyActive={applyActive}
           />
         );
@@ -1106,11 +1157,22 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     }
   }
 
-  const headersMap = headerItemsToObject(state.headers, preferToHeaderString(state.prefer));
+  // Count only asks for just the count-limit annotation, never a page size (#272).
+  const headersMap = headerItemsToObject(
+    state.headers,
+    state.countOnly ? COUNT_ONLY_PREFER : preferToHeaderString(state.prefer),
+  );
   const codeInputs = { method: 'GET', built, headers: headersMap };
 
   const rows = (result?.body as { value?: unknown[] } | null)?.value;
-  const resultCount = Array.isArray(rows) ? rows.length : result?.outcome === 'ok' ? 1 : null;
+  const resultCount =
+    typeof result?.body === 'number'
+      ? result.body
+      : Array.isArray(rows)
+        ? rows.length
+        : result?.outcome === 'ok'
+          ? 1
+          : null;
 
   return (
     <ModeShell

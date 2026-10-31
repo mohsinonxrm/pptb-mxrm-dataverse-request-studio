@@ -37,6 +37,7 @@ import {
   manageImagePipeline,
   manageAttachmentPipeline,
   type BinaryPipelineStep,
+  COUNT_ONLY_PREFER,
 } from './urlBuilder';
 import { applyBypassToHeaders } from './bypassHeaders';
 import { headerItemsToObject, type HeaderItem } from '../editors/HeadersEditor';
@@ -85,6 +86,8 @@ import { UPLOAD_URL_VAR, type CollectionItem, type CollectionRequest } from './c
 interface HeaderBits {
   headers?: HeaderItem[];
   prefer?: PreferSpec;
+  /** Retrieve Multiple count only (#272): its own Prefer, never a page size. */
+  countOnly?: boolean;
   concurrency?: ConcurrencyMode;
   bypass?: BypassOptions;
   /** Delete's legacy "bypass custom plugins" switch. */
@@ -116,7 +119,10 @@ export function composeHeaders(s: HeaderBits): Record<string, string> {
         : s.bypass;
     h = applyBypassToHeaders(h, b);
   }
-  return headerItemsToObject(h, s.prefer ? preferToHeaderString(s.prefer) : null);
+  return headerItemsToObject(
+    h,
+    s.countOnly ? COUNT_ONLY_PREFER : s.prefer ? preferToHeaderString(s.prefer) : null,
+  );
 }
 
 /** Path + query without the host, for builder URLs that may be absolute. */

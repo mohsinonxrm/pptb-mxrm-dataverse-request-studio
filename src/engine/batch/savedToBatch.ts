@@ -31,6 +31,7 @@ import {
   buildExecuteFunction,
   buildExecuteWorkflow,
   buildExecuteWorkflowBody,
+  COUNT_ONLY_PREFER,
 } from '../urlBuilder';
 import { applyBypassToHeaders } from '../bypassHeaders';
 import { headerItemsToObject, type HeaderItem } from '../../editors/HeadersEditor';
@@ -96,6 +97,8 @@ export const BATCHABLE_MODES: ReadonlySet<SavedModeId> = new Set<SavedModeId>([
 interface HeaderBits {
   headers?: HeaderItem[];
   prefer?: PreferSpec;
+  /** Retrieve Multiple count only (#272): its own Prefer, never a page size. */
+  countOnly?: boolean;
   concurrency?: ConcurrencyMode;
   bypass?: BypassOptions;
   bypassCustomPlugins?: boolean;
@@ -136,7 +139,10 @@ export function composePartHeaders(s: HeaderBits): Record<string, string> {
         : s.bypass;
     h = applyBypassToHeaders(h, b);
   }
-  const all = headerItemsToObject(h, s.prefer ? preferToHeaderString(s.prefer) : null);
+  const all = headerItemsToObject(
+    h,
+    s.countOnly ? COUNT_ONLY_PREFER : s.prefer ? preferToHeaderString(s.prefer) : null,
+  );
   return Object.fromEntries(
     Object.entries(all).filter(([name]) => !PART_DROPPED.has(name.toLowerCase())),
   );
