@@ -498,6 +498,18 @@ export const useStudioStyles = makeStyles({
     textTransform: 'uppercase',
     color: tokens.colorNeutralForeground3,
   },
+  // Fluent caps MenuItem at 290px, which leaves the verb mid-row in the
+  // 460px picker; let rows fill it so the verb sits at the right edge.
+  pickerMenuItem: { maxWidth: 'none' },
+  // Group tagline beside the header in the picker and palette (#289).
+  pickerGroupTagline: {
+    marginLeft: '8px',
+    fontSize: '11px',
+    fontWeight: 400,
+    letterSpacing: 'normal',
+    textTransform: 'none',
+    color: tokens.colorNeutralForeground3,
+  },
   paletteRow: {
     display: 'grid',
     gridTemplateColumns: '24px 1fr 60px',
