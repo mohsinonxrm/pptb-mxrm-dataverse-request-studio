@@ -68,6 +68,7 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
+import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
 
 // Workflow shape used by the picker — the wire response fields are
 // camelCased differently per the OData convention (workflowid not Id, etc).
@@ -198,13 +199,29 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
     ['Workflow id', state.workflowId],
     ['Record id', state.entityId],
   ]);
-  const disabledReason = !wf
-    ? 'Pick a workflow.'
-    : !state.entityId
-      ? `Pick a ${wf.primaryEntity} record to run the workflow on.`
-      : state.headers.some((h) => h.enabled && !h.name)
-        ? 'Fix empty header name.'
-        : urlPartProblem;
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const advisories = firstBlocker([
+    { when: !wf, id: 'workflow-pick', title: 'Pick a workflow.', focusNode: 'pick' },
+    {
+      when: !state.entityId,
+      id: 'workflow-record',
+      title: `Pick a ${wf?.primaryEntity} record to run the workflow on.`,
+      focusNode: 'target',
+    },
+    {
+      when: state.headers.some((h) => h.enabled && !h.name),
+      id: 'workflow-header-name',
+      title: 'Fix empty header name.',
+      focusNode: 'headers',
+    },
+    {
+      when: urlPartProblem,
+      id: 'workflow-url-part',
+      title: urlPartProblem ?? '',
+      focusNode: urlPartProblem?.startsWith('Workflow') ? 'pick' : 'target',
+    },
+  ]);
+  const disabledReason = disabledReasonFromAdvisories(advisories);
 
   const onExecute = async () => {
     setLoading(true);
@@ -472,6 +489,8 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
+          advisories={advisories}
+          onAdvisoryFocus={setActivePath}
         />
       }
     >

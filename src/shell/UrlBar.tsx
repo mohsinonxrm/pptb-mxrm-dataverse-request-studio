@@ -16,6 +16,7 @@ import { needsWriteConfirmation, type WriteConfirmSpec } from '../engine/writeCo
 import { confirmWrite } from './confirmWrite';
 import { notify } from './dialogs';
 import { copyText } from './copy';
+import { useOpenAdvisoryNode } from './builderNav';
 
 export interface UrlBarProps {
   method: HttpMethod;
@@ -77,6 +78,8 @@ export function UrlBar({
 }: UrlBarProps) {
   const ExecIcon = executeIcon ?? Play20Filled;
   const s = useStudioStyles();
+  // Open on an advisory: show the Builder, select the node, focus its field (#294).
+  const openAdvisoryNode = useOpenAdvisoryNode(onAdvisoryFocus);
   const fullUrl = `https://${ENV.host}${url}`;
   const [{ productionSafeMode }] = usePersistedSettings();
 
@@ -216,7 +219,7 @@ export function UrlBar({
         {((bytes ?? url.length) / 1024).toFixed(1)} KB
       </Caption1>
       {advisories && advisories.length > 0 && (
-        <AdvisoryDrawer advisories={advisories} onFocusNode={onAdvisoryFocus} />
+        <AdvisoryDrawer advisories={advisories} onFocusNode={openAdvisoryNode} />
       )}
       <Tooltip
         content={disabledReason ?? `${executeVerb} (Ctrl+Enter)`}

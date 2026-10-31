@@ -81,6 +81,7 @@ import { EnvironmentBadge } from '../shell/confirmWrite';
 import { hashState, type SavedRequest } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
+import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
 import {
   ASYNC_STATE,
   ASYNC_STATUS,
@@ -165,15 +166,25 @@ export function BulkDeleteMode({ themeMode }: { themeMode: ThemeMode }) {
       return { ...s, [k]: v, dirty: d };
     });
 
-  const disabledReason = !state.table
-    ? 'Pick a target table first.'
-    : !tbl
-      ? 'Loading table metadata…'
-      : problems.length > 0
-        ? problems[0]
-        : state.headers.some((h) => h.enabled && !h.name)
-          ? 'Fix empty header name.'
-          : null;
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const advisories = firstBlocker([
+    {
+      when: !state.table,
+      id: 'bd-table',
+      title: 'Pick a target table first.',
+      focusNode: 'target',
+    },
+    { when: !tbl, id: 'bd-metadata', title: 'Loading table metadata…', focusNode: 'target' },
+    // Query problems are listed in the Query pane, above the filter.
+    { when: problems.length > 0, id: 'bd-query', title: problems[0] ?? '', focusNode: 'filter' },
+    {
+      when: state.headers.some((h) => h.enabled && !h.name),
+      id: 'bd-header-name',
+      title: 'Fix empty header name.',
+      focusNode: 'headers',
+    },
+  ]);
+  const disabledReason = disabledReasonFromAdvisories(advisories);
 
   // ── Send → confirmation → BulkDelete ──
   const onConfirmed = async () => {
@@ -425,6 +436,8 @@ export function BulkDeleteMode({ themeMode }: { themeMode: ThemeMode }) {
           loading={loading}
           // Send only opens the confirmation; the job is submitted from there.
           onExecute={async () => setConfirmOpen(true)}
+          advisories={advisories}
+          onAdvisoryFocus={setActivePath}
         />
       }
     >

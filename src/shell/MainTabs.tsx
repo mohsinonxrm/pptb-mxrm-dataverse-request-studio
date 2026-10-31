@@ -3,6 +3,7 @@ import { TabList, Tab, Badge } from '@fluentui/react-components';
 import { TextBulletList20Regular, Code20Regular, Table20Regular } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import { ErrorBoundary } from './ErrorBoundary';
+import { useRegisterShowBuilder } from './builderNav';
 
 const TAB_LABEL: Record<MainTab, string> = { builder: 'Builder', code: 'Code', results: 'Results' };
 
@@ -20,6 +21,7 @@ export function MainTabs({
   children: ReactNode;
 }) {
   const s = useStudioStyles();
+  useRegisterShowBuilder(() => onTabChange('builder'));
   return (
     <main className={s.main}>
       <div className={s.mainTabsBar}>
@@ -42,7 +44,8 @@ export function MainTabs({
           </Tab>
         </TabList>
       </div>
-      <div className={s.mainBody}>
+      {/* Focusable, so an advisory's Open can land on a pane with no field. */}
+      <div className={s.mainBody} data-builder-body="" tabIndex={-1}>
         {/* Pane-level boundary (#19): a crash in one tab (e.g. the Results
             grid or the code generator) keeps the mode, its state and the
             other tabs usable. Switching tabs clears the error. */}

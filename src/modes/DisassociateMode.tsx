@@ -77,6 +77,7 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
+import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
 
 // Empty initial state — same pattern as MergeMode/AssociateMode. User picks
 // the table → source record → nav property → targets (if collection-valued).
@@ -244,19 +245,51 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
     ],
     [['Navigation property', state.navProperty]],
   );
-  const disabledReason = !tbl
-    ? 'Pick a source table first.'
-    : !state.sourceId
-      ? 'Pick a source record.'
-      : !state.navProperty
-        ? 'Pick a navigation property.'
-        : isCollection && state.targetIds.length === 0
-          ? 'Pick at least one target record to disassociate.'
-          : isSingle && currentLookup === null && !currentLookupLoading && !currentLookupError
-            ? "Source's lookup is already empty — nothing to disassociate."
-            : state.headers.some((h) => h.enabled && !h.name)
-              ? 'Fix empty header name.'
-              : urlPartProblem;
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const advisories = firstBlocker([
+    { when: !tbl, id: 'disassoc-table', title: 'Pick a source table first.', focusNode: 'source' },
+    {
+      when: !state.sourceId,
+      id: 'disassoc-source',
+      title: 'Pick a source record.',
+      focusNode: 'source',
+    },
+    {
+      when: !state.navProperty,
+      id: 'disassoc-nav',
+      title: 'Pick a navigation property.',
+      focusNode: 'nav',
+    },
+    {
+      when: isCollection && state.targetIds.length === 0,
+      id: 'disassoc-targets',
+      title: 'Pick at least one target record to disassociate.',
+      focusNode: 'target',
+    },
+    {
+      when: isSingle && currentLookup === null && !currentLookupLoading && !currentLookupError,
+      id: 'disassoc-lookup-empty',
+      title: "Source's lookup is already empty — nothing to disassociate.",
+      focusNode: 'target',
+    },
+    {
+      when: state.headers.some((h) => h.enabled && !h.name),
+      id: 'disassoc-header-name',
+      title: 'Fix empty header name.',
+      focusNode: 'headers',
+    },
+    {
+      when: urlPartProblem,
+      id: 'disassoc-url-part',
+      title: urlPartProblem ?? '',
+      focusNode: urlPartProblem?.startsWith('Target')
+        ? 'target'
+        : urlPartProblem?.startsWith('Navigation')
+          ? 'nav'
+          : 'source',
+    },
+  ]);
+  const disabledReason = disabledReasonFromAdvisories(advisories);
 
   const onExecute = async () => {
     setLoading(true);
@@ -570,6 +603,8 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
+          advisories={advisories}
+          onAdvisoryFocus={setActivePath}
         />
       }
     >

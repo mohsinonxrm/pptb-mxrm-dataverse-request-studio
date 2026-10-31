@@ -78,7 +78,12 @@ import type { ThemeMode } from '../theme/theme';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
 import { isEmbedded } from '../host/pptbBridge';
-import { adv, type Advisory } from '../primitives/advisories';
+import {
+  adv,
+  disabledReasonFromAdvisories,
+  firstBlocker,
+  type Advisory,
+} from '../primitives/advisories';
 import {
   serializeManageFile,
   deserializeManageFile,
@@ -167,21 +172,45 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
     [['Record id', state.recordId]],
     [['File column', state.fileColumn]],
   );
-  const disabledReason = !tbl
-    ? 'Pick a target table first.'
-    : !state.recordId
-      ? 'Pick a source record.'
-      : !state.fileColumn
-        ? 'Pick a file column.'
-        : state.operation === 'upload' &&
-            state.source.kind === 'file' &&
-            !state.bodyBase64 &&
-            state.source.kind === 'file' &&
-            !state.fileName
-          ? 'Choose a file to upload.'
-          : state.headers.some((h) => h.enabled && !h.name)
-            ? 'Fix empty header name.'
-            : urlPartProblem;
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const blockers = firstBlocker([
+    { when: !tbl, id: 'file-table', title: 'Pick a target table first.', focusNode: 'target' },
+    {
+      when: !state.recordId,
+      id: 'file-record',
+      title: 'Pick a source record.',
+      focusNode: 'target',
+    },
+    {
+      when: !state.fileColumn,
+      id: 'file-column',
+      title: 'Pick a file column.',
+      focusNode: 'column',
+    },
+    {
+      when:
+        state.operation === 'upload' &&
+        state.source.kind === 'file' &&
+        !state.bodyBase64 &&
+        !state.fileName,
+      id: 'file-upload-source',
+      title: 'Choose a file to upload.',
+      focusNode: 'source',
+    },
+    {
+      when: state.headers.some((h) => h.enabled && !h.name),
+      id: 'file-header-name',
+      title: 'Fix empty header name.',
+      focusNode: 'headers',
+    },
+    {
+      when: urlPartProblem,
+      id: 'file-url-part',
+      title: urlPartProblem ?? '',
+      focusNode: urlPartProblem?.startsWith('File column') ? 'column' : 'target',
+    },
+  ]);
+  const disabledReason = disabledReasonFromAdvisories(blockers);
 
   // Bound-record name capture for the WriteResultCard narrative.
   const [recordName, setRecordName] = useState<string>('');
@@ -595,7 +624,7 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
-          advisories={advisories}
+          advisories={[...blockers, ...advisories]}
           onAdvisoryFocus={setActivePath}
         />
       }

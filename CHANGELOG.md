@@ -23,8 +23,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Every error**, including failed writes: **Copy error report** copies the
     method, URL, status, error code and message. It never includes request
     headers, so no credentials or impersonation ids.
+- **Every mode lists what blocks Execute in Advisories** ([#294]). Create,
+  Associate, Disassociate, Execute Action / Function / Workflow, Manage File /
+  Image / Attachment, Predefined Query, `$batch`, Bulk Write and Bulk Delete
+  used to explain a disabled Execute only in its tooltip. Now the blocker is
+  in the Advisories drawer, like the read modes, and **Open** goes to the
+  sidebar node that fixes it, for example the first unset required parameter
+  or the first Bulk Write row with a problem. What blocks Execute is
+  unchanged.
+- **Open on any advisory shows the Builder and focuses the field** ([#294]),
+  from any tab, in every mode.
 
 [#291]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/291
+[#294]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/294
 
 ## [1.5.0-beta.1] - 2026-10-30
 
