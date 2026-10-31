@@ -85,13 +85,14 @@ import { BatchCodeView } from './batch/BatchCodeView';
 import { AddFromSavedDialog } from './batch/AddFromSavedDialog';
 import { useRecentRuns } from '../state/runHistory';
 
-const CODE_FORMATS: BatchCodeFormat[] = ['http', 'fetch', 'pptb'];
+const CODE_FORMATS: BatchCodeFormat[] = ['http', 'fetch', 'python', 'pptb'];
 type EmCodeFormat = 'csharp' | BatchCodeFormat;
-const EM_CODE_FORMATS: EmCodeFormat[] = ['csharp', 'http', 'pptb'];
+const EM_CODE_FORMATS: EmCodeFormat[] = ['csharp', 'http', 'python', 'pptb'];
 const EM_CODE_LABELS: Record<EmCodeFormat, string> = {
   ...BATCH_CODE_LABELS,
   csharp: 'ExecuteMultipleRequest (C#)',
   http: 'Web API equivalent ($batch)',
+  python: 'Web API equivalent (Python)',
 };
 
 /** Job / composite modes "Add last request" doesn't offer (#198). */

@@ -117,7 +117,7 @@ describe('Count only in the Code tab and exports', () => {
   it('every format sends the request that runs', () => {
     const built = buildRetrieveMultiple(retrieveMultipleState({ countOnly: true }));
     const i = { method: 'GET', built, headers: { Prefer: COUNT_ONLY_PREFER } };
-    for (const fmt of ['fetch', 'curl', 'powershell', 'csharp'] as const) {
+    for (const fmt of ['fetch', 'curl', 'powershell', 'csharp', 'python'] as const) {
       const code = generateCode(fmt, i);
       expect(code, fmt).toContain('$top=1');
       expect(code, fmt).toContain('$count=true');

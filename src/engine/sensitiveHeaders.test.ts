@@ -155,7 +155,7 @@ describe('Code tab and $batch parts', () => {
     headers: { Authorization: TOKEN, Cookie: 'a=b', 'OData-Version': '4.0' },
   };
 
-  it.each(['fetch', 'curl', 'powershell', 'csharp', 'json', 'xhr'] as const)(
+  it.each(['fetch', 'curl', 'powershell', 'csharp', 'python', 'json', 'xhr'] as const)(
     '%s never carries the typed credential',
     (fmt) => {
       const code = generateCode(fmt, codegen);

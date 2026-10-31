@@ -57,12 +57,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   plain-text answer. Dataverse counts up to 5,000 rows (500 for elastic
   tables); past that, the result says more rows match. Pasting a `/$count` URL
   turns Count only on.
+- **Python code** ([#270]). The Code tab has a **Python** format that sends
+  the request with `requests`: the URL, your headers, and the body as a
+  Python dict (or the file's bytes for an upload). Multi-request modes send
+  each request in order on one session. In `$batch` and ExecuteMultiple,
+  **Python (requests)** posts the multipart body. Put your token in
+  `ACCESS_TOKEN`.
 
 [#291]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/291
 [#294]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/294
 [#226]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/226
 [#269]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/269
 [#272]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/272
+[#270]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/270
 
 ## [1.5.0-beta.1] - 2026-10-30
 
