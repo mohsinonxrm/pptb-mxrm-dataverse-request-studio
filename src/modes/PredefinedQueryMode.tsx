@@ -88,6 +88,7 @@ import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
 import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
+import { useRecentRuns } from '../state/runHistory';
 
 // Empty initial state — the studio is a request *builder*. Pre-seeding a
 // table or a query confused users in PPTB ("why is this random view
@@ -257,7 +258,8 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   // The URL the shown result came from: the builder may have changed since (#291).
   const [runUrl, setRunUrl] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('predefined-query');
 
   // Save / Load
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);

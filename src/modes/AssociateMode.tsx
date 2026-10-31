@@ -78,6 +78,7 @@ import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
 import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
+import { useRecentRuns } from '../state/runHistory';
 
 // Empty initial state. The user picks a table → record → nav property →
 // target(s) before the request can fire. Seeding with a mock account id
@@ -110,7 +111,8 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('associate');
 
   // Save / Load tracking
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);

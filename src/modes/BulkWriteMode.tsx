@@ -77,7 +77,6 @@ import { findTable, type TableMeta } from '../mock/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import type { ExecResult } from '../engine/runtime';
 import { defaultBypassOptions, type CreateFieldValue } from '../state/writeState';
-import type { RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
@@ -106,6 +105,7 @@ import {
 } from '../engine/bulkWrite';
 import { checkBulkSupport, executeBulkWrite, idsFromResult } from '../engine/bulkWriteExecutor';
 import { copyText } from '../shell/copy';
+import { useRecentRuns } from '../state/runHistory';
 
 const MODE_ID = 'bulk-write' as const;
 const GROUP = 'bulk' as const;
@@ -137,7 +137,8 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
   const [result, setResult] = useState<ExecResult | null>(null);
   const [resultOp, setResultOp] = useState<BulkOperation>('CreateMultiple');
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns(MODE_ID);
   const [support, setSupport] = useState<BulkSupport>({ state: 'idle' });
   const [importOpen, setImportOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);

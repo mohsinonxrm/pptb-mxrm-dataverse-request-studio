@@ -104,6 +104,7 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
+import { useRecentRuns } from '../state/runHistory';
 
 // Default cap = Organization.MaxUploadFileSize default per doc (5 MB).
 const DEFAULT_MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -146,7 +147,8 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('manage-attachment');
 
   const built = useMemo(() => buildManageAttachment(state), [state]);
   const pipeline = useMemo(() => manageAttachmentPipeline(state), [state]);

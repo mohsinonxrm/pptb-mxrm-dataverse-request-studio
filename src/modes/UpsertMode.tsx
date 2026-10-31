@@ -83,6 +83,7 @@ import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { missingRequiredColumns, rawBodyBlocker } from '../engine/fieldBody';
 import { isRecordGuid } from '../primitives/guid';
+import { useRecentRuns } from '../state/runHistory';
 
 // Empty initial state — user picks the table first, which then re-seeds
 // the key shape (GUID by default; switches to first alternate key once
@@ -132,7 +133,8 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('upsert');
 
   // Save / Load tracking (Save button dirty/clean, library checkmark).
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);

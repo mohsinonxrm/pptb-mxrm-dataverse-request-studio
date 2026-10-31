@@ -63,10 +63,24 @@ function isHeaderRow(x: unknown): x is HeaderRowLike {
  * nothing was removed.
  */
 export function stripCredentialRows<T>(state: T): T {
+  return stripHeaderRows(state, isCredentialHeader);
+}
+
+/**
+ * A mode state for the run history (#226): without credential headers, and
+ * without impersonation headers either. A saved request keeps the user's
+ * MSCRMCallerID on purpose; a history the user never chose to keep doesn't.
+ */
+export function stripHistoryRows<T>(state: T): T {
+  return stripHeaderRows(state, (name) => isCredentialHeader(name) || !!impersonationVar(name));
+}
+
+/** `state` with every header row whose name `drop` matches removed, at any depth. */
+function stripHeaderRows<T>(state: T, drop: (name: string) => boolean): T {
   const walk = (v: unknown): unknown => {
     if (Array.isArray(v)) {
       if (v.length > 0 && v.every(isHeaderRow)) {
-        const kept = v.filter((row) => !isCredentialHeader(row.name));
+        const kept = v.filter((row) => !drop(row.name));
         return kept.length === v.length ? v : kept;
       }
       let changed = false;

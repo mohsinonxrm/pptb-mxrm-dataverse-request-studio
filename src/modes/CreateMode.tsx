@@ -75,6 +75,7 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { missingRequiredColumns, rawBodyBlocker } from '../engine/fieldBody';
+import { useRecentRuns } from '../state/runHistory';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -115,7 +116,8 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('create');
 
   // ── Save / Load tracking ──
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);

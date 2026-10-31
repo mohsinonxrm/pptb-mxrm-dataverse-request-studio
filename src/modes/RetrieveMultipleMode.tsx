@@ -90,6 +90,7 @@ import {
   type PageBatch,
   type PagingStatus,
 } from '../views/results/pagedResults';
+import { useRecentRuns } from '../state/runHistory';
 
 // Empty initial state — the studio is a request *builder*; seeding it with
 // mock data confused users in PPTB ("why are there pre-filled rules against
@@ -185,7 +186,8 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('retrieve-multiple');
   // The $filter "Run without $filter" cleared, until Restore or the next run (#291).
   const [removedFilter, setRemovedFilter] = useState<RetrieveMultipleState['filter'] | null>(null);
   const runWithoutFilterRef = useRef(false);
