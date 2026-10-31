@@ -82,6 +82,7 @@ import type { ThemeMode } from '../theme/theme';
 import { useLiveTable, useWarmReferencedTables } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
 import { pageSizeIsSent } from '../host/pptbBridge';
+import { serviceProtectionLimit } from '../engine/serviceProtection';
 import { topLevelRowCount } from '../views/results/flattenExpansions';
 import {
   mergePage,
@@ -485,7 +486,12 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
       );
       if (status() !== 'current') return;
       if (!more.ok) {
-        setPageError(`Couldn't load the next page: ${describePageError(more)}`);
+        const throttled = serviceProtectionLimit(more);
+        setPageError(
+          throttled
+            ? `Couldn't load the next page: Dataverse is throttling requests (${throttled.limit}). ${throttled.advice}`
+            : `Couldn't load the next page: ${describePageError(more)}`,
+        );
         return;
       }
       commitPages(pageOf(more));
@@ -508,7 +514,16 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
         commit: commitPages,
         status,
       });
-      if (outcome.kind === 'failed') {
+      const throttled = outcome.kind === 'failed' ? serviceProtectionLimit(outcome.error) : null;
+      if (throttled) {
+        // Throttling passes (#269): a pause with Continue, from the page
+        // that was refused, rather than an error. Rows so far are kept.
+        setPagingNotice(
+          `Retrieve all paused: Dataverse is throttling requests (${throttled.limit}). ` +
+            `${rowCountRef.current.toLocaleString()} rows are loaded. ${throttled.advice} ` +
+            'Continue picks up from the next page.',
+        );
+      } else if (outcome.kind === 'failed') {
         setPageError(`Retrieve all stopped at a failed page: ${describePageError(outcome.error)}`);
       } else if (outcome.kind === 'paused') {
         setPagingNotice(

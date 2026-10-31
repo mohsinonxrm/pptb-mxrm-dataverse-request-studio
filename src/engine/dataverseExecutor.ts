@@ -177,6 +177,7 @@ const STATUS_TEXT: Record<number, string> = {
   404: 'Not Found',
   409: 'Conflict',
   412: 'Precondition Failed',
+  429: 'Too Many Requests',
   500: 'Internal Server Error',
   501: 'Not Implemented',
 };
@@ -237,6 +238,10 @@ const STATUS_BY_DATAVERSE_CODE: Record<string, number> = {
   '0x80040237': 412, // DuplicateRecord (also If-None-Match: * on an existing row)
   '0x80060882': 412, // ConcurrencyVersionMismatch: stale If-Match ETag
   '0x80060888': 400, // OData: could not find a property
+  // Service protection limits (#269): Dataverse answers these with 429.
+  '0x80072322': 429, // Number of requests
+  '0x80072321': 429, // Combined execution time
+  '0x80072326': 429, // Concurrent requests
 };
 
 /** The first Dataverse error code (`0x8xxxxxxx`) in a host message, as written. */

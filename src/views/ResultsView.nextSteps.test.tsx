@@ -234,3 +234,34 @@ describe('ResultsView next steps (#291)', () => {
     }
   });
 });
+
+describe('ResultsView throttling (#269)', () => {
+  it('names the limit, says what to do, and offers Try again', () => {
+    const onRefresh = vi.fn();
+    render(
+      <ResultsView
+        result={failed(
+          429,
+          'Number of requests exceeded the limit of 6000 over time window of 300 seconds.',
+          '0x80072322',
+        )}
+        mode="multi"
+        onRefresh={onRefresh}
+      />,
+    );
+    expect(hostEl!.textContent).toContain('Throttled: number of requests · 429');
+    expect(hostEl!.textContent).toContain('more than 6,000 requests in 5 minutes');
+    expect(hostEl!.textContent).toContain('every app and flow signed in as you');
+    act(() => button('Try again')!.click());
+    expect(onRefresh).toHaveBeenCalledOnce();
+    const link = [...hostEl!.querySelectorAll('a')].find(
+      (a) => a.textContent === 'About the limits',
+    );
+    expect(link?.getAttribute('href')).toContain('/data-platform/api-limits');
+  });
+
+  it('offers no Try again on other errors', () => {
+    render(<ResultsView result={failed(400, 'Bad request')} mode="multi" onRefresh={vi.fn()} />);
+    expect(button('Try again')).toBeUndefined();
+  });
+});

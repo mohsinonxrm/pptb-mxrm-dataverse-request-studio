@@ -41,10 +41,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     history: search by URL, status or method, and click a run to restore it.
   - Settings → **Request history** turns it off (which also clears it) or
     clears it.
+- **Throttling is explained** ([#269]). When Dataverse's service protection
+  limits refuse a request (429: `0x80072322` requests, `0x80072321` execution
+  time, `0x80072326` concurrent requests), the result names the limit and says
+  what to do. Read results offer **Try again**; a failed write says it didn't
+  run.
+  - **Retrieve all** pauses instead of failing. The rows so far are kept, and
+    **Continue** asks for the refused page again.
+  - Waiting the exact `Retry-After` time needs response headers, which
+    ToolBox doesn't pass through yet.
 
 [#291]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/291
 [#294]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/294
 [#226]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/226
+[#269]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/269
 
 ## [1.5.0-beta.1] - 2026-10-30
 

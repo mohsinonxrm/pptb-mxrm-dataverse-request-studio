@@ -11,6 +11,7 @@ import {
   MessageBar,
   MessageBarBody,
   MessageBarActions,
+  Link,
 } from '@fluentui/react-components';
 import {
   Dismiss20Regular,
@@ -24,7 +25,14 @@ import {
   FilterDismiss20Regular,
   Link20Regular,
   DocumentCopy20Regular,
+  Clock20Regular,
+  ArrowClockwise20Regular,
 } from '@fluentui/react-icons';
+import {
+  SERVICE_PROTECTION_DOCS,
+  SERVICE_PROTECTION_SCOPE,
+  serviceProtectionLimit,
+} from '../engine/serviceProtection';
 import { useStudioStyles } from '../primitives/styles';
 import { StatusPill } from '../primitives/StatusPill';
 import { useAnnounceResult } from '../primitives/announce';
@@ -190,6 +198,7 @@ export function ResultsView({
           method={method}
           requestUrl={absoluteUrl(requestUrl)}
           onUseEntitySet={onUseEntitySet}
+          onRetry={onRefresh}
         />
       </div>
     );
@@ -547,18 +556,23 @@ function ErrorState({
   method,
   requestUrl,
   onUseEntitySet,
+  onRetry,
 }: {
   result: ExecResult;
   method?: string;
   requestUrl?: string;
   onUseEntitySet?: (segment: string, entitySet: string) => void;
+  /** Run the request again; offered when Dataverse throttled it (#269). */
+  onRetry?: () => void;
 }) {
   const Icon =
     result.status === 401
       ? LockClosed20Regular
       : result.status === 403
         ? ShieldDismiss20Regular
-        : ErrorCircle20Regular;
+        : result.status === 429
+          ? Clock20Regular
+          : ErrorCircle20Regular;
   const err = (result.body as { error?: { code?: string; message?: string } } | null)?.error;
   // #126 — the host caps response size; say how to shrink the response.
   // Only point at the page size where Execute sends it (#219).
@@ -599,19 +613,23 @@ function ErrorState({
               'Power Platform ToolBox rejected a request header. Fix it in the Headers or Prefer pane.',
           }
         : null;
+  // #269: Dataverse's service protection limits (429).
+  const throttled = notSent ? null : serviceProtectionLimit(result);
   const title = notSent
     ? notSent.title
-    : result.status === 401
-      ? 'Unauthorized · 401'
-      : result.status === 403
-        ? 'Forbidden · 403'
-        : result.status === 404
-          ? 'Not Found · 404'
-          : result.status === 501
-            ? 'Not Implemented · 501'
-            : result.status === 0
-              ? 'Request failed'
-              : `Error · ${result.status}`;
+    : throttled
+      ? `Throttled: ${throttled.limit} · 429`
+      : result.status === 401
+        ? 'Unauthorized · 401'
+        : result.status === 403
+          ? 'Forbidden · 403'
+          : result.status === 404
+            ? 'Not Found · 404'
+            : result.status === 501
+              ? 'Not Implemented · 501'
+              : result.status === 0
+                ? 'Request failed'
+                : `Error · ${result.status}`;
   // #291: name the missing privilege when the 403 message has one.
   const privilege = !notSent && result.status === 403 ? missingPrivilege(err?.message) : null;
   // #291: an entity set Dataverse couldn't resolve. Matched on the message,
@@ -619,19 +637,21 @@ function ErrorState({
   const segment = notSent ? null : notFoundSegment(err?.message);
   const advice = notSent
     ? notSent.advice
-    : result.status === 401
-      ? 'Your sign-in for this connection has expired or was revoked. Open Connection Manager in Power Platform ToolBox, sign in to the connection again, then run the request again.'
-      : result.status === 403
-        ? privilege
-          ? describeMissingPrivilege(privilege)
-          : 'Your user is missing a privilege this request needs. Check your security roles with a Dataverse administrator.'
-        : result.status === 404
-          ? 'Record (or entity) not found. Verify the GUID and entity set.'
-          : result.status === 501
-            ? 'The request was not sent. See the message below.'
-            : result.status === 0
-              ? noStatusAdvice(err)
-              : 'Inspect the error message below for details.';
+    : throttled
+      ? `${throttled.advice} ${SERVICE_PROTECTION_SCOPE}`
+      : result.status === 401
+        ? 'Your sign-in for this connection has expired or was revoked. Open Connection Manager in Power Platform ToolBox, sign in to the connection again, then run the request again.'
+        : result.status === 403
+          ? privilege
+            ? describeMissingPrivilege(privilege)
+            : 'Your user is missing a privilege this request needs. Check your security roles with a Dataverse administrator.'
+          : result.status === 404
+            ? 'Record (or entity) not found. Verify the GUID and entity set.'
+            : result.status === 501
+              ? 'The request was not sent. See the message below.'
+              : result.status === 0
+                ? noStatusAdvice(err)
+                : 'Inspect the error message below for details.';
   // Any failure is 'danger', including a status the host didn't report (0).
   const kind: 'success' | 'danger' | 'warning' = !result.ok
     ? 'danger'
@@ -685,6 +705,21 @@ function ErrorState({
         )}
         {segment && <EntitySetSuggestion segment={segment} onUse={onUseEntitySet} />}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+          {throttled && onRetry && (
+            <Button appearance="primary" icon={<ArrowClockwise20Regular />} onClick={onRetry}>
+              Try again
+            </Button>
+          )}
+          {throttled && (
+            <Link
+              href={SERVICE_PROTECTION_DOCS}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ alignSelf: 'center' }}
+            >
+              About the limits
+            </Link>
+          )}
           <Button
             icon={<DocumentCopy20Regular />}
             onClick={() =>

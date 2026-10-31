@@ -47,6 +47,7 @@ import {
   type ExecResult,
   type RelateTargetResult,
 } from '../../engine/dataverseExecutor';
+import { SERVICE_PROTECTION_SCOPE, serviceProtectionLimit } from '../../engine/serviceProtection';
 import { copyText } from '../../shell/copy';
 import { errorReport } from './nextSteps';
 
@@ -153,6 +154,7 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
     : result.outcome === 'partial' ||
         result.status === 412 ||
         result.status === 404 ||
+        result.status === 429 ||
         result.status === 409
       ? 'warning'
       : 'danger';
@@ -417,6 +419,15 @@ function buildNarrative(
       return {
         title: 'Not sent — header rejected',
         body: err?.message ?? 'Power Platform ToolBox rejected a request header.',
+      };
+    }
+    // Service protection limits (#269): Dataverse refused the request
+    // before running it, so the write wasn't applied.
+    const throttled = serviceProtectionLimit(result);
+    if (throttled) {
+      return {
+        title: `Throttled: ${throttled.limit}`,
+        body: `Dataverse didn't run this ${ctx.operation}. ${throttled.advice} ${SERVICE_PROTECTION_SCOPE}`,
       };
     }
     if (result.status === 412) {
