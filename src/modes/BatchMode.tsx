@@ -282,8 +282,14 @@ export function BatchMode({
         ),
       );
     }
+    // No host that can send a batch: a blocker too, so it's listed with the
+    // others and Open goes to the overview that explains it (#294).
+    if (unavailable) {
+      out.unshift(adv.err('batch-unavailable', 'validation', unavailable, undefined, 'overview'));
+    }
     return out;
-  }, [compiled]);
+  }, [compiled, unavailable]);
+  // Without a host that can send a batch, the tooltip says so first, as before.
   const disabledReason = unavailable ?? disabledReasonFromAdvisories(advisories);
   const needsConsent =
     compiled.items.some((c) => c.wire && Object.keys(c.wire.headers).length > 0) ||

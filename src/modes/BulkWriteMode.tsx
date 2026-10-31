@@ -69,7 +69,7 @@ import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEdi
 import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
 import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
-import { disabledReasonFromAdvisories } from '../primitives/advisories';
+import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { StatusPill } from '../primitives/StatusPill';
@@ -92,7 +92,7 @@ import {
   OPERATION_INFO,
   buildBulkWrite,
   buildBulkWriteBody,
-  bulkDisabledReason,
+  bulkBlocker,
   deserializeBulkWrite,
   duplicateBulkRow,
   newBulkRow,
@@ -217,17 +217,33 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
     () => applyBypassToHeaders(state.headers, state.bypass),
     [state.headers, state.bypass],
   );
-  const advisories = useMemo(
+  const bypassAdvisories = useMemo(
     () => [
       ...detectBypassAdvisories(state.bypass, 'bypass'),
       ...detectUnsentHeaderAdvisories({ op: 'create', bypass: state.bypass }),
     ],
     [state.bypass],
   );
-  const bypassBlocker = disabledReasonFromAdvisories(advisories);
-  const disabledReason =
-    bulkDisabledReason(state, issues, support) ??
-    (support.state === 'checking' ? `Checking ${state.operation} availability…` : null);
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const blocker = bulkBlocker(state, issues, support);
+  const blockers = firstBlocker([
+    {
+      when: blocker,
+      id: blocker?.id ?? '',
+      title: blocker?.reason ?? '',
+      focusNode: blocker?.focusNode,
+    },
+    {
+      when: support.state === 'checking',
+      id: 'bulk-checking',
+      title: `Checking ${state.operation} availability…`,
+      focusNode: 'operation',
+    },
+  ]);
+  const advisories = [...blockers, ...bypassAdvisories];
+  // The tooltip names the checklist blocker first, as before; bypass errors
+  // only when nothing else blocks (#294).
+  const disabledReason = blockers[0]?.title ?? disabledReasonFromAdvisories(bypassAdvisories);
 
   // ── Execute ──
   const onExecute = async () => {
@@ -554,7 +570,7 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
             scope: { kind: 'records', count: state.rows.length },
             highImpact: true,
           }}
-          disabledReason={disabledReason ?? bypassBlocker}
+          disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
           advisories={advisories}

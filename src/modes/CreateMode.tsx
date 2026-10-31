@@ -49,7 +49,7 @@ import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEdi
 import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
 import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
-import { disabledReasonFromAdvisories } from '../primitives/advisories';
+import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
 import { Warning20Filled } from '@fluentui/react-icons';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
@@ -182,17 +182,29 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   }, [tbl, state.rawBody, state.fieldValues, state.nullFields]);
 
   const jsonBlocker = rawBodyBlocker(state.rawBody);
-  const disabledReason = !tbl
-    ? 'Pick a target table first.'
-    : jsonBlocker
-      ? jsonBlocker
-      : missingRequired.length > 0
-        ? `${missingRequired.length} required field${missingRequired.length === 1 ? '' : 's'} unset: ${missingRequired.slice(0, 3).join(', ')}${missingRequired.length > 3 ? '…' : ''}`
-        : state.headers.some((h) => h.enabled && !h.name)
-          ? 'Fix empty header name.'
-          : Object.keys(body).length === 0
-            ? 'Body is empty — set at least one field.'
-            : null;
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const blockers = firstBlocker([
+    { when: !tbl, id: 'create-table', title: 'Pick a target table first.', focusNode: 'target' },
+    { when: jsonBlocker, id: 'create-json', title: jsonBlocker ?? '', focusNode: 'fieldset' },
+    {
+      when: missingRequired.length > 0,
+      id: 'create-required',
+      title: `${missingRequired.length} required field${missingRequired.length === 1 ? '' : 's'} unset: ${missingRequired.slice(0, 3).join(', ')}${missingRequired.length > 3 ? '…' : ''}`,
+      focusNode: 'fieldset',
+    },
+    {
+      when: state.headers.some((h) => h.enabled && !h.name),
+      id: 'create-header-name',
+      title: 'Fix empty header name.',
+      focusNode: 'headers',
+    },
+    {
+      when: Object.keys(body).length === 0,
+      id: 'create-empty-body',
+      title: 'Body is empty — set at least one field.',
+      focusNode: 'fieldset',
+    },
+  ]);
 
   // ── Execute ──
   const onExecute = async () => {
@@ -232,14 +244,17 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   }, [state.headers, state.duplicateDetection, state.bypass]);
 
   // ── Advisories — bypass family ──
-  const advisories = useMemo(
+  const bypassAdvisories = useMemo(
     () => [
       ...detectBypassAdvisories(state.bypass, 'bypass'),
       ...detectUnsentHeaderAdvisories({ op: 'create', bypass: state.bypass }),
     ],
     [state.bypass],
   );
-  const bypassBlocker = disabledReasonFromAdvisories(advisories);
+  const advisories = [...blockers, ...bypassAdvisories];
+  // The tooltip names the checklist blocker first, as before; bypass errors
+  // only when nothing else blocks (#294).
+  const disabledReason = blockers[0]?.title ?? disabledReasonFromAdvisories(bypassAdvisories);
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeCreate(state), [state]);
@@ -536,7 +551,7 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
             scope: { kind: 'records', count: 1 },
             highImpact: false,
           }}
-          disabledReason={disabledReason ?? bypassBlocker}
+          disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
           advisories={advisories}

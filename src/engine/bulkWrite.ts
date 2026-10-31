@@ -339,22 +339,45 @@ export function supportQueryPath(message: string, table: string): string {
 
 // ── Disabled-reason / validation ─────────────────────────────────────
 
+/** What blocks Execute, and the sidebar node that fixes it (#294). */
+export interface BulkBlocker {
+  id: string;
+  reason: string;
+  focusNode: string;
+}
+
+export function bulkBlocker(
+  s: BulkWriteState,
+  issues: RowIssue[],
+  support: BulkSupport,
+): BulkBlocker | null {
+  const tbl = findTable(s.table);
+  if (!s.table)
+    return { id: 'bulk-table', reason: 'Pick a target table first.', focusNode: 'target' };
+  if (!tbl) return { id: 'bulk-metadata', reason: 'Loading table metadata…', focusNode: 'target' };
+  if (support.state === 'unsupported')
+    return { id: 'bulk-unsupported', reason: support.message, focusNode: 'operation' };
+  if (s.rows.length === 0)
+    return { id: 'bulk-no-rows', reason: 'Add at least one row.', focusNode: 'rows' };
+  if (issues.length > 0) {
+    const first = issues[0];
+    return {
+      id: 'bulk-row',
+      reason: `Row ${first.rowIndex + 1}: ${first.message}${issues.length > 1 ? ` (+${issues.length - 1} more)` : ''}`,
+      focusNode: `row:${first.rowId}`,
+    };
+  }
+  if (s.headers.some((h) => h.enabled && !h.name))
+    return { id: 'bulk-header-name', reason: 'Fix empty header name.', focusNode: 'headers' };
+  return null;
+}
+
 export function bulkDisabledReason(
   s: BulkWriteState,
   issues: RowIssue[],
   support: BulkSupport,
 ): string | null {
-  const tbl = findTable(s.table);
-  if (!s.table) return 'Pick a target table first.';
-  if (!tbl) return 'Loading table metadata…';
-  if (support.state === 'unsupported') return support.message;
-  if (s.rows.length === 0) return 'Add at least one row.';
-  if (issues.length > 0) {
-    const first = issues[0];
-    return `Row ${first.rowIndex + 1}: ${first.message}${issues.length > 1 ? ` (+${issues.length - 1} more)` : ''}`;
-  }
-  if (s.headers.some((h) => h.enabled && !h.name)) return 'Fix empty header name.';
-  return null;
+  return bulkBlocker(s, issues, support)?.reason ?? null;
 }
 
 export type BulkSupport =

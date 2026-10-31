@@ -84,7 +84,12 @@ import type { ThemeMode } from '../theme/theme';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
 import { isEmbedded } from '../host/pptbBridge';
-import { adv, type Advisory } from '../primitives/advisories';
+import {
+  adv,
+  disabledReasonFromAdvisories,
+  firstBlocker,
+  type Advisory,
+} from '../primitives/advisories';
 import {
   serializeManageImage,
   deserializeManageImage,
@@ -199,21 +204,50 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
     [['Record id', state.recordId]],
     [['Image column', state.imageColumn]],
   );
-  const disabledReason = !tbl
-    ? 'Pick a target table first.'
-    : !state.recordId
-      ? 'Pick a source record.'
-      : !state.imageColumn
-        ? 'Pick an image column.'
-        : state.operation === 'upload' && state.source.kind === 'file' && !state.fileName
-          ? 'Pick an image file.'
-          : state.operation === 'download' &&
-              state.downloadSize === 'full' &&
-              !imageCol?.canStoreFullImage
-            ? `${state.imageColumn} doesn't store full-size images (canStoreFullImage = false).`
-            : state.headers.some((h) => h.enabled && !h.name)
-              ? 'Fix empty header name.'
-              : urlPartProblem;
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const blockers = firstBlocker([
+    { when: !tbl, id: 'image-table', title: 'Pick a target table first.', focusNode: 'target' },
+    {
+      when: !state.recordId,
+      id: 'image-record',
+      title: 'Pick a source record.',
+      focusNode: 'target',
+    },
+    {
+      when: !state.imageColumn,
+      id: 'image-column',
+      title: 'Pick an image column.',
+      focusNode: 'column',
+    },
+    {
+      when: state.operation === 'upload' && state.source.kind === 'file' && !state.fileName,
+      id: 'image-upload-source',
+      title: 'Pick an image file.',
+      focusNode: 'source',
+    },
+    {
+      when:
+        state.operation === 'download' &&
+        state.downloadSize === 'full' &&
+        !imageCol?.canStoreFullImage,
+      id: 'image-full-size',
+      title: `${state.imageColumn} doesn't store full-size images (canStoreFullImage = false).`,
+      focusNode: 'options',
+    },
+    {
+      when: state.headers.some((h) => h.enabled && !h.name),
+      id: 'image-header-name',
+      title: 'Fix empty header name.',
+      focusNode: 'headers',
+    },
+    {
+      when: urlPartProblem,
+      id: 'image-url-part',
+      title: urlPartProblem ?? '',
+      focusNode: urlPartProblem?.startsWith('Image column') ? 'column' : 'target',
+    },
+  ]);
+  const disabledReason = disabledReasonFromAdvisories(blockers);
 
   // Bound-record name capture for the WriteResultCard narrative.
   const [recordName, setRecordName] = useState<string>('');
@@ -690,7 +724,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
-          advisories={advisories}
+          advisories={[...blockers, ...advisories]}
           onAdvisoryFocus={setActivePath}
         />
       }

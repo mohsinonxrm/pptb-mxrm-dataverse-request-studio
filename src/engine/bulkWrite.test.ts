@@ -4,6 +4,7 @@ import { defaultBypassOptions } from '../state/writeState';
 import {
   buildBulkWrite,
   buildBulkWriteBody,
+  bulkBlocker,
   bulkDisabledReason,
   coerceValue,
   deserializeBulkWrite,
@@ -224,6 +225,43 @@ describe('bulkDisabledReason', () => {
     expect(bulkDisabledReason(state('CreateMultiple', []), [], { state: 'supported' })).toMatch(
       /at least one row/,
     );
+  });
+});
+
+describe('bulkBlocker (#294)', () => {
+  const supported = { state: 'supported' } as const;
+  it('names the sidebar node that fixes each blocker', () => {
+    expect(bulkBlocker({ ...state('CreateMultiple', []), table: '' }, [], supported)).toMatchObject(
+      {
+        reason: 'Pick a target table first.',
+        focusNode: 'target',
+      },
+    );
+    const s = state('CreateMultiple', [newBulkRow({ fieldValues: { name: 'a' } })]);
+    expect(bulkBlocker(s, [], { state: 'unsupported', message: 'nope' })?.focusNode).toBe(
+      'operation',
+    );
+    expect(bulkBlocker(state('CreateMultiple', []), [], supported)?.focusNode).toBe('rows');
+    expect(
+      bulkBlocker(
+        { ...s, headers: [{ id: 'h', name: '', value: 'x', enabled: true }] },
+        [],
+        supported,
+      )?.focusNode,
+    ).toBe('headers');
+    expect(bulkBlocker(s, [], supported)).toBeNull();
+  });
+  it('opens the first row with a problem', () => {
+    const s = state('CreateMultiple', [newBulkRow({ fieldValues: { name: 'a' } })]);
+    const issues = [
+      { rowIndex: 1, rowId: 'r2', message: 'name is required' },
+      { rowIndex: 3, rowId: 'r4', message: 'name is required' },
+    ];
+    expect(bulkBlocker(s, issues, supported)).toEqual({
+      id: 'bulk-row',
+      reason: 'Row 2: name is required (+1 more)',
+      focusNode: 'row:r2',
+    });
   });
 });
 

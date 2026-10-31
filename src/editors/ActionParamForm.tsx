@@ -428,6 +428,8 @@ function ParamRow({
   const missing = param.required && isEmpty(value);
   return (
     <div
+      // The sidebar node of a required param; an advisory's Open focuses here (#294).
+      data-focus-node={`param:${param.name}`}
       className={mergeClasses(styles.inlineCard)}
       style={{
         padding: 12,

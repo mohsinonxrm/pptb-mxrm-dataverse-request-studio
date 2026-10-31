@@ -67,6 +67,7 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
+import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
 import { invalidFunctionParamReason } from '../engine/executeBuilders';
 
 // Empty initial state — no pre-seeded function. User picks from the live
@@ -158,17 +159,45 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
   const urlPartProblem =
     invalidUrlPartReason(requiresBoundRecord ? [['Bound record id', state.boundRecordId]] : []) ??
     invalidFunctionParamReason(fn?.parameters ?? [], state.paramValues);
-  const disabledReason = !fn
-    ? 'Pick a function.'
-    : requiresBoundRecord && !state.boundRecordId
-      ? `Function '${fn.name}' is bound to ${boundEntity} — supply a source record.`
-      : bindingEntity && !bindingTable
-        ? `Can't build the URL yet — ${bindingEntity} table metadata isn't loaded.`
-        : missingRequired.length > 0
-          ? `${missingRequired.length} required param${missingRequired.length === 1 ? '' : 's'} unset.`
-          : state.headers.some((h) => h.enabled && !h.name)
-            ? 'Fix empty header name.'
-            : urlPartProblem;
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const advisories = firstBlocker([
+    { when: !fn, id: 'function-pick', title: 'Pick a function.', focusNode: 'pick' },
+    {
+      when: requiresBoundRecord && !state.boundRecordId,
+      id: 'function-bound-record',
+      title: `Function '${fn?.name}' is bound to ${boundEntity} — supply a source record.`,
+      focusNode: 'target',
+    },
+    {
+      when: bindingEntity && !bindingTable,
+      id: 'function-binding-metadata',
+      title: `Can't build the URL yet — ${bindingEntity} table metadata isn't loaded.`,
+      // The source record when one is needed; otherwise the action picker.
+      focusNode: requiresBoundRecord ? 'target' : 'pick',
+    },
+    {
+      when: missingRequired.length > 0,
+      id: 'function-required',
+      title: `${missingRequired.length} required param${missingRequired.length === 1 ? '' : 's'} unset.`,
+      focusNode: missingRequired[0] ? `param:${missingRequired[0].name}` : 'params',
+    },
+    {
+      when: state.headers.some((h) => h.enabled && !h.name),
+      id: 'function-header-name',
+      title: 'Fix empty header name.',
+      focusNode: 'headers',
+    },
+    {
+      when: urlPartProblem,
+      id: 'function-url-part',
+      title: urlPartProblem ?? '',
+      // 'Parameter <name>: …' names the param; each has its own node.
+      focusNode: urlPartProblem?.startsWith('Bound')
+        ? 'target'
+        : `param:${/^Parameter (\S+):/.exec(urlPartProblem ?? '')?.[1] ?? ''}`,
+    },
+  ]);
+  const disabledReason = disabledReasonFromAdvisories(advisories);
 
   const onExecute = async () => {
     setLoading(true);
@@ -568,6 +597,8 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
+          advisories={advisories}
+          onAdvisoryFocus={setActivePath}
         />
       }
     >

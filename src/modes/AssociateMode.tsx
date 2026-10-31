@@ -77,6 +77,7 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
+import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
 
 // Empty initial state. The user picks a table → record → nav property →
 // target(s) before the request can fire. Seeding with a mock account id
@@ -158,17 +159,45 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
     ],
     [['Navigation property', state.navProperty]],
   );
-  const disabledReason = !tbl
-    ? 'Pick a source table first.'
-    : !state.sourceId
-      ? 'Pick a source record.'
-      : !state.navProperty
-        ? 'Pick a navigation property.'
-        : state.targets.length === 0
-          ? 'Pick at least one target record.'
-          : state.headers.some((h) => h.enabled && !h.name)
-            ? 'Fix empty header name.'
-            : urlPartProblem;
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const advisories = firstBlocker([
+    { when: !tbl, id: 'assoc-table', title: 'Pick a source table first.', focusNode: 'source' },
+    {
+      when: !state.sourceId,
+      id: 'assoc-source',
+      title: 'Pick a source record.',
+      focusNode: 'source',
+    },
+    {
+      when: !state.navProperty,
+      id: 'assoc-nav',
+      title: 'Pick a navigation property.',
+      focusNode: 'nav',
+    },
+    {
+      when: state.targets.length === 0,
+      id: 'assoc-targets',
+      title: 'Pick at least one target record.',
+      focusNode: 'targets',
+    },
+    {
+      when: state.headers.some((h) => h.enabled && !h.name),
+      id: 'assoc-header-name',
+      title: 'Fix empty header name.',
+      focusNode: 'headers',
+    },
+    {
+      when: urlPartProblem,
+      id: 'assoc-url-part',
+      title: urlPartProblem ?? '',
+      focusNode: urlPartProblem?.startsWith('Target')
+        ? 'targets'
+        : urlPartProblem?.startsWith('Navigation')
+          ? 'nav'
+          : 'source',
+    },
+  ]);
+  const disabledReason = disabledReasonFromAdvisories(advisories);
 
   const onExecute = async () => {
     setLoading(true);
@@ -502,6 +531,8 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
+          advisories={advisories}
+          onAdvisoryFocus={setActivePath}
         />
       }
     >

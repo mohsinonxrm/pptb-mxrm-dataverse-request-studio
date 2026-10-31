@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useClearAnnouncementOnModeSwitch } from '../primitives/announce';
 import { useStudioStyles } from '../primitives/styles';
 import { RecordPickerMemoryScope } from '../primitives/RecordPicker';
+import { BuilderNavProvider } from './builderNav';
 
 /**
  * Wraps a mode's three regions in the correct DOM structure:
@@ -32,11 +33,14 @@ export function ModeShell({
   // sidebar panes (#189): a pane switch keeps the record picker's mode.
   return (
     <RecordPickerMemoryScope>
-      <div className={s.body}>
-        {sidebar}
-        {children}
-      </div>
-      {urlBar}
+      {/* An advisory's Open in the URL bar shows the Builder in MainTabs (#294). */}
+      <BuilderNavProvider>
+        <div className={s.body}>
+          {sidebar}
+          {children}
+        </div>
+        {urlBar}
+      </BuilderNavProvider>
     </RecordPickerMemoryScope>
   );
 }

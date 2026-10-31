@@ -86,7 +86,12 @@ import type { RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { useScopedEntities } from '../host/useScopedEntities';
 import { isEmbedded } from '../host/pptbBridge';
-import { adv, type Advisory } from '../primitives/advisories';
+import {
+  adv,
+  disabledReasonFromAdvisories,
+  firstBlocker,
+  type Advisory,
+} from '../primitives/advisories';
 import {
   serializeManageAttachment,
   deserializeManageAttachment,
@@ -169,21 +174,52 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
     ['Record id', state.recordId],
     ['Parent activity id', state.parentActivityId],
   ]);
-  const disabledReason =
-    state.operation === 'upload' && state.target === 'attachment' && !state.parentActivityId
-      ? 'Pick the parent email activity for the attachment.'
-      : state.operation === 'upload' && state.target === 'annotation' && !state.recordId
-        ? 'Provide a caller-generated annotationid (Annotations require an explicit GUID).'
-        : state.operation !== 'upload' && !state.recordId
-          ? `Pick the existing ${state.target} record.`
-          : state.operation === 'upload' &&
-              state.source.kind === 'file' &&
-              !state.bodyBase64 &&
-              !state.fileName
-            ? 'Choose a file to upload.'
-            : state.headers.some((h) => h.enabled && !h.name)
-              ? 'Fix empty header name.'
-              : urlPartProblem;
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const blockers = firstBlocker([
+    {
+      when:
+        state.operation === 'upload' && state.target === 'attachment' && !state.parentActivityId,
+      id: 'attach-parent',
+      title: 'Pick the parent email activity for the attachment.',
+      focusNode: 'parent',
+    },
+    {
+      when: state.operation === 'upload' && state.target === 'annotation' && !state.recordId,
+      id: 'attach-annotation-id',
+      title: 'Provide a caller-generated annotationid (Annotations require an explicit GUID).',
+      // The ids are typed in the Parent pane; Target only picks attachment or annotation.
+      focusNode: 'parent',
+    },
+    {
+      when: state.operation !== 'upload' && !state.recordId,
+      id: 'attach-record',
+      title: `Pick the existing ${state.target} record.`,
+      focusNode: 'parent',
+    },
+    {
+      when:
+        state.operation === 'upload' &&
+        state.source.kind === 'file' &&
+        !state.bodyBase64 &&
+        !state.fileName,
+      id: 'attach-upload-source',
+      title: 'Choose a file to upload.',
+      focusNode: 'source',
+    },
+    {
+      when: state.headers.some((h) => h.enabled && !h.name),
+      id: 'attach-header-name',
+      title: 'Fix empty header name.',
+      focusNode: 'headers',
+    },
+    {
+      when: urlPartProblem,
+      id: 'attach-url-part',
+      title: urlPartProblem ?? '',
+      focusNode: 'parent',
+    },
+  ]);
+  const disabledReason = disabledReasonFromAdvisories(blockers);
 
   const onExecute = async () => {
     setLoading(true);
@@ -595,7 +631,7 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
-          advisories={advisories}
+          advisories={[...blockers, ...advisories]}
           onAdvisoryFocus={setActivePath}
         />
       }

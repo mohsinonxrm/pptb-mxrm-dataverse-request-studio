@@ -57,6 +57,7 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
+import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
 
 export type ActionCategory = 'oob' | 'custom-api' | 'custom-action';
 
@@ -238,20 +239,46 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
   const urlPartProblem = invalidUrlPartReason(
     requiresBoundRecord ? [['Bound record id', state.boundRecordId]] : [],
   );
-  const disabledReason = !action
-    ? 'Pick an action.'
-    : requiresBoundRecord && !state.boundRecordId
-      ? `Action '${action.name}' is bound to ${boundEntity} — supply a source record.`
-      : bindingEntity && !bindingTable
-        ? `Can't build the URL yet — ${bindingEntity} table metadata isn't loaded.`
-        : missingRequired.length > 0
-          ? `${missingRequired.length} required param${missingRequired.length === 1 ? '' : 's'} unset: ${missingRequired
-              .slice(0, 3)
-              .map((p) => p.name)
-              .join(', ')}${missingRequired.length > 3 ? '…' : ''}`
-          : state.headers.some((h) => h.enabled && !h.name)
-            ? 'Fix empty header name.'
-            : urlPartProblem;
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const advisories = firstBlocker([
+    { when: !action, id: 'action-pick', title: 'Pick an action.', focusNode: 'pick' },
+    {
+      when: requiresBoundRecord && !state.boundRecordId,
+      id: 'action-bound-record',
+      title: `Action '${action?.name}' is bound to ${boundEntity} — supply a source record.`,
+      focusNode: 'target',
+    },
+    {
+      when: bindingEntity && !bindingTable,
+      id: 'action-binding-metadata',
+      title: `Can't build the URL yet — ${bindingEntity} table metadata isn't loaded.`,
+      // The source record when one is needed; otherwise the action picker.
+      focusNode: requiresBoundRecord ? 'target' : 'pick',
+    },
+    {
+      when: missingRequired.length > 0,
+      id: 'action-required',
+      title: `${missingRequired.length} required param${missingRequired.length === 1 ? '' : 's'} unset: ${missingRequired
+        .slice(0, 3)
+        .map((p) => p.name)
+        .join(', ')}${missingRequired.length > 3 ? '…' : ''}`,
+      // The first unset one: each required param is its own sidebar node.
+      focusNode: missingRequired[0] ? `param:${missingRequired[0].name}` : 'params',
+    },
+    {
+      when: state.headers.some((h) => h.enabled && !h.name),
+      id: 'action-header-name',
+      title: 'Fix empty header name.',
+      focusNode: 'headers',
+    },
+    {
+      when: urlPartProblem,
+      id: 'action-url-part',
+      title: urlPartProblem ?? '',
+      focusNode: 'target',
+    },
+  ]);
+  const disabledReason = disabledReasonFromAdvisories(advisories);
 
   const onExecute = async () => {
     setLoading(true);
@@ -616,6 +643,8 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
+          advisories={advisories}
+          onAdvisoryFocus={setActivePath}
         />
       }
     >
