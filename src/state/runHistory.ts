@@ -5,9 +5,17 @@
 // a tool's localStorage survives updates and restarts), holding the last
 // MAX_HISTORY runs of every mode. An entry is a RecentRun: the request
 // snapshot (the same one Saved stores), status, row count, duration and
-// time. Never the response body, and never credential or impersonation
-// headers (stripHistoryRows). A snapshot too large to keep is dropped; the
-// run is still listed, it just can't be restored.
+// time. Never the response body. Credential headers are removed and
+// impersonation caller ids reset (stripHistoryRows); the run is marked so a
+// restore can say so.
+//
+// Storage is shared with the saved library, so the history keeps to a
+// budget (MAX_HISTORY_CHARS): over it, the oldest runs lose their snapshots
+// first (they stay listed, without restore), then the oldest runs go.
+//
+// The parsed history is kept in memory per environment and written to
+// storage shortly after it changes, so a Retrieve all that updates its run
+// on every page doesn't parse and rewrite storage each time.
 //
 // `useRecentRuns(bucket)` is a drop-in for a mode's
 // `useState<RecentRun[]>([])`: it returns the mode's latest RECENT_SHOWN runs
@@ -28,11 +36,26 @@ export const RUN_HISTORY_KEY_PREFIX = 'drs:run-history:v1';
 export const MAX_HISTORY = 200;
 /** Runs a mode lists in its sidebar. */
 export const RECENT_SHOWN = 8;
-/** A snapshot larger than this (as JSON) isn't kept: a big Bulk Write
- *  import would otherwise crowd out the rest of the history. */
+/** The history's share of storage (characters of JSON), well under the
+ *  browser's ~5 M quota so the saved library always has room. */
+export const MAX_HISTORY_CHARS = 1_000_000;
+/** One snapshot larger than this isn't kept at all. */
 export const MAX_SNAPSHOT_CHARS = 64 * 1024;
+/** How long changes wait before they're written to storage. */
+const WRITE_DELAY_MS = 300;
 
 export const runHistoryKey = (scope = getOrgScope()) => `${RUN_HISTORY_KEY_PREFIX}:${scope}`;
+
+// ── On / off ────────────────────────────────────────────────────────────
+// Read at write time, so a run that finishes after history was turned off
+// is never written (its mode's setter may be from an earlier render).
+let historyEnabled = true;
+export function setHistoryEnabled(on: boolean): void {
+  historyEnabled = on;
+}
+export const isHistoryEnabled = () => historyEnabled;
+
+// ── Entries ─────────────────────────────────────────────────────────────
 
 function isRun(x: unknown): x is RecentRun {
   const r = x as RecentRun;
@@ -49,8 +72,59 @@ function isRun(x: unknown): x is RecentRun {
   );
 }
 
-/** The environment's history, newest first. Unreadable data reads as empty. */
-export function readHistory(scope = getOrgScope()): RecentRun[] {
+const jsonSize = (v: unknown): number => {
+  try {
+    return JSON.stringify(v)?.length ?? 0;
+  } catch {
+    return Infinity;
+  }
+};
+
+/** What a run keeps: no credentials, no caller id, no snapshot when it's too large. */
+export function historyEntry(run: RecentRun): RecentRun {
+  if (run.snapshot === undefined) return run;
+  const { state: snapshot, cleared } = stripHistoryRows(run.snapshot);
+  const { snapshot: _drop, ...rest } = run;
+  const marked = cleared ? { ...rest, impersonationCleared: true } : rest;
+  return jsonSize(snapshot) <= MAX_SNAPSHOT_CHARS ? { ...marked, snapshot } : marked;
+}
+
+const runKey = (r: RecentRun) => `${r.modeId}\u0000${r.id}`;
+
+/** `runs` added to (or replacing, by mode + id) `history`; newest first, capped. */
+export function mergeRuns(history: readonly RecentRun[], runs: readonly RecentRun[]): RecentRun[] {
+  const byKey = new Map(history.map((r) => [runKey(r), r]));
+  for (const r of runs) byKey.set(runKey(r), r);
+  return [...byKey.values()].sort((a, b) => b.ts - a.ts).slice(0, MAX_HISTORY);
+}
+
+/**
+ * `runs` (newest first) within `budget` characters: the oldest runs lose
+ * their snapshots first, then the oldest runs are dropped.
+ */
+export function fitBudget(runs: readonly RecentRun[], budget = MAX_HISTORY_CHARS): RecentRun[] {
+  const out = [...runs];
+  let total = jsonSize(out);
+  for (let i = out.length - 1; i >= 0 && total > budget; i--) {
+    if (out[i].snapshot === undefined) continue;
+    const { snapshot: _drop, ...rest } = out[i];
+    total -= jsonSize(out[i]) - jsonSize(rest);
+    out[i] = rest;
+  }
+  while (out.length > 0 && total > budget) {
+    total -= jsonSize(out[out.length - 1]) + 1;
+    out.pop();
+  }
+  return out;
+}
+
+// ── Store ───────────────────────────────────────────────────────────────
+
+const cache = new Map<string, RecentRun[]>();
+const pending = new Set<string>();
+let writeTimer: ReturnType<typeof setTimeout> | null = null;
+
+function readStorage(scope: string): RecentRun[] {
   try {
     const raw = localStorage.getItem(runHistoryKey(scope));
     if (!raw) return [];
@@ -61,56 +135,63 @@ export function readHistory(scope = getOrgScope()): RecentRun[] {
   }
 }
 
-/** What a run keeps: no sensitive headers, and no snapshot when it's too large. */
-export function historyEntry(run: RecentRun): RecentRun {
-  if (run.snapshot === undefined) return run;
-  const snapshot = stripHistoryRows(run.snapshot);
-  let size = Infinity;
-  try {
-    size = JSON.stringify(snapshot)?.length ?? 0;
-  } catch {
-    // Unserializable: treat as too large.
+/** The environment's history, newest first. Unreadable data reads as empty. */
+export function readHistory(scope = getOrgScope()): RecentRun[] {
+  let runs = cache.get(scope);
+  if (!runs) {
+    runs = readStorage(scope);
+    cache.set(scope, runs);
   }
-  const { snapshot: _drop, ...rest } = run;
-  return size <= MAX_SNAPSHOT_CHARS ? { ...rest, snapshot } : rest;
+  return runs;
 }
 
-/** `runs` added to (or replacing, by id) `history`; newest first, capped. */
-export function mergeRuns(history: readonly RecentRun[], runs: readonly RecentRun[]): RecentRun[] {
-  const byId = new Map(history.map((r) => [r.id, r]));
-  for (const r of runs) byId.set(r.id, r);
-  return [...byId.values()].sort((a, b) => b.ts - a.ts).slice(0, MAX_HISTORY);
+/** Write pending environments now. A full quota halves the budget and tries again. */
+export function flushHistory(): void {
+  if (writeTimer) clearTimeout(writeTimer);
+  writeTimer = null;
+  for (const scope of pending) {
+    let budget = MAX_HISTORY_CHARS;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const runs = fitBudget(cache.get(scope) ?? [], budget);
+      try {
+        localStorage.setItem(runHistoryKey(scope), JSON.stringify(runs));
+        cache.set(scope, runs);
+        break;
+      } catch {
+        budget = Math.floor(budget / 2);
+      }
+    }
+  }
+  pending.clear();
 }
 
-const listeners = new Set<() => void>();
-const notify = () => listeners.forEach((fn) => fn());
+if (typeof window !== 'undefined') window.addEventListener('pagehide', flushHistory);
 
-/** Called when any history changes (a run recorded, a clear). */
-export function subscribeHistory(fn: () => void): () => void {
+type Change = 'update' | 'clear';
+const listeners = new Set<(change: Change) => void>();
+const notify = (change: Change) => listeners.forEach((fn) => fn(change));
+
+/** Called when any history changes: a run recorded, or a clear. */
+export function subscribeHistory(fn: (change: Change) => void): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);
 }
 
-/**
- * Add or update runs in the environment's history. A full storage quota
- * drops the oldest half and tries once more; after that the runs stay in
- * the session only.
- */
+/** Add or update runs in the environment's history (unless history is off). */
 export function recordRuns(runs: readonly RecentRun[], scope = getOrgScope()): void {
-  let next = mergeRuns(readHistory(scope), runs.map(historyEntry));
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      localStorage.setItem(runHistoryKey(scope), JSON.stringify(next));
-      break;
-    } catch {
-      next = next.slice(0, Math.ceil(next.length / 2));
-    }
-  }
-  notify();
+  if (!historyEnabled) return;
+  cache.set(scope, mergeRuns(readHistory(scope), runs.map(historyEntry)));
+  pending.add(scope);
+  if (!writeTimer) writeTimer = setTimeout(flushHistory, WRITE_DELAY_MS);
+  notify('update');
 }
 
 /** Remove every environment's history. */
 export function clearAllHistory(): void {
+  if (writeTimer) clearTimeout(writeTimer);
+  writeTimer = null;
+  pending.clear();
+  cache.clear();
   try {
     const keys: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
@@ -121,12 +202,14 @@ export function clearAllHistory(): void {
   } catch {
     // Storage unavailable: nothing was kept either.
   }
-  notify();
+  notify('clear');
 }
 
 /** A mode's runs in the environment's history, newest first. */
 export const modeHistory = (bucket: string, scope = getOrgScope()) =>
   readHistory(scope).filter((r) => r.modeId === bucket);
+
+// ── Hooks ───────────────────────────────────────────────────────────────
 
 /**
  * A mode's Recent runs (#226), in place of `useState<RecentRun[]>([])`.
@@ -147,18 +230,30 @@ export function useRecentRuns(
   const shownScope = useRef(scope);
 
   useEffect(() => {
+    setHistoryEnabled(keepRunHistory);
+  }, [keepRunHistory]);
+
+  useEffect(() => {
     const scopeChanged = shownScope.current !== scope;
     shownScope.current = scope;
-    if (!keepRunHistory) {
-      // Session-only runs belong to the environment they ran against.
-      if (scopeChanged) setRuns([]);
-      return;
-    }
-    // A run made this session keeps its full snapshot in memory; the stored
-    // copy lacks impersonation headers. Anything cleared from storage goes.
-    const reload = () => {
-      const mine = new Map(runsRef.current.map((r) => [r.id, r]));
-      setRuns(modeHistory(bucket, scope).map((r) => mine.get(r.id) ?? r));
+    if (scopeChanged) runsRef.current = [];
+    // Kept runs, with this session's in-memory copies (full snapshots) in
+    // place of theirs, plus session runs storage doesn't have. A clear
+    // drops them all.
+    const reload = (change: Change = 'update') => {
+      const stored = keepRunHistory ? modeHistory(bucket, scope) : [];
+      if (change === 'clear') {
+        runsRef.current = stored;
+        setRuns(stored);
+        return;
+      }
+      const mine = new Map(runsRef.current.map((r) => [runKey(r), r]));
+      const merged = mergeRuns(
+        stored.map((r) => mine.get(runKey(r)) ?? r),
+        runsRef.current,
+      );
+      runsRef.current = merged;
+      setRuns(merged);
     };
     reload();
     return subscribeHistory(reload);
@@ -172,9 +267,9 @@ export function useRecentRuns(
       const merged = mergeRuns(runsRef.current, next);
       runsRef.current = merged;
       setRuns(merged);
-      if (keepRunHistory) recordRuns(next, scope);
+      recordRuns(next, scope);
     },
-    [keepRunHistory, scope],
+    [scope],
   );
 
   return [runs.slice(0, RECENT_SHOWN), update];
@@ -190,6 +285,15 @@ export function useModeHistory(bucket: string, sessionRuns: readonly RecentRun[]
     reload();
     return subscribeHistory(reload);
   }, [bucket, scope]);
-  // History off: only this session's runs exist.
-  return keepRunHistory ? runs : [...sessionRuns];
+  // This session's runs (full snapshots, and any storage didn't keep) win.
+  return keepRunHistory ? mergeRuns(runs, sessionRuns) : [...sessionRuns];
+}
+
+/** Tests: forget the in-memory copy, so the next read comes from storage. */
+export function __resetHistoryCache(): void {
+  if (writeTimer) clearTimeout(writeTimer);
+  writeTimer = null;
+  pending.clear();
+  cache.clear();
+  historyEnabled = true;
 }

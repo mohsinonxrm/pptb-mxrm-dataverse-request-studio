@@ -16,7 +16,7 @@ vi.mock('./dialogs', async (importOriginal) => ({
 
 import { SettingsDrawer } from './SettingsDrawer';
 import { defaultDisplaySettings, type DisplaySettings } from '../state/displaySettings';
-import { readHistory, recordRuns } from '../state/runHistory';
+import { __resetHistoryCache, readHistory, recordRuns } from '../state/runHistory';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -25,6 +25,7 @@ let host: HTMLDivElement | null = null;
 let changed: DisplaySettings | null = null;
 
 beforeEach(() => {
+  __resetHistoryCache();
   localStorage.clear();
   confirm.asked = 0;
   changed = null;

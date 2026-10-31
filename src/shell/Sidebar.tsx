@@ -11,6 +11,7 @@ import type { RecentRun } from '../state/readState';
 import { useModeHistory } from '../state/runHistory';
 import { RunHistoryDialog } from './RunHistoryDialog';
 import { runDetail, timeAgo } from './runLabels';
+import { notify } from './dialogs';
 
 export interface SidebarClauseItem {
   id: string; // selectable key
@@ -67,6 +68,17 @@ export function Sidebar({
   // A recent-run row is a button only when it can actually restore
   // something (#2): the mode wired a handler and the run has a snapshot.
   const isRestorable = (r: RecentRun) => !!onRecentClick && r.snapshot !== undefined;
+  // A kept run had its caller id removed (#226): say so, since the restored
+  // request now runs as the signed-in user.
+  const restore = (r: RecentRun) => {
+    onRecentClick?.(r);
+    if (r.impersonationCleared) {
+      notify(
+        'This run impersonated another user. History doesn’t keep the caller id, so the restored request runs as you: set MSCRMCallerID or CallerObjectId again in Headers to impersonate.',
+        { title: 'Impersonation not restored' },
+      );
+    }
+  };
   // Every run kept for this mode and environment (#226); the sidebar lists the latest.
   const history = useModeHistory(type.id, recents);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -127,11 +139,11 @@ export function Sidebar({
                       ? `Restore run: ${r.method} ${r.url}, status ${r.status || 'error'}`
                       : undefined
                   }
-                  onClick={() => isRestorable(r) && onRecentClick?.(r)}
+                  onClick={() => isRestorable(r) && restore(r)}
                   onKeyDown={(e) => {
                     if (isRestorable(r) && (e.key === 'Enter' || e.key === ' ')) {
                       e.preventDefault();
-                      onRecentClick?.(r);
+                      restore(r);
                     }
                   }}
                 >
@@ -170,7 +182,7 @@ export function Sidebar({
         onOpenChange={setHistoryOpen}
         modeName={type.name}
         runs={history}
-        onRestore={onRecentClick}
+        onRestore={onRecentClick ? restore : undefined}
       />
     </aside>
   );

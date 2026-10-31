@@ -29,7 +29,7 @@ import {
 } from '@fluentui/react-icons';
 import type { DisplaySettings, ValueDisplayMode } from '../state/displaySettings';
 import { metadata } from '../host/metadataProvider';
-import { clearAllHistory } from '../state/runHistory';
+import { clearAllHistory, setHistoryEnabled } from '../state/runHistory';
 import { useConfirm } from './dialogs';
 
 const useStyles = makeStyles({
@@ -95,6 +95,8 @@ export function SettingsDrawer({ open, settings, onClose, onSettingsChange }: Se
   // means nothing about past runs stays on this computer.
   const handleKeepHistoryChange = useCallback(
     (checked: boolean) => {
+      // Before the clear, so a run still in flight isn't written afterwards.
+      setHistoryEnabled(checked);
       if (!checked) clearAllHistory();
       onSettingsChange({ ...settings, keepRunHistory: checked });
     },
