@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ✨ Added
+
+- **Results suggest the next step** ([#291]):
+  - **0 rows:** **Edit $filter** opens the $filter, **Run without $filter**
+    removes it from the builder and runs again (with **Restore $filter**
+    afterwards), and **Copy request URL**.
+  - **403:** the card names the missing privilege when Dataverse's message has
+    one, for example `prvReadAccount` (Read access on account).
+  - **401:** the card says to sign in to the connection again in ToolBox's
+    Connection Manager.
+  - **Unknown entity set** ("Resource not found for the segment …"): the card
+    suggests the closest table in your entity scope. In Retrieve NextLink,
+    **Use** fixes the URL.
+  - **Every error**, including failed writes: **Copy error report** copies the
+    method, URL, status, error code and message. It never includes request
+    headers, so no credentials or impersonation ids.
+
+[#291]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/291
+
 ## [1.5.0-beta.1] - 2026-10-30
 
 The first 1.5.0 beta. Writes now ask before they're sent, naming the

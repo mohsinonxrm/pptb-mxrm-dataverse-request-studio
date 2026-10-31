@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Table20Regular,
   Table20Filled,
@@ -22,7 +22,13 @@ import {
   ChartMultiple20Filled,
   Link20Regular,
 } from '@fluentui/react-icons';
-import { tokens } from '@fluentui/react-components';
+import {
+  Button,
+  MessageBar,
+  MessageBarActions,
+  MessageBarBody,
+  tokens,
+} from '@fluentui/react-components';
 import { Sidebar, type SidebarClauseItem } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
@@ -180,6 +186,12 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [recents, setRecents] = useState<RecentRun[]>([]);
+  // The $filter "Run without $filter" cleared, until Restore or the next run (#291).
+  const [removedFilter, setRemovedFilter] = useState<RetrieveMultipleState['filter'] | null>(null);
+  const runWithoutFilterRef = useRef(false);
+  // The URL the shown result came from, for Copy request URL and the error
+  // report: the builder may have changed since (#291).
+  const [runUrl, setRunUrl] = useState<string | undefined>(undefined);
 
   // ── Saved-request persistence (localStorage) ──
   // Track the last-saved id + the hash of state at that save so we can
@@ -348,11 +360,16 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     startRun();
     setLoading(false);
     setResult(null);
+    setRemovedFilter(null);
   };
 
-  const onExecute = async () => {
+  // `keepRemovedFilter` is only `true` for the run that "Run without
+  // $filter" starts; a click handler passes its event here instead.
+  const onExecute = async (keepRemovedFilter?: unknown) => {
+    if (keepRemovedFilter !== true) setRemovedFilter(null);
     const run = startRun();
     setLoading(true);
+    setRunUrl(built.relativeUrl);
     runPageSizeRef.current = state.prefer.maxpagesize;
     runHeadersRef.current = headerItemsToObject(state.headers, null);
     const res = await runtime.retrieveMultiple(state, runHeadersRef.current);
@@ -382,6 +399,33 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
+
+  // ── 0 rows: next steps (#291) ──
+  // "Run without $filter" clears the builder's $filter, so the builder, the
+  // URL and Recent runs all show what ran, and runs once that state has
+  // rendered. The results then offer Restore, which puts the $filter back,
+  // until the next run, a reset, or a new $filter in the builder.
+  const filterActionsOn = filterCount > 0 && !state.apply.enabled;
+  const runWithoutFilter = () => {
+    setRemovedFilter(state.filter);
+    runWithoutFilterRef.current = true;
+    setState((s) => ({ ...s, filter: emptyFilter() }));
+  };
+  const restoreFilter = () => {
+    const f = removedFilter;
+    setRemovedFilter(null);
+    if (f) setState((s) => ({ ...s, filter: f }));
+  };
+  useEffect(() => {
+    if (runWithoutFilterRef.current) {
+      runWithoutFilterRef.current = false;
+      void onExecute(true);
+    } else if (countRules(state.filter) > 0) {
+      setRemovedFilter(null);
+    }
+    // Runs on the render that has the cleared $filter; onExecute reads it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.filter]);
 
   // ── Infinite scroll + Retrieve-All ──
   // Dataverse paginates large result sets via `@odata.nextLink` (the URL
@@ -1085,7 +1129,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
             select={state.select}
             expand={state.expand}
             orderby={state.orderby}
-            requestUrl={built.relativeUrl}
+            requestUrl={runUrl}
             isLoadingMore={isLoadingMore}
             onRefresh={onExecute}
             onLoadMore={pageError ? undefined : fetchOneMorePage}
@@ -1097,6 +1141,31 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
             loadMoreNotice={pagingNotice}
             onContinueLoadMore={retrieveAllPages}
             onDismissLoadMoreNotice={() => setPagingNotice(null)}
+            onEditFilter={
+              filterActionsOn
+                ? () => {
+                    setActivePath('filter');
+                    setTab('builder');
+                  }
+                : undefined
+            }
+            // Same gate as Execute: nothing runs while a run is in flight
+            // or the request has a blocker.
+            onRunWithoutFilter={
+              filterActionsOn && !loading && !disabledReason ? runWithoutFilter : undefined
+            }
+            notice={
+              removedFilter && filterCount === 0 ? (
+                <MessageBar intent="info" layout="multiline">
+                  <MessageBarBody>
+                    Ran without $filter. Your $filter was removed from the builder.
+                  </MessageBarBody>
+                  <MessageBarActions>
+                    <Button onClick={restoreFilter}>Restore $filter</Button>
+                  </MessageBarActions>
+                </MessageBar>
+              ) : undefined
+            }
           />
         )}
       </MainTabs>

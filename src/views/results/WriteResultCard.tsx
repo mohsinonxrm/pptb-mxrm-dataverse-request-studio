@@ -32,6 +32,7 @@ import {
   CheckmarkCircle16Filled,
   ErrorCircle16Filled,
   SubtractCircle16Regular,
+  DocumentCopy20Regular,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../../primitives/styles';
 import { canOpenInMode, openInMode } from '../../state/modeHandoff';
@@ -47,6 +48,7 @@ import {
   type RelateTargetResult,
 } from '../../engine/dataverseExecutor';
 import { copyText } from '../../shell/copy';
+import { errorReport } from './nextSteps';
 
 export type WriteOperation =
   | 'create'
@@ -324,6 +326,27 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
                 </Button>
               </Tooltip>
             )}
+          </div>
+        )}
+        {/* Every failure can be copied as a report (#291). */}
+        {!result.ok && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
+            <Button
+              size="small"
+              appearance="subtle"
+              icon={<DocumentCopy20Regular />}
+              onClick={() =>
+                void copyText(
+                  errorReport({
+                    result,
+                    operation: `${ctx.operation}${ctx.table ? ` on ${ctx.table}` : ''}`,
+                  }),
+                  'the error report',
+                )
+              }
+            >
+              Copy error report
+            </Button>
           </div>
         )}
       </div>

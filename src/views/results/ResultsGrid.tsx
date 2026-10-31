@@ -36,7 +36,7 @@
 //     so the grid sees a flat column list — same model as model-driven
 //     advanced-find's link-entity flattening.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   createTableColumn,
   makeStyles,
@@ -232,6 +232,8 @@ export interface ResultsGridProps {
   preferredColumnOrder?: string[];
   /** Reports the columns and rows the grid lists, for CSV export (#15). */
   onViewChange?: (view: GridExportView) => void;
+  /** Buttons under the "No records matched" state: the next step (#291). */
+  emptyActions?: ReactNode;
 }
 
 export function ResultsGrid({
@@ -252,6 +254,7 @@ export function ResultsGrid({
   serverTotal,
   preferredColumnOrder,
   onViewChange,
+  emptyActions,
 }: ResultsGridProps) {
   const styles = useStyles();
   const [settings, updateSettings] = usePersistedSettings();
@@ -844,6 +847,19 @@ export function ResultsGrid({
             ? 'The request succeeded but Dataverse returned zero rows. Check your $filter / $top — or try removing conditions to widen the result set.'
             : 'The request returned no rows.'}
         </div>
+        {emptyActions && (
+          <div
+            style={{
+              display: 'flex',
+              gap: 8,
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              marginTop: 8,
+            }}
+          >
+            {emptyActions}
+          </div>
+        )}
         {status && (
           <div
             style={{

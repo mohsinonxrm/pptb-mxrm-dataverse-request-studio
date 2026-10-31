@@ -115,6 +115,8 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
+  // The URL the shown result came from: the builder may have changed since (#291).
+  const [runUrl, setRunUrl] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
@@ -260,6 +262,7 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   // ── Execute ───────────────────────────────────────────────────────
   const onExecute = async () => {
     setLoading(true);
+    setRunUrl(built.relativeUrl);
     const res = await runtime.retrieveSingle(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setLoading(false);
@@ -592,7 +595,9 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
       <MainTabs tab={tab} onTabChange={setTab} resultCount={result?.outcome === 'ok' ? 1 : null}>
         {tab === 'builder' && pane}
         {tab === 'code' && <CodeView themeMode={themeMode} inputs={codeInputs} />}
-        {tab === 'results' && <ResultsView result={result} mode="single" table={state.table} />}
+        {tab === 'results' && (
+          <ResultsView result={result} mode="single" table={state.table} requestUrl={runUrl} />
+        )}
       </MainTabs>
     </ModeShell>
   );
