@@ -111,6 +111,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sidebar, named after the picked record and badged with its initials, and
   **Open** highlights it.
 
+### 🔄 Changed
+
+- **A smaller, faster-loading package** ([#236]). The npm package is about
+  1.8 MB (6.7 MB unpacked), down from 3.6 MB (14.5 MB), and DRS loads less
+  at startup:
+  - The editors load only the languages DRS shows (JSON, FetchXML and the
+    Code tab's formats) instead of all of Monaco's: its TypeScript, CSS and
+    HTML language services (~7.6 MB of workers) and ~80 language files are
+    gone.
+  - Every mode except Retrieve Multiple, the one DRS opens on, loads the
+    first time you pick it, as do the Code tab, the cURL import and the
+    write-result card. The startup bundle is ~1.7 MB, down from ~2 MB.
+  - The editors still highlight every Code tab format, and JSON is still
+    checked, formatted and folded. The JavaScript in the Code tab's Editor
+    playground loses what TypeScript's language service gave it: error
+    squiggles, completions, hover and formatting.
+  - CI fails the build if the package, or its startup bundle, grows past
+    its budget, or if an unused Monaco worker comes back.
+
 ### 🔧 Internal
 
 - Executor clean-ups ([#224]): one `API_VERSION` constant, matching the
@@ -131,6 +150,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [#224]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/224
 [#244]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/244
+[#236]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/236
 [#291]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/291
 [#294]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/294
 [#226]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/226

@@ -19,8 +19,7 @@ import { BulkDeleteMode } from './modes/BulkDeleteMode.lazy';
 import { RetrieveMultipleMode } from './modes/RetrieveMultipleMode';
 // Bulk Write loads on first use (#8, #22).
 import { BulkWriteMode } from './modes/BulkWriteMode.lazy';
-import { RetrieveSingleMode } from './modes/RetrieveSingleMode';
-// Less-used modes load on first use (#22).
+// Every mode but Retrieve Multiple loads on first use (#22, #236).
 import {
   RetrieveNextLinkMode,
   PredefinedQueryMode,
@@ -30,15 +29,16 @@ import {
   ExecuteWorkflowMode,
   ManageFileMode,
   ManageImageMode,
+  RetrieveSingleMode,
+  CreateMode,
+  UpdateMode,
+  UpsertMode,
+  DeleteMode,
+  ExecuteActionMode,
+  ExecuteFunctionMode,
+  ManageAttachmentMode,
 } from './modes/lazyModes';
-import { CreateMode } from './modes/CreateMode';
-import { UpdateMode } from './modes/UpdateMode';
 import { BatchMode, ExecuteMultipleMode } from './modes/lazyBatchModes';
-import { UpsertMode } from './modes/UpsertMode';
-import { DeleteMode } from './modes/DeleteMode';
-import { ExecuteActionMode } from './modes/ExecuteActionMode';
-import { ExecuteFunctionMode } from './modes/ExecuteFunctionMode';
-import { ManageAttachmentMode } from './modes/ManageAttachmentMode';
 import { ErrorBoundary } from './shell/ErrorBoundary';
 import { clearModeDrafts } from './state/modeDrafts';
 import { StubMode } from './modes/StubMode';

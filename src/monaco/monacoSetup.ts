@@ -1,23 +1,31 @@
 // Monaco bootstrap — loaded on demand by `MonacoEditor` (React.lazy), so the
-// ~3.6 MB monaco-editor chunk stays off DRS's startup path (#22). Everything
-// that must run before the first <Editor> mounts lives here, in one place.
+// monaco-editor chunk stays off DRS's startup path (#22). Everything that
+// must run before the first <Editor> mounts lives here, in one place.
 import Editor, { loader } from '@monaco-editor/react';
-import * as monaco from 'monaco-editor';
-// Monaco language workers — bundled by Vite as separate same-origin chunks
-// via the `?worker` suffix. The CSP allows worker-src from the iframe's own
-// origin, so these load cleanly inside PPTB (the `cdn.jsdelivr.net` path
-// that Monaco defaults to is the one that was blocked).
-//
-// Without this MonacoEnvironment setup, language modes that ship a worker
-// (TypeScript/JavaScript validation, JSON parsing, HTML/CSS analysis) throw
-// `You must define a function MonacoEnvironment.getWorkerUrl or
-// MonacoEnvironment.getWorker` — visible in the PPTB devtools when any
-// Code-tab format other than plain text is selected.
+// The editor core with its standard features (find, folding, bracket
+// matching, …), without the languages `import 'monaco-editor'` brings: that
+// entry registers ~80 basic languages and the TypeScript, CSS and HTML
+// language services, whose workers alone were ~7.6 MB of dist (#236).
+import 'monaco-editor/esm/vs/editor/edcore.main';
+import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
+// The languages DRS shows: JSON bodies (with its language service, so
+// malformed JSON is underlined), FetchXML, and the Code tab's formats
+// (FORMAT_LANG in engine/codeGenerators.ts). These are tokenizers only, which
+// is all a read-only snippet or the Editor playground needs.
+import 'monaco-editor/esm/vs/language/json/monaco.contribution';
+import 'monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution';
+import 'monaco-editor/esm/vs/basic-languages/csharp/csharp.contribution';
+import 'monaco-editor/esm/vs/basic-languages/python/python.contribution';
+import 'monaco-editor/esm/vs/basic-languages/powershell/powershell.contribution';
+import 'monaco-editor/esm/vs/basic-languages/shell/shell.contribution';
+import 'monaco-editor/esm/vs/basic-languages/xml/xml.contribution';
+// Monaco's workers — bundled by Vite as separate same-origin chunks via the
+// `?worker` suffix. The CSP allows worker-src from the iframe's own origin,
+// so these load cleanly inside PPTB (the `cdn.jsdelivr.net` path that Monaco
+// defaults to is the one that was blocked). JSON's language service runs in
+// its own worker; everything else uses the editor worker.
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
-import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
-import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker';
-import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
 
 // Bundle Monaco locally — PPTB's CSP forbids fetching from cdn.jsdelivr.net
 // ("script-src 'self' 'unsafe-inline' pptb-webview:"). `loader.config({ monaco })`
@@ -25,15 +33,12 @@ import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
 // of its default CDN-AMD loader path.
 loader.config({ monaco });
 
-// Route language workers to Vite's same-origin bundled chunks (see the
-// `?worker` imports above). The fallback `editorWorker` covers plain-text
-// modes that don't have a dedicated language worker (curl, csharp, etc.).
+// Without this, Monaco throws `You must define a function
+// MonacoEnvironment.getWorkerUrl or MonacoEnvironment.getWorker` when the
+// JSON service (or the editor's own diffing / link detection) starts.
 self.MonacoEnvironment = {
   getWorker(_workerId: string, label: string) {
     if (label === 'json') return new jsonWorker();
-    if (label === 'typescript' || label === 'javascript') return new tsWorker();
-    if (label === 'css' || label === 'scss' || label === 'less') return new cssWorker();
-    if (label === 'html' || label === 'handlebars' || label === 'razor') return new htmlWorker();
     return new editorWorker();
   },
 };

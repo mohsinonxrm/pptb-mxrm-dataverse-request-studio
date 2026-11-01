@@ -51,7 +51,7 @@ import {
   hasCollectionExpandWithNestedExpand,
   hasCollectionInvolvedNestedExpand,
 } from '../editors/expand/expandTree';
-import { CodeView } from '../views/CodeView';
+import { CodeView } from '../views/LazyCodeView';
 import { ResultsView } from '../views/ResultsView';
 import { countRules, newId } from '../editors/filter/filterTree';
 import { findTable } from '../metadata/metadata';

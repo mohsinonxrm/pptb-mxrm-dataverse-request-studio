@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { lazy, Suspense, useState, type ReactNode } from 'react';
 import {
   TabList,
   Tab,
@@ -47,7 +47,7 @@ import { ResultsCommandBar } from './results/ResultsCommandBar';
 import type { GridExportView } from './results/exportResults';
 import { usePersistedSettings } from '../host/usePersistedSettings';
 import { RecordDetailCard } from './detail/RecordDetailCard';
-import { WriteResultCard, type WriteResultContext } from './results/WriteResultCard';
+import type { WriteResultContext } from './results/WriteResultCard';
 import type { ExpandSpec } from '../editors/ExpandEditor';
 import type { OrderbySpec } from '../editors/OrderbyEditor';
 import { copyText } from '../shell/copy';
@@ -60,6 +60,12 @@ import {
   notFoundSegment,
   suggestEntitySet,
 } from './results/nextSteps';
+
+// The write-result card only shows after a write, so it isn't in the
+// startup bundle with Retrieve Multiple (#236).
+const WriteResultCard = lazy(() =>
+  import('./results/WriteResultCard').then((m) => ({ default: m.WriteResultCard })),
+);
 
 /** The request URL as sent: modes pass it relative to the org host. Like the
  *  URL bar, it reads `https:///…` when there's no connection. */
@@ -381,7 +387,9 @@ export function ResultsView({
         {tab === 'data' &&
           (mode === 'single' ? (
             writeContext ? (
-              <WriteResultCard result={result} ctx={writeContext} />
+              <Suspense fallback={<Spinner size="small" label="Loading the result…" />}>
+                <WriteResultCard result={result} ctx={writeContext} />
+              </Suspense>
             ) : (
               <DetailPane body={result.body} table={table ?? ''} />
             )
