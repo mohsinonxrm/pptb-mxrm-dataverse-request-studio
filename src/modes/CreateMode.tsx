@@ -76,6 +76,8 @@ import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { missingRequiredColumns, rawBodyBlocker } from '../engine/fieldBody';
 import { useRecentRuns } from '../state/runHistory';
+import { useImportedRequest } from '../state/modeHandoff';
+import { importCreate } from '../engine/curlImport/applyImport';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -304,6 +306,15 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   // The header holds on to these; the stable wrappers always run this
   // render's handlers, not the ones from when the context was published.
   const onSavedLatest = useLatestCallback(onSaved);
+  // cURL import (#271): a command pasted anywhere opens here. Like a recent
+  // run, it isn't a saved entry, so the save baseline stays as it was.
+  useImportedRequest('create', (request) => {
+    if (request.modeId !== 'create') return;
+    setState(importCreate(initialState(), request));
+    setResult(null);
+    setTab('builder');
+    setActivePath('fieldset');
+  });
   const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {

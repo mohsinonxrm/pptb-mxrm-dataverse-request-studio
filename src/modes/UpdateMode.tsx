@@ -100,6 +100,8 @@ import { rawBodyBlocker, sentFieldValues } from '../engine/fieldBody';
 import { isRecordGuid } from '../primitives/guid';
 import { isColumnInScope, useAdvancedFindOnly } from '../state/metadataScope';
 import { useRecentRuns } from '../state/runHistory';
+import { useImportedRequest } from '../state/modeHandoff';
+import { importUpdate } from '../engine/curlImport/applyImport';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -369,6 +371,15 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   // The header holds on to these; the stable wrappers always run this
   // render's handlers, not the ones from when the context was published.
   const onSavedLatest = useLatestCallback(onSaved);
+  // cURL import (#271): a command pasted anywhere opens here. Like a recent
+  // run, it isn't a saved entry, so the save baseline stays as it was.
+  useImportedRequest('update', (request) => {
+    if (request.modeId !== 'update') return;
+    setState(importUpdate(initialState(), request));
+    setResult(null);
+    setTab('builder');
+    setActivePath('target');
+  });
   const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {

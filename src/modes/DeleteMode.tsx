@@ -120,6 +120,8 @@ import { useLatestCallback } from '../primitives/useLatestCallback';
 import { isRecordGuid } from '../primitives/guid';
 import { isColumnInScope, useAdvancedFindOnly } from '../state/metadataScope';
 import { useRecentRuns } from '../state/runHistory';
+import { useImportedRequest } from '../state/modeHandoff';
+import { importDelete } from '../engine/curlImport/applyImport';
 
 const initialState = (): DeleteState => ({
   table: '',
@@ -338,6 +340,15 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
   // The header holds on to these; the stable wrappers always run this
   // render's handlers, not the ones from when the context was published.
   const onSavedLatest = useLatestCallback(onSaved);
+  // cURL import (#271): a command pasted anywhere opens here. Like a recent
+  // run, it isn't a saved entry, so the save baseline stays as it was.
+  useImportedRequest('delete', (request) => {
+    if (request.modeId !== 'delete') return;
+    setState(importDelete(initialState(), request));
+    setResult(null);
+    setTab('builder');
+    setActivePath('target');
+  });
   const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {

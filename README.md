@@ -162,6 +162,11 @@ has C# / HTTP / Python / PPTB.
   precondition, bypass or impersonation header are blocked with an
   explanation. `Authorization` / `Cookie` headers are never sent, saved or
   exported.
+- **Import a cURL command** — More actions → **Import cURL command…** opens a
+  pasted `curl` command (a browser's Copy as cURL, or DRS's own cURL code) in
+  the mode that sends it: Retrieve Multiple / Single, Create, Update, Upsert,
+  Delete, Execute Action / Custom API / Custom Action, or `$batch`. It's
+  filled in, not run, and credentials and browser headers are left out.
 - **Antipattern advisories** — Surfaces real-time guidance per the
   [Microsoft query-antipatterns doc](https://learn.microsoft.com/en-us/power-apps/developer/data-platform/query-antipatterns):
   `FilteringOnCalculatedColumns`, `LargeAmountOfLogicalAttributes`, large-text
@@ -530,9 +535,9 @@ Ideas under consideration include:
 - FetchXML and Dataverse Search API modes
 - A metadata browser mode
 - Comparing responses across runs or environments
-- Importing Postman / Insomnia collections and cURL commands
-- More code-generation targets (C# ServiceClient / IOrganizationService,
-  Python, the PowerShell Dataverse module)
+- Importing Postman / Insomnia collections
+- More code-generation targets (C# ServiceClient / IOrganizationService, the
+  PowerShell Dataverse module)
 
 ---
 
