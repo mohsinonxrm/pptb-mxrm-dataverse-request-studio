@@ -82,6 +82,11 @@ jobs:
                 dist_tag="support-$line"; latest=false
               elif git merge-base --is-ancestor "$GITHUB_SHA" origin/main && [ "$line" = "${main_version%.*}" ]; then
                 dist_tag=latest; latest=true
+              elif [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+                # A rehearsal never publishes, so a stable version that isn't on main yet (a
+                # release/X.Y or hotfix branch) still runs every check and the dry run
+                echo "::warning::Stable version $version is on neither main's release line ($main_version) nor support/$line, so a tag here would fail. Rehearsing as \"latest\"."
+                dist_tag=latest; latest=true
               else
                 echo "::error::Stable version $version is on neither main's release line ($main_version) nor support/$line. Tag the release → main merge commit (RELEASING.md)."
                 exit 1

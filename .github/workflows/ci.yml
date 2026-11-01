@@ -18,13 +18,13 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      # Pinned by commit SHA, as in release.yml (#376)
+      # The same pins as release.yml (#376): the actions by commit SHA, and Node
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version-file: .nvmrc
+          node-version: 24.22.0
           cache: npm
       # Like the release build (#376): only esbuild and fsevents have install scripts, and
       # neither needs them
