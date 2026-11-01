@@ -2,7 +2,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { FluentProvider, webLightTheme } from '@fluentui/react-components';
-import type { CsdlAction } from '../mock/actionsCsdl';
+import type { CsdlAction } from '../metadata/actionsCsdl';
 
 import {
   ResponsePropertiesCard,

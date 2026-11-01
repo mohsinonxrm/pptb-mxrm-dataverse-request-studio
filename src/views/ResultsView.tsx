@@ -51,7 +51,7 @@ import { WriteResultCard, type WriteResultContext } from './results/WriteResultC
 import type { ExpandSpec } from '../editors/ExpandEditor';
 import type { OrderbySpec } from '../editors/OrderbyEditor';
 import { copyText } from '../shell/copy';
-import { ENV } from '../mock/environment';
+import { ENV } from '../env/environment';
 import { useScopedEntities } from '../host/useScopedEntities';
 import {
   describeMissingPrivilege,

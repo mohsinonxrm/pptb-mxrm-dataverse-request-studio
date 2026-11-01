@@ -30,7 +30,7 @@ import { RetrieveMultipleMode } from './RetrieveMultipleMode';
 import { SaveContextRoot, type SaveContextValue } from '../state/SaveContext';
 import { openImport, useRegisterModeNavigator } from '../state/modeHandoff';
 import { importCurl } from '../engine/curlImport/curlImport';
-import { __clearLiveTables, findTable } from '../mock/metadata';
+import { __clearLiveTables, findTable } from '../metadata/metadata';
 import { account, registerFixtureTables } from '../test/fixtures';
 import type { SerializedRetrieveMultipleState } from '../state/savedRequests';
 

@@ -36,7 +36,7 @@ import {
   type WireRequest,
 } from '../../engine/batch/batchModel';
 import { encodePart } from '../../engine/batch/multipart';
-import { API_BASE } from '../../mock/environment';
+import { API_BASE } from '../../env/environment';
 import { scopedNavs, useAdvancedFindOnly } from '../../state/metadataScope';
 
 const OPS: { id: BatchOpKind; label: string }[] = [

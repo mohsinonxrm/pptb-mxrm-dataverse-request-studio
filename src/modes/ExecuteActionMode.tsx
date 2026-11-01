@@ -35,7 +35,7 @@ import { TargetEditor } from '../editors/TargetEditor';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { type CsdlAction } from '../mock/actionsCsdl';
+import { type CsdlAction } from '../metadata/actionsCsdl';
 import { actions as actionsProvider, fetchSourceClassificationStatus } from '../host/csdlProvider';
 import { findRequestType } from '../registry/requestTypes';
 import { buildExecuteAction, buildExecuteActionBody } from '../engine/urlBuilder';

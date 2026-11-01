@@ -5,7 +5,7 @@
 // to deeply-nested expands don't accidentally touch siblings.
 
 import { type ExpandSpec, makeExpandSpec } from '../ExpandEditor';
-import { findTable, type NavProperty, type TableMeta } from '../../mock/metadata';
+import { findTable, type NavProperty, type TableMeta } from '../../metadata/metadata';
 import { isNavInScope } from '../../state/metadataScope';
 
 // ────────────────────────────────────────────────────────────

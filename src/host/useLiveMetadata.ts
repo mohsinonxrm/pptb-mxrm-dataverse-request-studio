@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { metadata, type EntityListItem } from './metadataProvider';
-import { __subscribeLiveTables, findTable, type TableMeta } from '../mock/metadata';
+import { __subscribeLiveTables, findTable, type TableMeta } from '../metadata/metadata';
 import { collectReferencedEntities, type ReferencedTreeInput } from '../engine/navPath';
 
 /**

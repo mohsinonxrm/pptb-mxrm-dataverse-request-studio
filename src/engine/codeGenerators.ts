@@ -8,7 +8,7 @@
 //   - Preserve the user's actual headers (Prefer, MSCRMCallerID, etc.)
 
 import type { BuiltRequest } from './urlBuilder';
-import { API_BASE, ENV } from '../mock/environment';
+import { API_BASE, ENV } from '../env/environment';
 import { generateOpenApi } from './openApiGenerator';
 import { isCredentialHeader, withoutCredentialHeaders } from './sensitiveHeaders';
 import { encodeSpaces } from '../primitives/urlParts';

@@ -93,7 +93,7 @@ import {
   type LookupColumnMeta,
   type CustomerColumnMeta,
   type OwnerColumnMeta,
-} from '../mock/metadata';
+} from '../metadata/metadata';
 import { useLookupRecords } from '../host/useLookupRecords';
 import {
   decodeFieldBody,

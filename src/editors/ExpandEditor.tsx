@@ -8,7 +8,7 @@
 // Nested $expand is supported recursively per the docs:
 //   ?$expand=primarycontactid($select=fullname;$expand=createdby($select=fullname))
 
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { groupToOData, type FilterGroup, newId } from './filter/filterTree';
 import { orderbyToOData, type OrderbySpec } from './OrderbyEditor';
 import { attrRefByName } from '../engine/odataAttr';

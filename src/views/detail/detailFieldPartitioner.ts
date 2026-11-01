@@ -19,7 +19,7 @@
 //      from the API: RetrieveSingle bodies, Create/Update return=
 //      representation, Action/Function single-entity outputs.
 
-import type { TableMeta, NavProperty } from '../../mock/metadata';
+import type { TableMeta, NavProperty } from '../../metadata/metadata';
 
 // ── Public types ─────────────────────────────────────────────────────
 

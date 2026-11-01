@@ -52,7 +52,7 @@ import { ExpandRouter } from '../editors/expand/ExpandRouter';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { countRules } from '../editors/filter/filterTree';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildRetrieveSingle } from '../engine/urlBuilder';
 import { relatedMetadataAdvisories } from '../engine/navPath';

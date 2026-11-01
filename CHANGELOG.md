@@ -118,6 +118,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the executor's module header describes what it does today. Manage
   Image's preview tile takes its initials from the picked record instead of
   a fixed `?`.
+- `src/mock/` is renamed for what it holds ([#224]): the table registry and
+  CSDL action types are in `src/metadata/`, the environment in `src/env/`.
+  No behaviour change.
 
 [#224]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/224
 [#291]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/291

@@ -50,7 +50,7 @@ import { TargetEditor } from '../editors/TargetEditor';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import {
   buildAssociate,
@@ -662,7 +662,7 @@ function RequestsPreview({
   );
 }
 
-function cardinalityShort(c: import('../mock/metadata').NavProperty['cardinality']): string {
+function cardinalityShort(c: import('../metadata/metadata').NavProperty['cardinality']): string {
   switch (c) {
     case 'OneToMany':
       return '1:N';

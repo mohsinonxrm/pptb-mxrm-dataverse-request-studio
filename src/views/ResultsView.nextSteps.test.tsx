@@ -17,8 +17,8 @@ vi.mock('../shell/copy', async (importOriginal) => ({
   copyText: host.copy,
 }));
 // A connected org, so URLs are absolute (without one they read https:///…).
-vi.mock('../mock/environment', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../mock/environment')>()),
+vi.mock('../env/environment', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../env/environment')>()),
   ENV: { name: 'Test', host: 'org.crm.dynamics.com', apiBase: '/api/data/v9.2', user: '' },
 }));
 vi.mock('../host/useScopedEntities', () => ({
@@ -36,7 +36,7 @@ vi.mock('../host/useScopedEntities', () => ({
 
 import { ResultsView } from './ResultsView';
 import type { ExecResult } from '../engine/dataverseExecutor';
-import { ENV } from '../mock/environment';
+import { ENV } from '../env/environment';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 // The grid and MessageBar measure themselves; jsdom has no ResizeObserver.

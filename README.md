@@ -444,6 +444,15 @@ src/
     cache.ts                 — per-org metadata caches (TTL + in-flight dedup)
     useLiveMetadata.ts, useColumnDetail.ts, useScopedEntities.ts, …
 
+  metadata/                  — Dataverse metadata model
+    metadata.ts              — table / column types + live table registry
+                               (findTable, findTableBySet)
+    actionsCsdl.ts           — CSDL action / function types
+
+  env/                       — target environment
+    environment.ts           — connected environment (getEnv, ENV) +
+                               API_VERSION / API_BASE
+
   primitives/                — small reusable UI bits
     ClauseTreeItem.tsx, SectionHeader.tsx, ModeCard.tsx, RequestTypePicker.tsx
     StatusPill.tsx, MethodPill.tsx, AdvisoryDrawer.tsx, advisories.ts

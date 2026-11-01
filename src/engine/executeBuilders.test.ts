@@ -1,7 +1,7 @@
 // #221: function parameter values in the URL can't add parameters to the call.
 import { describe, expect, it } from 'vitest';
 import { encodeParamForUrl, invalidFunctionParamReason } from './executeBuilders';
-import type { ActionParam } from '../mock/actionsCsdl';
+import type { ActionParam } from '../metadata/actionsCsdl';
 
 const ID = '00000000-0000-0000-0000-0000000000a1';
 const p = (name: string, type: string, extra: Partial<ActionParam> = {}) =>

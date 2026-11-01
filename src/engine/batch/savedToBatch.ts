@@ -9,7 +9,7 @@
 // binary bodies, so they aren't offered.
 
 import { metadata } from '../../host/metadataProvider';
-import { findTable } from '../../mock/metadata';
+import { findTable } from '../../metadata/metadata';
 import {
   buildRetrieveMultiple,
   buildRetrieveSingle,

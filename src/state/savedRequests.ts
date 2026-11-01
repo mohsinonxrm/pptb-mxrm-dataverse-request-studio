@@ -46,7 +46,7 @@ import type {
   ExecuteWorkflowState,
 } from './executeState';
 import type { ManageFileState, ManageImageState, ManageAttachmentState } from './binaryState';
-import { getEnv } from '../mock/environment';
+import { getEnv } from '../env/environment';
 import { stripCredentialRows } from '../engine/sensitiveHeaders';
 import { invalidUrlPartReason } from '../primitives/urlParts';
 import {

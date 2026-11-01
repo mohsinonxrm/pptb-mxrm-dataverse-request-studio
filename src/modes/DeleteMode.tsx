@@ -91,7 +91,7 @@ import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildDelete } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
@@ -824,7 +824,7 @@ function DeleteTargetPane({
   rowLoading: boolean;
   rowError: string | null;
   primaryName: string;
-  tbl: import('../mock/metadata').TableMeta | undefined;
+  tbl: import('../metadata/metadata').TableMeta | undefined;
   onTableChange: (t: string) => void;
   onRecordChange: (id: string | null, primary?: string) => void;
   onProceedToConfirmation: () => void;
@@ -1022,7 +1022,7 @@ function DeleteConfirmationPane({
   state: DeleteState;
   row: Record<string, unknown> | null;
   primaryName: string;
-  tbl: import('../mock/metadata').TableMeta | undefined;
+  tbl: import('../metadata/metadata').TableMeta | undefined;
   onConfirmText: (v: string) => void;
   onAck: (v: boolean) => void;
   onBackToTarget: () => void;

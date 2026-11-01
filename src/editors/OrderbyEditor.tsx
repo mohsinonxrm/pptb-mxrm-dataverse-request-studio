@@ -25,7 +25,7 @@ import {
   isCompanionLogicalReadOnly,
   resolveNavPath,
   type TableMeta,
-} from '../mock/metadata';
+} from '../metadata/metadata';
 import { attrRef } from '../engine/odataAttr';
 import { PaneHead } from './PaneHead';
 import { firstOfferedColumn, scopedColumns, useAdvancedFindOnly } from '../state/metadataScope';

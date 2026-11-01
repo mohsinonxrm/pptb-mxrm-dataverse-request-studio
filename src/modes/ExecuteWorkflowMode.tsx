@@ -47,7 +47,7 @@ import { WorkflowArgumentsCard } from '../editors/WorkflowArgumentsCard';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildExecuteWorkflow, buildExecuteWorkflowBody } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';

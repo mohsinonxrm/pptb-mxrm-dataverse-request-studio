@@ -39,8 +39,8 @@ import { useStudioStyles } from '../../primitives/styles';
 import { canOpenInMode, openInMode } from '../../state/modeHandoff';
 import { StatusPill } from '../../primitives/StatusPill';
 import { RecordDetailCard } from '../detail/RecordDetailCard';
-import { ENV } from '../../mock/environment';
-import { findTable } from '../../mock/metadata';
+import { ENV } from '../../env/environment';
+import { findTable } from '../../metadata/metadata';
 import {
   HEADER_CONSENT_DECLINED_CODE,
   HEADER_REJECTED_CODE,

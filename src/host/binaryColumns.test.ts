@@ -10,7 +10,7 @@ import {
 } from './pptbClient';
 import { attributeTypeOf, enrichBinaryColumns, mapAttribute } from './metadataProvider';
 import { mustSupplyOnCreate } from '../engine/fieldBody';
-import type { ColumnMeta } from '../mock/metadata';
+import type { ColumnMeta } from '../metadata/metadata';
 
 const loadAttributesByTypeCast = vi.hoisted(() => vi.fn());
 vi.mock('./dataverseMetadata', async (importOriginal) => ({

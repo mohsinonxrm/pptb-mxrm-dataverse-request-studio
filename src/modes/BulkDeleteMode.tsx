@@ -68,8 +68,8 @@ import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../edit
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { StatusPill } from '../primitives/StatusPill';
-import { findTable, type TableMeta } from '../mock/metadata';
-import { ENV } from '../mock/environment';
+import { findTable, type TableMeta } from '../metadata/metadata';
+import { ENV } from '../env/environment';
 import { findRequestType } from '../registry/requestTypes';
 import type { ExecResult } from '../engine/runtime';
 import type { ThemeMode } from '../theme/theme';

@@ -28,9 +28,9 @@
 // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/bulk-operations
 // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/reference/createmultiple
 
-import { findTable, findColumn, isLookupLike, type TableMeta } from '../mock/metadata';
-import type { ColumnMeta } from '../mock/metadata';
-import { ENV } from '../mock/environment';
+import { findTable, findColumn, isLookupLike, type TableMeta } from '../metadata/metadata';
+import type { ColumnMeta } from '../metadata/metadata';
+import { ENV } from '../env/environment';
 import type { HeaderItem } from '../editors/HeadersEditor';
 import type {
   BypassOptions,

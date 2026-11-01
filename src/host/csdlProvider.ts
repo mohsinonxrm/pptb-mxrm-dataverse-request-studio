@@ -1,5 +1,5 @@
 // CSDL provider — fetches the Dataverse `$metadata` document and parses it
-// into the studio's `CsdlAction[]` shape (same type as `mock/actionsCsdl.ts`).
+// into the studio's `CsdlAction[]` shape (same type as `metadata/actionsCsdl.ts`).
 //
 // Why this exists:
 //   The studio's Execute group (ExecuteAction, ExecuteFunction, ExecuteCustomApi,
@@ -8,7 +8,7 @@
 //   typed inputs (Edm.Int32 → SpinButton, EntityReference → record picker,
 //   OptionSetValue → Combobox, etc).
 //
-//   `src/mock/actionsCsdl.ts` holds only the types; there's no sample
+//   `src/metadata/actionsCsdl.ts` holds only the types; there's no sample
 //   catalog. Standalone, the load fails and the pickers say so, so no
 //   operation (or its response card) shows outside PPTB (#317).
 //   In PPTB the source of truth is the live `$metadata` EDMX document —
@@ -53,7 +53,7 @@ import type {
   ActionBinding,
   ActionReturnType,
   EdmType,
-} from '../mock/actionsCsdl';
+} from '../metadata/actionsCsdl';
 
 // Tiny inline memoizer — CSDL is fetched at most twice per org (raw XML
 // + parsed actions). A small cache is enough; we don't need the full

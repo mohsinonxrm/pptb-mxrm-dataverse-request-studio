@@ -54,7 +54,7 @@ import { Warning20Filled } from '@fluentui/react-icons';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { writeResultName } from '../views/results/writeResultName';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildCreate, buildCreateBody } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';

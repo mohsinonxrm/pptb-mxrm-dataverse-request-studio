@@ -7,7 +7,7 @@ import { MethodPill } from '../primitives/MethodPill';
 import { AdvisoryDrawer } from '../primitives/AdvisoryDrawer';
 import { announce } from '../primitives/announce';
 import type { Advisory } from '../primitives/advisories';
-import { ENV } from '../mock/environment';
+import { ENV } from '../env/environment';
 import { UrlTokens } from './UrlTokens';
 import type { HttpMethod } from '../registry/requestTypes';
 import { getSession } from '../host/pptbBridge';

@@ -94,7 +94,7 @@ export interface DisassociateState {
 // ──────────────────────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────────────────────
-import type { NavProperty } from '../mock/metadata';
+import type { NavProperty } from '../metadata/metadata';
 
 /** True for OneToMany / ManyToMany nav props (collection-valued). */
 export const isCollectionValuedNav = (n: NavProperty): boolean =>

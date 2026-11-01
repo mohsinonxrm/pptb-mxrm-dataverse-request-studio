@@ -67,7 +67,7 @@ import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { topLevelRowCount } from '../views/results/flattenExpansions';
 import { findRequestType } from '../registry/requestTypes';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { buildPredefinedQuery } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
 import type { PredefinedQueryState, PredefinedRelatedTarget, RecentRun } from '../state/readState';

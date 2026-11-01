@@ -54,7 +54,7 @@ import {
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { countRules, newId } from '../editors/filter/filterTree';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildRetrieveMultiple, COUNT_ONLY_PREFER } from '../engine/urlBuilder';
 import { relatedMetadataAdvisories } from '../engine/navPath';

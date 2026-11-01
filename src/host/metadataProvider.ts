@@ -1,6 +1,6 @@
 // Metadata provider — transforms raw Dataverse metadata into the studio's
 // `TableMeta` / `ColumnMeta` shape, then publishes it into the synchronous
-// live registry in `mock/metadata.ts` so every editor's `findTable(logical)`
+// live registry in `metadata/metadata.ts` so every editor's `findTable(logical)`
 // call returns live data.
 //
 // Architecture:
@@ -19,7 +19,7 @@ import {
   __unregisterLiveTable,
   findTable,
   getLiveTables,
-} from '../mock/metadata';
+} from '../metadata/metadata';
 import type {
   TableMeta,
   ColumnMeta,
@@ -27,7 +27,7 @@ import type {
   AlternateKeyDef,
   AttributeTypeCode,
   SourceType,
-} from '../mock/metadata';
+} from '../metadata/metadata';
 import type { EntityMetadata, AttributeMetadata, RelationshipMetadata } from './pptbClient';
 import { metadataCache } from './cache';
 import { activeOrg } from './activeOrg';

@@ -62,7 +62,7 @@ import { runtime, type ExecResult } from '../engine/runtime';
 import { buildRetrieveNextLink } from '../engine/urlBuilder';
 import type { RetrieveNextLinkState } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
-import { getEnv } from '../mock/environment';
+import { getEnv } from '../env/environment';
 import { useScopedEntities } from '../host/useScopedEntities';
 import type { Advisory } from '../primitives/advisories';
 import { decodeForDisplay } from '../primitives/decodeForDisplay';

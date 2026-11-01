@@ -31,7 +31,7 @@ import {
   tokens,
 } from '@fluentui/react-components';
 import { ChevronRight16Regular, ChevronDown16Regular } from '@fluentui/react-icons';
-import { findTable } from '../../mock/metadata';
+import { findTable } from '../../metadata/metadata';
 import { partitionRecord, prettifyKey } from './detailFieldPartitioner';
 import { RecordDetailCard } from './RecordDetailCard';
 

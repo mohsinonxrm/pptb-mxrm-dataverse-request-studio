@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { __registerLiveTables, type TableMeta } from '../mock/metadata';
+import { __registerLiveTables, type TableMeta } from '../metadata/metadata';
 import { defaultBypassOptions } from '../state/writeState';
 import {
   buildBulkWrite,

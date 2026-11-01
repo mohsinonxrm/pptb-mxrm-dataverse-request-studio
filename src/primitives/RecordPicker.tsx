@@ -57,7 +57,7 @@ import {
 } from '@fluentui/react-components';
 import { Dismiss16Regular, Warning20Filled, CheckmarkCircle16Filled } from '@fluentui/react-icons';
 import { parseGuid } from './guid';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import {
   fetchRecordName,
   useLookupRecords,

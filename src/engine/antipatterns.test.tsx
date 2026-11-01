@@ -14,7 +14,7 @@ import {
   detectLogicalSelect,
   detectRetrieveMultipleAntipatterns,
 } from './antipatterns';
-import { __registerLiveTables, type ColumnMeta, type TableMeta } from '../mock/metadata';
+import { __registerLiveTables, type ColumnMeta, type TableMeta } from '../metadata/metadata';
 import type { FilterGroup, FilterNode } from '../editors/filter/filterTree';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 

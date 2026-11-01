@@ -52,7 +52,7 @@ import {
   resolveNavPath,
   type ColumnMeta,
   type TableMeta,
-} from '../../mock/metadata';
+} from '../../metadata/metadata';
 import { useLiveTable } from '../../host/useLiveMetadata';
 import { ApplyOverridesBanner } from '../ApplyOverridesBanner';
 import {

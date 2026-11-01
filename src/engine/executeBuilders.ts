@@ -19,18 +19,17 @@
 //   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/use-web-api-actions
 //   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/use-web-api-functions
 
-import { ENV } from '../mock/environment';
-import { findTable } from '../mock/metadata';
-import { type CsdlAction, type ActionParam } from '../mock/actionsCsdl';
-// LIVE-AWARE action lookup. The mock `findAction` only sees the seeded
-// ~30 actions in `mock/actionsCsdl.ts` — in PPTB the real action set has
-// 1000+ entries from the parsed `$metadata` document. We use the cached
-// sync accessor from csdlProvider so the builders return correct URL +
-// body for any live action, not just mock ones.
+import { ENV } from '../env/environment';
+import { findTable } from '../metadata/metadata';
+import { type CsdlAction, type ActionParam } from '../metadata/actionsCsdl';
+// LIVE-AWARE action lookup. `metadata/actionsCsdl.ts` holds only the action
+// types; in PPTB the real action set has 1000+ entries from the parsed
+// `$metadata` document. We use the cached sync accessor from csdlProvider
+// so the builders return correct URL + body for any live action.
 //
-// Without this swap, every non-mock action (QualifyLead, every Custom
-// API, etc.) would return an empty BuiltRequest → broken code-gen
-// snippets and missing body previews.
+// Without it, every action (QualifyLead, every Custom API, etc.) would
+// return an empty BuiltRequest → broken code-gen snippets and missing body
+// previews.
 import { findActionSync } from '../host/csdlProvider';
 import { ISO_DATE_RE } from '../primitives/urlParts';
 import { isRecordGuid } from '../primitives/guid';
