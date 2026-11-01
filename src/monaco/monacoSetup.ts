@@ -26,6 +26,7 @@ import 'monaco-editor/esm/vs/basic-languages/xml/xml.contribution';
 // its own worker; everything else uses the editor worker.
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
+import { workerOrInPage } from './inPageWorker';
 
 // Bundle Monaco locally — PPTB's CSP forbids fetching from cdn.jsdelivr.net
 // ("script-src 'self' 'unsafe-inline' pptb-webview:"). `loader.config({ monaco })`
@@ -35,11 +36,12 @@ loader.config({ monaco });
 
 // Without this, Monaco throws `You must define a function
 // MonacoEnvironment.getWorkerUrl or MonacoEnvironment.getWorker` when the
-// JSON service (or the editor's own diffing / link detection) starts.
+// JSON service (or the editor's own diffing / link detection) starts. Where
+// a worker can't start (the PPTB VS Code extension serves the worker scripts
+// from another origin), the same code runs on the page instead (#255).
 self.MonacoEnvironment = {
   getWorker(_workerId: string, label: string) {
-    if (label === 'json') return new jsonWorker();
-    return new editorWorker();
+    return workerOrInPage(label, () => (label === 'json' ? new jsonWorker() : new editorWorker()));
   },
 };
 
