@@ -54,7 +54,7 @@ vi.mock('../views/ResultsView', () => ({
 import { RetrieveMultipleMode } from './RetrieveMultipleMode';
 import { SaveContextRoot, type SaveContextValue } from '../state/SaveContext';
 import { serializeRetrieveMultiple, type SavedRequest } from '../state/savedRequests';
-import { __clearLiveTables, findTable } from '../mock/metadata';
+import { __clearLiveTables, findTable } from '../metadata/metadata';
 import { registerFixtureTables, retrieveMultipleState } from '../test/fixtures';
 import { mapError } from '../engine/dataverseExecutor';
 import { clearModeDrafts } from '../state/modeDrafts';

@@ -61,7 +61,7 @@ import { BinaryPipelineCard } from '../editors/BinaryPipelineCard';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { findTable, type FileColumnMeta } from '../mock/metadata';
+import { findTable, type FileColumnMeta } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildManageFile, manageFilePipeline, formatSize } from '../engine/urlBuilder';
 import { pipelineCodegen } from '../engine/binaryBuilders';

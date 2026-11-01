@@ -47,7 +47,7 @@ import {
   type MoneyColumnMeta,
   type DateTimeColumnMeta,
   type MultiSelectPicklistColumnMeta,
-} from '../mock/metadata';
+} from '../metadata/metadata';
 import { loadAttributeWithOptionSet, loadAttributeDetailedMetadata } from './dataverseMetadata';
 import type { AttributeMetadata } from './pptbClient';
 

@@ -1,5 +1,5 @@
-// Mock Dataverse metadata — modeled after the real Web API
-// AttributeMetadata response shapes.
+// Dataverse table metadata and the live table registry. The types are modeled
+// after the Web API AttributeMetadata response shapes.
 //
 // Each column carries:
 //   - logicalName / displayName / required / description
@@ -12,8 +12,8 @@
 //
 // Field shapes are a discriminated union keyed on `attributeType`.
 //
-// ── Reference: when the real Web API is wired up ────────────────────────────
-// This mock maps 1:1 to the Dataverse Web API metadata endpoint at
+// ── Reference: where these shapes come from ─────────────────────────────────
+// These types map 1:1 to the Dataverse Web API metadata endpoint at
 //   GET /api/data/v9.2/EntityDefinitions(LogicalName='<table>')
 //     ?$expand=Attributes(...) — cast to the typed metadata classes
 //

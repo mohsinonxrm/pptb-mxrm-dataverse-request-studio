@@ -25,7 +25,7 @@ import { findRequestType } from '../registry/requestTypes';
 import { useScopedEntities } from '../host/useScopedEntities';
 import { metadata } from '../host/metadataProvider';
 import { actions } from '../host/csdlProvider';
-import { getEnv } from '../mock/environment';
+import { getEnv } from '../env/environment';
 
 export function ImportCurlDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [text, setText] = useState('');

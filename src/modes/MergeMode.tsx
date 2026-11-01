@@ -67,7 +67,7 @@ import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advis
 import { RecordPicker } from '../primitives/RecordPicker';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildMerge, buildMergeBody } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
@@ -873,7 +873,7 @@ function RecordCard({
   chip: string;
   chipDescription: string;
   row: Record<string, unknown> | undefined;
-  tbl: import('../mock/metadata').TableMeta;
+  tbl: import('../metadata/metadata').TableMeta;
   emptyHint: string;
 }) {
   // Uses Fluent palette tokens (not hand-mixed rgba) so the accent shifts
@@ -1236,7 +1236,7 @@ function OptionsPane({
 // Helpers
 // ──────────────────────────────────────────────────────────────
 function primaryNameOf(
-  tbl: import('../mock/metadata').TableMeta | undefined,
+  tbl: import('../metadata/metadata').TableMeta | undefined,
   row: Record<string, unknown> | undefined,
 ): string | null {
   if (!tbl || !row) return null;

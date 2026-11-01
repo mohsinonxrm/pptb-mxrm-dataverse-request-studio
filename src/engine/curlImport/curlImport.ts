@@ -21,7 +21,7 @@ import {
   type ConcurrencyMode,
   type DeleteScope,
 } from '../../state/writeState';
-import type { CsdlAction } from '../../mock/actionsCsdl';
+import type { CsdlAction } from '../../metadata/actionsCsdl';
 import type { ExpandSpec } from '../../editors/ExpandEditor';
 import { newGroup, newItem, type BatchGroup } from '../batch/batchModel';
 import { parseBatchRequest } from '../batch/multipart';

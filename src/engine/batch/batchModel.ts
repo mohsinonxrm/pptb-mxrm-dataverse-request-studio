@@ -16,7 +16,7 @@
 // `executeBatch` — sent in order. A batch with one group is one call.
 
 import { isCredentialHeader } from '../sensitiveHeaders';
-import { API_BASE } from '../../mock/environment';
+import { API_BASE } from '../../env/environment';
 
 export type BatchMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 export type BatchOpKind = 'create' | 'update' | 'delete' | 'retrieve' | 'associate' | 'custom';

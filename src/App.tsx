@@ -42,7 +42,7 @@ import { ManageAttachmentMode } from './modes/ManageAttachmentMode';
 import { ErrorBoundary } from './shell/ErrorBoundary';
 import { clearModeDrafts } from './state/modeDrafts';
 import { StubMode } from './modes/StubMode';
-import { findTable } from './mock/metadata';
+import { findTable } from './metadata/metadata';
 import { _setTableLookup } from './editors/filter/filterTree';
 import { HostProvider, useHostSession } from './host/HostContext';
 import { SettingsProvider } from './host/usePersistedSettings';

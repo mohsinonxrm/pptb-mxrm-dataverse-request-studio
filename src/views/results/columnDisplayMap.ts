@@ -17,7 +17,12 @@
 // isn't in the live registry yet we still surface the leaf attribute
 // name so the header at least reads like a column, not "undefined".
 
-import { findTable, type ColumnMeta, type NavProperty, type TableMeta } from '../../mock/metadata';
+import {
+  findTable,
+  type ColumnMeta,
+  type NavProperty,
+  type TableMeta,
+} from '../../metadata/metadata';
 import type { ExpandSpec } from '../../editors/ExpandEditor';
 
 export interface ColumnDisplayInfo {

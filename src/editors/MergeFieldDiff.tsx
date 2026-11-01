@@ -58,7 +58,7 @@ import {
   type LookupColumnMeta,
   type CustomerColumnMeta,
   type OwnerColumnMeta,
-} from '../mock/metadata';
+} from '../metadata/metadata';
 // Live snapshots are passed in as props (see MergeFieldDiffProps.target /
 // .sub). We no longer read from the mock store.
 import type { CreateFieldValue, LookupFieldValue, MergeFieldChoice } from '../state/writeState';

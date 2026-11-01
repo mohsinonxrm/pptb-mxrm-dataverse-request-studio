@@ -1,7 +1,7 @@
 // #221: typed filter literals go unquoted only when they have the column's
 // shape; anything else is quoted and escaped, and flagged so Execute blocks.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { __registerLiveTables, findTable, type TableMeta } from '../../mock/metadata';
+import { __registerLiveTables, findTable, type TableMeta } from '../../metadata/metadata';
 import {
   _setTableLookup,
   collectInvalidLiterals,

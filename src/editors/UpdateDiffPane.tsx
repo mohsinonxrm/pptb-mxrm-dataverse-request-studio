@@ -36,7 +36,7 @@ import {
   ChevronRight20Filled,
 } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
-import { findTable, columnOptions, isLookupLike, type ColumnMeta } from '../mock/metadata';
+import { findTable, columnOptions, isLookupLike, type ColumnMeta } from '../metadata/metadata';
 import type { CreateFieldValue, LookupFieldValue } from '../state/writeState';
 import { readRowValue, sameLookup, formatLookup } from '../engine/recordSnapshot';
 import { formatDateTimeValue } from './dateTimeValue';

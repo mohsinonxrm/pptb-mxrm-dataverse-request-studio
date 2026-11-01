@@ -18,7 +18,7 @@
 import { tokens, mergeClasses, Badge, Caption1 } from '@fluentui/react-components';
 import { Code20Filled } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
-import type { CsdlAction } from '../mock/actionsCsdl';
+import type { CsdlAction } from '../metadata/actionsCsdl';
 import { lookupComplexType } from '../host/csdlProvider';
 
 // Known complex-type schemas — for actions/functions that return well-known

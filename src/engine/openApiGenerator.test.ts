@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { columnSchema, generateOpenApi } from './openApiGenerator';
 import type { CodegenInputs } from './codeGenerators';
 import type { BuiltRequest } from './urlBuilder';
-import type { ColumnMeta } from '../mock/metadata';
+import type { ColumnMeta } from '../metadata/metadata';
 import { ACCOUNT_ID, CONTACT_ID, account, registerFixtureTables } from '../test/fixtures';
 
-vi.mock('../mock/environment', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../mock/environment')>()),
+vi.mock('../env/environment', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../env/environment')>()),
   ENV: {
     name: 'Test',
     host: 'contoso.crm.dynamics.com',

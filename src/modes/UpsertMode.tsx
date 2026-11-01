@@ -56,7 +56,7 @@ import {
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { writeResultName } from '../views/results/writeResultName';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import {
   altKeyReservedCharColumns,

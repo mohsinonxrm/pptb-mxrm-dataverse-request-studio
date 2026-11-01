@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { CsdlAction } from '../mock/actionsCsdl';
+import type { CsdlAction } from '../metadata/actionsCsdl';
 
 const getCSDLDocument = vi.hoisted(() => vi.fn<() => Promise<string>>());
 // Partial mock: keep the bridge's real exports (e.g. `subscribe`, which other

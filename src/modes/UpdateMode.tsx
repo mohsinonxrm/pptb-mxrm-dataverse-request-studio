@@ -71,7 +71,7 @@ import {
 import { UpdateDiffPane } from '../editors/UpdateDiffPane';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { findTable, findColumn } from '../mock/metadata';
+import { findTable, findColumn } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildUpdate, buildUpdateBody } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';

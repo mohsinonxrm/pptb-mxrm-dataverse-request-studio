@@ -11,8 +11,8 @@
 //
 // 3.0.3 rather than 3.1: it is what most generators and API tools import.
 
-import { API_VERSION, ENV } from '../mock/environment';
-import { findTable, type ColumnMeta, type TableMeta } from '../mock/metadata';
+import { API_VERSION, ENV } from '../env/environment';
+import { findTable, type ColumnMeta, type TableMeta } from '../metadata/metadata';
 import type { CodegenInputs } from './codeGenerators';
 import { impersonationVar, isCredentialHeader } from './sensitiveHeaders';
 

@@ -55,7 +55,7 @@ import {
   Filter20Filled,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
-import { findTable, type ColumnMeta } from '../mock/metadata';
+import { findTable, type ColumnMeta } from '../metadata/metadata';
 import { NavPathColumnPicker } from '../primitives/NavPathColumnPicker';
 import { SortableList, SortableItem } from '../primitives/Sortable';
 import { PaneHead } from './PaneHead';
@@ -777,7 +777,10 @@ function LabeledInput({
  * Degenerate forms collapse naturally — when a stage is empty, it and its
  * separating slash are omitted.
  */
-export function applyToOData(spec: ApplySpec, tbl?: import('../mock/metadata').TableMeta): string {
+export function applyToOData(
+  spec: ApplySpec,
+  tbl?: import('../metadata/metadata').TableMeta,
+): string {
   if (!spec.enabled) return '';
 
   const stages: string[] = [];

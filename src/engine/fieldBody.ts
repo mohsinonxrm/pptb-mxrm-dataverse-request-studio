@@ -20,7 +20,7 @@ import {
   isLookupLike,
   type ColumnMeta,
   type TableMeta,
-} from '../mock/metadata';
+} from '../metadata/metadata';
 import type { CreateFieldValue, LookupFieldValue } from '../state/writeState';
 
 /**

@@ -3,12 +3,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { importCurl, parsePrefer, type CurlImportContext } from './curlImport';
 import { account, contact, registerFixtureTables } from '../../test/fixtures';
-import type { CsdlAction } from '../../mock/actionsCsdl';
+import type { CsdlAction } from '../../metadata/actionsCsdl';
 import { encodeParamForBody } from '../executeBuilders';
-import { __clearLiveTables, __registerLiveTables } from '../../mock/metadata';
+import { __clearLiveTables, __registerLiveTables } from '../../metadata/metadata';
 
-vi.mock('../../mock/environment', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../mock/environment')>()),
+vi.mock('../../env/environment', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../env/environment')>()),
   ENV: {
     name: 'Test',
     host: 'contoso.crm.dynamics.com',

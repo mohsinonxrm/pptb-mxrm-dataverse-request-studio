@@ -20,7 +20,7 @@ import type {
   StatusColumnMeta,
   StateColumnMeta,
   MultiSelectPicklistColumnMeta,
-} from '../../mock/metadata';
+} from '../../metadata/metadata';
 import { displayDateOf } from '../../editors/dateTimeValue';
 
 const useStyles = makeStyles({

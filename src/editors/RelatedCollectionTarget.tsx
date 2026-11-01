@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo } from 'react';
 import { Caption1, Dropdown, Field, Option, Spinner, tokens } from '@fluentui/react-components';
-import { findTable, type TableMeta } from '../mock/metadata';
+import { findTable, type TableMeta } from '../metadata/metadata';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { RecordPicker } from '../primitives/RecordPicker';
 import type { PredefinedRelatedTarget } from '../state/readState';

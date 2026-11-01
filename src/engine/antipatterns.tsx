@@ -28,8 +28,8 @@ import {
   isLogicalColumn,
   sourceTypeLabel,
   type NavProperty,
-} from '../mock/metadata';
-import type { ColumnMeta, TableMeta } from '../mock/metadata';
+} from '../metadata/metadata';
+import type { ColumnMeta, TableMeta } from '../metadata/metadata';
 import type { FilterGroup } from '../editors/filter/filterTree';
 import { adv, type Advisory } from '../primitives/advisories';
 

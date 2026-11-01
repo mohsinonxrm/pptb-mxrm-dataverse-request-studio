@@ -10,7 +10,7 @@
 // nested `updateExpand` helper so deeply-nested edits don't leak.
 
 import { Caption1, MessageBar, MessageBarBody, Spinner, tokens } from '@fluentui/react-components';
-import { findTable } from '../../mock/metadata';
+import { findTable } from '../../metadata/metadata';
 import { useLiveTable } from '../../host/useLiveMetadata';
 import { type ExpandSpec } from '../ExpandEditor';
 import {

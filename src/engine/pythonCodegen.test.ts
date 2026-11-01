@@ -7,8 +7,8 @@ import { compileBatch, newGroup, newItem, planDispatch } from './batch/batchMode
 import { generateBatchCode, toEncodableGroups } from './batch/batchCode';
 import { encodeBatch } from './batch/multipart';
 
-vi.mock('../mock/environment', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../mock/environment')>()),
+vi.mock('../env/environment', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../env/environment')>()),
   ENV: {
     name: 'Test',
     host: 'contoso.crm.dynamics.com',

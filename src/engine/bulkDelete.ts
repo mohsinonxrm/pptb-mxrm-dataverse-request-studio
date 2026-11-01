@@ -31,8 +31,8 @@
 // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/delete-data-bulk
 // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/auditing/delete-audit-data#use-bulkdelete-to-delete-audit-data
 
-import { findTable, findColumn, type ColumnMeta, type TableMeta } from '../mock/metadata';
-import { ENV } from '../mock/environment';
+import { findTable, findColumn, type ColumnMeta, type TableMeta } from '../metadata/metadata';
+import { ENV } from '../env/environment';
 import type { HeaderItem } from '../editors/HeadersEditor';
 import {
   collectInvalidLiterals,

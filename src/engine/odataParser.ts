@@ -32,8 +32,8 @@
 //      warning; the rest of the query is applied (#83).
 //   ❌ `$search`, `$format` and any other option — rejected as unknown.
 
-import type { TableMeta, NavProperty } from '../mock/metadata';
-import { findTable } from '../mock/metadata';
+import type { TableMeta, NavProperty } from '../metadata/metadata';
+import { findTable } from '../metadata/metadata';
 import type {
   FilterGroup,
   FilterNode,

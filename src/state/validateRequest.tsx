@@ -30,8 +30,8 @@
 //   /webapi/query/join-tables   — 15-expand cap, nested rules
 //   /webapi/query/aggregate-data— $apply restrictions
 
-import type { TableMeta } from '../mock/metadata';
-import { findTable } from '../mock/metadata';
+import type { TableMeta } from '../metadata/metadata';
+import { findTable } from '../metadata/metadata';
 import type { FilterGroup, FilterNode, InvalidLiteral } from '../editors/filter/filterTree';
 import {
   collectInvalidLiterals,

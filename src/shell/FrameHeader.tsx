@@ -31,7 +31,7 @@ import { usePersistedSettings } from '../host/usePersistedSettings';
 import { ScopeChip } from './ScopeChip';
 import { useAccessMode } from '../host/useAccessMode';
 import type { ThemeMode } from '../theme/theme';
-import { getEnv } from '../mock/environment';
+import { getEnv } from '../env/environment';
 import { useHostSession } from '../host/HostContext';
 import { useSaveContext } from '../state/SaveContext';
 import { useRegisterModeNavigator } from '../state/modeHandoff';

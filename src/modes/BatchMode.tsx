@@ -38,7 +38,7 @@ import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
 import { findRequestType } from '../registry/requestTypes';
 import type { ThemeMode } from '../theme/theme';
-import { ENV } from '../mock/environment';
+import { ENV } from '../env/environment';
 import { adv, disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { hashState, type SavedRequest } from '../state/savedRequests';
 import { lastPublishedRequest, usePublishSaveContext } from '../state/SaveContext';
@@ -77,7 +77,7 @@ import {
 import { encodeBatch, makeBoundary } from '../engine/batch/multipart';
 import { generateExecuteMultipleCSharp } from '../engine/batch/executeMultipleCode';
 import { useScopedEntities } from '../host/useScopedEntities';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { BatchItemEditor } from './batch/BatchItemEditor';
 import { BatchGroupPane, BatchOverviewPane } from './batch/BatchPanes';
 import { BatchResultsView, type ResultRow } from './batch/BatchResultsView';

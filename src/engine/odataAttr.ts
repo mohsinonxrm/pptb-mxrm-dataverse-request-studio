@@ -21,7 +21,7 @@
 // EntityName / partylist / certain virtual types could be added here if
 // they need different handling — for now we only special-case lookups.
 
-import type { ColumnMeta, TableMeta } from '../mock/metadata';
+import type { ColumnMeta, TableMeta } from '../metadata/metadata';
 
 /** True if the column's value lives at `_<logical>_value` in OData. */
 export function isLookupLike(col: ColumnMeta | undefined): boolean {

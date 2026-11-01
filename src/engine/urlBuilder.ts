@@ -1,7 +1,7 @@
 // URL composition for each Read mode. Returns both the relative path and the
 // rendered relative URL plus an estimated byte length for validation.
 
-import { ENV } from '../mock/environment';
+import { ENV } from '../env/environment';
 import {
   altKeyColumnType,
   findTable,
@@ -11,7 +11,7 @@ import {
   type AlternateKeyDef,
   type AttributeTypeCode,
   type TableMeta,
-} from '../mock/metadata';
+} from '../metadata/metadata';
 import { bindPropertyFor, encodeFieldBody, parseRawBody } from './fieldBody';
 import { groupToOData } from '../editors/filter/filterTree';
 import { attrRefByName } from './odataAttr';

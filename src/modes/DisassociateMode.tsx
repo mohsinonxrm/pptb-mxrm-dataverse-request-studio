@@ -51,7 +51,7 @@ import { TargetEditor } from '../editors/TargetEditor';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import {
   buildDisassociate,
@@ -839,7 +839,7 @@ function TargetPane({
 // ──────────────────────────────────────────────────────────────
 // URL shape comparison card — surfaces both wire shapes per cardinality
 // ──────────────────────────────────────────────────────────────
-function UrlShapeComparison({ nav }: { nav: import('../mock/metadata').NavProperty }) {
+function UrlShapeComparison({ nav }: { nav: import('../metadata/metadata').NavProperty }) {
   const s = useStudioStyles();
   const isSingle = isSingleValuedNav(nav);
   return (
@@ -917,7 +917,7 @@ function UrlShapeCard({
   );
 }
 
-function cardinalityShort(c: import('../mock/metadata').NavProperty['cardinality']): string {
+function cardinalityShort(c: import('../metadata/metadata').NavProperty['cardinality']): string {
   switch (c) {
     case 'OneToMany':
       return '1:N';

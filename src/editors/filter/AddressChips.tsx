@@ -9,7 +9,7 @@
 
 import { Button, Caption1, Tooltip, tokens } from '@fluentui/react-components';
 import { Add16Regular, Location16Regular } from '@fluentui/react-icons';
-import type { ColumnMeta, TableMeta } from '../../mock/metadata';
+import type { ColumnMeta, TableMeta } from '../../metadata/metadata';
 import { defaultRule, type FilterRule } from './filterTree';
 
 const ADDRESS_PREFIXES = ['address1', 'address2', 'address3'] as const;

@@ -28,9 +28,9 @@ import {
 } from '@fluentui/react-components';
 import { Flash20Filled, Code20Filled, BoxMultiple20Regular } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
-import { type CsdlAction } from '../mock/actionsCsdl';
+import { type CsdlAction } from '../metadata/actionsCsdl';
 import type { MessagePublisher } from '../host/messagePublishers';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { returnKindLabel } from './ResponsePropertiesCard';
 import {
   actions as actionsProvider,

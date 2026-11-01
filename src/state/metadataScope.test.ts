@@ -11,7 +11,7 @@ import {
 import { SETTINGS_REVISION, defaultDisplaySettings, mergeWithDefaults } from './displaySettings';
 import { mapAttribute } from '../host/metadataProvider';
 import type { AttributeMetadata } from '../host/pptbClient';
-import { __registerLiveTables, findTable, type TableMeta } from '../mock/metadata';
+import { __registerLiveTables, findTable, type TableMeta } from '../metadata/metadata';
 import { availableNavsAt } from '../editors/expand/expandTree';
 import { relatedCollectionOptions } from '../editors/RelatedCollectionTarget';
 

@@ -10,7 +10,7 @@
 // The builders read table metadata from the live registry, so the caller
 // loads each entry's table first (see `loadTablesFor`).
 
-import { ENV } from '../mock/environment';
+import { ENV } from '../env/environment';
 import { metadata } from '../host/metadataProvider';
 import {
   buildRetrieveMultiple,

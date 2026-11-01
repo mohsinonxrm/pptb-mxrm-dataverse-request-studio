@@ -61,7 +61,7 @@ import {
 import type { RowRenderer } from '@fluentui-contrib/react-data-grid-react-window';
 import { ArrowSortUp16Regular, ArrowSortDown16Regular } from '@fluentui/react-icons';
 
-import { findTable } from '../../mock/metadata';
+import { findTable } from '../../metadata/metadata';
 import type { ExpandSpec } from '../../editors/ExpandEditor';
 import type { OrderbySpec } from '../../editors/OrderbyEditor';
 import { usePersistedSettings } from '../../host/usePersistedSettings';
