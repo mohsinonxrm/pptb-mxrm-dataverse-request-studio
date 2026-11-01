@@ -84,6 +84,8 @@ import { BatchResultsView, type ResultRow } from './batch/BatchResultsView';
 import { BatchCodeView } from './batch/BatchCodeView';
 import { AddFromSavedDialog } from './batch/AddFromSavedDialog';
 import { useRecentRuns } from '../state/runHistory';
+import { useImportedRequest } from '../state/modeHandoff';
+import { importBatch } from '../engine/curlImport/applyImport';
 
 const CODE_FORMATS: BatchCodeFormat[] = ['http', 'fetch', 'python', 'pptb'];
 type EmCodeFormat = 'csharp' | BatchCodeFormat;
@@ -419,6 +421,15 @@ export function BatchMode({
   // The header holds on to these; the stable wrappers always run this
   // render's handlers, not the ones from when the context was published.
   const onSavedLatest = useLatestCallback(onSaved);
+  // cURL import (#271): a command pasted anywhere opens here. Like a recent
+  // run, it isn't a saved entry, so the save baseline stays as it was.
+  useImportedRequest(modeId, (request) => {
+    if (request.modeId !== modeId) return;
+    setState(importBatch(initialBatchState(), request));
+    setRun(null);
+    setTab('builder');
+    setActivePath('overview');
+  });
   const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {

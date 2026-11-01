@@ -73,10 +73,11 @@ import {
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
-import { takeModeHandoff } from '../state/modeHandoff';
+import { takeModeHandoff, useImportedRequest } from '../state/modeHandoff';
 import type { Advisory } from '../primitives/advisories';
 import { isRecordGuid } from '../primitives/guid';
 import { useRecentRuns } from '../state/runHistory';
+import { importRetrieveSingle } from '../engine/curlImport/applyImport';
 
 const initialState = (): RetrieveSingleState => ({
   table: '',
@@ -213,6 +214,15 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   // The header holds on to these; the stable wrappers always run this
   // render's handlers, not the ones from when the context was published.
   const onSavedLatest = useLatestCallback(onSaved);
+  // cURL import (#271): a command pasted anywhere opens here. Like a recent
+  // run, it isn't a saved entry, so the save baseline stays as it was.
+  useImportedRequest('retrieve-single', (request) => {
+    if (request.modeId !== 'retrieve-single') return;
+    setState(importRetrieveSingle(initialState(), request));
+    setResult(null);
+    setTab('builder');
+    setActivePath('target');
+  });
   const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {

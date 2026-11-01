@@ -92,6 +92,8 @@ import {
   type PagingStatus,
 } from '../views/results/pagedResults';
 import { useRecentRuns } from '../state/runHistory';
+import { useImportedRequest } from '../state/modeHandoff';
+import { importRetrieveMultiple } from '../engine/curlImport/applyImport';
 
 /** Sidebar nodes whose clauses Count only (#272) doesn't send. */
 const COUNT_ONLY_DROPPED = /^(select|orderby|top|expand|apply|prefer)(\/|$)/;
@@ -309,6 +311,15 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // The header holds on to these; the stable wrappers always run this
   // render's handlers, not the ones from when the context was published.
   const onSavedLatest = useLatestCallback(onSaved);
+  // cURL import (#271): a command pasted anywhere opens here. Like a recent
+  // run, it isn't a saved entry, so the save baseline stays as it was.
+  useImportedRequest('retrieve-multiple', (request) => {
+    if (request.modeId !== 'retrieve-multiple') return;
+    setState(importRetrieveMultiple(initialState(), request));
+    clearResult();
+    setTab('builder');
+    setActivePath(request.parsed.filter.rules.length > 0 ? 'filter' : 'target');
+  });
   const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(

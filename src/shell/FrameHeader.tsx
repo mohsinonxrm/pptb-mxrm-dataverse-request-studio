@@ -22,6 +22,7 @@ import {
   MoreHorizontal20Regular,
   Database20Regular,
   Settings20Regular,
+  ArrowImport20Regular,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import { RequestTypePicker } from '../primitives/RequestTypePicker';
@@ -36,6 +37,7 @@ import { useSaveContext } from '../state/SaveContext';
 import { useRegisterModeNavigator } from '../state/modeHandoff';
 import { SaveButton, SavedLibraryButton } from '../editors/SavedRequestsDialog';
 import { EnvironmentBadge } from './confirmWrite';
+import { ImportCurlDialog } from './ImportCurlDialog';
 
 export function FrameHeader({
   themeMode,
@@ -59,6 +61,7 @@ export function FrameHeader({
     host.connectionName || host.environmentUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   const env = getEnv();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [settings, updateSettings] = usePersistedSettings();
   const { accessSummary } = useAccessMode();
   // The mode picker lives here, so this is also where result cards switch
@@ -205,12 +208,16 @@ export function FrameHeader({
         </MenuTrigger>
         <MenuPopover>
           <MenuList>
+            <MenuItem icon={<ArrowImport20Regular />} onClick={() => setImportOpen(true)}>
+              Import cURL command…
+            </MenuItem>
             <MenuItem icon={<Settings20Regular />} onClick={() => setSettingsOpen(true)}>
               Settings
             </MenuItem>
           </MenuList>
         </MenuPopover>
       </Menu>
+      <ImportCurlDialog open={importOpen} onClose={() => setImportOpen(false)} />
       <SettingsDrawer
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}

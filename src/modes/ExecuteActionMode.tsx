@@ -59,6 +59,8 @@ import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
 import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
 import { useRecentRuns } from '../state/runHistory';
+import { useImportedRequest } from '../state/modeHandoff';
+import { importExecuteAction } from '../engine/curlImport/applyImport';
 
 export type ActionCategory = 'oob' | 'custom-api' | 'custom-action';
 
@@ -364,6 +366,21 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
   // The header holds on to these; the stable wrappers always run this
   // render's handlers, not the ones from when the context was published.
   const onSavedLatest = useLatestCallback(onSaved);
+  // cURL import (#271): a command pasted anywhere opens here. Like a recent
+  // run, it isn't a saved entry, so the save baseline stays as it was.
+  useImportedRequest(config.registryId, (request) => {
+    if (
+      request.modeId !== 'exec-action' &&
+      request.modeId !== 'exec-customapi' &&
+      request.modeId !== 'exec-customaction'
+    )
+      return;
+    setState(importExecuteAction(initialState(category), request));
+    setResult(null);
+    setBoundRecordName('');
+    setTab('builder');
+    setActivePath('pick');
+  });
   const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {

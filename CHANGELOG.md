@@ -63,6 +63,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   each request in order on one session. In `$batch` and ExecuteMultiple,
   **Python (requests)** posts the multipart body. Put your token in
   `ACCESS_TOKEN`.
+- **Import a cURL command** ([#271]). More actions (**…**) → **Import cURL
+  command…** reads a pasted `curl` command, for example from your
+  browser's Copy as cURL (bash or cmd) or DRS's own cURL code, and opens it
+  in the mode that sends it, filled in but not run:
+  - GET a table → Retrieve Multiple (the query is checked like Paste OData
+    URL), GET a row → Retrieve Single.
+  - POST to a table → Create, PATCH → Update with `If-Match` or Upsert
+    without it, DELETE → Delete (a row or one column). The body opens in the
+    field set's JSON view; Prefer, `If-Match` and the bypass headers fill
+    their panes.
+  - POST to an action → Execute Action, Custom API or Custom Action, with
+    the body read into its parameters (row references and new rows
+    included). A parameter it can't read is refused, not sent as null.
+  - POST `$batch` → `$batch`, with change sets kept.
+  - `Authorization`, cookies and browser headers are left out, and the
+    dialog lists what was left out or changed. Functions, associations,
+    alternate keys and file uploads aren't imported yet.
 
 [#291]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/291
 [#294]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/294
@@ -70,6 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#269]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/269
 [#272]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/272
 [#270]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/270
+[#271]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/271
 
 ## [1.5.0-beta.1] - 2026-10-30
 

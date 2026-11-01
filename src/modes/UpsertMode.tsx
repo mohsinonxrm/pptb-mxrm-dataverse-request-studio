@@ -84,6 +84,8 @@ import { useLatestCallback } from '../primitives/useLatestCallback';
 import { missingRequiredColumns, rawBodyBlocker } from '../engine/fieldBody';
 import { isRecordGuid } from '../primitives/guid';
 import { useRecentRuns } from '../state/runHistory';
+import { useImportedRequest } from '../state/modeHandoff';
+import { importUpsert } from '../engine/curlImport/applyImport';
 
 // Empty initial state — user picks the table first, which then re-seeds
 // the key shape (GUID by default; switches to first alternate key once
@@ -408,6 +410,15 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
   // The header holds on to these; the stable wrappers always run this
   // render's handlers, not the ones from when the context was published.
   const onSavedLatest = useLatestCallback(onSaved);
+  // cURL import (#271): a command pasted anywhere opens here. Like a recent
+  // run, it isn't a saved entry, so the save baseline stays as it was.
+  useImportedRequest('upsert', (request) => {
+    if (request.modeId !== 'upsert') return;
+    setState(importUpsert(initialState(), request));
+    setResult(null);
+    setTab('builder');
+    setActivePath('target');
+  });
   const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {

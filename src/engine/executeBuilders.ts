@@ -364,6 +364,122 @@ function entityRefBody(entityType: string, id: string): Record<string, unknown> 
   return { '@odata.type': `Microsoft.Dynamics.CRM.${entityType}`, [pk]: id };
 }
 
+/** `/accounts(<guid>)`, `accounts(<guid>)` or an absolute URL ending in one → set + id. */
+function readRowPath(s: string): { set: string; id: string } | null {
+  const m = /(?:^|\/)([A-Za-z_][A-Za-z0-9_]*)\(\{?([0-9a-fA-F-]{36})\}?\)$/.exec(s.trim());
+  return m && isRecordGuid(m[2]) ? { set: m[1], id: m[2].toLowerCase() } : null;
+}
+
+const typeOf = (v: Record<string, unknown>) =>
+  typeof v['@odata.type'] === 'string'
+    ? (v['@odata.type'] as string).replace(/^#?Microsoft\.Dynamics\.CRM\./i, '')
+    : undefined;
+
+/**
+ * The parameter value the Execute Action form stores for a value as it goes
+ * on the wire — the inverse of `encodeParamForBody`, for a pasted request
+ * body (cURL import, #271). `resolveSet` maps an entity set name to its
+ * table. Returns an error when the value can't be read as that type, rather
+ * than letting the encoder turn it into null.
+ */
+export function decodeParamFromBody(
+  param: ActionParam,
+  wire: unknown,
+  resolveSet: (set: string) => string | undefined,
+): { value: unknown } | { error: string } {
+  const bad = (what: string) => ({ error: `${param.name}: expected ${what}.` });
+  if (wire === null) return { value: null };
+  const obj =
+    wire && typeof wire === 'object' && !Array.isArray(wire)
+      ? (wire as Record<string, unknown>)
+      : null;
+  // A reference as `{@odata.type, <pk>}` or `{@odata.id: '<set>(<id>)'}`.
+  const readRef = (v: unknown, fallbackType?: string) => {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+    const o = v as Record<string, unknown>;
+    if (typeof o['@odata.id'] === 'string') {
+      const row = readRowPath(o['@odata.id']);
+      const entityType = row && resolveSet(row.set);
+      return row && entityType ? { id: row.id, entityType } : null;
+    }
+    const entityType = typeOf(o) ?? fallbackType;
+    if (!entityType) return null;
+    const pk = findTable(entityType)?.primaryKey ?? `${entityType}id`;
+    const id = o[pk];
+    return typeof id === 'string' && isRecordGuid(id) ? { id: id.toLowerCase(), entityType } : null;
+  };
+  switch (param.type) {
+    case 'Edm.String':
+    case 'Edm.Guid':
+    case 'Edm.DateTimeOffset':
+    case 'Edm.Binary':
+      return typeof wire === 'string' ? { value: wire } : bad('a string');
+    case 'Edm.Int32':
+    case 'Edm.Int64':
+    case 'Edm.Decimal':
+    case 'Edm.Double':
+    case 'OptionSetValue':
+      return typeof wire === 'number' ? { value: wire } : bad('a number');
+    case 'Edm.Boolean':
+      return typeof wire === 'boolean' ? { value: wire } : bad('true or false');
+    case 'Collection(Edm.String)':
+    case 'Collection(Edm.Int32)':
+    case 'Collection(Edm.Guid)':
+      return Array.isArray(wire) ? { value: wire } : bad('an array');
+    case 'EntityReference': {
+      const ref = readRef(wire, param.entityType);
+      return ref ? { value: ref } : bad('a row reference ({"@odata.type", "<id column>"})');
+    }
+    case 'EntityCollection': {
+      if (!Array.isArray(wire)) return bad('an array of row references');
+      const refs = wire.map((x) => readRef(x, param.entityType));
+      return refs.every(Boolean) ? { value: refs } : bad('an array of row references');
+    }
+    case 'EntitySpecific': {
+      if (!obj || !param.entityType) return bad('an object');
+      const tbl = findTable(param.entityType);
+      const pk = tbl?.primaryKey ?? `${param.entityType}id`;
+      const keys = Object.keys(obj).filter((k) => k !== '@odata.type');
+      // Just the row's id (or an @odata.id) → a reference to an existing row.
+      if (keys.length === 1 && (keys[0] === pk || keys[0] === '@odata.id')) {
+        const ref = readRef(obj, param.entityType);
+        return ref ? { value: { '@ref': ref.id } } : bad('a row reference');
+      }
+      // Otherwise a new row, as a field-value map the form can show.
+      const fields: Record<string, unknown> = {};
+      for (const key of keys) {
+        const v = obj[key];
+        const bind = /^(.+)@odata\.bind$/.exec(key);
+        const col = tbl?.columns.find((c) => c.logicalName === (bind ? bind[1] : key));
+        if (!col) return { error: `${param.name}: ${param.entityType} has no column "${key}".` };
+        if (bind) {
+          const row = typeof v === 'string' ? readRowPath(v) : null;
+          const target = row && resolveSet(row.set);
+          if (!row || !target) return bad(`"${key}" to be "/<set>(<id>)"`);
+          fields[col.logicalName] = { id: row.id, targetEntity: target, entitySet: row.set };
+        } else if (col.attributeType === 'MultiSelectPicklist' && typeof v === 'string') {
+          fields[col.logicalName] = v.split(',').map((n) => Number(n.trim()));
+        } else fields[col.logicalName] = v;
+      }
+      return { value: fields };
+    }
+    case 'ComplexType': {
+      if (!obj) return bad('an object');
+      if (!param.complexType) return { value: obj };
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(obj)) {
+        const field = param.complexType.fields.find((f) => f.name === k);
+        if (!field)
+          return { error: `${param.name}: ${param.complexType.name} has no field "${k}".` };
+        const r = decodeParamFromBody(field, v, resolveSet);
+        if ('error' in r) return r;
+        out[k] = r.value;
+      }
+      return { value: out };
+    }
+  }
+}
+
 export function encodeParamForBody(param: ActionParam, value: unknown): unknown {
   if (value === null || value === undefined) return null;
   switch (param.type) {
@@ -429,12 +545,14 @@ export function encodeParamForBody(param: ActionParam, value: unknown): unknown 
           col.attributeType === 'Customer' ||
           col.attributeType === 'Owner'
         ) {
-          const lk = raw as { id?: string; targetEntity?: string };
+          const lk = raw as { id?: string; targetEntity?: string; entitySet?: string };
           if (!lk?.id) continue;
           const target = lk.targetEntity ?? col.targets[0];
-          const targetTbl = findTable(target);
-          if (!targetTbl) continue;
-          body[`${col.logicalName}@odata.bind`] = `/${targetTbl.entitySetName}(${lk.id})`;
+          // A value read out of a typed body carries its entity set, so the
+          // bind survives when the target's metadata isn't loaded (#271).
+          const set = findTable(target)?.entitySetName ?? lk.entitySet;
+          if (!set) continue;
+          body[`${col.logicalName}@odata.bind`] = `/${set}(${lk.id})`;
           continue;
         }
         if (col.attributeType === 'MultiSelectPicklist') {
