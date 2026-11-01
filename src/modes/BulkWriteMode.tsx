@@ -66,7 +66,6 @@ import { TargetEditor } from '../editors/TargetEditor';
 import { FieldSetEditor, seedRequiredFieldValues } from '../editors/FieldSetEditor';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
-import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
 import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
@@ -105,7 +104,8 @@ import {
 } from '../engine/bulkWrite';
 import { checkBulkSupport, executeBulkWrite, idsFromResult } from '../engine/bulkWriteExecutor';
 import { copyText } from '../shell/copy';
-import { useRecentRuns } from '../state/runHistory';
+import { addRun, useRecentRuns } from '../state/runHistory';
+import { composeHeaderItems } from '../engine/requestHeaders';
 
 const MODE_ID = 'bulk-write' as const;
 const GROUP = 'bulk' as const;
@@ -214,10 +214,7 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
   };
 
   // ── Headers / advisories ──
-  const headers = useMemo(
-    () => applyBypassToHeaders(state.headers, state.bypass),
-    [state.headers, state.bypass],
-  );
+  const headers = useMemo(() => composeHeaderItems(state), [state]);
   const bypassAdvisories = useMemo(
     () => [
       ...detectBypassAdvisories(state.bypass, 'bypass'),
@@ -257,24 +254,19 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
     setLoading(false);
     setTab('results');
     const ids = idsFromResult(res.body);
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          modeId: MODE_ID,
-          url: built.relativeUrl,
-          method: 'POST',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: res.ok ? ids.length || state.rows.length : 0,
-          // Recent runs shows no row count for writes (#309).
-          summary: res.ok
-            ? `${ids.length || state.rows.length} ${(ids.length || state.rows.length) === 1 ? 'row' : 'rows'} written`
-            : undefined,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        modeId: MODE_ID,
+        url: built.relativeUrl,
+        method: 'POST',
+        status: res.status,
+        ms: res.ms,
+        rowCount: res.ok ? ids.length || state.rows.length : 0,
+        // Recent runs shows no row count for writes (#309).
+        summary: res.ok
+          ? `${ids.length || state.rows.length} ${(ids.length || state.rows.length) === 1 ? 'row' : 'rows'} written`
+          : undefined,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };

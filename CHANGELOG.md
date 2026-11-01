@@ -121,8 +121,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `src/mock/` is renamed for what it holds ([#224]): the table registry and
   CSDL action types are in `src/metadata/`, the environment in `src/env/`.
   No behaviour change.
+- One header composition ([#244]): Create, Update, Upsert, Delete, Merge
+  and Bulk Write, the collection exports and `$batch` all build the
+  precondition, duplicate-detection and bypass headers in
+  `engine/requestHeaders.ts`, so Execute, the Code tab and exports can't
+  drift apart. A test checks they match.
+- One Recent-runs push ([#244]): every mode adds its run with `addRun`,
+  which stamps the id and time and keeps the list at `RECENT_SHOWN`.
 
 [#224]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/224
+[#244]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/244
 [#291]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/291
 [#294]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/294
 [#226]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/226

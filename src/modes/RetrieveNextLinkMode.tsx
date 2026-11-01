@@ -68,7 +68,7 @@ import type { Advisory } from '../primitives/advisories';
 import { decodeForDisplay } from '../primitives/decodeForDisplay';
 import { readClipboardText } from '../host/pptbBridge';
 import { notify } from '../shell/dialogs';
-import { useRecentRuns } from '../state/runHistory';
+import { addRun, useRecentRuns } from '../state/runHistory';
 
 const initialState = (): RetrieveNextLinkState => ({
   url: '',
@@ -209,20 +209,15 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          modeId: 'retrieve-nextlink',
-          url: state.url,
-          method: 'GET',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: topLevelRowCount(res.body) ?? 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        modeId: 'retrieve-nextlink',
+        url: state.url,
+        method: 'GET',
+        status: res.status,
+        ms: res.ms,
+        rowCount: topLevelRowCount(res.body) ?? 0,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };

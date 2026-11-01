@@ -60,7 +60,6 @@ import { PaneHead } from '../editors/PaneHead';
 import { MergeFieldDiff } from '../editors/MergeFieldDiff';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
-import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
 import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
@@ -95,7 +94,8 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { isRecordGuid } from '../primitives/guid';
-import { useRecentRuns } from '../state/runHistory';
+import { addRun, useRecentRuns } from '../state/runHistory';
+import { composeHeaderItems } from '../engine/requestHeaders';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -348,41 +348,22 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'merge',
-          url: built.relativeUrl,
-          method: 'POST',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: res.ok ? 1 : 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'merge',
+        url: built.relativeUrl,
+        method: 'POST',
+        status: res.status,
+        ms: res.ms,
+        rowCount: res.ok ? 1 : 0,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
 
   // ── Compose effective headers (auto-toggle MSCRM.SuppressDuplicateDetection + bypass family) ──
-  const effectiveHeaders = useMemo(() => {
-    let h = [...state.headers];
-    if (state.suppressDuplicateDetection) {
-      h.push({
-        id: '__sup-dupe',
-        name: 'MSCRM.SuppressDuplicateDetection',
-        value: 'true',
-        enabled: true,
-        builtin: true,
-        hint: 'Skips duplicate detection rules when applying UpdateContent overrides.',
-      });
-    }
-    h = applyBypassToHeaders(h, state.bypass);
-    return h;
-  }, [state.headers, state.suppressDuplicateDetection, state.bypass]);
+  const effectiveHeaders = useMemo(() => composeHeaderItems(state), [state]);
 
   // ── Advisories — bypass family + GUID validation + same-record guard ──
   const advisories = useMemo<Advisory[]>(() => {

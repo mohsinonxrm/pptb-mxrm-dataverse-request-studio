@@ -83,7 +83,7 @@ import { BatchGroupPane, BatchOverviewPane } from './batch/BatchPanes';
 import { BatchResultsView, type ResultRow } from './batch/BatchResultsView';
 import { BatchCodeView } from './batch/BatchCodeView';
 import { AddFromSavedDialog } from './batch/AddFromSavedDialog';
-import { useRecentRuns } from '../state/runHistory';
+import { addRun, useRecentRuns } from '../state/runHistory';
 import { useImportedRequest } from '../state/modeHandoff';
 import { importBatch } from '../engine/curlImport/applyImport';
 
@@ -308,21 +308,16 @@ export function BatchMode({
       // The batch's own status plus a per-part summary — never one part's
       // error status (#204).
       const { status, summary, succeeded } = summarizeBatchRun(res);
-      setRecents((rs) =>
-        [
-          {
-            id: `r-${Date.now()}`,
-            modeId,
-            url: `${API_BASE}/$batch`,
-            method: 'BATCH',
-            ts: Date.now(),
-            status,
-            ms: res.ms,
-            rowCount: succeeded,
-            summary,
-          },
-          ...rs,
-        ].slice(0, 8),
+      setRecents(
+        addRun({
+          modeId,
+          url: `${API_BASE}/$batch`,
+          method: 'BATCH',
+          status,
+          ms: res.ms,
+          rowCount: succeeded,
+          summary,
+        }),
       );
       setState((s) => ({ ...s, dirty: new Set() }));
     } finally {

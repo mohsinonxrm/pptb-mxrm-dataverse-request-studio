@@ -79,7 +79,7 @@ import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
 import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
-import { useRecentRuns } from '../state/runHistory';
+import { addRun, useRecentRuns } from '../state/runHistory';
 
 // Empty initial state — same pattern as MergeMode/AssociateMode. User picks
 // the table → source record → nav property → targets (if collection-valued).
@@ -308,23 +308,18 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'disassociate',
-          url: built.relativeUrl,
-          method,
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: relateDoneCount(res, requests.length) ?? 0,
-          // Recent runs shows no row count for writes (#309); say how many links were done.
-          summary: `${relateDoneCount(res, requests.length) ?? 0} of ${requests.length} unlinked`,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'disassociate',
+        url: built.relativeUrl,
+        method,
+        status: res.status,
+        ms: res.ms,
+        rowCount: relateDoneCount(res, requests.length) ?? 0,
+        // Recent runs shows no row count for writes (#309); say how many links were done.
+        summary: `${relateDoneCount(res, requests.length) ?? 0} of ${requests.length} unlinked`,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };

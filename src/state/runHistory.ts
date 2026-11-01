@@ -20,7 +20,7 @@
 // `useRecentRuns(bucket)` is a drop-in for a mode's
 // `useState<RecentRun[]>([])`: it returns the mode's latest RECENT_SHOWN runs
 // and a setter that takes the same updaters the modes already pass. Runs the
-// updater drops (a mode's `.slice(0, 8)`) stay in the history; only Clear
+// updater drops (`addRun` keeps RECENT_SHOWN) stay in the history; only Clear
 // removes them. With `keepRunHistory` off nothing is written, and Recent
 // runs last for the session, as before.
 
@@ -36,6 +36,22 @@ export const RUN_HISTORY_KEY_PREFIX = 'drs:run-history:v1';
 export const MAX_HISTORY = 200;
 /** Runs a mode lists in its sidebar. */
 export const RECENT_SHOWN = 8;
+
+/** A run as a mode reports it; `addRun` stamps the id and time unless given. */
+export type NewRun = Omit<RecentRun, 'id' | 'ts'> & { id?: string; ts?: number };
+
+/**
+ * The updater every mode hands its Recent runs setter after an Execute (#244):
+ * the run goes first and the list keeps RECENT_SHOWN. What drops off the list
+ * stays in the history.
+ */
+export const addRun =
+  (run: NewRun) =>
+  (rs: RecentRun[]): RecentRun[] =>
+    [{ ...run, id: run.id ?? `r-${Date.now()}`, ts: run.ts ?? Date.now() }, ...rs].slice(
+      0,
+      RECENT_SHOWN,
+    );
 /** The history's share of storage (characters of JSON), well under the
  *  browser's ~5 M quota so the saved library always has room. */
 export const MAX_HISTORY_CHARS = 1_000_000;

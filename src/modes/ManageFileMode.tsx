@@ -96,7 +96,7 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
-import { useRecentRuns } from '../state/runHistory';
+import { addRun, useRecentRuns } from '../state/runHistory';
 
 const initialState = (): ManageFileState => ({
   // Empty initial state — user picks table + record + file column from live
@@ -223,21 +223,16 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'manage-file',
-          url: built.relativeUrl,
-          method: firstStepMethod,
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: res.ok ? 1 : 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'manage-file',
+        url: built.relativeUrl,
+        method: firstStepMethod,
+        status: res.status,
+        ms: res.ms,
+        rowCount: res.ok ? 1 : 0,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };

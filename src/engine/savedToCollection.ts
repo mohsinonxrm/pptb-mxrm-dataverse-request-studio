@@ -37,13 +37,7 @@ import {
   manageImagePipeline,
   manageAttachmentPipeline,
   type BinaryPipelineStep,
-  COUNT_ONLY_PREFER,
 } from './urlBuilder';
-import { applyBypassToHeaders } from './bypassHeaders';
-import { headerItemsToObject, type HeaderItem } from '../editors/HeadersEditor';
-import { preferToHeaderString, type PreferSpec } from '../editors/PreferEditor';
-import { preconditionToHeader } from '../editors/PreconditionEditor';
-import type { BypassOptions, ConcurrencyMode } from '../state/writeState';
 import {
   deserializeRetrieveMultiple,
   deserializeRetrieveSingle,
@@ -82,48 +76,10 @@ import {
 } from '../state/savedRequests';
 import { UPLOAD_URL_VAR, type CollectionItem, type CollectionRequest } from './collectionFormats';
 
-/** The header-related fields a mode state may carry. */
-interface HeaderBits {
-  headers?: HeaderItem[];
-  prefer?: PreferSpec;
-  /** Retrieve Multiple count only (#272): its own Prefer, never a page size. */
-  countOnly?: boolean;
-  concurrency?: ConcurrencyMode;
-  bypass?: BypassOptions;
-  /** Delete's legacy "bypass custom plugins" switch. */
-  bypassCustomPlugins?: boolean;
-  /** Create: duplicate detection on → MSCRM.SuppressDuplicateDetection: false. */
-  duplicateDetection?: boolean;
-  /** Merge: skip duplicate detection on UpdateContent. */
-  suppressDuplicateDetection?: boolean;
-}
-
-function synth(name: string, value: string): HeaderItem {
-  return { id: `__export__${name}`, name, value, enabled: true, builtin: true };
-}
-
-/** Execute-time headers for a mode state, mirroring each mode's composition. */
-export function composeHeaders(s: HeaderBits): Record<string, string> {
-  let h: HeaderItem[] = (s.headers ?? []).map((it) =>
-    it.name === 'MSCRM.SuppressDuplicateDetection' && s.duplicateDetection !== undefined
-      ? { ...it, enabled: s.duplicateDetection, value: 'false' }
-      : it,
-  );
-  const cc = s.concurrency ? preconditionToHeader(s.concurrency) : null;
-  if (cc) h.push(synth(cc.name, cc.value));
-  if (s.suppressDuplicateDetection) h.push(synth('MSCRM.SuppressDuplicateDetection', 'true'));
-  if (s.bypass) {
-    const b =
-      s.bypassCustomPlugins && s.bypass.businessLogic === 'none'
-        ? { ...s.bypass, businessLogic: 'sync' as const, useLegacyHeader: true }
-        : s.bypass;
-    h = applyBypassToHeaders(h, b);
-  }
-  return headerItemsToObject(
-    h,
-    s.countOnly ? COUNT_ONLY_PREFER : s.prefer ? preferToHeaderString(s.prefer) : null,
-  );
-}
+// Execute-time headers for a mode state (#244): one composer for Execute,
+// the Code tab and every export.
+import { composeHeaders } from './requestHeaders';
+export { composeHeaders };
 
 /** Path + query without the host, for builder URLs that may be absolute. */
 function pathOnly(url: string): string {
