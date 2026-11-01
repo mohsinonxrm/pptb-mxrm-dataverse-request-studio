@@ -91,6 +91,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Retrieve NextLink names the right table** ([#224]). The table came from
   trimming the entity set's plural (`mailboxes` became `mailboxe`); now it's
   looked up in the environment's entity list, and left blank when unknown.
+- **Manage Image's preview has a sidebar entry** ([#224]). The pane with the
+  operation banner, the 144×144 preview tile and the pipeline had no sidebar
+  item: once you left it, only loading a request (or **Open** on _Image
+  operations run externally_) brought it back, so the picked record's
+  initials on the tile went unseen. A **Preview** section now heads the
+  sidebar, named after the picked record and badged with its initials, and
+  **Open** highlights it.
 
 ### 🔧 Internal
 

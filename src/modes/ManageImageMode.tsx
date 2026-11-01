@@ -2,6 +2,7 @@
 //
 // Layout:
 //   Sidebar:
+//     • Preview       — the main pane below (where the mode opens)
 //     • Operation     — Upload | Retrieve | Delete (radio cards)
 //     • Target        — table + record picker
 //     • Image column  — entityimage (primary) vs custom image column,
@@ -32,6 +33,8 @@ import {
   ArrowUpload20Filled,
   ArrowDownload20Filled,
   Delete20Filled,
+  Eye20Regular,
+  Eye20Filled,
 } from '@fluentui/react-icons';
 import {
   RadioGroup,
@@ -381,6 +384,23 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
   const initials = recordInitials(recordName);
 
   const sections = [
+    // The pane the mode opens on: the operation banner, the preview tile
+    // with the record's initials, and the pipeline (#224).
+    {
+      id: 'preview',
+      label: 'Preview',
+      items: [
+        {
+          id: 'preview',
+          icon: Eye20Regular,
+          iconFilled: Eye20Filled,
+          // The item label ellipsizes a long name; a section's meta doesn't.
+          label: recordName.trim() || 'Image preview',
+          badge: initials === '?' ? null : initials,
+          badgeAppearance: 'ghost' as const,
+        },
+      ],
+    },
     {
       id: 'operation',
       label: 'Operation',
