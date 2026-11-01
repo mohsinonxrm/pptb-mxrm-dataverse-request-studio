@@ -1045,7 +1045,10 @@ async function runPerTarget(
  *                               Content-ID), they're all `rolled-back`.
  *   • the host call threw     → its error; the sent targets `rolled-back`
  *                               (a change set applies whole or not at all).
- * Never `partial`: nothing is applied unless everything is.
+ *   • a request has no result → treated like a failure nobody can tie to a
+ *                               request: nothing is reported as done.
+ * Never `partial`: nothing is applied unless everything is. More than
+ * MAX_CHANGE_SET requests aren't sent: Dataverse and PPTB refuse them.
  */
 async function runChangeSet(
   targetIds: string[],
@@ -1055,27 +1058,44 @@ async function runChangeSet(
   /** The headers each request carries, to report a declined consent prompt. */
   sentHeaders?: Record<string, string>,
 ): Promise<ExecResult> {
-  const sent = new Map<string, string>(); // contentId → targetId
+  const sent = new Map<string, number>(); // contentId → index in targetIds
   const requests: DataverseAPI.BatchRequest[] = [];
-  for (const id of targetIds) {
-    if (skip(id)) continue;
+  targetIds.forEach((id, i) => {
+    if (skip(id)) return;
     const contentId = String(requests.length + 1);
-    sent.set(contentId, id);
+    sent.set(contentId, i);
     requests.push({ ...request(id), contentId });
-  }
-  const sentIds = new Set(sent.values());
-  const results = (failedId: string | null, state: 'done' | 'rolled-back') =>
+  });
+  const sentAt = new Set(sent.values());
+  const results = (failedAt: number | null, state: 'done' | 'rolled-back') =>
     targetIds.map(
-      (targetId): RelateTargetResult =>
-        !sentIds.has(targetId)
+      (targetId, i): RelateTargetResult =>
+        !sentAt.has(i)
           ? { targetId, state: 'skipped' }
-          : { targetId, state: targetId === failedId ? 'failed' : state },
+          : { targetId, state: i === failedAt ? 'failed' : state },
     );
   const elapsed = () => Math.round(performance.now() - t0);
   if (requests.length === 0) {
     const targets = results(null, 'done');
     return { ...ok(204, { targets }, elapsed()), targets };
   }
+  if (requests.length > MAX_CHANGE_SET) {
+    return mapError(
+      {
+        statusCode: 400,
+        message: `Not sent: a change set holds at most ${MAX_CHANGE_SET} requests, and this one has ${requests.length}. Remove targets or turn off All or nothing.`,
+      },
+      elapsed(),
+    );
+  }
+  const failed = (f: ExecResult, failedAt: number | null): ExecResult => {
+    const fError = (f.body as { error: { code?: string; message: string } }).error;
+    const targets = results(failedAt, 'rolled-back');
+    const t = failedAt === null ? undefined : targets[failedAt];
+    if (t) Object.assign(t, { status: f.status, statusText: f.statusText, error: fError });
+    const body = { error: fError, targets };
+    return { ...f, body, bytes: jsonBytes(body), targets, changeSet: true };
+  };
 
   let answer: DataverseAPI.BatchResult[];
   try {
@@ -1084,31 +1104,42 @@ async function runChangeSet(
     const f = mapError(e, elapsed(), sentHeaders);
     const code = (f.body as { error?: { code?: string } } | null)?.error?.code;
     if (e instanceof HostNotAvailableError || code === HEADER_CONSENT_DECLINED_CODE) return f;
-    const targets = results(null, 'rolled-back');
-    const body = { error: (f.body as { error: unknown }).error, targets };
-    return { ...f, body, bytes: jsonBytes(body), targets, changeSet: true };
+    return failed(f, null);
   }
 
   const ms = elapsed();
   const bad = answer.find((r) => r.status >= 400);
   if (!bad) {
+    // Every request needs its own success, or nothing is claimed as done.
+    const answered = new Set(answer.map((r) => r.contentId));
+    const missing =
+      answer.length < requests.length || requests.some((r) => !answered.has(r.contentId));
+    if (missing) {
+      return failed(
+        failure(
+          0,
+          {
+            message: `Power Platform ToolBox returned ${answer.length} result(s) for the ${requests.length} requests in the change set, so DRS can't tell whether it was applied. Check the links before you Execute again.`,
+          },
+          ms,
+        ),
+        null,
+      );
+    }
     const targets = results(null, 'done');
     return { ...ok(204, { targets }, ms), targets, changeSet: true };
   }
-  const failedId = (bad.contentId && sent.get(bad.contentId)) || null;
-  const targets = results(failedId, 'rolled-back');
   const reported = (bad.body as { error?: { code?: string; message?: string } } | null)?.error;
   const error = {
     code: reported?.code,
     message: reported?.message || bad.statusText || `HTTP ${bad.status}`,
   };
-  const f = failure(bad.status, error, ms, bad.statusText || undefined);
-  const fError = (f.body as { error: { code?: string; message: string } }).error;
-  const t = targets.find((x) => x.state === 'failed');
-  if (t) Object.assign(t, { status: f.status, statusText: f.statusText, error: fError });
-  const body = { error: fError, targets };
-  return { ...f, body, bytes: jsonBytes(body), targets, changeSet: true };
+  const failedAt = bad.contentId !== undefined ? (sent.get(bad.contentId) ?? null) : null;
+  return failed(failure(bad.status, error, ms, bad.statusText || undefined), failedAt);
 }
+
+/** Dataverse (and PPTB) take at most this many requests in one `$batch`. */
+export const MAX_CHANGE_SET = 1000;
 
 export async function executeAssociate(
   s: AssociateState,

@@ -229,6 +229,40 @@ describe('Associate, all or nothing', () => {
   });
 });
 
+describe('Associate, all or nothing — review follow-ups', () => {
+  it('claims nothing done when the host answers fewer requests than were sent', async () => {
+    host.executeTransaction.mockResolvedValue([ok204('1')]);
+    const r = await executeAssociate(assoc([T1, T2]));
+    expect(r.ok).toBe(false);
+    expect(r.targets!.map((t) => t.state)).toEqual(['rolled-back', 'rolled-back']);
+    expect((r.body as { error: { message: string } }).error.message).toMatch(
+      /1 result\(s\) for the 2/,
+    );
+    host.executeTransaction.mockResolvedValue([]);
+    expect((await executeAssociate(assoc([T1, T2]))).ok).toBe(false);
+  });
+
+  it('refuses more than 1,000 requests without calling the host', async () => {
+    const ids = Array.from(
+      { length: 1001 },
+      (_, i) => `00000000-0000-0000-0000-${String(i).padStart(12, '0')}`,
+    );
+    const r = await executeAssociate(assoc(ids));
+    expect(host.executeTransaction).not.toHaveBeenCalled();
+    expect(r.status).toBe(400);
+    expect((r.body as { error: { message: string } }).error.message).toMatch(/at most 1000/);
+  });
+
+  it('marks the row of the failed request when a target id repeats', async () => {
+    host.executeTransaction.mockResolvedValue([
+      { contentId: '2', status: 400, statusText: 'Bad Request', headers: {}, body: undefined },
+    ]);
+    const r = await executeAssociate(assoc([T1, T1]));
+    expect(r.targets!.map((t) => t.state)).toEqual(['rolled-back', 'failed']);
+    expect(r.targets![0].error).toBeUndefined();
+  });
+});
+
 describe('Associate, one request per target', () => {
   it('is the default', async () => {
     const r = await executeAssociate(assoc([T1, T2], false));

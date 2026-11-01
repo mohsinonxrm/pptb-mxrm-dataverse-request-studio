@@ -85,7 +85,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or nothing** under the target records to send their requests as one
   `$batch` change set. If any target fails, Dataverse rolls back the rest, so
   nothing is linked or unlinked; the results list the failed target and mark
-  the others **Not applied · rolled back**. It's off by default: each target
+  the others **Not applied**. A change set holds at most 1,000 requests. It's off by default: each target
   is still sent on its own, and a failure leaves the targets before it
   changed. The Code tab follows the choice: with it on, fetch, Python, C#,
   PowerShell and cURL post one `$batch`, and `Xrm.WebApi.executeMultiple`

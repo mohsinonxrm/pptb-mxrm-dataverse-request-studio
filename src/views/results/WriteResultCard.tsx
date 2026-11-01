@@ -770,17 +770,31 @@ function relateNarrative(
 
   // All or nothing (#224): the change set failed, so none of it applied.
   if (rolledBack > 0) {
+    const op = assoc ? 'Associate' : 'Disassociate';
     const sent = failed + rolledBack;
+    const requests = `${sent} request${sent === 1 ? '' : 's'}`;
+    if (failed > 0) {
+      return {
+        title: `${op} failed — nothing changed`,
+        body: (
+          `The ${requests} went as one change set. One failed, so Dataverse rolled back the ` +
+          `other ${rolledBack}: nothing was changed on ${sourceFrag}${navLabel}.` +
+          skippedFrag +
+          ' Fix the failure and Execute again.'
+        ).trim(),
+      };
+    }
+    // The failure isn't tied to one target (or the call itself failed):
+    // say what it was, since no target row carries it.
+    const message = (result.body as { error?: { message?: string } } | null)?.error?.message;
     return {
-      title: `${assoc ? 'Associate' : 'Disassociate'} failed — nothing changed`,
+      title: `${op} failed — change set not applied`,
       body: (
-        `The ${plural(sent)} were sent as one change set. ` +
-        (failed > 0
-          ? `One failed, so Dataverse rolled back the other ${rolledBack}. `
-          : `It failed as a whole, so none of them was applied. `) +
-        `Nothing was changed on ${sourceFrag}${navLabel}.` +
+        `The change set of ${requests} failed${message ? `: ${message.replace(/\.?$/, '.')}` : '.'} ` +
+        `Dataverse applies a change set whole or not at all, so none of them should have changed ` +
+        `${sourceFrag}${navLabel}.` +
         skippedFrag +
-        ' Fix the failure and Execute again.'
+        ' If the connection dropped, check the links before you Execute again.'
       ).trim(),
     };
   }
@@ -844,7 +858,7 @@ function TargetResultList({
       : t.state === 'skipped'
         ? 'Already linked · skipped'
         : t.state === 'rolled-back'
-          ? 'Not applied · rolled back'
+          ? 'Not applied'
           : t.status
             ? `Failed · ${t.status} ${t.statusText ?? ''}`.trim()
             : 'Failed';

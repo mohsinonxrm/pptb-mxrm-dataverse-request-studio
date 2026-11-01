@@ -59,7 +59,7 @@ import {
   relateRequestHeaders,
 } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
-import { relateAsChangeSet, relateDoneCount } from '../engine/dataverseExecutor';
+import { MAX_CHANGE_SET, relateAsChangeSet, relateDoneCount } from '../engine/dataverseExecutor';
 import type { DisassociateState } from '../state/relateState';
 import { isCollectionValuedNav, isSingleValuedNav } from '../state/relateState';
 import type { RecentRun } from '../state/readState';
@@ -275,6 +275,12 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
       when: isSingle && currentLookup === null && !currentLookupLoading && !currentLookupError,
       id: 'disassoc-lookup-empty',
       title: "Source's lookup is already empty — nothing to disassociate.",
+      focusNode: 'target',
+    },
+    {
+      when: changeSet && requests.length > MAX_CHANGE_SET,
+      id: 'disassoc-change-set-cap',
+      title: `All or nothing sends at most ${MAX_CHANGE_SET} requests in one change set; this has ${requests.length}. Remove targets or turn it off.`,
       focusNode: 'target',
     },
     {

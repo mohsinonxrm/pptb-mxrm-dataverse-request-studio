@@ -123,6 +123,60 @@ describe('All or nothing — one change set (#224)', () => {
     expect(curl.match(/curl -X/g)).toHaveLength(1);
   });
 
+  it('PowerShell and cURL bodies decode to the same change set', () => {
+    // PowerShell '…' doubles a quote; sh '…' writes one as '\''.
+    const quoted = (code: string, start: string, end: string, unq: (s: string) => string) => {
+      const from = code.indexOf(start) + start.length;
+      return (
+        code
+          .slice(from, code.indexOf(end, from))
+          .split('\n')
+          .map((l) => l.trim().replace(/ \\$/, ''))
+          .filter(Boolean)
+          .map((l) => unq(l.slice(1, -1)))
+          .join('\r\n') + '\r\n'
+      );
+    };
+    expectChangeSet(
+      quoted(generateCode('powershell', on), '$body = (@(', ') -join', (s) =>
+        s.replace(/''/g, "'"),
+      ),
+    );
+    expectChangeSet(
+      quoted(generateCode('curl', on), "printf '%s\\r\\n' \\", ' |\ncurl', (s) =>
+        s.replace(/'\\''/g, "'"),
+      ),
+    );
+  });
+
+  it('Disassociate: one DELETE per part, no body', () => {
+    const del: CodegenInputs = {
+      method: 'DELETE',
+      built,
+      headers: { MSCRMCallerID: CALLER },
+      multiRequests: [T1, T2].map((t) => ({
+        method: 'DELETE',
+        relativeUrl: `${API}/accounts(${SRC})/contact_customer_accounts(${t})/$ref`,
+      })),
+      changeSet: true,
+    };
+    const code = generateCode('fetch', del);
+    const [group] = parseBatchRequest(
+      bodyFrom(code, 'const body = [', '].join'),
+      'multipart/mixed; boundary=batch_drs',
+    );
+    expect(group.atomic).toBe(true);
+    expect(group.requests).toEqual(
+      [T1, T2].map((t, i) => ({
+        method: 'DELETE',
+        url: `${API}/accounts(${SRC})/contact_customer_accounts(${t})/$ref`,
+        headers: { mscrmcallerid: CALLER },
+        body: '',
+        contentId: String(i + 1),
+      })),
+    );
+  });
+
   it('xhr and Xrm.WebApi fall back to the fetch change set', () => {
     for (const fmt of ['xhr', 'xrm'] as CodeFormat[]) {
       expect(generateCode(fmt, on)).toContain(`'${HOST}${API}/$batch'`);

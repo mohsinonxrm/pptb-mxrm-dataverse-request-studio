@@ -59,7 +59,7 @@ import {
   relateRequestHeaders,
 } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
-import { relateAsChangeSet, relateDoneCount } from '../engine/dataverseExecutor';
+import { MAX_CHANGE_SET, relateAsChangeSet, relateDoneCount } from '../engine/dataverseExecutor';
 import type { AssociateState } from '../state/relateState';
 import { isSingleValuedNav } from '../state/relateState';
 import type { RecentRun } from '../state/readState';
@@ -183,6 +183,12 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
       when: state.targets.length === 0,
       id: 'assoc-targets',
       title: 'Pick at least one target record.',
+      focusNode: 'targets',
+    },
+    {
+      when: changeSet && requests.length > MAX_CHANGE_SET,
+      id: 'assoc-change-set-cap',
+      title: `All or nothing sends at most ${MAX_CHANGE_SET} requests in one change set; this has ${requests.length}. Remove targets or turn it off.`,
       focusNode: 'targets',
     },
     {

@@ -36,7 +36,9 @@ const host = vi.hoisted(() => {
     (op: string, result: unknown = undefined) =>
     async (...args: unknown[]) => {
       calls.push({ op, args });
-      return typeof result === 'function' ? (result as () => unknown)() : result;
+      return typeof result === 'function'
+        ? (result as (...a: unknown[]) => unknown)(...args)
+        : result;
     };
   const dataverseAPI = {
     create: record('create', { id: '00000000-0000-0000-0000-00000000ffff' }),
@@ -49,7 +51,10 @@ const host = vi.hoisted(() => {
     associate: record('associate'),
     disassociate: record('disassociate'),
     executeBatch: record('executeBatch', []),
-    executeTransaction: record('executeTransaction', []),
+    // A change set that succeeds: one 204 per request (#224).
+    executeTransaction: record('executeTransaction', (reqs: { contentId: string }[]) =>
+      reqs.map((r) => ({ contentId: r.contentId, status: 204, headers: {} })),
+    ),
   };
   const w = window as unknown as Record<string, unknown>;
   w.dataverseAPI = dataverseAPI;
