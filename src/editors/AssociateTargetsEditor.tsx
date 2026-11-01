@@ -166,8 +166,17 @@ export function AssociateTargetsEditor({
                 </>
               ) : (
                 <>
-                  One or more targets — each fires a separate POST request. For many targets,
-                  Dataverse recommends a <code>$batch</code> request.
+                  One or more targets —{' '}
+                  {changeSet ? (
+                    <>
+                      sent together as one <code>$batch</code> change set (All or nothing).
+                    </>
+                  ) : (
+                    <>
+                      each fires a separate POST request. For many targets, Dataverse recommends a{' '}
+                      <code>$batch</code> request.
+                    </>
+                  )}
                 </>
               ))}
           </span>
@@ -287,7 +296,7 @@ export function AssociateTargetsEditor({
             hint={
               singleValued
                 ? `Pick a single ${targetTbl?.displayName ?? 'record'} — the PATCH sets this as the lookup value.`
-                : `Each pick queues a separate ${verb}. Currently ${targets.length} target${targets.length === 1 ? '' : 's'} queued.`
+                : `Each pick queues ${changeSet ? 'one more request in the change set' : `a separate ${verb}`}. Currently ${targets.length} target${targets.length === 1 ? '' : 's'} queued.`
             }
           >
             <RecordPicker
