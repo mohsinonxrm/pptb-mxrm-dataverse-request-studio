@@ -110,10 +110,12 @@ CI runs `check-release.mjs` on every PR and on pushes to `dev`, `main`, `release
 `support/**`, so a release-prep PR that misses one of them fails before it merges; on other
 PRs it confirms the branch is still consistent.
 
-Branches cut before the check existed (for example a `support/1.4` cut from a `v1.4.*` tag)
-run the workflow of their own commit: they don't get the check, so check them by hand
-against this table. Their GitHub Release notes are the CHANGELOG section alone, as `v1.4.0`'s
-were, without the PPTB line and the PR list.
+A tag runs the workflow of its own commit. Branches cut before this process existed (for
+example a `support/1.4` cut from `v1.4.0`) run that older `release.yml`: no release check,
+and none of the job separation and pins in *What `release.yml` does*. It's one job holding
+the npm token while it installs `npm@latest` and runs `npm ci` with install scripts, and it
+checks `main` before `support/X.Y` when choosing the channel. So bring such a branch up to
+date before its first tag (*Supported versions*).
 
 ## Release lifecycle
 
@@ -210,7 +212,10 @@ release's own steps above.
 - **The previous minor release** gets **critical and security fixes for 30 days** after
   the next minor ships, for users who can't update Power Platform ToolBox yet. When such a
   fix is needed, create `support/1.4` from the last `v1.4.*` tag
-  (`git switch -c support/1.4 v1.4.0 && git push -u origin support/1.4`), PR the fix into
+  (`git switch -c support/1.4 v1.4.0 && git push -u origin support/1.4`). Its first PR
+  brings it up to the current release process: `.github/workflows/` and `.github/scripts/`
+  from `main`, the `badges` script in `package.json`, and `npm run badges` with the README
+  lines the check prints; `check-release.mjs` reports anything else. Then PR the fix into
   it, and tag `v1.4.1` there. It publishes to the npm `support-1.4` tag, never `latest`,
   and isn't marked as the latest GitHub Release.
 - Older versions aren't supported.
@@ -249,21 +254,49 @@ the version and the tagged commit:
 | Tag | Tagged commit must be on | npm tag | GitHub Release |
 |---|---|---|---|
 | `vX.Y.Z-beta.N`, `vX.Y.Z-rc.N` | any branch (normally `release/X.Y`) | `beta` | pre-release |
-| `vX.Y.Z` | `main` | `latest` | latest |
 | `vX.Y.Z` | `support/X.Y` | `support-X.Y` | not marked latest |
+| `vX.Y.Z` | `main`, with `X.Y` = main's own version line | `latest` | latest |
 
-Any other tag fails before publishing, so a stray tag can't replace `latest`. It then:
+`support/X.Y` is checked first: it merges forward into `main`, so an older line's commit can
+be on `main` too, and it must never move `latest` back. Any other tag fails before
+publishing, so a stray tag can't replace `latest`.
 
-1. checks the release metadata (`check-release.mjs`: the version, `package-lock.json` and
-   the CHANGELOG section);
-2. runs `npm ci`, `npm test`, `npm run validate` and `npm run build`, then checks the
-   bundled icon and the bundled DOMPurify version, and writes the release notes (previewed
-   in the run summary);
-3. publishes with `npm publish --provenance` through npm **trusted publishing** (OIDC, no
-   npm token);
-4. creates the GitHub Release. Its notes are the PPTB requirement and the version's
-   `CHANGELOG.md` section (with its link definitions), then GitHub's list of PRs. Edit
-   the release afterwards only to add context.
+It runs in separate jobs, so the code that installs and runs dependencies never holds
+publishing rights (#376, as FetchXML Studio):
+
+| Job | Runs on | Permissions | What it does |
+|---|---|---|---|
+| `build` | always | read the repository | Checks the tag and chooses the channel; checks the release metadata (`check-release.mjs`); `npm ci --ignore-scripts` (no cache); the runtime audit (no high or critical findings), lint, tests, validation, build (with the type check), no root-absolute asset URLs, the bundled icon, the DOMPurify check; writes the release notes (previewed in the run summary); packs the tarball and checks its contents. |
+| `publish` | tag push only | npm OIDC token (`id-token: write`) | Installs no project dependencies: downloads the tarball and publishes it with provenance through npm **trusted publishing** (no npm token). |
+| `rehearse` | manual run only | none | `npm publish --dry-run` of the tarball, without provenance or an npm token. |
+| `github-release` | tag push only | write the repository | Creates the GitHub Release with the notes `build` wrote: the PPTB requirement and the version's `CHANGELOG.md` section (with its link definitions), then GitHub's list of PRs. Edit the release afterwards only to add context. |
+
+Node (24.22.0), npm (11.21.1) and the actions (by full commit SHA, the tag in a comment) are
+pinned to versions at least 14 days old. CI uses the same pins (Node 24.22.0 and the
+actions) and `npm ci --ignore-scripts`, and doesn't keep the checkout's token. Dependabot
+proposes newer actions on `dev`; other branches get them when `dev` reaches them through a
+release. Move the Node and npm pins by hand. Only one release run per ref runs at a time.
+
+**If a run fails**, use *Re-run failed jobs*, not a full re-run: a full re-run stops at
+`publish`, since npm never accepts a version twice. The tarball and the notes are kept for 7
+days, so after that, re-run the whole workflow instead (only if nothing was published). If
+`publish` failed after npm took the version (a timeout, say), its re-run is refused and
+`github-release` never runs. Check the version is on its npm tag (*After every release*),
+then download the run's `release-notes` artifact and create the release by hand, adding
+`--prerelease` for a beta or rc, or `--latest=false` for a support release:
+
+```bash
+gh release create vX.Y.Z --verify-tag --title vX.Y.Z --notes-file release-notes.md --generate-notes
+```
+
+**Rehearse a release** after the version bump and before the tag, on a branch whose workflow
+changed: `gh workflow run release.yml --ref <branch>` (or Actions → *Release* → *Run
+workflow* once `dev` has the manual trigger). It runs every check and
+`npm publish --dry-run`, and creates no GitHub Release. A stable version that isn't on
+`main` yet (on `release/X.Y` or a hotfix branch) rehearses as `latest`, with a warning that
+a tag there would fail. npm's dry run refuses a version that's already published, so on an
+unbumped branch the rehearsal stops with a notice after the checks. It doesn't exercise the
+npm token exchange or provenance signing. A manual run never publishes, even on a tag.
 
 Pre-release versions (anything with a `-`) bundle the gold Insider icon; stable versions
 use the regular icon (`vite.config.ts`).
@@ -284,6 +317,11 @@ package.
 - **npm trusted publisher:** npmjs.com → package → *Settings* → *Trusted publishing* →
   *GitHub Actions*: user `mohsinonxrm`, repository `pptb-mxrm-dataverse-request-studio`,
   workflow `release.yml`, no environment. Until it's set, the publish step fails.
+- **Recommended, not set yet (#376):** with no environment, npm checks only the repository
+  and the workflow's file name, so anyone who can push a branch could give a job in its
+  `release.yml` `id-token: write` and publish. To close that, put `publish` in a GitHub
+  environment that only `v*` tags can deploy to, name that environment in the npm trusted
+  publisher, and add a tag ruleset so only maintainers can push `v*` tags.
 - `repository.url` in `package.json` must point at this GitHub repository, or provenance
   and trusted publishing fail.
 - A ruleset requiring PRs and the `check` status on `dev`, `main`, `release/**` and
