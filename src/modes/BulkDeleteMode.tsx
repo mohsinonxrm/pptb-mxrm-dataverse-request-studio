@@ -104,7 +104,7 @@ import {
   type MatchCount,
 } from '../engine/bulkDeleteExecutor';
 import { copyText } from '../shell/copy';
-import { useRecentRuns } from '../state/runHistory';
+import { addRun, useRecentRuns } from '../state/runHistory';
 
 const MODE_ID = 'bulk-delete' as const;
 const GROUP = 'bulk' as const;
@@ -196,19 +196,14 @@ export function BulkDeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     setJobId(res.ok ? jobIdFromResult(res.body) : null);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          modeId: MODE_ID,
-          url: built.relativeUrl,
-          method: 'POST',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        modeId: MODE_ID,
+        url: built.relativeUrl,
+        method: 'POST',
+        status: res.status,
+        ms: res.ms,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };

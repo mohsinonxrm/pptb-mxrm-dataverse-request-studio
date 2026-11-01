@@ -44,15 +44,10 @@ import { AlternateKeyEditor } from '../editors/AlternateKeyEditor';
 import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/PreferEditor';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
-import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
 import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
-import {
-  PreconditionEditor,
-  etagProblem,
-  preconditionToHeader,
-} from '../editors/PreconditionEditor';
+import { PreconditionEditor, etagProblem } from '../editors/PreconditionEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { writeResultName } from '../views/results/writeResultName';
@@ -83,9 +78,10 @@ import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { missingRequiredColumns, rawBodyBlocker } from '../engine/fieldBody';
 import { isRecordGuid } from '../primitives/guid';
-import { useRecentRuns } from '../state/runHistory';
+import { addRun, useRecentRuns } from '../state/runHistory';
 import { useImportedRequest } from '../state/modeHandoff';
 import { importUpsert } from '../engine/curlImport/applyImport';
+import { composeHeaderItems } from '../engine/requestHeaders';
 
 // Empty initial state — user picks the table first, which then re-seeds
 // the key shape (GUID by default; switches to first alternate key once
@@ -228,42 +224,22 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
     setSentReturnRep(state.prefer.returnRepresentation);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'upsert',
-          url: built.relativeUrl,
-          method: 'PATCH',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: res.ok ? 1 : 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'upsert',
+        url: built.relativeUrl,
+        method: 'PATCH',
+        status: res.status,
+        ms: res.ms,
+        rowCount: res.ok ? 1 : 0,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
 
   // ── Compose effective headers ──
-  const effectiveHeaders = useMemo(() => {
-    let h = [...state.headers];
-    const cc = preconditionToHeader(state.concurrency);
-    if (cc) {
-      h.push({
-        id: `__cc__${cc.name}`,
-        name: cc.name,
-        value: cc.value,
-        enabled: true,
-        builtin: true,
-        hint: 'Auto-composed from the Concurrency pane.',
-      });
-    }
-    h = applyBypassToHeaders(h, state.bypass);
-    return h;
-  }, [state.headers, state.concurrency, state.bypass]);
+  const effectiveHeaders = useMemo(() => composeHeaderItems(state), [state]);
 
   // ── Advisories — bypass + GUID + alt-key host limitation ──
   const advisories = useMemo<Advisory[]>(() => {

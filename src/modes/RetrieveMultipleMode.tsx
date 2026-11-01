@@ -56,7 +56,7 @@ import { ResultsView } from '../views/ResultsView';
 import { countRules, newId } from '../editors/filter/filterTree';
 import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
-import { buildRetrieveMultiple, COUNT_ONLY_PREFER } from '../engine/urlBuilder';
+import { buildRetrieveMultiple } from '../engine/urlBuilder';
 import { relatedMetadataAdvisories } from '../engine/navPath';
 // Phase 1 wiring: routes through `runtime.retrieveMultiple` which auto-picks
 // the live (dvHost.queryData) or mock executor based on `isEmbedded()`. The
@@ -91,9 +91,10 @@ import {
   type PageBatch,
   type PagingStatus,
 } from '../views/results/pagedResults';
-import { useRecentRuns } from '../state/runHistory';
+import { addRun, useRecentRuns } from '../state/runHistory';
 import { useImportedRequest } from '../state/modeHandoff';
 import { importRetrieveMultiple } from '../engine/curlImport/applyImport';
+import { composeHeaders } from '../engine/requestHeaders';
 
 /** Sidebar nodes whose clauses Count only (#272) doesn't send. */
 const COUNT_ONLY_DROPPED = /^(select|orderby|top|expand|apply|prefer)(\/|$)/;
@@ -402,25 +403,21 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     const recentId = `r-${Date.now()}`;
     runRecentIdRef.current = recentId;
     rowCountRef.current = topLevelRowCount(res.body) ?? 0;
-    setRecents((rs) =>
-      [
-        {
-          id: recentId,
-          snapshot: currentSerialized,
-          modeId: 'retrieve-multiple',
-          url: built.relativeUrl,
-          method: 'GET',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: topLevelRowCount(res.body),
-          // Count only (#272): the body is the count.
-          ...(typeof res.body === 'number'
-            ? { summary: `${res.body.toLocaleString()} matching row${res.body === 1 ? '' : 's'}` }
-            : {}),
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        id: recentId,
+        snapshot: currentSerialized,
+        modeId: 'retrieve-multiple',
+        url: built.relativeUrl,
+        method: 'GET',
+        status: res.status,
+        ms: res.ms,
+        rowCount: topLevelRowCount(res.body),
+        // Count only (#272): the body is the count.
+        ...(typeof res.body === 'number'
+          ? { summary: `${res.body.toLocaleString()} matching row${res.body === 1 ? '' : 's'}` }
+          : {}),
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
@@ -1169,10 +1166,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   }
 
   // Count only asks for just the count-limit annotation, never a page size (#272).
-  const headersMap = headerItemsToObject(
-    state.headers,
-    state.countOnly ? COUNT_ONLY_PREFER : preferToHeaderString(state.prefer),
-  );
+  const headersMap = composeHeaders(state);
   const codeInputs = { method: 'GET', built, headers: headersMap };
 
   const rows = (result?.body as { value?: unknown[] } | null)?.value;

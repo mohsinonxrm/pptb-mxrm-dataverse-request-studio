@@ -39,14 +39,8 @@ import { TargetEditor } from '../editors/TargetEditor';
 import { SelectEditor } from '../editors/SelectEditor';
 import { FieldSetEditor, seedRequiredFieldValues } from '../editors/FieldSetEditor';
 import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/PreferEditor';
-import {
-  HeadersEditor,
-  defaultWriteHeaders,
-  headerItemsToObject,
-  type HeaderItem,
-} from '../editors/HeadersEditor';
+import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
-import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
 import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
@@ -75,9 +69,10 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { missingRequiredColumns, rawBodyBlocker } from '../engine/fieldBody';
-import { useRecentRuns } from '../state/runHistory';
+import { addRun, useRecentRuns } from '../state/runHistory';
 import { useImportedRequest } from '../state/modeHandoff';
 import { importCreate } from '../engine/curlImport/applyImport';
+import { composeHeaderItems } from '../engine/requestHeaders';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -217,35 +212,22 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'create',
-          url: built.relativeUrl,
-          method: 'POST',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: res.ok ? 1 : 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'create',
+        url: built.relativeUrl,
+        method: 'POST',
+        status: res.status,
+        ms: res.ms,
+        rowCount: res.ok ? 1 : 0,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
 
   // ── Headers (auto-toggle MSCRM.SuppressDuplicateDetection + bypass composer) ──
-  const headers = useMemo<HeaderItem[]>(() => {
-    const baseHeaders = state.headers.map((h) => {
-      if (h.name === 'MSCRM.SuppressDuplicateDetection') {
-        return { ...h, enabled: state.duplicateDetection, value: 'false' };
-      }
-      return h;
-    });
-    return applyBypassToHeaders(baseHeaders, state.bypass);
-  }, [state.headers, state.duplicateDetection, state.bypass]);
+  const headers = useMemo(() => composeHeaderItems(state), [state]);
 
   // ── Advisories — bypass family ──
   const bypassAdvisories = useMemo(
