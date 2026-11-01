@@ -134,11 +134,23 @@ describe('Manage Image preview pane (#224)', () => {
     mount();
     pickRecord('Contoso Ltd');
     expect(tileText()).toBeUndefined();
+    // The sidebar offers the node; selecting it renders the preview.
+    expect(previewNode()).toBeDefined();
     select('preview');
     expect(host.sidebar!.activeNode).toBe('preview');
     expect(tileText()).toBe('CL');
     expect(previewNode()?.badge).toBe('CL');
     expect(previewNode()?.label).toBe('Contoso Ltd');
+  });
+
+  it('falls back to a plain label for a name without initials', () => {
+    mount();
+    pickRecord('   ');
+    expect(previewNode()?.label).toBe('Image preview');
+    expect(previewNode()?.badge).toBeNull();
+    pickRecord('###');
+    expect(previewNode()?.label).toBe('###');
+    expect(previewNode()?.badge).toBeNull();
   });
 
   it('is offered for every operation', () => {
@@ -161,6 +173,8 @@ describe('Manage Image preview pane (#224)', () => {
     pickRecord('Contoso Ltd');
     const advisory = host.urlBar!.advisories!.find((a) => a.id === 'binary-host-unsupported');
     expect(advisory?.focusNode).toBe('preview');
+    // Open leads to a node the sidebar shows, so it's highlighted there.
+    expect(previewNode()).toBeDefined();
     act(() => host.urlBar!.onAdvisoryFocus!(advisory!.focusNode!));
     expect(host.sidebar!.activeNode).toBe('preview');
     expect(tileText()).toBe('CL');

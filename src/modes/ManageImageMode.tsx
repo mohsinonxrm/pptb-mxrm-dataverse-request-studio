@@ -395,8 +395,8 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
           icon: Eye20Regular,
           iconFilled: Eye20Filled,
           // The item label ellipsizes a long name; a section's meta doesn't.
-          label: recordName || 'Image preview',
-          badge: recordName ? initials : null,
+          label: recordName.trim() || 'Image preview',
+          badge: initials === '?' ? null : initials,
           badgeAppearance: 'ghost' as const,
         },
       ],
