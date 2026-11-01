@@ -371,10 +371,10 @@ function MergeRow({
         </div>
       </Td>
       <Td tone="target">
-        <ValueCell col={col} value={targetVal} tbl={tbl} />
+        <ValueCell col={col} value={targetVal} />
       </Td>
       <Td tone="sub">
-        <ValueCell col={col} value={subVal} tbl={tbl} />
+        <ValueCell col={col} value={subVal} />
       </Td>
       <Td>
         {/* Choice picker */}
@@ -503,8 +503,7 @@ function Td({ children, tone }: { children: React.ReactNode; tone?: 'target' | '
   );
 }
 
-function ValueCell({ col, value, tbl }: { col: ColumnMeta; value: unknown; tbl: TableMeta }) {
-  void tbl;
+function ValueCell({ col, value }: { col: ColumnMeta; value: unknown }) {
   if (value == null || value === '') {
     return (
       <span style={{ color: tokens.colorNeutralForeground3, fontStyle: 'italic', fontSize: 11 }}>

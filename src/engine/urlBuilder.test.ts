@@ -269,7 +269,48 @@ describe('buildRetrieveNextLink', () => {
     );
     expect(built.relativeNoBase).toBe('/opportunities?$select=name&$skiptoken=%253Ccookie%253E');
     expect(built.entitySet).toBe('opportunities');
-    expect(built.entityLogical).toBe('opportunity');
+    // Not loaded: no guess from the plural (#224).
+    expect(built.entityLogical).toBe('');
+  });
+
+  const nextLink = (set: string) =>
+    buildRetrieveNextLink({
+      url: `https://contoso.crm.dynamics.com/api/data/v9.2/${set}?$skiptoken=x`,
+      prefer: emptyPrefer(),
+      headers: [],
+      dirty: new Set(),
+    });
+
+  it('takes the table from the loaded metadata by entity set name (#224)', () => {
+    expect(nextLink('accounts').entityLogical).toBe('account');
+    expect(nextLink('contacts').entityLogical).toBe('contact');
+  });
+
+  it('uses the entity list for sets whose table is not loaded, irregular plurals included', () => {
+    const list: Record<string, string> = {
+      activitypointers: 'activitypointer',
+      addresses: 'customeraddress',
+    };
+    const built = (set: string) =>
+      buildRetrieveNextLink(
+        {
+          url: `https://contoso.crm.dynamics.com/api/data/v9.2/${set}?$skiptoken=x`,
+          prefer: emptyPrefer(),
+          headers: [],
+          dirty: new Set(),
+        },
+        (s) => list[s],
+      ).entityLogical;
+    expect(built('activitypointers')).toBe('activitypointer');
+    expect(built('addresses')).toBe('customeraddress');
+    // Not in the list: the loaded metadata still answers.
+    expect(built('accounts')).toBe('account');
+  });
+
+  it("doesn't strip a plural it can't look up", () => {
+    // The old guess turned these into "addresse" and "activitypointer".
+    expect(nextLink('addresses').entityLogical).toBe('');
+    expect(nextLink('activitypointers').entityLogical).toBe('');
   });
 });
 

@@ -10,7 +10,6 @@
 // nested `updateExpand` helper so deeply-nested edits don't leak.
 
 import { Caption1, MessageBar, MessageBarBody, Spinner, tokens } from '@fluentui/react-components';
-import { useStudioStyles } from '../../primitives/styles';
 import { findTable } from '../../mock/metadata';
 import { useLiveTable } from '../../host/useLiveMetadata';
 import { type ExpandSpec } from '../ExpandEditor';
@@ -309,7 +308,6 @@ function ScopedClause({
   onPatch: (patch: Partial<ExpandSpec>) => void;
   group: RequestGroup;
 }) {
-  const s = useStudioStyles();
   // Breadcrumb header common to every nested clause
   const crumb = (
     <div
@@ -335,7 +333,6 @@ function ScopedClause({
       ))}
     </div>
   );
-  void s;
 
   // Single-valued navs (ManyToOne / lookups):
   //   Dataverse error reads: "Only $select and $filter clause can be provided

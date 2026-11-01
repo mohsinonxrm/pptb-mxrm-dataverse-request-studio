@@ -35,16 +35,6 @@ export interface ColumnDisplayInfo {
   navPath: string[];
 }
 
-/** Walks an `ExpandSpec` tree to find the spec whose nav path matches `path`. */
-function findExpandByPath(items: ExpandSpec[], path: string[]): ExpandSpec | undefined {
-  if (path.length === 0) return undefined;
-  const [head, ...rest] = path;
-  const match = items.find((it) => it.nav === head);
-  if (!match) return undefined;
-  if (rest.length === 0) return match;
-  return findExpandByPath(match.nestedExpand ?? [], rest);
-}
-
 /**
  * Walk a `TableMeta` + an array of nav names, returning the deepest
  * `TableMeta` we could resolve. Falls back to the last successfully
@@ -98,7 +88,6 @@ export function resolveColumnDisplay(
   const { table: parentTable } = rootTable
     ? walkToTargetTable(rootTable, navPath)
     : { table: undefined };
-  void findExpandByPath; // reserved for richer display-name resolution later
 
   // Find the leaf attribute. Lookup VALUE columns (`_xxx_value`) carry the
   // value at that exact key, but the underlying ColumnMeta is keyed by the

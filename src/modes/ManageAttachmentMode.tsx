@@ -84,7 +84,6 @@ import {
 } from '../state/binaryState';
 import type { RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
-import { useScopedEntities } from '../host/useScopedEntities';
 import { isEmbedded } from '../host/pptbBridge';
 import {
   adv,
@@ -251,7 +250,6 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
   // ── Save / Load ──
   // Every table, not just the pickers' scope: a saved request's table only
   // has to exist (#44).
-  const { allEntities: entities } = useScopedEntities();
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const currentSerialized = useMemo(() => serializeManageAttachment(state), [state]);
@@ -267,7 +265,6 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
     const snap = entry.state as SerializedManageAttachmentState;
     // We don't gate by entity availability — both 'activitymimeattachment' and
     // 'annotation' are system tables present in every Dataverse environment.
-    void entities; // intentionally unused — see comment above
     setState(deserializeManageAttachment(snap));
     setLastSavedId(entry.id);
     setLastSavedHash(hashState(snap));

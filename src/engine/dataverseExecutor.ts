@@ -2,10 +2,9 @@
 // host's `window.dataverseAPI` surface (via the `dvHost` wrapper in
 // `pptbBridge.ts`).
 //
-// This module implements the SAME function signatures as the mock
-// `executor.ts` — `(state, sim?) => Promise<ExecResult>`. The `sim` arg is
-// ignored in live mode (it's a mock-only affordance for synthesizing 4xx
-// responses without round-trips); the host returns real status codes.
+// Each `execute*` takes a mode's state (plus the headers it composed) and
+// resolves to an `ExecResult` with the host's real status, never a thrown
+// error; `runtime.ts` dispatches to them.
 //
 // Request headers: the write group (Create / Update / Upsert / Delete /
 // Merge), Execute Action and Execute Workflow (#266) pass the headers their
@@ -49,10 +48,8 @@ import {
   COUNT_ONLY_PREFER,
   buildRetrieveSingle,
   buildCreateBody,
-  buildUpdate,
   buildUpdateBody,
   buildUpsertBody,
-  buildDelete,
   buildMergeBody,
   buildAssociateRequests,
   buildDisassociateRequests,
@@ -792,11 +789,9 @@ export async function executeUpdate(
   const wire = sendable(headers);
   const res = await timed(() => dvHost.update(s.table, s.recordId!, body, wire), wire);
   if (isExecResult(res)) return res;
-  // dvHost.update resolves to void on 204 No Content. Best-effort GET to
-  // hydrate the updated row for the Results pane, then fall back to a
-  // minimal envelope.
-  void buildUpdate; // keep import used
-  return ok(204, { '@odata.context': 'update' }, res.ms);
+  // dvHost.update resolves to void: the host returns no row, even when the
+  // request asked for return=representation (#224). Report the 204 as is.
+  return ok(204, null, res.ms);
 }
 
 export async function executeUpsert(
@@ -840,7 +835,8 @@ export async function executeUpsert(
   const wire = sendable(headers);
   const res = await timed(() => dvHost.update(s.table, recordId, body, wire), wire);
   if (isExecResult(res)) return res;
-  return ok(204, { '@odata.context': 'upsert' }, res.ms);
+  // Same as Update: no row from the host, and no way to tell 201 from 204.
+  return ok(204, null, res.ms);
 }
 
 export async function executeDelete(
@@ -871,7 +867,6 @@ export async function executeDelete(
       0,
     );
   }
-  void buildDelete;
   const wire = sendable(headers);
   const res = await timed(() => dvHost.delete(s.table, s.recordId!, wire), wire);
   if (isExecResult(res)) return res;
@@ -1308,18 +1303,4 @@ export async function executeManageAttachment(_s: ManageAttachmentState): Promis
  */
 export function execFailure(err: unknown, ms: number): ExecResult {
   return mapError(err, ms);
-}
-
-// ── Bridge connectivity check (used by an "are we online" indicator) ─────
-export async function pingHost(): Promise<boolean> {
-  try {
-    await dvHost.execute({ operationName: 'WhoAmI', operationType: 'function' });
-    return true;
-  } catch (e) {
-    if (e instanceof HostNotAvailableError) return false;
-    // Other errors (network blip, 401) still mean "the host is here, just
-    // can't reach Dataverse right now". Treat as "online" so we don't
-    // hide the live executor.
-    return true;
-  }
 }

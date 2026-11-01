@@ -647,7 +647,7 @@ export function invalidFunctionParamReason(
   return null;
 }
 
-export function encodeParamForUrl(param: ActionParam, value: unknown, aliased: boolean): string {
+export function encodeParamForUrl(param: ActionParam, value: unknown, _aliased: boolean): string {
   if (value === null || value === undefined) return 'null';
   // Unquoted literals only when the value has the type's shape; anything else
   // is quoted and escaped, so it can't add parameters to the call (#221).
@@ -689,7 +689,7 @@ export function encodeParamForUrl(param: ActionParam, value: unknown, aliased: b
       if (!ref?.id || !ref?.entityType) return 'null';
       const tbl = findTable(ref.entityType);
       const set = tbl?.entitySetName ?? `${ref.entityType}s`;
-      void aliased; // both forms use the same record-ref shape
+      // Aliased and inline use the same record-ref shape.
       return `{'@odata.id':'${set}(${ref.id.replace(/'/g, "''")})'}`;
     }
     case 'EntitySpecific': {

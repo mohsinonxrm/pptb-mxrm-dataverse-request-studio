@@ -99,6 +99,11 @@ export interface WriteResultContext {
   targetName?: string | null;
   subordinateName?: string | null;
   /**
+   * Update / Upsert asked for `Prefer: return=representation`. ToolBox's
+   * update passes no row back, so the card says why there's none (#224).
+   */
+  returnRepresentation?: boolean;
+  /**
    * Associate / Disassociate — the nav property name (e.g.
    * `contact_customer_accounts`) and the count of targets that were
    * (dis)associated. `targetNames` is best-effort: only names captured
@@ -199,7 +204,7 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
     canOpenInMode();
   const recordUrl =
     resolvedId && tbl
-      ? `https://${ENV.host}/api/data/v9.2/${tbl.entitySetName}(${resolvedId})`
+      ? `https://${ENV.host}${ENV.apiBase}/${tbl.entitySetName}(${resolvedId})`
       : null;
 
   // The body — if Create/Update/Upsert returned a representation, we
@@ -243,6 +248,15 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
                 {narrative.body}
               </Caption1>
             )}
+            {family === 'success' &&
+              ctx.returnRepresentation &&
+              (ctx.operation === 'update' || ctx.operation === 'upsert') &&
+              !hasReturnedRecord && (
+                <Caption1 style={{ display: 'block', color: tokens.colorNeutralForeground3 }}>
+                  You asked for return=representation, but ToolBox&apos;s update doesn&apos;t pass
+                  the row back.{canRetrieve && ' Retrieve this record to see it.'}
+                </Caption1>
+              )}
           </div>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <StatusPill

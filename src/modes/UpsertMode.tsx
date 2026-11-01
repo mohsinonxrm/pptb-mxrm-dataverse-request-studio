@@ -134,6 +134,8 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
+  // Whether the request that produced `result` asked for return=representation.
+  const [sentReturnRep, setSentReturnRep] = useState(false);
   const [loading, setLoading] = useState(false);
   // Kept across reloads, per environment (#226).
   const [recents, setRecents] = useRecentRuns('upsert');
@@ -223,6 +225,7 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
     setLoading(true);
     const res = await runtime.upsert(state, headerItemsToObject(effectiveHeaders, null));
     setResult(res);
+    setSentReturnRep(state.prefer.returnRepresentation);
     setLoading(false);
     setTab('results');
     setRecents((rs) =>
@@ -767,6 +770,7 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
               // via the advisory, so this path rarely fires in practice).
               recordId: state.key.kind === 'guid' ? state.key.recordId : null,
               recordName: writeResultName(tbl?.primaryName, result?.body, state.fieldValues),
+              returnRepresentation: sentReturnRep,
             }}
           />
         )}

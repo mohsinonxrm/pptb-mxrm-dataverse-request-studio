@@ -53,7 +53,6 @@ import type {
   ManageImageState,
   ManageAttachmentState,
 } from '../state/binaryState';
-import { isEmbedded } from '../host/pptbBridge';
 import { invalidateLookupRecords } from '../host/useLookupRecords';
 
 // Writes go through `afterWrite`, which drops cached record-picker searches
@@ -138,13 +137,6 @@ export const runtime = neverThrow({
 });
 
 export type { ExecResult };
-
-/**
- * Whether the runtime is connected to a real Dataverse host. True when
- * embedded in PPTB. Modes use this to gate execute-time affordances
- * (e.g. surface a "running standalone — Execute will fail" hint).
- */
-export const isLiveRuntime = (): boolean => isEmbedded();
 
 /**
  * Turns anything a dispatch throws into a failed `ExecResult` (same mapping

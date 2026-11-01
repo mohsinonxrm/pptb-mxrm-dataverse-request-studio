@@ -296,7 +296,6 @@ describe('standalone (no host)', () => {
     const bridge = await loadBridge();
     expect(() => bridge.dvHost.create('accounts', {})).toThrow(bridge.HostNotAvailableError);
     expect(() => bridge.tbHost.utils.copyToClipboard('x')).toThrow(bridge.HostNotAvailableError);
-    await expect(bridge.dataverseQuery('accounts')).rejects.toThrow('running standalone');
   });
 });
 

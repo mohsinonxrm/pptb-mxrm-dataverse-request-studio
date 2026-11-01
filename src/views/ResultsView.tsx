@@ -16,7 +16,6 @@ import {
 import {
   Dismiss20Regular,
   Copy20Regular,
-  ArrowDownload20Regular,
   DocumentSearch20Regular,
   ErrorCircle20Regular,
   LockClosed20Regular,
@@ -820,7 +819,3 @@ function ErrorState({
     </div>
   );
 }
-
-// keep import warnings down
-void Spinner;
-void ArrowDownload20Regular;

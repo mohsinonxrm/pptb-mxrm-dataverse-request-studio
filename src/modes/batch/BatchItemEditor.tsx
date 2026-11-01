@@ -36,6 +36,7 @@ import {
   type WireRequest,
 } from '../../engine/batch/batchModel';
 import { encodePart } from '../../engine/batch/multipart';
+import { API_BASE } from '../../mock/environment';
 import { scopedNavs, useAdvancedFindOnly } from '../../state/metadataScope';
 
 const OPS: { id: BatchOpKind; label: string }[] = [
@@ -209,7 +210,7 @@ export function BatchItemEditor({
               </Dropdown>
             </Field>
             <Field
-              label="URL (relative to /api/data/v9.2/)"
+              label={`URL (relative to ${API_BASE}/)`}
               hint="e.g. WhoAmI, accounts?$top=5, $1/primarycontactid/$ref"
               style={{ gridColumn: 'span 2' }}
             >

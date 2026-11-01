@@ -63,6 +63,7 @@ import { buildRetrieveNextLink } from '../engine/urlBuilder';
 import type { RetrieveNextLinkState } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { getEnv } from '../mock/environment';
+import { useScopedEntities } from '../host/useScopedEntities';
 import type { Advisory } from '../primitives/advisories';
 import { decodeForDisplay } from '../primitives/decodeForDisplay';
 import { readClipboardText } from '../host/pptbBridge';
@@ -159,7 +160,16 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
   // Kept across reloads, per environment (#226).
   const [recents, setRecents] = useRecentRuns('retrieve-nextlink');
 
-  const built = useMemo(() => buildRetrieveNextLink(state), [state]);
+  // Any table can come back in a nextLink, in scope or not (#44).
+  const { allEntities } = useScopedEntities();
+  const built = useMemo(
+    () =>
+      buildRetrieveNextLink(
+        state,
+        (set) => allEntities.find((e) => e.entitySetName === set)?.logicalName,
+      ),
+    [state, allEntities],
+  );
   const analysis = useMemo(() => analyzeNextLink(state.url, env.host), [state.url, env.host]);
 
   const markDirty = (id: ClauseId) =>
@@ -343,7 +353,7 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
               rows={6}
               value={state.url}
               onChange={(_, d) => set('url', d.value, 'url')}
-              placeholder={`https://${env.host}/api/data/v9.2/<entityset>?$select=…&$skiptoken=…`}
+              placeholder={`https://${env.host}${env.apiBase}/<entityset>?$select=…&$skiptoken=…`}
               style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 11 }}
             />
           </Field>
