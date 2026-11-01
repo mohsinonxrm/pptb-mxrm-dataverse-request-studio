@@ -5,6 +5,7 @@ import {
   createInPageWorker,
   InPageWorker,
   resetWorkersBlocked,
+  WorkerWithFallback,
   workerOrInPage,
 } from './inPageWorker';
 
@@ -32,8 +33,8 @@ const CREATE_DATA = {
 };
 
 /** JSON's worker, set up as Monaco's JSON mode does (jsonMode.js `createWebWorker`). */
-function jsonClient() {
-  const worker = createInPageWorker('json').then((w) => {
+function jsonClient(start: Promise<Worker> | Worker = createInPageWorker('json')) {
+  const worker = Promise.resolve(start).then((w) => {
     w.postMessage('ignore');
     w.postMessage(CREATE_DATA);
     return w;
@@ -197,10 +198,152 @@ describe('in-page workers (#255)', () => {
   });
 });
 
+/** A Worker stand-in that can answer, or fail the way a blocked or missing worker script does. */
+class FakeWorker extends EventTarget {
+  onmessage: ((ev: MessageEvent) => void) | null = null;
+  onmessageerror: ((ev: MessageEvent) => void) | null = null;
+  posted: unknown[] = [];
+  terminated = false;
+  postMessage(message: unknown) {
+    this.posted.push(message);
+  }
+  terminate() {
+    this.terminated = true;
+  }
+  reply(data: unknown) {
+    this.onmessage?.(new MessageEvent('message', { data }));
+  }
+  // A CSP-blocked or missing worker script: a plain `error` Event, no throw.
+  fail() {
+    this.dispatchEvent(new Event('error', { cancelable: true }));
+  }
+}
+
 describe('workerOrInPage', () => {
-  it('uses the real worker when it starts', () => {
-    const real = {} as Worker;
-    expect(workerOrInPage('json', () => real)).toBe(real);
+  it('uses the real worker when it starts, and passes its messages and errors through', () => {
+    const real = new FakeWorker();
+    const worker = workerOrInPage(
+      'json',
+      () => real as unknown as Worker,
+    ) as unknown as WorkerWithFallback;
+    expect(worker).toBeInstanceOf(WorkerWithFallback);
+    const replies: unknown[] = [];
+    const errors: Event[] = [];
+    worker.onmessage = (ev) => replies.push(ev.data);
+    worker.addEventListener('error', (ev) => errors.push(ev));
+    worker.postMessage('hello');
+    expect(real.posted).toEqual(['hello']);
+    real.reply('answer');
+    expect(replies).toEqual(['answer']);
+    // Once it has answered, a failure is the worker's own: passed on, no switch.
+    real.fail();
+    expect(errors).toHaveLength(1);
+    expect(real.terminated).toBe(false);
+    worker.terminate();
+    expect(real.terminated).toBe(true);
+  });
+
+  it("switches to an in-page worker when JSON's worker fails before answering", async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const real = new FakeWorker();
+    const start = vi.fn(() => real as unknown as Worker);
+    const client = jsonClient(workerOrInPage('json', start));
+    setTimeout(() => real.fail(), 20);
+    // The handshake and model sent to the dead worker are replayed in-page.
+    expect((await validate(client, '{ oops')).length).toBeGreaterThan(0);
+    expect(real.terminated).toBe(true);
+    expect(console.info).toHaveBeenCalledTimes(1);
+    // Later workers go in-page straight away.
+    expect(await workerOrInPage('json', start)).toBeInstanceOf(InPageWorker);
+    expect(start).toHaveBeenCalledTimes(1);
+    client.dispose();
+  });
+
+  it('switches once, even if the worker reports more than one load failure', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn');
+    const real = new FakeWorker();
+    const client = jsonClient(workerOrInPage('json', () => real as unknown as Worker));
+    setTimeout(() => {
+      real.fail();
+      real.fail();
+    }, 20);
+    expect((await validate(client, '{ oops')).length).toBeGreaterThan(0);
+    expect((await validate(client, '{}')).length).toBe(0);
+    expect(console.info).toHaveBeenCalledTimes(1);
+    // A second in-page worker would answer the replayed requests twice.
+    expect(warn).not.toHaveBeenCalled();
+    client.dispose();
+  });
+
+  it("passes on the worker's own runtime error before it answered, without switching", () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const real = new FakeWorker();
+    const worker = workerOrInPage(
+      'json',
+      () => real as unknown as Worker,
+    ) as unknown as WorkerWithFallback;
+    const errors: string[] = [];
+    worker.addEventListener('error', (ev) => errors.push((ev as ErrorEvent).message));
+    worker.postMessage('ignore');
+    real.dispatchEvent(new ErrorEvent('error', { message: 'boom', cancelable: true }));
+    expect(errors).toEqual(['boom']);
+    expect(real.terminated).toBe(false);
+    expect(console.info).not.toHaveBeenCalled();
+    worker.terminate();
+  });
+
+  it("doesn't switch once a message transferred buffers (they can't be replayed)", () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const real = new FakeWorker();
+    const worker = workerOrInPage(
+      'json',
+      () => real as unknown as Worker,
+    ) as unknown as WorkerWithFallback;
+    const errors: Event[] = [];
+    worker.addEventListener('error', (ev) => errors.push(ev));
+    worker.postMessage({ data: new ArrayBuffer(8) }, [new ArrayBuffer(8)]);
+    real.fail();
+    expect(errors).toHaveLength(1);
+    expect(console.info).not.toHaveBeenCalled();
+    worker.terminate();
+  });
+
+  it("doesn't switch after terminate(), nor finish a switch it was in", async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const first = new FakeWorker();
+    const a = workerOrInPage(
+      'json',
+      () => first as unknown as Worker,
+    ) as unknown as WorkerWithFallback;
+    a.terminate();
+    first.fail();
+    expect(console.info).not.toHaveBeenCalled();
+
+    const second = new FakeWorker();
+    const b = workerOrInPage(
+      'json',
+      () => second as unknown as Worker,
+    ) as unknown as WorkerWithFallback;
+    const replies: unknown[] = [];
+    b.onmessage = (ev) => replies.push(ev.data);
+    b.postMessage('ignore');
+    second.fail();
+    b.terminate();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(replies).toEqual([]);
+  });
+
+  it('switches to an in-page worker when the editor worker fails before answering', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const real = new FakeWorker();
+    const client = createWebWorker(
+      Promise.resolve(workerOrInPage('editorWorkerService', () => real as unknown as Worker)),
+    );
+    EditorWorkerHost.setChannel(client, { $fhr: () => Promise.resolve(undefined) });
+    setTimeout(() => real.fail(), 20);
+    await expect(client.proxy.$ping()).resolves.toBe('pong');
+    client.dispose();
   });
 
   it('falls back to an in-page worker, and stops trying real ones', async () => {
