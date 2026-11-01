@@ -122,7 +122,9 @@ import Editor from '../monaco/MonacoEditor';
 import type { ThemeMode } from '../theme/theme';
 import type { CreateFieldValue, LookupFieldValue } from '../state/writeState';
 import type { RequestGroup } from '../registry/requestTypes';
-import { scopedColumns, useAdvancedFindOnly } from '../state/metadataScope';
+import { isColumnInScope, scopedColumns, useAdvancedFindOnly } from '../state/metadataScope';
+import { buildBodySchema } from '../engine/bodySchema';
+import { useLiveEntities } from '../host/useLiveMetadata';
 import { copyText } from '../shell/copy';
 
 // ──────────────────────────────────────────────────────────────
@@ -679,6 +681,10 @@ export function FieldSetEditor({
           onStay={() => setSwitchIssue(null)}
           themeMode={themeMode}
           onChange={onJsonChange}
+          table={tbl}
+          writable={writable}
+          nullSupported={nullFieldsSupported}
+          advancedFindOnly={advancedFindOnly}
         />
       )}
 
@@ -2042,6 +2048,10 @@ function JsonEditPane({
   onStay,
   themeMode,
   onChange,
+  table,
+  writable,
+  nullSupported,
+  advancedFindOnly,
 }: {
   text: string;
   error: string | null;
@@ -2055,7 +2065,24 @@ function JsonEditPane({
   onStay: () => void;
   themeMode: ThemeMode;
   onChange: (text: string) => void;
+  table: TableMeta;
+  /** The columns the form can set; the schema offers the same (#268). */
+  writable: ColumnMeta[];
+  nullSupported: boolean;
+  advancedFindOnly: boolean;
 }) {
+  // Completions, hover and type checks for the body (#268). Lookup targets'
+  // entity sets come from their metadata when loaded, else the table list.
+  const { entities } = useLiveEntities();
+  const jsonSchema = useMemo(() => {
+    const sets = new Map(entities.map((e) => [e.logicalName, e.entitySetName]));
+    return buildBodySchema(table, writable, {
+      nullSupported,
+      suggest: (c) => isColumnInScope(c, advancedFindOnly),
+      entitySetOf: (t) => findTable(t)?.entitySetName ?? sets.get(t),
+    });
+  }, [table, writable, nullSupported, advancedFindOnly, entities]);
+
   const keyList = (
     <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
       {unmapped.map((u) => (
@@ -2178,6 +2205,7 @@ function JsonEditPane({
             height="100%"
             language="json"
             value={text}
+            jsonSchema={jsonSchema}
             onChange={(v) => onChange(v ?? '')}
             theme={themeMode === 'dark' ? 'vs-dark' : 'light'}
             options={{
