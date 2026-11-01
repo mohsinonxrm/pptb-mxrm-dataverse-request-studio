@@ -5,6 +5,7 @@ import { ENV } from '../mock/environment';
 import {
   altKeyColumnType,
   findTable,
+  findTableBySet,
   findColumn,
   isLookupLike,
   type AlternateKeyDef,
@@ -228,7 +229,11 @@ export function buildRetrieveSingle(s: RetrieveSingleState): BuiltRequest {
   };
 }
 
-export function buildRetrieveNextLink(s: RetrieveNextLinkState): BuiltRequest {
+export function buildRetrieveNextLink(
+  s: RetrieveNextLinkState,
+  /** Entity set → logical name from the environment's entity list. */
+  resolveSet?: (entitySet: string) => string | undefined,
+): BuiltRequest {
   const url = s.url || '';
   // The nextLink URL is opaque; we don't decompose it. Return as-is for display.
   // Best-effort: extract the entity-set segment for breadcrumbs.
@@ -239,14 +244,11 @@ export function buildRetrieveNextLink(s: RetrieveNextLinkState): BuiltRequest {
   let noBase = url;
   noBase = noBase.replace(/^https?:\/\/[^/]+/, '');
   noBase = noBase.replace(/^\/api\/data\/v\d+\.\d+/, '');
-  // NextLink is opaque — we don't know the entity logical name without parsing.
-  // Best-effort derivation: lop the trailing 's' for the simple case. Generators
-  // shouldn't rely on this; they branch on isNextLink instead.
-  const entityLogical = entitySet
-    ? entitySet.endsWith('ies')
-      ? entitySet.slice(0, -3) + 'y'
-      : entitySet.replace(/s$/, '')
-    : '';
+  // The table comes from the entity list (or the loaded metadata) by entity
+  // set name. Plurals don't strip back to a logical name (activitypointers,
+  // addresses, custom sets), so an unknown set stays '' rather than a guess (#224).
+  const entityLogical =
+    (entitySet && (resolveSet?.(entitySet) ?? findTableBySet(entitySet)?.logicalName)) || '';
   return {
     relativeUrl: url.replace(/^https?:\/\/[^/]+/, ''),
     relativeNoBase: noBase || '/',
@@ -667,9 +669,6 @@ export function buildMergeBody(s: MergeState): Record<string, unknown> {
   // 'subordinate' choices are skipped at body-build time, matching the
   // safe default.
   const subRow = s.subordinateSnapshot ?? undefined;
-  // Reference param kept so downstream lookups can still narrow by PK if
-  // a snapshot stores extra annotations like @odata.etag.
-  void refKey;
 
   // Compose UpdateContent — only fields the user explicitly overrode
   const update: Record<string, CreateFieldValue> = {};

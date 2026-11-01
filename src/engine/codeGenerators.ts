@@ -8,7 +8,7 @@
 //   - Preserve the user's actual headers (Prefer, MSCRMCallerID, etc.)
 
 import type { BuiltRequest } from './urlBuilder';
-import { ENV } from '../mock/environment';
+import { API_BASE, ENV } from '../mock/environment';
 import { generateOpenApi } from './openApiGenerator';
 import { isCredentialHeader, withoutCredentialHeaders } from './sensitiveHeaders';
 import { encodeSpaces } from '../primitives/urlParts';
@@ -1240,7 +1240,7 @@ function powerAutomateHttpSpec(i: CodegenInputs, reason: string): PowerAutomateA
         label: 'Relative URI',
         value: relativeToApi(i),
         multiline: true,
-        hint: 'Strip the /api/data/v9.2 prefix — the connector adds it',
+        hint: `Strip the ${API_BASE} prefix — the connector adds it`,
       },
       {
         label: 'Body',
@@ -1426,7 +1426,7 @@ export function generatePowerAutomateFields(i: CodegenInputs): PowerAutomateActi
         {
           label: 'Relative URI',
           value: i.built.relativeUrl.replace(/^\/api\/data\/v\d+\.\d+/, ''),
-          hint: 'Strip the /api/data/v9.2 prefix — the connector adds it',
+          hint: `Strip the ${API_BASE} prefix — the connector adds it`,
         },
         { label: 'Body', value: '', hint: 'Functions have no body' },
       ],

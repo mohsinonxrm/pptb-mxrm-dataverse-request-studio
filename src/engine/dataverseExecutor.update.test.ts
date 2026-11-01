@@ -110,5 +110,7 @@ describe('executeUpdate on a host with header pass-through (PPTB 1.2.7+)', () =>
     expect(host.retrieve).not.toHaveBeenCalled();
     expect(host.update).toHaveBeenCalledWith('account', ID, expect.any(Object), IF_MATCH);
     expect(r.status).toBe(204);
+    // The host passes no row back; no stand-in body either (#224).
+    expect(r.body).toBeNull();
   });
 });

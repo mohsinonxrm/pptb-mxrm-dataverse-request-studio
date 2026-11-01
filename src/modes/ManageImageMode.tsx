@@ -103,6 +103,7 @@ import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
 import { useRecentRuns } from '../state/runHistory';
+import { recordInitials } from '../primitives/recordInitials';
 
 const initialState = (): ManageImageState => ({
   // Empty initial state — user picks everything from live metadata.
@@ -375,11 +376,9 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
         : 'DELETE';
   const opBadgeColor = state.operation === 'delete' ? ('danger' as const) : ('brand' as const);
 
-  // Initials placeholder for the avatar preview tile. The richer "fetch the
-  // primary name to derive initials" path lived against the mock records
-  // catalog; with that gone we just render a question mark until the user
-  // wires up a live record-name lookup (TODO if/when this mode lands).
-  const initials = '?';
+  // Initials for the avatar preview tile, from the picked record's primary
+  // name; '?' until a record with a name is picked (#224).
+  const initials = recordInitials(recordName);
 
   const sections = [
     {
@@ -565,6 +564,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
               imageColumn: null,
               dirty: new Set(['target', 'column']),
             }));
+            setRecordName('');
             setResult(null);
             // New table → fresh draft. Forget the last save so Save can't
             // overwrite an entry that belongs to the old table (#58).

@@ -158,6 +158,8 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
+  // Whether the request that produced `result` asked for return=representation.
+  const [sentReturnRep, setSentReturnRep] = useState(false);
   const [loading, setLoading] = useState(false);
   // Kept across reloads, per environment (#226).
   const [recents, setRecents] = useRecentRuns('update');
@@ -431,6 +433,7 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
     setLoading(true);
     const res = await runtime.update(state, headerItemsToObject(effectiveHeaders, null));
     setResult(res);
+    setSentReturnRep(state.prefer.returnRepresentation);
     setLoading(false);
     setTab('results');
     setRecents((rs) =>
@@ -921,6 +924,7 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
               operation: 'update',
               table: state.table,
               recordId: state.recordId,
+              returnRepresentation: sentReturnRep,
               recordName:
                 pickedPrimaryFromPicker ||
                 (originalRow && tbl ? String(originalRow[tbl.primaryName] ?? '') : null),

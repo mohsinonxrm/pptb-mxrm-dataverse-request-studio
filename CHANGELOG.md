@@ -81,6 +81,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     dialog lists what was left out or changed. Functions, associations,
     alternate keys and file uploads aren't imported yet.
 
+### 🐛 Fixed
+
+- **Update and Upsert results show what came back** ([#224]). A 204 used
+  to show a made-up `{"@odata.context": "update"}` body in the JSON tab;
+  now it shows none. ToolBox's update passes no row back, even with
+  `Prefer: return=representation` (Upsert's default), so the result says so
+  and points to **Retrieve this record**.
+- **Retrieve NextLink names the right table** ([#224]). The table came from
+  trimming the entity set's plural (`mailboxes` became `mailboxe`); now it's
+  looked up in the environment's entity list, and left blank when unknown.
+
+### 🔧 Internal
+
+- Executor clean-ups ([#224]): one `API_VERSION` constant, matching the
+  `v9.2` ToolBox calls; unused exports and `void` import keepers removed;
+  the executor's module header describes what it does today. Manage
+  Image's preview tile takes its initials from the picked record instead of
+  a fixed `?`.
+
+[#224]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/224
 [#291]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/291
 [#294]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/294
 [#226]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/226

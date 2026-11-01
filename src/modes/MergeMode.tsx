@@ -49,7 +49,6 @@ import {
   Option,
   Badge,
   Persona,
-  Button,
 } from '@fluentui/react-components';
 import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
@@ -1244,6 +1243,3 @@ function primaryNameOf(
   const v = row[tbl.primaryName];
   return v != null ? String(v) : null;
 }
-
-// Suppress unused-import warning
-void Button;

@@ -638,6 +638,10 @@ export const TABLES: TableMeta[] = new Proxy([] as TableMeta[], {
 export const findTable = (logicalName: string): TableMeta | undefined =>
   liveTablesOf().get(logicalName);
 
+/** The loaded table with this entity set name (`accounts` → account), if any. */
+export const findTableBySet = (entitySetName: string): TableMeta | undefined =>
+  Array.from(liveTablesOf().values()).find((t) => t.entitySetName === entitySetName);
+
 export const findColumn = (table: TableMeta, logicalName: string): ColumnMeta | undefined =>
   table.columns.find((c) => c.logicalName === logicalName);
 
