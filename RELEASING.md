@@ -249,21 +249,38 @@ the version and the tagged commit:
 | Tag | Tagged commit must be on | npm tag | GitHub Release |
 |---|---|---|---|
 | `vX.Y.Z-beta.N`, `vX.Y.Z-rc.N` | any branch (normally `release/X.Y`) | `beta` | pre-release |
-| `vX.Y.Z` | `main` | `latest` | latest |
 | `vX.Y.Z` | `support/X.Y` | `support-X.Y` | not marked latest |
+| `vX.Y.Z` | `main`, with `X.Y` = main's own version line | `latest` | latest |
 
-Any other tag fails before publishing, so a stray tag can't replace `latest`. It then:
+`support/X.Y` is checked first: it merges forward into `main`, so an older line's commit can
+be on `main` too, and it must never move `latest` back. Any other tag fails before
+publishing, so a stray tag can't replace `latest`.
 
-1. checks the release metadata (`check-release.mjs`: the version, `package-lock.json` and
-   the CHANGELOG section);
-2. runs `npm ci`, `npm test`, `npm run validate` and `npm run build`, then checks the
-   bundled icon and the bundled DOMPurify version, and writes the release notes (previewed
-   in the run summary);
-3. publishes with `npm publish --provenance` through npm **trusted publishing** (OIDC, no
-   npm token);
-4. creates the GitHub Release. Its notes are the PPTB requirement and the version's
-   `CHANGELOG.md` section (with its link definitions), then GitHub's list of PRs. Edit
-   the release afterwards only to add context.
+It runs in separate jobs, so the code that installs and runs dependencies never holds
+publishing rights (#376, as FetchXML Studio):
+
+| Job | Runs on | Permissions | What it does |
+|---|---|---|---|
+| `build` | always | read the repository | Checks the tag and chooses the channel; checks the release metadata (`check-release.mjs`); `npm ci --ignore-scripts` (no cache); the runtime audit (no high or critical findings), lint, tests, validation, build (with the type check), no root-absolute asset URLs, the bundled icon, the DOMPurify check; writes the release notes (previewed in the run summary); packs the tarball and checks its contents. |
+| `publish` | tag push only | npm OIDC token (`id-token: write`) | Installs no project dependencies: downloads the tarball and publishes it with provenance through npm **trusted publishing** (no npm token). |
+| `rehearse` | manual run only | none | `npm publish --dry-run` of the tarball, without provenance or an npm token. |
+| `github-release` | tag push only | write the repository | Creates the GitHub Release with the notes `build` wrote: the PPTB requirement and the version's `CHANGELOG.md` section (with its link definitions), then GitHub's list of PRs. Edit the release afterwards only to add context. |
+
+Node (24.22.0), npm (11.21.1) and the actions (by full commit SHA, the tag in a comment) are
+pinned to versions at least 14 days old. CI uses the same action pins and
+`npm ci --ignore-scripts`, and doesn't keep the checkout's token. Dependabot proposes newer
+actions on `dev`; other branches get them when `dev` reaches them through a release. Move
+the Node and npm pins by hand. Only one release run per ref runs at a time. If a run fails
+after publishing, use *Re-run failed jobs*: a full re-run stops at `publish`, since npm
+never accepts a version twice.
+
+**Rehearse a release** after the version bump and before the tag, on a branch whose workflow
+changed: `gh workflow run release.yml --ref <branch>` (or Actions → *Release* → *Run
+workflow* once `dev` has the manual trigger). It runs every check and
+`npm publish --dry-run`, and creates no GitHub Release. npm's dry run refuses a version
+that's already published, so on an unbumped branch the rehearsal stops with a notice after
+the checks. It doesn't exercise the npm token exchange or provenance signing. A manual run
+never publishes, even on a tag.
 
 Pre-release versions (anything with a `-`) bundle the gold Insider icon; stable versions
 use the regular icon (`vite.config.ts`).

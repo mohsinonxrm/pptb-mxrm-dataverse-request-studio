@@ -47,10 +47,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The release check covers the README badges** ([#373]): the files in
   `assets/badges/` match `package.json`, the README shows them, and no README
   image comes from `img.shields.io`.
+- **The release workflow is hardened** ([#376]), as FetchXML Studio's was.
+  - **Separate jobs:** `release.yml` is split into `build`, `publish` and
+    `github-release`. The job that installs and runs the dependencies
+    (`npm ci --ignore-scripts`, no cache, tests, build) only reads the
+    repository. Only `publish` can get the npm OIDC token, only for a tag push,
+    and it installs no project dependencies: it publishes the tarball `build`
+    packed. Only `github-release` can write to the repository.
+  - **More checks before publishing:** the release build now also runs the
+    runtime audit, lint, the root-absolute asset check and the package-contents
+    check, so a tag on a commit that skipped CI can't publish.
+  - **Pinned versions:** npm is pinned to 11.21.1 instead of `npm@latest`, and
+    Node to 24.22.0. Actions are pinned by commit SHA (checkout v7.0.1,
+    setup-node v7.1.0, upload-artifact v7.0.2, download-artifact v8.0.2), each
+    at least 14 days old.
+  - **Rehearsal:** running the workflow by hand runs every check and
+    `npm publish --dry-run`, with no npm token and no GitHub Release.
+  - **`latest` can't move back:** a stable tag gets `latest` only for main's own
+    version line, and a `support/X.Y` commit is checked first. Support branches
+    merge forward into `main`, so before this, re-running a support release
+    after that merge would have published it to `latest`.
+  - **CI** uses the same pins and `npm ci --ignore-scripts`, doesn't keep the
+    checkout's token, and runs the runtime audit.
 
 [#363]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/363
 [#372]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/372
 [#373]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/373
+[#376]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/376
 
 ## [1.5.0-beta.1] - 2026-10-30
 

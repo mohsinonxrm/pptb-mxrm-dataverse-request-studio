@@ -18,15 +18,23 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      # Pinned by commit SHA, as in release.yml (#376)
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
-      # The version, package-lock.json and the CHANGELOG section agree (#372, RELEASING.md).
+      # Like the release build (#376): only esbuild and fsevents have install scripts, and
+      # neither needs them
+      - run: npm ci --ignore-scripts
+      # The version, package-lock.json, the CHANGELOG section and the README badges agree
+      # (#372, RELEASING.md).
       - name: Check the release metadata
         run: node .github/scripts/check-release.mjs
+      - name: Audit runtime dependencies (no high or critical findings)
+        run: npm audit --omit=dev --audit-level=high
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run format:check
