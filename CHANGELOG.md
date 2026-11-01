@@ -80,6 +80,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Authorization`, cookies and browser headers are left out, and the
     dialog lists what was left out or changed. Functions, associations,
     alternate keys and file uploads aren't imported yet.
+- **All or nothing for Associate and Disassociate** ([#224]). With two or
+  more targets on a one-to-many or many-to-many relationship, turn on **All
+  or nothing** under the target records to send their requests as one
+  `$batch` change set. If any target fails, Dataverse rolls back the rest, so
+  nothing is linked or unlinked; the results list the failed target and mark
+  the others **Not applied**. A change set holds at most 1,000 requests. It's off by default: each target
+  is still sent on its own, and a failure leaves the targets before it
+  changed. The Code tab follows the choice: with it on, fetch, Python, C#,
+  PowerShell and cURL post one `$batch`, and `Xrm.WebApi.executeMultiple`
+  nests the requests in a change set. Needs Power Platform ToolBox 1.2.7 or
+  later; on an older ToolBox the option is unavailable and the requests go
+  one at a time.
 
 ### 🐛 Fixed
 

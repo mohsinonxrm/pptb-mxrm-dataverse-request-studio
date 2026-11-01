@@ -45,6 +45,7 @@ import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from '../editors/PaneHead';
 import { NavPropertyPicker } from '../editors/NavPropertyPicker';
 import { AssociateTargetsEditor, targetsTitle } from '../editors/AssociateTargetsEditor';
+import { AllOrNothingOption } from '../editors/AllOrNothingOption';
 import { TargetEditor } from '../editors/TargetEditor';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
@@ -58,7 +59,7 @@ import {
   relateRequestHeaders,
 } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
-import { relateDoneCount } from '../engine/dataverseExecutor';
+import { MAX_CHANGE_SET, relateAsChangeSet, relateDoneCount } from '../engine/dataverseExecutor';
 import type { AssociateState } from '../state/relateState';
 import { isSingleValuedNav } from '../state/relateState';
 import type { RecentRun } from '../state/readState';
@@ -141,6 +142,8 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
   // PPTB constraint: PUT $ref isn't exposed on dataverseAPI, so PATCH is
   // also the only path that actually works in PPTB for single-valued.
   const method: 'POST' | 'PATCH' = singleValued ? 'PATCH' : 'POST';
+  // All or nothing (#224): the targets go as one change set, as Execute sends them.
+  const changeSet = !singleValued && relateAsChangeSet(state.allOrNothing, requests.length);
 
   const markDirty = (id: string) =>
     setState((s) => {
@@ -180,6 +183,12 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
       when: state.targets.length === 0,
       id: 'assoc-targets',
       title: 'Pick at least one target record.',
+      focusNode: 'targets',
+    },
+    {
+      when: changeSet && requests.length > MAX_CHANGE_SET,
+      id: 'assoc-change-set-cap',
+      title: `All or nothing sends at most ${MAX_CHANGE_SET} requests in one change set; this has ${requests.length}. Remove targets or turn it off.`,
       focusNode: 'targets',
     },
     {
@@ -350,7 +359,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
                 id: 'preview',
                 icon: Code20Filled,
                 iconFilled: Code20Filled,
-                label: `${requests.length} request${requests.length === 1 ? '' : 's'}`,
+                label: `${requests.length} request${requests.length === 1 ? '' : 's'}${changeSet ? ' · all or nothing' : ''}`,
                 badge: requests.length,
                 badgeAppearance: 'ghost' as const,
               },
@@ -464,11 +473,22 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
           setTargetNames={(n) => set('targetNames', n)}
           group="relate"
           resolvedMethod={nav ? method : null}
+          changeSet={changeSet}
+          footer={
+            nav && !singleValued ? (
+              <AllOrNothingOption
+                checked={!!state.allOrNothing}
+                onChange={(v) => set('allOrNothing', v || undefined, 'targets')}
+                targets={state.targets.length}
+                verb="POST"
+              />
+            ) : undefined
+          }
         />
       );
       break;
     case 'preview':
-      pane = <RequestsPreview requests={requests} />;
+      pane = <RequestsPreview requests={requests} changeSet={changeSet} />;
       break;
     case 'headers':
       pane = (
@@ -500,6 +520,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
             description: `target ${r.targetId}`,
           }))
         : undefined,
+    changeSet,
   };
 
   return (
@@ -574,8 +595,10 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
 // ──────────────────────────────────────────────────────────────
 function RequestsPreview({
   requests,
+  changeSet,
 }: {
   requests: import('../engine/urlBuilder').AssociateRequest[];
+  changeSet: boolean;
 }) {
   const s = useStudioStyles();
   return (
@@ -583,7 +606,11 @@ function RequestsPreview({
       <PaneHead
         icon={Code20Filled}
         title={`Generated requests (${requests.length})`}
-        sub="Each target queues a separate HTTP request. For large counts, prefer a $batch request."
+        sub={
+          changeSet
+            ? 'All or nothing: these requests go together as one $batch change set, so all succeed or none do.'
+            : 'Each target queues a separate HTTP request. For large counts, prefer a $batch request.'
+        }
         group="relate"
       />
       <div

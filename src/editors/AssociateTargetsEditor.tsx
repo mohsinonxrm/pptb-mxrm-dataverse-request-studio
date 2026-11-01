@@ -71,6 +71,10 @@ export interface AssociateTargetsEditorProps {
   sub?: ReactNode;
   /** Verb each collection target sends — POST to associate, DELETE to disassociate. */
   verb?: 'POST' | 'DELETE';
+  /** The targets go as one change set (All or nothing, #224). */
+  changeSet?: boolean;
+  /** Rendered under the picker once a nav property is picked (the All or nothing option). */
+  footer?: ReactNode;
 }
 
 export function AssociateTargetsEditor({
@@ -84,6 +88,8 @@ export function AssociateTargetsEditor({
   resolvedMethod,
   sub,
   verb = 'POST',
+  changeSet = false,
+  footer,
 }: AssociateTargetsEditorProps) {
   // Callers that don't track names externally get a transient session map.
   // Defined alongside the controlled path so the editor's display logic
@@ -160,8 +166,17 @@ export function AssociateTargetsEditor({
                 </>
               ) : (
                 <>
-                  One or more targets — each fires a separate POST request. For many targets,
-                  Dataverse recommends a <code>$batch</code> request.
+                  One or more targets —{' '}
+                  {changeSet ? (
+                    <>
+                      sent together as one <code>$batch</code> change set (All or nothing).
+                    </>
+                  ) : (
+                    <>
+                      each fires a separate POST request. For many targets, Dataverse recommends a{' '}
+                      <code>$batch</code> request.
+                    </>
+                  )}
                 </>
               ))}
           </span>
@@ -182,14 +197,18 @@ export function AssociateTargetsEditor({
         )}
         {!singleValued && targets.length > 1 && (
           <Tooltip
-            content="Will fire one request per target — Dataverse recommends $batch for large counts. Batch transport lands in a later pass."
+            content={
+              changeSet
+                ? 'Sent together as one $batch change set: all succeed or none do.'
+                : 'Will fire one request per target. Turn on All or nothing to send them as one $batch change set.'
+            }
             relationship="description"
           >
             <Badge
               appearance="ghost"
               icon={<BoxMultiple20Regular style={{ width: 12, height: 12 }} />}
             >
-              {targets.length} requests queued
+              {targets.length} requests {changeSet ? '· 1 change set' : 'queued'}
             </Badge>
           </Tooltip>
         )}
@@ -277,7 +296,7 @@ export function AssociateTargetsEditor({
             hint={
               singleValued
                 ? `Pick a single ${targetTbl?.displayName ?? 'record'} — the PATCH sets this as the lookup value.`
-                : `Each pick queues a separate ${verb}. Currently ${targets.length} target${targets.length === 1 ? '' : 's'} queued.`
+                : `Each pick queues ${changeSet ? 'one more request in the change set' : `a separate ${verb}`}. Currently ${targets.length} target${targets.length === 1 ? '' : 's'} queued.`
             }
           >
             <RecordPicker
@@ -308,6 +327,7 @@ export function AssociateTargetsEditor({
           </MessageBarBody>
         </MessageBar>
       )}
+      {footer}
     </div>
   );
 }

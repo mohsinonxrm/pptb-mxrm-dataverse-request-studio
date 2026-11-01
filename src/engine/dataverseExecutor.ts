@@ -37,6 +37,7 @@ import {
   dvHost,
   HostNotAvailableError,
   hostSupportsAdditionalHeaders,
+  hostSupportsBatch,
   isEmbedded,
 } from '../host/pptbBridge';
 import { metadata } from '../host/metadataProvider';
@@ -124,6 +125,8 @@ export interface ExecResult {
   /** Associate / Disassociate on a collection-valued nav property: one
    *  entry per target, in request order (#99). Absent for every other op. */
   targets?: RelateTargetResult[];
+  /** Those targets went as one change set, all or nothing (#224). */
+  changeSet?: boolean;
   /** Count only (#272): Dataverse stopped counting at its limit (5,000, or
    *  500 for elastic tables). Absent when the response didn't say. */
   countLimitExceeded?: boolean;
@@ -136,10 +139,12 @@ export interface ExecResult {
  *                 Disassociate never skips (see executeDisassociate).
  *   • `failed`  — the request failed; `status` / `error` come from the same
  *                 mapping as every other failure.
+ *   • `rolled-back` — All or nothing only (#224): sent in a change set that
+ *                 failed, so this target's change wasn't applied.
  */
 export interface RelateTargetResult {
   targetId: string;
-  state: 'done' | 'skipped' | 'failed';
+  state: 'done' | 'skipped' | 'failed' | 'rolled-back';
   status?: number;
   statusText?: string;
   error?: { code?: string; message: string };
@@ -150,8 +155,9 @@ export function relateTargetCounts(r: ExecResult | null | undefined): {
   done: number;
   skipped: number;
   failed: number;
+  'rolled-back': number;
 } {
-  const c = { done: 0, skipped: 0, failed: 0 };
+  const c = { done: 0, skipped: 0, failed: 0, 'rolled-back': 0 };
   for (const t of r?.targets ?? []) c[t.state]++;
   return c;
 }
@@ -907,7 +913,18 @@ export async function executeMerge(
 
 // Collection-valued Associate / Disassociate is one host call per target
 // (no batch), so a run can partly succeed. Each target gets its own result
-// and a failure doesn't stop the rest (#99).
+// and a failure doesn't stop the rest (#99). With All or nothing on (#224),
+// on PPTB 1.2.7+, the targets' requests go as one change set instead
+// (`executeTransaction`): Dataverse applies all of them or none.
+
+/**
+ * True when a relate run sends its targets as one change set: All or
+ * nothing is on, there are 2+ targets, and the host can send a change set.
+ * Standalone counts as able, so the Code tab shows the change set.
+ */
+export function relateAsChangeSet(allOrNothing: boolean | undefined, targets: number): boolean {
+  return !!allOrNothing && targets > 1 && (!isEmbedded() || hostSupportsBatch());
+}
 
 /** Max target GUIDs per "which are linked?" query, to keep the URL short. */
 const LINK_CHECK_CHUNK = 25;
@@ -1017,6 +1034,113 @@ async function runPerTarget(
   };
 }
 
+/**
+ * All or nothing (#224): send the targets `skip` doesn't skip as one change
+ * set and map the host's results back per target:
+ *   • every request succeeded → 204, each sent target `done`.
+ *   • a request failed        → that request's status and error; the
+ *                               target it belongs to is `failed`, every
+ *                               other sent target `rolled-back`. When the
+ *                               host can't tie the failure to a request (no
+ *                               Content-ID), they're all `rolled-back`.
+ *   • the host call threw     → its error; the sent targets `rolled-back`
+ *                               (a change set applies whole or not at all).
+ *   • a request has no result → treated like a failure nobody can tie to a
+ *                               request: nothing is reported as done.
+ * Never `partial`: nothing is applied unless everything is. More than
+ * MAX_CHANGE_SET requests aren't sent: Dataverse and PPTB refuse them.
+ */
+async function runChangeSet(
+  targetIds: string[],
+  skip: (id: string) => boolean,
+  request: (id: string) => DataverseAPI.BatchRequest,
+  t0: number,
+  /** The headers each request carries, to report a declined consent prompt. */
+  sentHeaders?: Record<string, string>,
+): Promise<ExecResult> {
+  const sent = new Map<string, number>(); // contentId → index in targetIds
+  const requests: DataverseAPI.BatchRequest[] = [];
+  targetIds.forEach((id, i) => {
+    if (skip(id)) return;
+    const contentId = String(requests.length + 1);
+    sent.set(contentId, i);
+    requests.push({ ...request(id), contentId });
+  });
+  const sentAt = new Set(sent.values());
+  const results = (failedAt: number | null, state: 'done' | 'rolled-back') =>
+    targetIds.map(
+      (targetId, i): RelateTargetResult =>
+        !sentAt.has(i)
+          ? { targetId, state: 'skipped' }
+          : { targetId, state: i === failedAt ? 'failed' : state },
+    );
+  const elapsed = () => Math.round(performance.now() - t0);
+  if (requests.length === 0) {
+    const targets = results(null, 'done');
+    return { ...ok(204, { targets }, elapsed()), targets };
+  }
+  if (requests.length > MAX_CHANGE_SET) {
+    return mapError(
+      {
+        statusCode: 400,
+        message: `Not sent: a change set holds at most ${MAX_CHANGE_SET} requests, and this one has ${requests.length}. Remove targets or turn off All or nothing.`,
+      },
+      elapsed(),
+    );
+  }
+  const failed = (f: ExecResult, failedAt: number | null): ExecResult => {
+    const fError = (f.body as { error: { code?: string; message: string } }).error;
+    const targets = results(failedAt, 'rolled-back');
+    const t = failedAt === null ? undefined : targets[failedAt];
+    if (t) Object.assign(t, { status: f.status, statusText: f.statusText, error: fError });
+    const body = { error: fError, targets };
+    return { ...f, body, bytes: jsonBytes(body), targets, changeSet: true };
+  };
+
+  let answer: DataverseAPI.BatchResult[];
+  try {
+    answer = await dvHost.executeTransaction(requests);
+  } catch (e) {
+    const f = mapError(e, elapsed(), sentHeaders);
+    const code = (f.body as { error?: { code?: string } } | null)?.error?.code;
+    if (e instanceof HostNotAvailableError || code === HEADER_CONSENT_DECLINED_CODE) return f;
+    return failed(f, null);
+  }
+
+  const ms = elapsed();
+  const bad = answer.find((r) => r.status >= 400);
+  if (!bad) {
+    // Every request needs its own success, or nothing is claimed as done.
+    const answered = new Set(answer.map((r) => r.contentId));
+    const missing =
+      answer.length < requests.length || requests.some((r) => !answered.has(r.contentId));
+    if (missing) {
+      return failed(
+        failure(
+          0,
+          {
+            message: `Power Platform ToolBox returned ${answer.length} result(s) for the ${requests.length} requests in the change set, so DRS can't tell whether it was applied. Check the links before you Execute again.`,
+          },
+          ms,
+        ),
+        null,
+      );
+    }
+    const targets = results(null, 'done');
+    return { ...ok(204, { targets }, ms), targets, changeSet: true };
+  }
+  const reported = (bad.body as { error?: { code?: string; message?: string } } | null)?.error;
+  const error = {
+    code: reported?.code,
+    message: reported?.message || bad.statusText || `HTTP ${bad.status}`,
+  };
+  const failedAt = bad.contentId !== undefined ? (sent.get(bad.contentId) ?? null) : null;
+  return failed(failure(bad.status, error, ms, bad.statusText || undefined), failedAt);
+}
+
+/** Dataverse (and PPTB) take at most this many requests in one `$batch`. */
+export const MAX_CHANGE_SET = 1000;
+
 export async function executeAssociate(
   s: AssociateState,
   composed?: Record<string, string>,
@@ -1071,13 +1195,34 @@ export async function executeAssociate(
     return mapError(e, Math.round(performance.now() - t0));
   }
   const wire = sendable(relate);
+  const skip = (id: string) => !!linked?.has(id.toLowerCase());
+  if (relateAsChangeSet(s.allOrNothing, ids.length)) {
+    // The same POST $ref the Code tab shows, absolute @odata.id included;
+    // the headers go on each request in the change set.
+    const byId = new Map(reqs.map((r) => [r.targetId, r]));
+    return runChangeSet(ids, skip, (id) => changeSetRequest(byId.get(id)!, wire), t0, wire);
+  }
   return runPerTarget(
     ids,
-    (id) => !!linked?.has(id.toLowerCase()),
+    skip,
     (id) => dvHost.associate(s.table, sourceId, navProperty, relatedEntity, id, wire),
     t0,
     wire,
   );
+}
+
+/** One relate request as a change-set request: URL relative to the API base. */
+function changeSetRequest(
+  r: { method: string; relativeNoBase: string; body?: Record<string, unknown> },
+  headers?: Record<string, string>,
+): DataverseAPI.BatchRequest {
+  const req: DataverseAPI.BatchRequest = {
+    method: r.method as DataverseAPI.BatchRequest['method'],
+    url: r.relativeNoBase.replace(/^\//, ''),
+  };
+  if (headers && Object.keys(headers).length > 0) req.headers = { ...headers };
+  if (r.body !== undefined) req.body = r.body;
+  return req;
 }
 
 export async function executeDisassociate(
@@ -1125,6 +1270,16 @@ export async function executeDisassociate(
   // DELETE is reported as the failure Dataverse returned.
   const ids = reqs.map((r) => r.targetId).filter((id): id is string => !!id);
   const wire = sendable(relate);
+  if (relateAsChangeSet(s.allOrNothing, ids.length)) {
+    const byId = new Map(reqs.map((r) => [r.targetId, r]));
+    return runChangeSet(
+      ids,
+      () => false,
+      (id) => changeSetRequest(byId.get(id)!, wire),
+      t0,
+      wire,
+    );
+  }
   return runPerTarget(
     ids,
     () => false,
