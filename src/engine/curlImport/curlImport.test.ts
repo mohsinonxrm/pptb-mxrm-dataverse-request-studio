@@ -64,6 +64,10 @@ const ctx: CurlImportContext = {
 
 const run = (cmd: string) => importCurl(cmd, ctx);
 
+/** A bash `$'…'` word for `s`: backslash first, then quotes and line breaks. */
+const ansiC = (s: string) =>
+  `$'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '\\r').replace(/\n/g, '\\n')}'`;
+
 beforeEach(() => registerFixtureTables());
 
 describe('reads', () => {
@@ -361,7 +365,7 @@ describe('$batch', () => {
     '',
   ].join('\r\n');
   const cmd = (extra = '') =>
-    `curl -X POST '${ORG}/$batch' -H 'Content-Type: ${CT}' ${extra} --data-binary $'${body.replace(/\r\n/g, '\\r\\n').replace(/'/g, "\\'")}'`;
+    `curl -X POST '${ORG}/$batch' -H 'Content-Type: ${CT}' ${extra} --data-binary ${ansiC(body)}`;
 
   it('opens $batch with change sets and independent requests grouped as sent', async () => {
     const r = await run(cmd(`-H 'Prefer: odata.continue-on-error'`));
@@ -548,7 +552,7 @@ describe('nothing changes quietly (review of #271)', () => {
       '',
     ].join('\r\n');
     const r = await run(
-      `curl -X POST '${ORG}/$batch' -H 'Content-Type: multipart/mixed; boundary=b' -H 'MSCRM.BypassCustomPluginExecution: true' -H 'Prefer: return=representation' --data-binary $'${body.replace(/\r\n/g, '\r\n')}'`,
+      `curl -X POST '${ORG}/$batch' -H 'Content-Type: multipart/mixed; boundary=b' -H 'MSCRM.BypassCustomPluginExecution: true' -H 'Prefer: return=representation' --data-binary ${ansiC(body)}`,
     );
     const w = r.warnings.join(' | ');
     expect(w).toMatch(/batch-level Prefer preferences/);
