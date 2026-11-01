@@ -60,6 +60,11 @@ update changes the shipped bundle for a reason users care about (a security fix 
 runtime dependency), add one under *Security* in the release-prep PR. Delete the branch
 after merging or closing; the repository doesn't delete head branches automatically.
 
+An update to a badge's dependency (`@pptb/types`, a TypeScript minor, a React or Fluent UI
+major) fails the release check in CI, because the README badges no longer match
+`package.json`. On that PR's branch, run `npm run badges`, replace the README's badge lines
+with the ones the check prints, and push.
+
 ## Where a fix goes
 
 **Fix on the oldest supported branch that has the bug, then merge forward:**
@@ -77,9 +82,38 @@ of beta fixes and one before the stable release is enough; they don't have to fo
 every beta. When a forward merge conflicts badly because the code has moved on, re-apply
 the fix on the newer branch in a small companion PR instead.
 
-**Resolving forward-merge conflicts** in `CHANGELOG.md` and `package.json`: keep the
-target branch's version and its `[Unreleased]` section on top, and add the incoming dated
-sections in version order.
+**Resolving forward-merge conflicts** in `CHANGELOG.md`, `package.json`, `package-lock.json`
+and the version badge (`assets/badges/version.svg`): keep the **higher** of the two versions
+(semver), with its lock fields and badge (resolve `package.json`, then `npm run badges` and
+`git add assets/badges`: SVGs are binary in `.gitattributes`, so git can't merge them), and
+the target branch's `[Unreleased]` section on top; add the incoming dated sections in
+version order, highest first. So the newest dated section is always the branch's version,
+which `check-release.mjs` checks. For example, a `1.5.1` hotfix merged into `dev` at `1.5.0`
+makes `dev` `1.5.1`; merged into `dev` at `1.6.0-beta.2`, `dev` stays `1.6.0-beta.2` with
+`[1.5.1]` below its section.
+
+## Every release: what changes
+
+Each release-prep PR (beta, rc, stable, hotfix or support) changes these, plus the README
+when the release changes what it documents:
+
+| What | How | Checked by |
+|---|---|---|
+| **Version** (`X.Y.Z`, `X.Y.Z-beta.N` or `X.Y.Z-rc.N`) in `package.json` and `package-lock.json` | `npm version <version> --no-git-tag-version` updates both | `check-release.mjs` (CI and `release.yml`); the tag must match too |
+| **CHANGELOG** | Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, with its own `[#n]: …` link definitions, and add an empty `## [Unreleased]` above it | `check-release.mjs`: the newest section is the version, dated, with entries |
+| **README badges** | `npm run badges` regenerates `assets/badges/*.svg` from `package.json`: the version (yellow for pre-releases), the PPTB `minAPI`, `@pptb/types`, React, TypeScript, Fluent UI and the license. A version change touches only `version.svg`; the README changes only when another badge's text does (its alt text names the value), and the check prints the lines it expects | `check-release.mjs`: the files are current, the README shows them, and nothing uses `img.shields.io` |
+| **Icon** | Nothing to do: the build bundles the gold Insider icon for `-beta.N` / `-rc.N` and the release icon for `X.Y.Z` | `check-release.mjs --dist` compares `dist/icons/icon.svg` with the right source |
+| **npm package** | Published by `release.yml` on the tag, with provenance, to `beta`, `latest` or `support-X.Y` | `release.yml` |
+| **GitHub Release** | Created by `release.yml` on the tag: a pre-release for betas, latest for stable on `main`. Its notes are the PPTB requirement and the CHANGELOG section, then GitHub's PR list | `release.yml` |
+
+CI runs `check-release.mjs` on every PR and on pushes to `dev`, `main`, `release/**` and
+`support/**`, so a release-prep PR that misses one of them fails before it merges; on other
+PRs it confirms the branch is still consistent.
+
+Branches cut before the check existed (for example a `support/1.4` cut from a `v1.4.*` tag)
+run the workflow of their own commit: they don't get the check, so check them by hand
+against this table. Their GitHub Release notes are the CHANGELOG section alone, as `v1.4.0`'s
+were, without the PPTB line and the PR list.
 
 ## Release lifecycle
 
@@ -99,15 +133,16 @@ tracking issue** in the milestone for the stabilizing checklist.
 1. On a branch from `release/1.5` (`chore/release-1.5.0-beta.1`):
    `npm version 1.5.0-beta.1 --no-git-tag-version`, rename `## [Unreleased]` to
    `## [1.5.0-beta.1] - YYYY-MM-DD` with its own `[#n]: …` link definitions (add a new
-   empty `## [Unreleased]` above it), update the README if needed, and PR it into
-   `release/1.5`.
+   empty `## [Unreleased]` above it), run `npm run badges`, update the README if needed,
+   and PR it into `release/1.5`.
 2. Tag the merged commit on `release/1.5` and push the tag:
 
    ```bash
    git switch release/1.5 && git pull && git tag v1.5.0-beta.1 && git push origin v1.5.0-beta.1
    ```
 
-3. Fixes found in the beta go into `release/1.5` by PR; ship them as `beta.2`, `beta.3`, ….
+3. Run *After every release* (below).
+4. Fixes found in the beta go into `release/1.5` by PR; ship them as `beta.2`, `beta.3`, ….
    Merge `release/1.5` into `dev` from time to time (see *Where a fix goes*).
 
 `-beta.N` and `-rc.N` publish to the npm `beta` tag as a GitHub pre-release; `latest`
@@ -129,8 +164,8 @@ Before promoting a beta to `latest`:
 ### 4. Stable release (to `main`)
 
 1. Release-prep PR into `release/1.5`: `npm version 1.5.0 --no-git-tag-version`, a dated
-   `## [1.5.0]` CHANGELOG section that summarises the betas above their history, and
-   README updates.
+   `## [1.5.0]` CHANGELOG section that summarises the betas above their history,
+   `npm run badges`, and README updates.
 2. PR `release/1.5` → `main`, merged with a merge commit.
 3. Tag the merge commit on `main` and push it:
 
@@ -138,18 +173,36 @@ Before promoting a beta to `latest`:
    git switch main && git pull && git tag v1.5.0 && git push origin v1.5.0
    ```
 
-4. Check `npm view @mohsinonxrm/pptb-dataverse-request-studio dist-tags` and the GitHub
-   Release, and smoke-test the published package.
+4. Run *After every release*, and smoke-test the published package.
 5. Merge `main` into `dev` (PR, merge commit), then delete `release/1.5`.
-6. Deprecate what the release supersedes (see *Deprecating on npm*).
 
 ## Hotfixes (to the current stable release)
 
 1. Branch `hotfix/1.5.1` from `main`; fix, set the version (`1.5.1`), date its CHANGELOG
-   section; PR into `main` (merge commit).
-2. Tag `v1.5.1` on `main` → npm `latest`.
-3. Merge `main` forward into `release/*` (if one is open) and `dev`, keeping each target's
-   version and `[Unreleased]` entries.
+   section, run `npm run badges`; PR into `main` (merge commit).
+2. Tag `v1.5.1` on `main` → npm `latest`, then run *After every release*.
+3. Merge `main` forward into `release/*` (if one is open) and `dev`, keeping the higher
+   version (*Resolving forward-merge conflicts*) and each target's `[Unreleased]` entries.
+
+## After every release
+
+The checks every release gets, whatever its kind. The forward merges are in each
+release's own steps above.
+
+1. **npm:** `npm view @mohsinonxrm/pptb-dataverse-request-studio dist-tags` shows the new
+   version on its tag. The registry can take a few minutes to show it after the run.
+2. **Icon:** unpack the published tarball (`npm pack
+   @mohsinonxrm/pptb-dataverse-request-studio@<version>`, then `tar -xzf *.tgz`, in an empty
+   folder) and compare `package/dist/icons/icon.svg` with `icons/icon-insider.svg` (betas
+   and rcs) or `icons/icon.svg`.
+3. **GitHub Release:** add any context the CHANGELOG doesn't carry, such as how a fix was
+   verified or a known issue.
+4. **Tracking issue:** comment on the release's tracking issue (the soak restarts with each
+   beta).
+5. **Deprecate** what it supersedes (*Deprecating on npm*): after a beta or rc, the previous
+   beta or rc; after a stable release, that line's betas (the previous stable waits until
+   it's out of support); after a hotfix, the patch it replaces.
+6. **Milestone:** close it when its stable release ships.
 
 ## Supported versions
 
@@ -201,15 +254,30 @@ the version and the tagged commit:
 
 Any other tag fails before publishing, so a stray tag can't replace `latest`. It then:
 
-1. runs `npm ci`, `npm test`, `npm run validate` and `npm run build`, and checks the
-   bundled DOMPurify version;
-2. publishes with `npm publish --provenance` through npm **trusted publishing** (OIDC, no
+1. checks the release metadata (`check-release.mjs`: the version, `package-lock.json` and
+   the CHANGELOG section);
+2. runs `npm ci`, `npm test`, `npm run validate` and `npm run build`, then checks the
+   bundled icon and the bundled DOMPurify version, and writes the release notes (previewed
+   in the run summary);
+3. publishes with `npm publish --provenance` through npm **trusted publishing** (OIDC, no
    npm token);
-3. creates the GitHub Release. Its notes are the version's `CHANGELOG.md` section (with
-   its link definitions), or generated notes when there isn't one.
+4. creates the GitHub Release. Its notes are the PPTB requirement and the version's
+   `CHANGELOG.md` section (with its link definitions), then GitHub's list of PRs. Edit
+   the release afterwards only to add context.
 
 Pre-release versions (anything with a `-`) bundle the gold Insider icon; stable versions
 use the regular icon (`vite.config.ts`).
+
+## README images
+
+PPTB shows the README in its main window, whose CSP only allows images from GitHub and
+`*.githubusercontent.com`, and escapes raw HTML. So README images are files in the repo,
+linked by absolute `https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/...`
+URLs, never `img.shields.io` or HTML tags. The badges are generated into `assets/badges/` by
+`npm run badges` (`.github/scripts/badges.mjs`), in shields.io's flat style, as Command Bar
+Studio and FetchXML Studio do. They're read from `main`, so they show the current stable
+release, and new or renamed badges appear once they reach `main`. `assets/` isn't in the npm
+package.
 
 ## One-time setup
 

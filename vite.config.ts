@@ -243,6 +243,7 @@ export default defineConfig({
   test: {
     // jsdom provides DOMParser, which the CSDL parser (host/csdlProvider) relies on.
     environment: 'jsdom',
-    include: ['src/**/*.test.{ts,tsx}'],
+    // Plus the release check's tests (#372).
+    include: ['src/**/*.test.{ts,tsx}', '.github/scripts/**/*.test.mjs'],
   },
 });

@@ -65,10 +65,15 @@ jobs:
             echo "latest=$latest"
             echo "prerelease=$prerelease"
           } >> "$GITHUB_OUTPUT"
+      # The version, package-lock.json and the CHANGELOG section (#372, RELEASING.md)
+      - name: Check the release metadata
+        run: node .github/scripts/check-release.mjs
       - run: npm ci
       - run: npm test
       - run: npm run validate
       - run: npm run build
+      - name: Check the bundled icon and write the release notes
+        run: node .github/scripts/check-release.mjs --dist --notes "$RUNNER_TEMP/release-notes.md" --repository "$GITHUB_REPOSITORY"
       - name: Check the bundled DOMPurify
         run: node .github/scripts/check-dompurify.mjs
       - name: Check package contents
@@ -79,24 +84,14 @@ jobs:
         env:
           DIST_TAG: ${{ steps.channel.outputs.dist_tag }}
         run: npm publish --provenance --access public --tag "$DIST_TAG"
-      - name: Release notes from CHANGELOG.md
-        id: notes
-        run: |
-          # The version's "## [X.Y.Z…]" section, up to the next "## [" heading (link
-          # definitions included, so its [#n] references resolve).
-          version="${GITHUB_REF_NAME#v}"
-          awk -v v="$version" '
-            index($0, "## [" v "]") == 1 { on = 1; next }
-            on && /^## \[/ { exit }
-            on { print }
-          ' CHANGELOG.md > release-notes.md
-          if [ -s release-notes.md ]; then echo "file=release-notes.md" >> "$GITHUB_OUTPUT"; fi
+      # The notes check-release.mjs wrote: the PPTB requirement and the version's CHANGELOG
+      # section (with its [#n] link definitions), then GitHub's generated list of PRs and the
+      # compare link (gh puts --notes-file before the generated notes). The check above
+      # guarantees the section exists, so there's no PR-list-only fallback.
       - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           LATEST: ${{ steps.channel.outputs.latest }}
           PRERELEASE: ${{ steps.channel.outputs.prerelease }}
-          NOTES_FILE: ${{ steps.notes.outputs.file }}
         run: |
-          if [ -n "$NOTES_FILE" ]; then notes=(--notes-file "$NOTES_FILE"); else notes=(--generate-notes); fi
-          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" "${notes[@]}" --latest="$LATEST" --prerelease="$PRERELEASE"
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/release-notes.md" --generate-notes --latest="$LATEST" --prerelease="$PRERELEASE"
