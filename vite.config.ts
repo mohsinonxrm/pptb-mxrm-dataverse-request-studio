@@ -55,6 +55,31 @@ function monacoDompurify(): Plugin {
   };
 }
 
+// The JSON language service for the in-page worker (#255,
+// src/monaco/inPageWorker.ts): json.worker.js imported as
+// `…/json.worker?in-page`, with its worker bootstrap (which would take over the
+// page's `self.onmessage`) swapped for an export of the JSONWorker class. The
+// build fails if a Monaco update changes that bootstrap.
+function monacoJsonWorkerInPage(): Plugin {
+  const bootstrap =
+    /self\.onmessage = \(\) => \{\s*initialize\(\(ctx, createData\) => \{\s*return new JSONWorker\(ctx, createData\);\s*\}\);\s*\};\s*$/;
+  return {
+    name: 'drs-monaco-json-worker-in-page',
+    transform(code, id) {
+      if (
+        !/[\\/]monaco-editor[\\/]esm[\\/]vs[\\/]language[\\/]json[\\/]json\.worker\.js\?in-page$/.test(
+          id,
+        )
+      )
+        return null;
+      if (!bootstrap.test(code)) {
+        this.error("monaco-editor's json.worker.js changed: update the in-page worker (#255)");
+      }
+      return { code: code.replace(bootstrap, 'export { JSONWorker };\n'), map: null };
+    },
+  };
+}
+
 // Opt-in bundle report (#22): `npm run build:analyze` (or ANALYZE=1).
 // Dependency-free: prints every emitted JS/CSS chunk with raw + gzip size
 // and the heaviest packages inside each chunk (by rendered bytes after tree
@@ -185,7 +210,7 @@ export default defineConfig({
   // (the codicon font) resolves outside the tool and fails. CI checks the
   // build for root-absolute asset URLs.
   base: './',
-  plugins: [react(), toolIcon(), monacoDompurify(), bundleReport()],
+  plugins: [react(), toolIcon(), monacoDompurify(), monacoJsonWorkerInPage(), bundleReport()],
   server: { port: 5173, open: true },
   optimizeDeps: {
     include: [

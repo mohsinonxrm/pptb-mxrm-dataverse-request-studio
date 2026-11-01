@@ -95,6 +95,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🐛 Fixed
 
+- **JSON bodies are checked in the PPTB VS Code extension** ([#255]). The
+  extension serves DRS's files from another origin than the page, so
+  Monaco's workers couldn't start. The JSON editors then showed no error
+  squiggles and offered no formatting or folding, and threw an error on
+  every edit. Where a worker can't start, the same code now runs on the
+  page. That includes a worker that fails after it was created, for
+  example one a host's CSP forbids, or one whose file is gone after DRS
+  updated while open. ToolBox desktop still uses real workers.
 - **Update and Upsert results show what came back** ([#224]). A 204 used
   to show a made-up `{"@odata.context": "update"}` body in the JSON tab;
   now it shows none. ToolBox's update passes no row back, even with
@@ -151,6 +159,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#224]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/224
 [#244]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/244
 [#236]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/236
+[#255]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/255
 [#291]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/291
 [#294]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/294
 [#226]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/226
