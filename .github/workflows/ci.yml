@@ -24,6 +24,9 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # The version, package-lock.json and the CHANGELOG section agree (#372, RELEASING.md).
+      - name: Check the release metadata
+        run: node .github/scripts/check-release.mjs
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run format:check
@@ -36,6 +39,8 @@ jobs:
             echo "::error::dist has root-absolute /assets/ URLs. Keep base: './' in vite.config.ts."
             exit 1
           fi
+      - name: Check the bundled icon (Insider for pre-releases)
+        run: node .github/scripts/check-release.mjs --dist
       # Monaco ships its own DOMPurify; vite.config.ts swaps in the npm one.
       - name: Check the bundled DOMPurify
         run: node .github/scripts/check-dompurify.mjs

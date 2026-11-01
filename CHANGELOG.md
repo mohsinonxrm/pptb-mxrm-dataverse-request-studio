@@ -137,6 +137,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     squiggles, completions, hover and formatting.
   - CI fails the build if the package, or its startup bundle, grows past
     its budget, or if an unused Monaco worker comes back.
+- **The Insider icon's gold corner is bigger, deeper gold and flush with the
+  corner** ([#363]). The old stamp's right point sat inside the hexagon's edge,
+  leaving a thin blue gap, and the light gold faded at small sizes. The stamp
+  now fills the corner, about 1.5 times larger, in two tones of gold
+  (`#CC8A00` and `#F2A100`) split on the same diagonal as the blue.
+  Prerelease builds only; the release icon is unchanged. Same change as
+  FetchXML Studio.
+- **The README's badges show in the ToolBox** ([#373]). Power Platform ToolBox
+  shows a tool's README in a window that only loads images from GitHub, so the
+  `img.shields.io` badges didn't appear there. They're now SVG files in
+  `assets/badges/`, linked from `raw.githubusercontent.com` as in Command Bar
+  Studio and FetchXML Studio, and generated from `package.json` by
+  `npm run badges`: version, Power Platform ToolBox ≥ 1.2.0, `@pptb/types`,
+  React, TypeScript, Fluent UI and license. The version badge links to npm, in
+  place of the npm `latest` and `beta` badges. The links point at `main`, so
+  the ToolBox shows them from the 1.5.0 release on.
 
 ### 🔧 Internal
 
@@ -155,6 +171,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   drift apart. A test checks they match.
 - One Recent-runs push ([#244]): every mode adds its run with `addRun`,
   which stamps the id and time and keeps the list at `RECENT_SHOWN`.
+- **Releases check what they must update** ([#372]). A new `check-release.mjs`
+  runs in CI (every PR, and pushes to the long-lived branches) and in the
+  release build. It fails when any of these don't match `package.json`'s
+  version:
+  - the version's shape (`X.Y.Z`, `X.Y.Z-beta.N` or `X.Y.Z-rc.N`);
+  - `package-lock.json`;
+  - the CHANGELOG (a dated `[X.Y.Z]` section with entries, under a single
+    `[Unreleased]`);
+  - after the build, the bundled icon (the Insider icon for pre-releases).
+
+  The GitHub Release notes are built by the same script: the PPTB requirement,
+  the CHANGELOG section and a link to the full CHANGELOG, then GitHub's PR
+  list. A release no longer falls back to a PR list alone when the section is
+  missing, because the check fails first. RELEASING.md gains a table of what
+  every release changes and an *After every release* checklist, and forward
+  merges now keep the higher version. Ported from FetchXML Studio's check.
+- **The release check covers the README badges** ([#373]): the files in
+  `assets/badges/` match `package.json`, the README shows them, and no README
+  image comes from `img.shields.io`.
 
 [#224]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/224
 [#244]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/244
@@ -167,6 +202,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#272]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/272
 [#270]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/270
 [#271]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/271
+[#363]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/363
+[#372]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/372
+[#373]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/373
 
 ## [1.5.0-beta.1] - 2026-10-30
 
