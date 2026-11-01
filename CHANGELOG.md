@@ -17,7 +17,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Prerelease builds only; the release icon is unchanged. Same change as
   FetchXML Studio.
 
+### 🔧 Internal
+
+- **Releases check what they must update** ([#372]). A new `check-release.mjs`
+  runs in CI (every PR, and pushes to the long-lived branches) and in the
+  release build. It fails when any of these don't match `package.json`'s
+  version:
+  - the version's shape (`X.Y.Z`, `X.Y.Z-beta.N` or `X.Y.Z-rc.N`);
+  - `package-lock.json`;
+  - the CHANGELOG (a dated `[X.Y.Z]` section with entries, under a single
+    `[Unreleased]`);
+  - after the build, the bundled icon (the Insider icon for pre-releases).
+
+  The GitHub Release notes are built by the same script: the PPTB requirement,
+  the CHANGELOG section and a link to the full CHANGELOG, then GitHub's PR
+  list. A release no longer falls back to a PR list alone when the section is
+  missing, because the check fails first. RELEASING.md gains a table of what
+  every release changes and an *After every release* checklist, and forward
+  merges now keep the higher version. Ported from FetchXML Studio's check,
+  without its README-badge rule for now.
+
 [#363]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/363
+[#372]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/372
 
 ## [1.5.0-beta.1] - 2026-10-30
 
