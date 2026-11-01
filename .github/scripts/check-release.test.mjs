@@ -5,6 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { badgeMarkdown, badges } from './badges.mjs';
 
 // check-release.mjs as release.yml and CI run it (#372), in a folder with just the files it reads.
 const script = fileURLToPath(new URL('./check-release.mjs', import.meta.url));
@@ -14,15 +15,24 @@ const RELEASE = '<svg>release</svg>';
 let dir;
 afterEach(() => dir && rmSync(dir, { recursive: true, force: true }));
 
-function setUp({ version = '1.5.0-beta.2', bundled = INSIDER } = {}) {
+function setUp({ version = '1.5.0-beta.2', bundled = INSIDER, badgeFiles = true } = {}) {
   dir = mkdtempSync(join(tmpdir(), 'drs-release-check-'));
   const write = (path, text) => {
     mkdirSync(join(dir, path, '..'), { recursive: true });
     writeFileSync(join(dir, path), text);
   };
-  write('package.json', JSON.stringify({ version, features: { minAPI: '1.2.0' } }));
+  const pkg = {
+    name: '@scope/tool',
+    version,
+    license: 'MIT',
+    repository: { url: 'git+https://github.com/o/r.git' },
+    features: { minAPI: '1.2.0' },
+  };
+  write('package.json', JSON.stringify(pkg));
   write('package-lock.json', JSON.stringify({ version, packages: { '': { version } } }));
   write('CHANGELOG.md', `## [Unreleased]\n\n## [${version}] - 2026-11-01\n\n- **A fix.**\n`);
+  write('README.md', `# Tool\n\n${badgeMarkdown(pkg).join('\n')}\n`);
+  if (badgeFiles) for (const b of badges(pkg)) write(`assets/badges/${b.file}`, b.svg);
   write('icons/icon-insider.svg', INSIDER);
   write('icons/icon.svg', RELEASE);
   if (bundled) write('dist/icons/icon.svg', bundled);
@@ -66,5 +76,25 @@ describe('check-release.mjs', () => {
     expect(r.status).toBe(1);
     expect(r.out).toMatch(/--notes needs --repository/);
     expect(() => readFileSync(join(dir, 'notes.md'))).toThrow();
+  });
+
+  it('fails when assets/badges/ was never generated', () => {
+    setUp({ badgeFiles: false });
+    const r = run();
+    expect(r.status).toBe(1);
+    expect(r.out).toMatch(
+      /assets\/badges\/ is out of date \(version\.svg, pptb\.svg, license\.svg\)/,
+    );
+  });
+});
+
+describe('write-badges.mjs', () => {
+  it('writes the files the check expects', () => {
+    setUp({ badgeFiles: false });
+    const write = fileURLToPath(new URL('./write-badges.mjs', import.meta.url));
+    const w = spawnSync(process.execPath, [write], { cwd: dir, encoding: 'utf8' });
+    expect(w.status).toBe(0);
+    expect(w.stdout).toMatch(/assets\/badges\/version\.svg/);
+    expect(run()).toMatchObject({ status: 0 });
   });
 });

@@ -9,13 +9,13 @@ file / image / attachment operations.
 Built for [Power Platform ToolBox](https://www.powerplatformtoolbox.com/) with
 React 18, Fluent UI v9, TypeScript, and live Dataverse metadata integration.
 
-[![npm](https://img.shields.io/npm/v/@mohsinonxrm/pptb-dataverse-request-studio?label=npm)](https://www.npmjs.com/package/@mohsinonxrm/pptb-dataverse-request-studio)
-[![npm beta](https://img.shields.io/npm/v/@mohsinonxrm/pptb-dataverse-request-studio/beta?label=beta&color=orange)](https://www.npmjs.com/package/@mohsinonxrm/pptb-dataverse-request-studio?activeTab=versions)
-![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript)
-![Fluent UI](https://img.shields.io/badge/Fluent%20UI-v9-0078D4?logo=microsoft)
-![PPTB Types](https://img.shields.io/badge/%40pptb%2Ftypes-1.2.7-orange)
-![License](https://img.shields.io/badge/license-AGPL--3.0--only-green)
+[![Version](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/version.svg)](https://www.npmjs.com/package/@mohsinonxrm/pptb-dataverse-request-studio)
+![Power Platform ToolBox 1.2.0 or later](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/pptb.svg)
+![@pptb/types 1.2.7](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/pptb-types.svg)
+![React 18](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/react.svg)
+![TypeScript 5.9](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/typescript.svg)
+![Fluent UI v9](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/fluent-ui.svg)
+![License AGPL-3.0-only](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/license.svg)
 
 ---
 
@@ -342,7 +342,15 @@ npm run validate
 
 # Lint (ESLint, no warnings allowed)
 npm run lint
+
+# Regenerate the README badges in assets/badges/ from package.json
+npm run badges
 ```
+
+The badges at the top of this README are SVG files in `assets/badges/`, linked from
+`raw.githubusercontent.com`: Power Platform ToolBox shows the README in a window that only
+loads images from GitHub, so `img.shields.io` badges don't appear there
+([RELEASING.md](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/blob/dev/RELEASING.md#readme-images)).
 
 ### Standalone vs PPTB-embedded
 

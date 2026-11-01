@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`#CC8A00` and `#F2A100`) split on the same diagonal as the blue.
   Prerelease builds only; the release icon is unchanged. Same change as
   FetchXML Studio.
+- **The README's badges show in the ToolBox** ([#373]). Power Platform ToolBox
+  shows a tool's README in a window that only loads images from GitHub, so the
+  `img.shields.io` badges didn't appear there. They're now SVG files in
+  `assets/badges/`, linked from `raw.githubusercontent.com` as in Command Bar
+  Studio and FetchXML Studio, and generated from `package.json` by
+  `npm run badges`: version, Power Platform ToolBox ≥ 1.2.0, `@pptb/types`,
+  React, TypeScript, Fluent UI and license. The version badge links to npm, in
+  place of the npm `latest` and `beta` badges. The links point at `main`, so
+  the ToolBox shows them from the 1.5.0 release on.
 
 ### 🔧 Internal
 
@@ -34,11 +43,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   list. A release no longer falls back to a PR list alone when the section is
   missing, because the check fails first. RELEASING.md gains a table of what
   every release changes and an *After every release* checklist, and forward
-  merges now keep the higher version. Ported from FetchXML Studio's check,
-  without its README-badge rule for now.
+  merges now keep the higher version. Ported from FetchXML Studio's check.
+- **The release check covers the README badges** ([#373]): the files in
+  `assets/badges/` match `package.json`, the README shows them, and no README
+  image comes from `img.shields.io`.
 
 [#363]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/363
 [#372]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/372
+[#373]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/373
 
 ## [1.5.0-beta.1] - 2026-10-30
 

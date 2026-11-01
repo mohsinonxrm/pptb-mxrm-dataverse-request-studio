@@ -1,8 +1,10 @@
 // What every release must update, checked against package.json's version (#372,
-// RELEASING.md): the version's shape, package-lock.json, the CHANGELOG section and the
-// bundled icon. Also builds the GitHub Release notes from the CHANGELOG section. Used by
-// check-release.mjs; pure functions, so they're unit tested (release-checks.test.mjs).
-// Ported from FetchXML Studio, which also checks a README version badge.
+// RELEASING.md): the version's shape, package-lock.json, the CHANGELOG section, the README
+// badges (#373) and the bundled icon. Also builds the GitHub Release notes from the CHANGELOG
+// section. Used by check-release.mjs; pure functions, so they're unit tested
+// (release-checks.test.mjs). Ported from FetchXML Studio.
+
+import { badgeMarkdown, badges } from './badges.mjs';
 
 /** X.Y.Z, X.Y.Z-beta.N or X.Y.Z-rc.N: the shapes release.yml publishes */
 export const VERSION_PATTERN =
@@ -32,9 +34,10 @@ const isIsoDate = (date) =>
 
 /**
  * Problems with the release metadata, or [] when it's consistent.
- * @param {{ pkg: any, lock: any, changelog: string }} files
+ * @param {{ pkg: any, lock: any, changelog: string, readme: string, badgeFiles: Record<string, string | undefined> }} files
+ *   badgeFiles: assets/badges/<file> contents by file name (undefined when missing)
  */
-export function checkReleaseFiles({ pkg, lock, changelog }) {
+export function checkReleaseFiles({ pkg, lock, changelog, readme, badgeFiles }) {
   const problems = [];
   const version = pkg.version;
   if (!VERSION_PATTERN.test(version ?? '')) {
@@ -74,6 +77,26 @@ export function checkReleaseFiles({ pkg, lock, changelog }) {
   }
   const duplicates = sections.filter((s) => s.name === version).length;
   if (duplicates > 1) problems.push(`CHANGELOG.md has ${duplicates} [${version}] sections.`);
+  // README badges: files in assets/badges/ generated from package.json, linked from the README
+  // (PPTB's README viewer blocks img.shields.io)
+  const stale = badges(pkg)
+    .filter(({ file, svg }) => badgeFiles?.[file] !== svg)
+    .map(({ file }) => file);
+  if (stale.length > 0) {
+    problems.push(`assets/badges/ is out of date (${stale.join(', ')}): run \`npm run badges\`.`);
+  }
+  const missing = badgeMarkdown(pkg).filter((line) => !readme.includes(line));
+  if (missing.length > 0) {
+    problems.push(`README.md doesn't show these badges: ${missing.join(' ')}`);
+  }
+  // Any img.shields.io URL (an inline or reference-style image, or an <img>), outside code;
+  // a mention in the text without the URL is fine
+  const prose = readme.replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '');
+  if (/https?:\/\/img\.shields\.io/i.test(prose)) {
+    problems.push(
+      "README.md uses img.shields.io, which PPTB's README viewer blocks: use the badges in assets/badges/.",
+    );
+  }
   return problems;
 }
 
