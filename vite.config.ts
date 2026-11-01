@@ -161,8 +161,9 @@ function bundleReport(): Plugin {
 
 // Vite config — mirrors FetchXML Studio's Monaco-bundling strategy.
 //
-//   • `optimizeDeps.include: ['monaco-editor']`
-//     Pre-bundle Monaco at dev-time so Vite doesn't try to transform its
+//   • `optimizeDeps.include` — the Monaco entry points monacoSetup imports
+//     (the editor core, the JSON service and the basic languages DRS uses,
+//     #236). Pre-bundle them at dev-time so Vite doesn't transform Monaco's
 //     deep internal imports lazily (avoids CJS/ESM interop edge cases that
 //     surface as runtime "module not found" errors).
 //
@@ -187,7 +188,17 @@ export default defineConfig({
   plugins: [react(), toolIcon(), monacoDompurify(), bundleReport()],
   server: { port: 5173, open: true },
   optimizeDeps: {
-    include: ['monaco-editor'],
+    include: [
+      'monaco-editor/esm/vs/editor/edcore.main',
+      'monaco-editor/esm/vs/editor/editor.api',
+      'monaco-editor/esm/vs/language/json/monaco.contribution',
+      'monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution',
+      'monaco-editor/esm/vs/basic-languages/csharp/csharp.contribution',
+      'monaco-editor/esm/vs/basic-languages/python/python.contribution',
+      'monaco-editor/esm/vs/basic-languages/powershell/powershell.contribution',
+      'monaco-editor/esm/vs/basic-languages/shell/shell.contribution',
+      'monaco-editor/esm/vs/basic-languages/xml/xml.contribution',
+    ],
   },
   build: {
     target: 'es2020',

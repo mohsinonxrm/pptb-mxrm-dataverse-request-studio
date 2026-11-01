@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import {
   Breadcrumb,
   BreadcrumbButton,
@@ -37,7 +37,33 @@ import { useSaveContext } from '../state/SaveContext';
 import { useRegisterModeNavigator } from '../state/modeHandoff';
 import { SaveButton, SavedLibraryButton } from '../editors/SavedRequestsDialog';
 import { EnvironmentBadge } from './confirmWrite';
-import { ImportCurlDialog } from './ImportCurlDialog';
+import { notify } from './dialogs';
+import { isChunkLoadError, STALE_BUILD_MESSAGE } from './chunkLoadError';
+
+// The cURL import (#271) loads when it's first opened (#236). The header has
+// no error boundary around it, so a chunk that fails to load (DRS updated
+// while open, #187) says so and closes, instead of taking the app down.
+const ImportCurlDialog = lazy(() =>
+  import('./ImportCurlDialog').then(
+    (m) => ({ default: m.ImportCurlDialog }),
+    (error: unknown) => {
+      const message = isChunkLoadError(error)
+        ? STALE_BUILD_MESSAGE
+        : `The cURL import couldn't load: ${error instanceof Error ? error.message : String(error)}`;
+      return {
+        default: (p: { onClose: () => void }) => <ImportUnavailable {...p} message={message} />,
+      };
+    },
+  ),
+);
+
+function ImportUnavailable({ onClose, message }: { onClose: () => void; message: string }) {
+  useEffect(() => {
+    notify(message, { intent: 'error' });
+    onClose();
+  }, [message, onClose]);
+  return null;
+}
 
 export function FrameHeader({
   themeMode,
@@ -217,7 +243,11 @@ export function FrameHeader({
           </MenuList>
         </MenuPopover>
       </Menu>
-      <ImportCurlDialog open={importOpen} onClose={() => setImportOpen(false)} />
+      {importOpen && (
+        <Suspense fallback={null}>
+          <ImportCurlDialog open onClose={() => setImportOpen(false)} />
+        </Suspense>
+      )}
       <SettingsDrawer
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}

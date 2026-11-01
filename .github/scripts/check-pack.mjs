@@ -6,8 +6,19 @@
 // Usage: npm pack --dry-run --json --silent > pack.json && node .github/scripts/check-pack.mjs pack.json
 import { appendFileSync, readFileSync } from 'node:fs';
 
-const MAX_UNPACKED_BYTES = 22 * 1024 * 1024; // 1.4.0: ~14.5 MB (Monaco is most of it)
-const MAX_PACKED_BYTES = 6 * 1024 * 1024; // 1.4.0: ~3.6 MB
+// Budgets with headroom over the bundle trim (#236), which dropped Monaco's
+// TS, CSS and HTML language services and ~80 unused language chunks. Before
+// it: ~14.5 MB unpacked, ~3.6 MB packed, ~2 MB loaded at startup.
+const MAX_UNPACKED_BYTES = 9 * 1024 * 1024; // #236: ~6.7 MB
+const MAX_PACKED_BYTES = 2.5 * 1024 * 1024; // #236: ~1.8 MB
+// The scripts dist/index.html loads at startup (its module script and any
+// modulepreloads).
+const MAX_BOOT_BYTES = 2 * 1024 * 1024; // #236: ~1.7 MB
+// Files only a full `import 'monaco-editor'` (or a worker DRS doesn't use)
+// would emit: its TS / CSS / HTML language services and workers, and a few
+// of the ~80 basic languages it registers.
+const UNUSED_MONACO =
+  /^dist\/assets\/((ts|css|html)\.worker|tsMode|cssMode|htmlMode|abap|apex|cameligo|solidity)-[\w-]+\.js$/;
 
 const REQUIRED = [
   'package.json',
@@ -40,6 +51,32 @@ for (const file of files) {
 if (!files.some((f) => /^dist\/assets\/index-[\w-]+\.js$/.test(f))) {
   errors.push('missing the app bundle: dist/assets/index-*.js');
 }
+// Startup cost: what dist/index.html loads, read from the built file (the
+// check runs at the package root, after the build).
+const sizeOf = new Map(pkg.files.map((f) => [f.path.replace(/\\/g, '/'), f.size]));
+let html = '';
+try {
+  html = readFileSync('dist/index.html', 'utf8');
+} catch {
+  errors.push("can't read dist/index.html to measure what loads at startup");
+}
+const bootFiles = [
+  ...html.matchAll(/<script\b[^>]*\bsrc="([^"]+\.js)"/g),
+  ...html.matchAll(/<link\b(?=[^>]*\brel="modulepreload")[^>]*\bhref="([^"]+\.js)"/g),
+].map((m) => `dist/${m[1].replace(/^\.?\//, '')}`);
+let bootBytes = 0;
+for (const file of bootFiles) {
+  const size = sizeOf.get(file);
+  if (typeof size !== 'number') errors.push(`startup script ${file} isn't in the package`);
+  else bootBytes += size;
+}
+if (html && bootFiles.length === 0) errors.push('dist/index.html loads no module script');
+if (bootBytes > MAX_BOOT_BYTES) {
+  errors.push(`startup scripts are ${bootBytes} B, over the ${MAX_BOOT_BYTES} B budget`);
+}
+for (const file of files.filter((f) => UNUSED_MONACO.test(f))) {
+  errors.push(`unused Monaco code in package (a full monaco-editor import?): ${file}`);
+}
 if (pkg.unpackedSize > MAX_UNPACKED_BYTES) {
   errors.push(`unpacked size ${pkg.unpackedSize} B exceeds budget ${MAX_UNPACKED_BYTES} B`);
 }
@@ -51,9 +88,9 @@ const mb = (n) => `${(n / 1024 / 1024).toFixed(2)} MB`;
 const summary = [
   `### 📦 ${pkg.name}@${pkg.version}`,
   '',
-  '| files | packed | unpacked |',
-  '| --- | --- | --- |',
-  `| ${pkg.entryCount} | ${mb(pkg.size)} | ${mb(pkg.unpackedSize)} |`,
+  '| files | packed | unpacked | loaded at startup |',
+  '| --- | --- | --- | --- |',
+  `| ${pkg.entryCount} | ${mb(pkg.size)} | ${mb(pkg.unpackedSize)} | ${mb(bootBytes)} |`,
   '',
   errors.length
     ? `❌ ${errors.length} problem(s):\n${errors.map((e) => `- ${e}`).join('\n')}`
