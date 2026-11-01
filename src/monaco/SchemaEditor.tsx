@@ -4,17 +4,23 @@
 // never import Monaco themselves.
 //
 // Monaco's JSON language service takes every schema in one global option,
-// matched to models by file name. So each JSON editor gets its own model
-// path, and the schemas of the mounted editors are collected here and
+// matched to models by file name. So an editor with a schema gets its own
+// model path, and the schemas of the mounted editors are collected here and
 // applied together.
-import { useEffect, useId } from 'react';
+import { useEffect, useId, useMemo } from 'react';
 import Editor, { type EditorProps } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
 import type { BodyJsonSchema } from '../engine/bodySchema';
 
 export interface SchemaEditorProps extends EditorProps {
-  /** JSON Schema for a `language="json"` editor: completions, hover, type checks. */
-  jsonSchema?: BodyJsonSchema;
+  /**
+   * JSON Schema for a `language="json"` editor: completions, hover, type
+   * checks. `null` while it's still loading: the editor already gets its own
+   * model, so the schema arriving later doesn't swap the model under the user.
+   * Leave it out for editors without one; they keep `@monaco-editor/react`'s
+   * single default model (CodeView switches languages on it).
+   */
+  jsonSchema?: BodyJsonSchema | null;
 }
 
 // Model file name → schema, as JSON text (compared by value)
@@ -48,11 +54,18 @@ function queueApply(): void {
 
 export default function SchemaEditor({ jsonSchema, ...props }: SchemaEditorProps) {
   const id = useId();
-  const file = `drs-${id.replace(/[^A-Za-z0-9]/g, '')}.json`;
-  const schemaText = jsonSchema ? JSON.stringify(jsonSchema) : undefined;
+  const path =
+    props.path ??
+    (jsonSchema !== undefined ? `drs-${id.replace(/[^A-Za-z0-9]/g, '')}.json` : undefined);
+  // The JSON service matches `fileMatch` as `**/<pattern>` against the URI
+  const file = path?.split('/').pop();
+  const schemaText = useMemo(
+    () => (jsonSchema ? JSON.stringify(jsonSchema) : undefined),
+    [jsonSchema],
+  );
 
   useEffect(() => {
-    if (!schemaText) return;
+    if (!schemaText || !file) return;
     schemas.set(file, schemaText);
     queueApply();
     return () => {
@@ -61,8 +74,5 @@ export default function SchemaEditor({ jsonSchema, ...props }: SchemaEditorProps
     };
   }, [file, schemaText]);
 
-  // A JSON editor always gets its own path, so a schema that arrives later
-  // (metadata still loading) doesn't swap the model under the user
-  const path = props.path ?? (props.language === 'json' ? file : undefined);
   return <Editor {...props} path={path} />;
 }

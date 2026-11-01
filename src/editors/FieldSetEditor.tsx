@@ -2072,8 +2072,9 @@ function JsonEditPane({
   advancedFindOnly: boolean;
 }) {
   // Completions, hover and type checks for the body (#268). Lookup targets'
-  // entity sets come from their metadata when loaded, else the table list.
-  const { entities } = useLiveEntities();
+  // entity sets come from their metadata when loaded, else the table list,
+  // which is awaited (usually cached) so the JSON worker restarts once.
+  const { entities, loading: entitiesLoading } = useLiveEntities();
   const jsonSchema = useMemo(() => {
     const sets = new Map(entities.map((e) => [e.logicalName, e.entitySetName]));
     return buildBodySchema(table, writable, {
@@ -2205,7 +2206,7 @@ function JsonEditPane({
             height="100%"
             language="json"
             value={text}
-            jsonSchema={jsonSchema}
+            jsonSchema={entitiesLoading ? null : jsonSchema}
             onChange={(v) => onChange(v ?? '')}
             theme={themeMode === 'dark' ? 'vs-dark' : 'light'}
             options={{

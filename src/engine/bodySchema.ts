@@ -28,6 +28,9 @@ export interface BodyJsonSchema {
   description?: string;
   /** Monaco: value completions, with snippet placeholders. */
   defaultSnippets?: { label: string; description?: string; body: unknown }[];
+  pattern?: string;
+  /** Monaco: the warning shown when `pattern` doesn't match. */
+  patternErrorMessage?: string;
   /** Monaco: validated and shown on hover, but not offered in completions. */
   doNotSuggest?: boolean;
   properties?: Record<string, BodyJsonSchema>;
@@ -76,7 +79,11 @@ function columnSchema(c: ColumnMeta, nullable: boolean): BodyJsonSchema {
   const options = columnOptions(c);
   let description = `${c.displayName} (${c.attributeType}).${requiredNote(c)}`;
   if (c.attributeType === 'DateTime') {
-    description += ' ISO 8601, e.g. "2026-11-01" or "2026-11-01T09:00:00Z".';
+    // Date Only behavior is Edm.Date in the Web API: no time part
+    description +=
+      c.dateTimeBehavior === 'DateOnly'
+        ? ' A date, e.g. "2026-11-01".'
+        : ' ISO 8601, e.g. "2026-11-01T09:00:00Z".';
   }
   if (c.attributeType === 'Boolean') {
     description += ` true = ${c.trueOption.label}, false = ${c.falseOption.label}.`;
@@ -101,14 +108,27 @@ function columnSchema(c: ColumnMeta, nullable: boolean): BodyJsonSchema {
       body: o.value,
     }));
   }
+  if (c.attributeType === 'MultiSelectPicklist') {
+    // The common shapes the decoder maps: integers between commas (it skips
+    // empty pieces)
+    schema.pattern = '^\\s*(-?\\d+\\s*)?(,\\s*(-?\\d+\\s*)?)*$';
+    schema.patternErrorMessage = 'Expected comma-separated option values, e.g. "1,2".';
+    if (options?.length) {
+      schema.defaultSnippets = options.map((o) => ({
+        label: `"${o.value}" · ${o.label}`,
+        description: `${o.label}. Add more values after a comma.`,
+        body: String(o.value),
+      }));
+    }
+  }
   return schema;
 }
 
 /**
  * The `@odata.bind` keys for a lookup column, as `bindPropertyFor` names
  * them: one per ManyToOne navigation property that references the column
- * (polymorphic lookups have one per target), or `<column>@odata.bind` when
- * the metadata has none.
+ * (polymorphic lookups have one per target), and `<column>@odata.bind` for
+ * targets without one (all of them when the metadata has no navs).
  */
 function bindKeysOf(
   tbl: TableMeta,
@@ -117,13 +137,17 @@ function bindKeysOf(
   const navs = tbl.navigationProperties.filter(
     (n: NavProperty) => n.cardinality === 'ManyToOne' && n.referencingAttribute === c.logicalName,
   );
-  if (navs.length === 0) return [{ key: `${c.logicalName}@odata.bind`, targets: c.targets }];
   const out = new Map<string, string[]>();
+  const add = (key: string, targets: string[]) =>
+    out.set(key, [...new Set([...(out.get(key) ?? []), ...targets])]);
   for (const n of navs) {
     // An Owner column's single nav targets `owner`; its rows are users or teams
-    const targets = c.targets.includes(n.targetEntity) ? [n.targetEntity] : c.targets;
-    const key = `${n.name}@odata.bind`;
-    out.set(key, [...new Set([...(out.get(key) ?? []), ...targets])]);
+    add(`${n.name}@odata.bind`, c.targets.includes(n.targetEntity) ? [n.targetEntity] : c.targets);
+  }
+  const covered = new Set([...out.values()].flat());
+  const rest = c.targets.filter((t) => !covered.has(t));
+  if (rest.length > 0 || out.size === 0) {
+    add(`${c.logicalName}@odata.bind`, rest.length > 0 ? rest : c.targets);
   }
   return [...out].map(([key, targets]) => ({ key, targets }));
 }

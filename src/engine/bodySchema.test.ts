@@ -104,6 +104,45 @@ describe('buildBodySchema', () => {
     expect(props(s)['primarycontactid@odata.bind']).toBeDefined();
   });
 
+  it('keys a polymorphic target without a nav property by the column, as bindPropertyFor does', () => {
+    const tbl: TableMeta = {
+      ...contact,
+      navigationProperties: contact.navigationProperties.filter(
+        (n) => n.targetEntity !== 'contact',
+      ),
+    };
+    const s = buildBodySchema(tbl, writable(tbl), { nullSupported: true, entitySetOf });
+    expect(props(s)['parentcustomerid_account@odata.bind'].defaultSnippets?.[0].label).toBe(
+      '/accounts(<guid>)',
+    );
+    expect(props(s)['parentcustomerid@odata.bind'].defaultSnippets?.map((d) => d.label)).toEqual([
+      '/contacts(<guid>)',
+    ]);
+  });
+
+  it('describes date-only columns without a time part', () => {
+    const date = (dateTimeBehavior: string) =>
+      ({
+        logicalName: 'd',
+        displayName: 'D',
+        attributeType: 'DateTime',
+        format: 'DateOnly',
+        dateTimeBehavior,
+      }) as ColumnMeta;
+    const only = buildBodySchema(account, [date('DateOnly')], { nullSupported: false });
+    expect(props(only).d.description).toContain('A date, e.g. "2026-11-01".');
+    const local = buildBodySchema(account, [date('UserLocal')], { nullSupported: false });
+    expect(props(local).d.description).toContain('"2026-11-01T09:00:00Z"');
+  });
+
+  it('completes a multi-select to its values, as strings', () => {
+    const s = buildBodySchema(account, writable(account), { nullSupported: true, entitySetOf });
+    expect(props(s).sample_tags.defaultSnippets).toEqual([
+      { label: '"100" · A', description: 'A. Add more values after a comma.', body: '100' },
+      { label: '"200" · B', description: 'B. Add more values after a comma.', body: '200' },
+    ]);
+  });
+
   it('completes choices to their values, labelled in the list', () => {
     const s = buildBodySchema(account, writable(account), { nullSupported: true, entitySetOf });
     expect(props(s).industrycode).toMatchObject({
@@ -114,7 +153,6 @@ describe('buildBodySchema', () => {
       ],
     });
     expect(props(s).industrycode.description).toContain('Values: 1 = Accounting, 2 = Agriculture.');
-    expect(props(s).sample_tags.defaultSnippets).toBeUndefined();
     expect(props(s).sample_tags.description).toContain('Comma-separated values: 100 = A, 200 = B.');
   });
 
@@ -155,8 +193,9 @@ describe('buildBodySchema', () => {
   });
 });
 
-// The schema's types, checked the way Monaco's JSON service does
+// The schema's types and pattern, checked the way Monaco's JSON service does
 function accepts(s: BodyJsonSchema, v: unknown): boolean {
+  if (s.pattern && typeof v === 'string' && !new RegExp(s.pattern).test(v)) return false;
   if (!s.type) return true;
   const types = Array.isArray(s.type) ? s.type : [s.type];
   return types.some((t) =>
@@ -171,7 +210,24 @@ function accepts(s: BodyJsonSchema, v: unknown): boolean {
 }
 
 describe('buildBodySchema agrees with decodeFieldBody', () => {
-  const samples: unknown[] = ['text', '', 3, 2.5, 0, true, false, null, [100], { a: 1 }];
+  const samples: unknown[] = [
+    'text',
+    '',
+    3,
+    2.5,
+    0,
+    true,
+    false,
+    null,
+    [100],
+    { a: 1 },
+    '100,200',
+    ' 100 , 200 ',
+    '100,,200',
+    '1,x',
+    '1 2',
+    '-1',
+  ];
   const cols = writable(account).filter((c) => c.attributeType !== 'Lookup');
   const schema = buildBodySchema(account, cols, { nullSupported: true, entitySetOf });
 
@@ -185,8 +241,6 @@ describe('buildBodySchema agrees with decodeFieldBody', () => {
           expect(accepts(props(schema)[c.logicalName], v)).toBe(false);
           continue;
         }
-        // A multi-select string must be numbers; the schema only checks it's a string
-        if (c.attributeType === 'MultiSelectPicklist' && typeof v === 'string') continue;
         expect([c.logicalName, v, accepts(props(schema)[c.logicalName], v)]).toEqual([
           c.logicalName,
           v,
