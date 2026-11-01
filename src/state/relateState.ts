@@ -48,6 +48,8 @@ export interface AssociateState {
    * render as "(name not resolved)" with the GUID still visible.
    */
   targetNames: Record<string, string>;
+  /** All or nothing (#224): send 2+ collection-valued targets as one change set. */
+  allOrNothing?: boolean;
   /** HTTP headers. */
   headers: HeaderItem[];
   /** Dirty bits for sidebar badges. */
@@ -81,6 +83,8 @@ export interface DisassociateState {
    * + saved-request rehydration.
    */
   targetNames: Record<string, string>;
+  /** All or nothing (#224): send 2+ collection-valued targets as one change set. */
+  allOrNothing?: boolean;
   /** HTTP headers. */
   headers: HeaderItem[];
   /** Dirty bits for sidebar badges. */

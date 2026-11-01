@@ -46,6 +46,7 @@ import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from '../editors/PaneHead';
 import { NavPropertyPicker } from '../editors/NavPropertyPicker';
 import { AssociateTargetsEditor, targetsTitle } from '../editors/AssociateTargetsEditor';
+import { AllOrNothingOption } from '../editors/AllOrNothingOption';
 import { TargetEditor } from '../editors/TargetEditor';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
@@ -58,7 +59,7 @@ import {
   relateRequestHeaders,
 } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
-import { relateDoneCount } from '../engine/dataverseExecutor';
+import { relateAsChangeSet, relateDoneCount } from '../engine/dataverseExecutor';
 import type { DisassociateState } from '../state/relateState';
 import { isCollectionValuedNav, isSingleValuedNav } from '../state/relateState';
 import type { RecentRun } from '../state/readState';
@@ -150,6 +151,8 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // Docs-preferred verb per cardinality (see file header).
   const method: 'DELETE' | 'PATCH' = isSingle ? 'PATCH' : 'DELETE';
+  // All or nothing (#224): the targets go as one change set, as Execute sends them.
+  const changeSet = isCollection && relateAsChangeSet(state.allOrNothing, requests.length);
 
   // ── Live source-lookup fetch (single-valued only) ──
   //
@@ -523,6 +526,8 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
           setTargetIds={(ids) => set('targetIds', ids, 'target')}
           targetNames={state.targetNames}
           setTargetNames={(n) => set('targetNames', n)}
+          setAllOrNothing={(v) => set('allOrNothing', v || undefined, 'target')}
+          changeSet={changeSet}
           currentLookup={currentLookup}
           currentLookupLoading={currentLookupLoading}
           currentLookupError={currentLookupError}
@@ -562,6 +567,7 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
             description: r.targetId ? `target ${r.targetId}` : 'clear lookup (null)',
           }))
         : undefined,
+    changeSet,
   };
 
   // ── Build the WriteResultCard context. For single-valued, the "targets"
@@ -647,6 +653,8 @@ function TargetPane({
   setTargetIds,
   targetNames,
   setTargetNames,
+  setAllOrNothing,
+  changeSet,
   currentLookup,
   currentLookupLoading,
   currentLookupError,
@@ -655,6 +663,8 @@ function TargetPane({
   setTargetIds: (ids: string[]) => void;
   targetNames: Record<string, string>;
   setTargetNames: (next: Record<string, string>) => void;
+  setAllOrNothing: (next: boolean) => void;
+  changeSet: boolean;
   currentLookup: CurrentLookup | null;
   currentLookupLoading: boolean;
   currentLookupError: string | null;
@@ -798,11 +808,22 @@ function TargetPane({
       group="relate"
       resolvedMethod={null}
       verb="DELETE"
+      changeSet={changeSet}
+      footer={
+        <AllOrNothingOption
+          checked={!!state.allOrNothing}
+          onChange={setAllOrNothing}
+          targets={state.targetIds.length}
+          verb="DELETE"
+        />
+      }
       sub={
         <>
           Pick one or more <code>{targetTbl?.logicalName}</code> rows to remove from the collection.
-          Each fires a separate DELETE request per docs — the target rows are <strong>not</strong>{' '}
-          deleted, only the links.
+          {changeSet
+            ? 'The DELETE requests go together as one change set'
+            : 'Each fires a separate DELETE request per docs'}{' '}
+          — the target rows are <strong>not</strong> deleted, only the links.
         </>
       }
     />

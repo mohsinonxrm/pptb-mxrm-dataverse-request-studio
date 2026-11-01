@@ -32,6 +32,7 @@ import {
   CheckmarkCircle16Filled,
   ErrorCircle16Filled,
   SubtractCircle16Regular,
+  ArrowUndo16Regular,
   DocumentCopy20Regular,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../../primitives/styles';
@@ -608,7 +609,9 @@ function buildNarrative(
       return {
         title:
           n > 1 ? `Associated ${n} records to ${entityDisplay}` : `Associated to ${entityDisplay}`,
-        body: `Linked ${targetsFrag} to ${sourceFrag} ${navLabel}.`.replace(/\s+\./, '.'),
+        body:
+          `Linked ${targetsFrag} to ${sourceFrag} ${navLabel}.`.replace(/\s+\./, '.') +
+          (result.changeSet ? ' Sent as one change set.' : ''),
       };
     }
     case 'disassociate': {
@@ -629,7 +632,7 @@ function buildNarrative(
             ? `Removed ${n} link${n === 1 ? '' : 's'} from ${sourceFrag} ${navLabel}.`.replace(
                 /\s+\./,
                 '.',
-              )
+              ) + (result.changeSet ? ' Sent as one change set.' : '')
             : `Cleared the lookup on ${sourceFrag} ${navLabel}.`.replace(/\s+\./, '.'),
       };
     }
@@ -741,10 +744,12 @@ function relateNarrative(
   if (ctx.operation !== 'associate' && ctx.operation !== 'disassociate') return null;
   if (!showTargetList(result)) return null;
   const n = result.targets!.length;
-  const { done, skipped, failed } = relateTargetCounts(result);
+  const counts = relateTargetCounts(result);
+  const { done, skipped, failed } = counts;
+  const rolledBack = counts['rolled-back'];
   // Every target linked / unlinked, or the single target failed: the
   // regular framings say it best.
-  if ((failed === 0 && skipped === 0) || (failed === n && n === 1)) return null;
+  if ((failed === 0 && skipped === 0 && rolledBack === 0) || (failed === n && n === 1)) return null;
   const assoc = ctx.operation === 'associate';
   const plural = (k: number) => `${k} record${k === 1 ? '' : 's'}`;
   const sourceFrag = name
@@ -762,6 +767,23 @@ function relateNarrative(
   const rerun = assoc
     ? 'Fix the failures and Execute again: targets that are already linked are skipped.'
     : 'Fix the failures, remove the targets that were unlinked, and Execute again: every listed target is sent again.';
+
+  // All or nothing (#224): the change set failed, so none of it applied.
+  if (rolledBack > 0) {
+    const sent = failed + rolledBack;
+    return {
+      title: `${assoc ? 'Associate' : 'Disassociate'} failed — nothing changed`,
+      body: (
+        `The ${plural(sent)} were sent as one change set. ` +
+        (failed > 0
+          ? `One failed, so Dataverse rolled back the other ${rolledBack}. `
+          : `It failed as a whole, so none of them was applied. `) +
+        `Nothing was changed on ${sourceFrag}${navLabel}.` +
+        skippedFrag +
+        ' Fix the failure and Execute again.'
+      ).trim(),
+    };
+  }
 
   if (failed === 0) {
     const verb = assoc ? 'Linked' : 'Removed links to';
@@ -821,9 +843,11 @@ function TargetResultList({
         : 'Unlinked'
       : t.state === 'skipped'
         ? 'Already linked · skipped'
-        : t.status
-          ? `Failed · ${t.status} ${t.statusText ?? ''}`.trim()
-          : 'Failed';
+        : t.state === 'rolled-back'
+          ? 'Not applied · rolled back'
+          : t.status
+            ? `Failed · ${t.status} ${t.statusText ?? ''}`.trim()
+            : 'Failed';
   return (
     <div className={s.inlineCard} style={{ padding: 12 }}>
       <Caption1
@@ -846,13 +870,17 @@ function TargetResultList({
               ? CheckmarkCircle16Filled
               : t.state === 'skipped'
                 ? SubtractCircle16Regular
-                : ErrorCircle16Filled;
+                : t.state === 'rolled-back'
+                  ? ArrowUndo16Regular
+                  : ErrorCircle16Filled;
           const color =
             t.state === 'done'
               ? tokens.colorPaletteGreenForeground1
               : t.state === 'skipped'
                 ? tokens.colorNeutralForeground3
-                : tokens.colorPaletteRedForeground1;
+                : t.state === 'rolled-back'
+                  ? tokens.colorPaletteDarkOrangeForeground1
+                  : tokens.colorPaletteRedForeground1;
           const name = names[t.targetId];
           return (
             <div key={t.targetId} style={{ display: 'flex', gap: 8, minWidth: 0 }}>
@@ -878,7 +906,9 @@ function TargetResultList({
                         ? 'success'
                         : t.state === 'skipped'
                           ? 'informative'
-                          : 'danger'
+                          : t.state === 'rolled-back'
+                            ? 'warning'
+                            : 'danger'
                     }
                   >
                     {label(t)}

@@ -186,7 +186,7 @@ interface Wire {
 function codeTab(inputs: CodegenInputs): Wire[] {
   const out = JSON.parse(generateCode('json', inputs));
   const rel = (u: string) => (u.startsWith(API) ? u.slice(API.length) : u);
-  if (out.mode === 'multi-request') {
+  if (out.mode === 'multi-request' || out.mode === 'change-set') {
     return out.requests.map((r: { method: string; relativeUrl: string; body?: unknown }) => ({
       method: r.method,
       path: rel(r.relativeUrl),
@@ -744,4 +744,59 @@ describe('Associate / Disassociate', () => {
     expect(sent).toHaveLength(2);
     sent.forEach((w, i) => expectSame(code[i], w, sentHeaders.relate(code[i].headers)));
   });
+
+  // All or nothing (#224): the same requests, as one executeTransaction call.
+  it.each(['associate', 'disassociate'] as const)(
+    '%s, all or nothing: one change set with the same requests',
+    async (op) => {
+      const assoc = op === 'associate';
+      const s = {
+        table: 'account',
+        sourceId: ACCOUNT_ID,
+        navProperty: 'contact_customer_accounts',
+        [assoc ? 'targets' : 'targetIds']: [CONTACT_ID, CONTACT_2],
+        targetNames: {},
+        allOrNothing: true,
+        headers: relatePane(),
+        dirty: new Set(),
+      } as unknown as AssociateState & DisassociateState;
+      const requests = assoc ? buildAssociateRequests(s) : buildDisassociateRequests(s);
+      const inputs: CodegenInputs = {
+        method: assoc ? 'POST' : 'DELETE',
+        built: assoc ? buildAssociate(s) : buildDisassociate(s),
+        headers: headerItemsToObject(s.headers, null),
+        multiRequests: requests.map((r) => ({
+          method: r.method,
+          relativeUrl: r.relativeUrl,
+          body: r.body as Record<string, unknown> | undefined,
+        })),
+        changeSet: true,
+      };
+      expect(JSON.parse(generateCode('json', inputs)).mode).toBe('change-set');
+      const code = codeTab(inputs);
+      await run(() =>
+        assoc
+          ? runtime.associate(s, headerItemsToObject(s.headers, null))
+          : runtime.disassociate(s, headerItemsToObject(s.headers, null)),
+      );
+      expect(host.calls.filter((c) => c.op === op)).toHaveLength(0);
+      const tx = host.calls.filter((c) => c.op === 'executeTransaction');
+      expect(tx).toHaveLength(1);
+      const parts = tx[0].args[0] as {
+        method: string;
+        url: string;
+        headers: Headers;
+        body?: unknown;
+      }[];
+      expect(tx[0].args).toHaveLength(1);
+      expect(parts).toHaveLength(2);
+      parts.forEach((p, i) =>
+        expectSame(
+          code[i],
+          { method: p.method, path: p.url, headers: p.headers, body: p.body },
+          sentHeaders.relate(code[i].headers),
+        ),
+      );
+    },
+  );
 });

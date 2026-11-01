@@ -12,6 +12,8 @@ import { API_BASE, ENV } from '../mock/environment';
 import { generateOpenApi } from './openApiGenerator';
 import { isCredentialHeader, withoutCredentialHeaders } from './sensitiveHeaders';
 import { encodeSpaces } from '../primitives/urlParts';
+import { CRLF, encodeBatch } from './batch/multipart';
+import type { BatchMethod } from './batch/batchModel';
 
 export type CodeFormat =
   | 'fetch'
@@ -99,6 +101,12 @@ export interface CodegenInputs {
    * and single-request preview.
    */
   multiRequests?: MultiRequest[];
+  /**
+   * Associate / Disassociate with All or nothing on (#224): send
+   * `multiRequests` (2+) as one `$batch` change set instead of one call
+   * each, so Dataverse applies all of them or none.
+   */
+  changeSet?: boolean;
 }
 
 export interface MultiRequest {
@@ -480,6 +488,7 @@ ${headerBlock}
  * $batch request (separate mode, lands later).
  */
 function genFetchMulti(i: CodegenInputs): string {
+  if (isChangeSet(i)) return genFetchChangeSet(i);
   const hdrs = stripAuth(i.headers);
   const headerBlock = jsHeaderObject(hdrs, '      ');
   const reqs = i.multiRequests ?? [];
@@ -508,7 +517,8 @@ function genFetchMulti(i: CodegenInputs): string {
 //   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/associate-disassociate-entities-using-web-api
 //
 // For more than a handful of targets, prefer a $batch request — sending
-// many small requests in sequence is slower and not transactional.
+// many small requests in sequence is slower and not transactional. (All or
+// nothing sends them as one $batch change set.)
 
 (async () => {
   const requests = [
@@ -541,6 +551,107 @@ ${headerBlock}
 }
 
 // ────────────────────────────────────────────────────────────
+// All or nothing (#224) — the multi-request as one $batch change set
+// ────────────────────────────────────────────────────────────
+//
+//   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/execute-batch-operations-using-web-api
+
+/** True when the generators send `multiRequests` as one change set. */
+const isChangeSet = (i: CodegenInputs): boolean =>
+  !!i.changeSet && !!i.multiRequests && i.multiRequests.length > 1;
+
+// The outer $batch request carries these; inside a part they add nothing.
+const OUTER_ONLY = new Set([
+  'accept',
+  'content-type',
+  'content-length',
+  'odata-version',
+  'odata-maxversion',
+]);
+
+/** Fixed boundaries keep the snippet stable; they only have to not appear in a body. */
+const CHANGE_SET_BOUNDARIES = { batch: 'batch_drs', changeset: () => 'changeset_drs' };
+
+interface ChangeSetBatch {
+  url: string;
+  /** Outer headers, Content-Type (with the boundary) last; no Authorization. */
+  headers: [string, string][];
+  /** The multipart body's lines; each ends in CRLF on the wire. */
+  lines: string[];
+}
+
+/** The change-set `$batch` request: one part per request, the user's headers on each. */
+function changeSetBatch(i: CodegenInputs): ChangeSetBatch {
+  const shared = Object.entries(stripAuth(i.headers)).filter(
+    ([k]) => !OUTER_ONLY.has(k.toLowerCase()),
+  );
+  const parts = (i.multiRequests ?? []).map((r, n) => ({
+    contentId: String(n + 1),
+    wire: {
+      method: r.method as BatchMethod,
+      path: r.relativeUrl.startsWith(`${ENV.apiBase}/`)
+        ? r.relativeUrl.slice(ENV.apiBase.length + 1)
+        : r.relativeUrl.replace(/^\//, ''),
+      headers: { ...Object.fromEntries(shared), ...(r.headers ?? {}) },
+      body: r.body ? JSON.stringify(r.body) : undefined,
+    },
+  }));
+  const encoded = encodeBatch([{ atomic: true, parts }], CHANGE_SET_BOUNDARIES);
+  const lines = encoded.body.split(CRLF);
+  if (lines[lines.length - 1] === '') lines.pop();
+  return {
+    url: `https://${ENV.host}${ENV.apiBase}/$batch`,
+    headers: [
+      ['OData-MaxVersion', '4.0'],
+      ['OData-Version', '4.0'],
+      ['Accept', 'application/json'],
+      ['Content-Type', encoded.contentType],
+    ],
+    lines,
+  };
+}
+
+const CHANGE_SET_NOTE = (n: number) =>
+  `The ${n} requests go in one change set: Dataverse applies all of them or, if
+any fails, none. Every line of the body must end in CRLF.
+  https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/execute-batch-operations-using-web-api`;
+
+/** Prefix each line of a multi-line comment. */
+const commented = (text: string, prefix: string) =>
+  text
+    .split('\n')
+    .map((l) => `${prefix} ${l}`.trimEnd())
+    .join('\n');
+
+function genFetchChangeSet(i: CodegenInputs): string {
+  const b = changeSetBatch(i);
+  return `// Dataverse Web API — fetch, one $batch change set (all or nothing)
+//
+${commented(CHANGE_SET_NOTE(i.multiRequests!.length), '//')}
+
+(async () => {
+  const body = [
+${b.lines.map((l) => `    ${JSON.stringify(l)},`).join('\n')}
+  ].join('\\r\\n') + '\\r\\n';
+
+  const res = await fetch('${jsEscape(b.url)}', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer <access-token>',
+${b.headers.map(([k, v]) => `      '${jsEscape(k)}': '${jsEscape(v)}',`).join('\n')}
+    },
+    body,
+  });
+
+  // The response is multipart/mixed: a result per request when the change
+  // set succeeds, or the failing request's error when it's rolled back.
+  console.log(res.status, res.headers.get('Content-Type'));
+  console.log(await res.text());
+})().catch(console.error);
+`;
+}
+
+// ────────────────────────────────────────────────────────────
 // Xrm.WebApi — model-driven app / D365 form scripts
 // ────────────────────────────────────────────────────────────
 function genXrm(i: CodegenInputs): string {
@@ -562,7 +673,7 @@ console.log('Next page:', page.value);
   if (i.multiRequests && i.multiRequests.length > 1) {
     return `// Xrm.WebApi doesn't expose Associate / Disassociate $ref endpoints
 // directly — the documented path is Xrm.WebApi.online.execute() with a
-// request descriptor, or fall back to a fetch loop. We emit the fetch loop:
+// request descriptor, or fall back to fetch. We emit the ${isChangeSet(i) ? '$batch change set' : 'fetch loop'}:
 
 ${genFetchMulti(i)}`;
   }
@@ -935,8 +1046,13 @@ ${xrmFunctionMembers(i, fn, '      ')}
       i.multiRequests && i.multiRequests.length > 0
         ? i.multiRequests
         : [{ url, method: i.method, body: i.body ?? null }];
+    // All or nothing (#224): a nested array is a change set.
+    const changeSet = isChangeSet(i);
+    const changeSetNote = changeSet
+      ? '\n// The requests go as one change set (the nested array): all succeed or none do.'
+      : '';
     return `// Xrm.WebApi.online.executeMultiple — ${opName} via CRUD descriptors.
-// Each request describes one (target, relationship, related) tuple.
+// Each request describes one (target, relationship, related) tuple.${changeSetNote}
 
 (async () => {
   const requests = [
@@ -959,7 +1075,7 @@ ${sources
   .join('\n')}
   ];
 
-  const results = await Xrm.WebApi.online.executeMultiple(requests);
+  const results = await Xrm.WebApi.online.executeMultiple(${changeSet ? '[requests]' : 'requests'});
   console.log(\`\${results.filter(r => r.ok).length}/\${results.length} succeeded\`);
 })().catch(err => console.error('executeMultiple error:', err));
 `;
@@ -1207,7 +1323,10 @@ function classifyPowerAutomate(i: CodegenInputs): PowerAutomateClass {
         : i.method === 'PUT' && isColumn
           ? 'A single-column PUT has no matching row action. Use "Update a row" with just that column, or send this request with "Invoke an HTTP request".'
           : isRef
-            ? 'Associate / disassociate via $ref. The connector\'s "Relate rows" / "Unrelate rows" actions cover this, or send this request with "Invoke an HTTP request".'
+            ? 'Associate / disassociate via $ref. The connector\'s "Relate rows" / "Unrelate rows" actions cover this, or send this request with "Invoke an HTTP request".' +
+              (isChangeSet(i)
+                ? ' For all or nothing, put one action per target in a "Perform a changeset request" action.'
+                : '')
             : isRow && !isGuidRow
               ? 'This request addresses the row by alternate key, which the connector\'s row actions don\'t take. Send it with "Invoke an HTTP request".'
               : 'The connector\'s row actions can\'t express this request. Send it with "Invoke an HTTP request".';
@@ -1902,6 +2021,41 @@ ${apply_warning}
 // C# — HttpClient
 // ────────────────────────────────────────────────────────────
 function genCsharp(i: CodegenInputs): string {
+  if (isChangeSet(i)) {
+    const b = changeSetBatch(i);
+    const ctype = b.headers[b.headers.length - 1][1];
+    const outer = b.headers
+      .slice(0, -1)
+      .map(
+        ([k, v]) =>
+          `http.DefaultRequestHeaders.TryAddWithoutValidation("${csharpString(k)}", "${csharpString(v)}");`,
+      )
+      .join('\n');
+    return `// .NET 8 — HttpClient, one $batch change set (all or nothing)
+//
+${commented(CHANGE_SET_NOTE(i.multiRequests!.length), '//')}
+
+using System.Net.Http;
+using System.Net.Http.Headers;
+
+var http = new HttpClient { BaseAddress = new Uri("https://${ENV.host}/") };
+http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "<access-token>");
+${outer}
+
+var body = string.Join("\\r\\n", new[]
+{
+${b.lines.map((l) => `    "${csharpString(l)}",`).join('\n')}
+}) + "\\r\\n";
+var content = new StringContent(body);
+content.Headers.ContentType = MediaTypeHeaderValue.Parse("${csharpString(ctype)}");
+
+var res = await http.PostAsync("${csharpString(b.url.replace(`https://${ENV.host}/`, ''))}", content);
+// The response is multipart/mixed: a result per request when the change set
+// succeeds, or the failing request's error when it's rolled back.
+Console.WriteLine($"{(int)res.StatusCode} {res.ReasonPhrase}");
+Console.WriteLine(await res.Content.ReadAsStringAsync());
+`;
+  }
   if (i.multiRequests && i.multiRequests.length > 1) {
     const reqs = i.multiRequests;
     const headerLines = Object.entries(i.headers)
@@ -2116,8 +2270,42 @@ else:
 `;
 }
 
+/** All or nothing (#224): the requests as one $batch change set. */
+function genPythonChangeSet(i: CodegenInputs): string {
+  const b = changeSetBatch(i);
+  return `# Dataverse Web API — Python (requests), one $batch change set (all or nothing)
+#
+${commented(CHANGE_SET_NOTE(i.multiRequests!.length), '#')}
+# pip install requests and replace <access-token> with a bearer token.
+
+import requests
+
+ACCESS_TOKEN = "<access-token>"
+
+body = "\\r\\n".join([
+${b.lines.map((l) => `    ${pyStr(l)},`).join('\n')}
+]) + "\\r\\n"
+
+res = requests.post(
+    ${pyStr(b.url)},
+    headers={
+        "Authorization": "Bearer " + ACCESS_TOKEN,
+${b.headers.map(([k, v]) => `        ${pyStr(k)}: ${pyStr(v)},`).join('\n')}
+    },
+    data=body.encode("utf-8"),
+    timeout=120,
+)
+
+# The response is multipart/mixed: a result per request when the change set
+# succeeds, or the failing request's error when it's rolled back.
+print(res.status_code, res.headers.get("Content-Type"))
+print(res.text)
+`;
+}
+
 /** Multi-request Python — one call per request, sent in order on one Session. */
 function genPythonMulti(i: CodegenInputs): string {
+  if (isChangeSet(i)) return genPythonChangeSet(i);
   const reqs = i.multiRequests ?? [];
   const headerLines = pyDictLines(stripAuth(i.headers), '    ');
   const calls = reqs
@@ -2238,6 +2426,32 @@ function psQuote(v: string): string {
 // PowerShell — Invoke-RestMethod
 // ────────────────────────────────────────────────────────────
 function genPowershell(i: CodegenInputs): string {
+  if (isChangeSet(i)) {
+    const b = changeSetBatch(i);
+    const ctype = b.headers[b.headers.length - 1][1];
+    return `# PowerShell — Invoke-RestMethod, one $batch change set (all or nothing)
+#
+${commented(CHANGE_SET_NOTE(i.multiRequests!.length), '#')}
+
+$token = "<access-token>"
+$headers = @{
+  Authorization = "Bearer $token"
+${b.headers
+  .slice(0, -1)
+  .map(([k, v]) => `  ${psQuote(k)} = ${psQuote(v)}`)
+  .join('\n')}
+}
+
+$body = (@(
+${b.lines.map((l) => `  ${psQuote(l)}`).join('\n')}
+) -join "\`r\`n") + "\`r\`n"
+
+# The response is multipart/mixed: a result per request when the change set
+# succeeds, or the failing request's error when it's rolled back.
+Invoke-RestMethod -Method POST -Uri ${psQuote(b.url)} -Headers $headers \`
+  -ContentType ${psQuote(ctype)} -Body $body
+`;
+  }
   if (i.multiRequests && i.multiRequests.length > 1) {
     const reqs = i.multiRequests;
     const headerLines = Object.entries(i.headers)
@@ -2317,6 +2531,21 @@ $response | ConvertTo-Json -Depth 8
 // cURL — shell / CI scripts
 // ────────────────────────────────────────────────────────────
 function genCurl(i: CodegenInputs): string {
+  if (isChangeSet(i)) {
+    const b = changeSetBatch(i);
+    return `# cURL — one $batch change set (all or nothing)
+#
+${commented(CHANGE_SET_NOTE(i.multiRequests!.length), '#')}
+# printf writes each line with its CRLF; curl reads the body from stdin.
+
+printf '%s\\r\\n' \\
+${b.lines.map((l) => `  ${shQuote(l)}`).join(' \\\n')} |
+curl -X POST --globoff ${shQuote(b.url)} \\
+  -H "Authorization: Bearer <access-token>" \\
+${b.headers.map(([k, v]) => `  -H ${shQuote(`${k}: ${v}`)}`).join(' \\\n')} \\
+  --data-binary @-
+`;
+  }
   if (i.multiRequests && i.multiRequests.length > 1) {
     const reqs = i.multiRequests;
     const hdrs = stripAuth(i.headers);
@@ -2372,9 +2601,13 @@ ${hdrLines}${body}
 // ────────────────────────────────────────────────────────────
 function genJson(i: CodegenInputs): string {
   if (i.multiRequests && i.multiRequests.length > 1) {
+    // All or nothing (#224): the same requests, sent as one change set.
+    const changeSet = isChangeSet(i)
+      ? { mode: 'change-set', method: 'POST', url: `https://${ENV.host}${ENV.apiBase}/$batch` }
+      : { mode: 'multi-request' };
     return JSON.stringify(
       {
-        mode: 'multi-request',
+        ...changeSet,
         headers: withoutCredentialHeaders(i.headers),
         requests: i.multiRequests.map((r) => ({
           method: r.method,
