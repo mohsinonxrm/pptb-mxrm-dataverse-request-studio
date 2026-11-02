@@ -1,7 +1,7 @@
 // Monaco bootstrap — loaded on demand by `MonacoEditor` (React.lazy), so the
 // monaco-editor chunk stays off DRS's startup path (#22). Everything that
 // must run before the first <Editor> mounts lives here, in one place.
-import Editor, { loader } from '@monaco-editor/react';
+import { loader } from '@monaco-editor/react';
 // The editor core with its standard features (find, folding, bracket
 // matching, …), without the languages `import 'monaco-editor'` brings: that
 // entry registers ~80 basic languages and the TypeScript, CSS and HTML
@@ -27,6 +27,7 @@ import 'monaco-editor/esm/vs/basic-languages/xml/xml.contribution';
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
 import { workerOrInPage } from './inPageWorker';
+import SchemaEditor from './SchemaEditor';
 
 // Bundle Monaco locally — PPTB's CSP forbids fetching from cdn.jsdelivr.net
 // ("script-src 'self' 'unsafe-inline' pptb-webview:"). `loader.config({ monaco })`
@@ -45,4 +46,5 @@ self.MonacoEnvironment = {
   },
 };
 
-export default Editor;
+// `@monaco-editor/react`'s Editor, with per-model JSON schemas (#268)
+export default SchemaEditor;

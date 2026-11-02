@@ -105,7 +105,7 @@ import {
   type DecodedFieldBody,
   type UnmappedBodyKey,
 } from '../engine/fieldBody';
-import { useColumnDetail } from '../host/useColumnDetail';
+import { useColumnDetail, useTableDetail } from '../host/useColumnDetail';
 import {
   behaviorHint,
   behaviorOf,
@@ -122,7 +122,9 @@ import Editor from '../monaco/MonacoEditor';
 import type { ThemeMode } from '../theme/theme';
 import type { CreateFieldValue, LookupFieldValue } from '../state/writeState';
 import type { RequestGroup } from '../registry/requestTypes';
-import { scopedColumns, useAdvancedFindOnly } from '../state/metadataScope';
+import { isColumnInScope, scopedColumns, useAdvancedFindOnly } from '../state/metadataScope';
+import { buildBodySchema } from '../engine/bodySchema';
+import { useLiveEntities } from '../host/useLiveMetadata';
 import { copyText } from '../shell/copy';
 
 // ──────────────────────────────────────────────────────────────
@@ -679,6 +681,10 @@ export function FieldSetEditor({
           onStay={() => setSwitchIssue(null)}
           themeMode={themeMode}
           onChange={onJsonChange}
+          table={tbl}
+          writable={writable}
+          nullSupported={nullFieldsSupported}
+          advancedFindOnly={advancedFindOnly}
         />
       )}
 
@@ -2042,6 +2048,10 @@ function JsonEditPane({
   onStay,
   themeMode,
   onChange,
+  table,
+  writable,
+  nullSupported,
+  advancedFindOnly,
 }: {
   text: string;
   error: string | null;
@@ -2055,7 +2065,34 @@ function JsonEditPane({
   onStay: () => void;
   themeMode: ThemeMode;
   onChange: (text: string) => void;
+  table: TableMeta;
+  /** The columns the form can set; the schema offers the same (#268). */
+  writable: ColumnMeta[];
+  nullSupported: boolean;
+  advancedFindOnly: boolean;
 }) {
+  // Completions, hover and type checks for the body (#268). The table's
+  // first load has no options, lookup targets or date behavior, so the
+  // whole table is enriched here. Lookup targets' entity sets come from
+  // their metadata when loaded, else the table list. Both are awaited
+  // (usually cached), so the JSON worker restarts once.
+  const { entities, loading: entitiesLoading } = useLiveEntities();
+  const { table: liveTable, loading: detailLoading } = useTableDetail(table.logicalName);
+  const jsonSchema = useMemo(() => {
+    const tbl = liveTable ?? table;
+    const live = new Map(tbl.columns.map((c) => [c.logicalName, c]));
+    const sets = new Map(entities.map((e) => [e.logicalName, e.entitySetName]));
+    return buildBodySchema(
+      tbl,
+      writable.map((c) => live.get(c.logicalName) ?? c),
+      {
+        nullSupported,
+        suggest: (c) => isColumnInScope(c, advancedFindOnly),
+        entitySetOf: (t) => findTable(t)?.entitySetName ?? sets.get(t),
+      },
+    );
+  }, [table, liveTable, writable, nullSupported, advancedFindOnly, entities]);
+
   const keyList = (
     <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
       {unmapped.map((u) => (
@@ -2178,6 +2215,7 @@ function JsonEditPane({
             height="100%"
             language="json"
             value={text}
+            jsonSchema={entitiesLoading || detailLoading ? null : jsonSchema}
             onChange={(v) => onChange(v ?? '')}
             theme={themeMode === 'dark' ? 'vs-dark' : 'light'}
             options={{

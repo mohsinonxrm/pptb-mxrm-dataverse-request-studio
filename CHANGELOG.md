@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
+- **The JSON body editor knows the table** ([#268]). In a field set's JSON view
+  (Create, Update, Upsert, Bulk Write rows and entity parameters):
+  - **Keys:** typing `"` lists the columns the form can set. Lookups are
+    listed as their `@odata.bind` keys, one per target for Customer and other
+    polymorphic lookups.
+  - **Values:**
+    - Choice, Status and State columns list their values with labels, for
+      example `Accounting · 1`; typing a number narrows the list. Multi-select
+      choices list theirs as strings.
+    - A lookup key inserts `"/<entityset>(<guid>)"`, with the GUID selected.
+  - **Hover:** a key shows its column's display name, type and whether it's
+    required.
+  - **Type check:** a value of the wrong JSON type is underlined, for example
+    text in a Currency column. The check follows the same rules as switching
+    back to the Form view, with one difference: a multi-select value given as
+    an array is underlined too, because a JSON body is sent as typed and
+    Dataverse wants `"1,2"`.
+
+  With *Advanced Find only* on, columns Advanced Find hides aren't listed, but
+  they still get hover text and type checks. Unknown keys and annotations
+  aren't underlined, because the pane already lists them. The table's option
+  values, lookup targets and date behaviour load when the JSON view opens, in
+  one request per column type.
+
 - **Results suggest the next step** ([#291]):
   - **0 rows:** **Edit $filter** opens the $filter, **Run without $filter**
     removes it from the builder and runs again (with **Restore $filter**
@@ -223,6 +247,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#244]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/244
 [#236]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/236
 [#255]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/255
+[#268]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/268
 [#291]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/291
 [#294]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/294
 [#226]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/226

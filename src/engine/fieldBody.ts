@@ -217,9 +217,11 @@ function resolveTarget(targets: string[], entitySet: string): string | undefined
   );
 }
 
-const NUMBER_TYPES = new Set(['Integer', 'BigInt', 'Decimal', 'Double', 'Money']);
-const INT_CHOICE_TYPES = new Set(['Picklist', 'State', 'Status']);
-const STRING_TYPES = new Set(['String', 'Memo', 'Uniqueidentifier', 'DateTime']);
+// The JSON types `decodeFieldBody` maps, per attribute type. The JSON view's
+// schema (engine/bodySchema) uses the same sets, so its warnings agree.
+export const NUMBER_TYPES = new Set(['Integer', 'BigInt', 'Decimal', 'Double', 'Money']);
+export const INT_CHOICE_TYPES = new Set(['Picklist', 'State', 'Status']);
+export const STRING_TYPES = new Set(['String', 'Memo', 'Uniqueidentifier', 'DateTime']);
 
 const typeOfJson = (v: unknown): string =>
   Array.isArray(v) ? 'an array' : v === null ? 'null' : `a ${typeof v}`;
