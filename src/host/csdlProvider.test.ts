@@ -85,8 +85,22 @@ const CSDL = `<?xml version="1.0" encoding="utf-8"?>
         <Parameter Name="EntityName" Type="Edm.String" Nullable="false" />
         <ReturnType Type="Edm.Int64" Nullable="false" />
       </Function>
-      <Function Name="Last7Days" IsBound="true" IsComposable="true">
+      <Function Name="Last7Days">
+        <Parameter Name="PropertyName" Type="Edm.String" Nullable="false" Unicode="false" />
+        <ReturnType Type="Edm.Boolean" Nullable="false" />
+      </Function>
+      <Function Name="Contains">
+        <Parameter Name="PropertyName" Type="Edm.String" Nullable="false" Unicode="false" />
+        <Parameter Name="PropertyValue" Type="Edm.String" Nullable="false" Unicode="false" />
+        <ReturnType Type="Edm.Boolean" Nullable="false" />
+      </Function>
+      <Function Name="IsActiveFor" IsBound="true">
+        <Parameter Name="entity" Type="mscrm.account" Nullable="false" />
         <Parameter Name="PropertyName" Type="Edm.String" Nullable="false" />
+        <ReturnType Type="Edm.Boolean" Nullable="false" />
+      </Function>
+      <Function Name="IsEnabled">
+        <Parameter Name="FeatureName" Type="Edm.String" Nullable="false" />
         <ReturnType Type="Edm.Boolean" Nullable="false" />
       </Function>
     </Schema>
@@ -114,6 +128,9 @@ describe('parseCsdl', () => {
       ['WhoAmI', 'Function'],
       ['RetrieveCount', 'Function'],
       ['Last7Days', 'Function'],
+      ['Contains', 'Function'],
+      ['IsActiveFor', 'Function'],
+      ['IsEnabled', 'Function'],
     ]);
     expect(new Set(actions.map((a) => a.namespace))).toEqual(new Set(['Microsoft.Dynamics.CRM']));
   });
@@ -214,8 +231,22 @@ describe('parseCsdl', () => {
     expect(count.isComposable).toBe(true);
     expect(count.returnType).toEqual({ kind: 'primitive', typeName: 'Edm.Int64' });
     expect(count.isQueryFunction).toBeUndefined();
-    expect(byName(actions, 'Last7Days').isQueryFunction).toBe(true);
     expect(byName(actions, 'WinOpportunity').isComposable).toBeUndefined();
+  });
+
+  it('recognises query functions, which Dataverse declares unbound (#384)', () => {
+    expect(byName(actions, 'Last7Days')).toMatchObject({
+      isQueryFunction: true,
+      binding: { kind: 'unbound' },
+    });
+    expect(byName(actions, 'Contains').isQueryFunction).toBe(true);
+    // Bound: the first parameter is the binding; PropertyName comes after it
+    expect(byName(actions, 'IsActiveFor')).toMatchObject({
+      isQueryFunction: true,
+      binding: { kind: 'entity', entityType: 'account' },
+    });
+    // A Boolean function without PropertyName is an ordinary function
+    expect(byName(actions, 'IsEnabled').isQueryFunction).toBeUndefined();
   });
 
   it('classifies publisher-prefixed messages as custom and the rest as OOB', () => {

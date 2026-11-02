@@ -135,6 +135,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🐛 Fixed
 
+- **Execute Function no longer lists query functions** ([#384]). `Last7Days`,
+  `Contains`, `Between` and the other `$filter` query functions only work
+  inside a `$filter`, and the picker was meant to hide them. It missed them
+  because Dataverse declares them unbound.
 - **JSON bodies are checked in the PPTB VS Code extension** ([#255]). The
   extension serves DRS's files from another origin than the page, so
   Monaco's workers couldn't start. The JSON editors then showed no error
@@ -275,6 +279,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#372]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/372
 [#373]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/373
 [#376]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/376
+[#384]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/384
 
 ## [1.5.0-beta.1] - 2026-10-30
 

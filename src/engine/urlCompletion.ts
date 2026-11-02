@@ -378,17 +378,6 @@ function resolveTable(
   return { table, path };
 }
 
-/**
- * A `$filter` query function (Last7Days, Contains, …), not a path segment.
- * Dataverse declares them unbound, so `isQueryFunction` (which looks for
- * IsBound) can miss them: match their signature too.
- */
-const isFilterFunction = (a: CsdlAction) =>
-  a.isQueryFunction ||
-  (a.kind === 'Function' &&
-    a.parameters[0]?.name === 'PropertyName' &&
-    a.returnType?.typeName === 'Edm.Boolean');
-
 const operationInsert = (a: CsdlAction, bound: boolean) => {
   const name = bound ? `${a.namespace}.${a.name}` : a.name;
   if (a.kind === 'Action') return name;
@@ -450,7 +439,7 @@ export function urlSuggestions(ctx: CaretContext, deps: SuggestionDeps): Suggest
       }
       // An unbound function or action can start the path too
       for (const a of deps.operations) {
-        if (a.binding.kind !== 'unbound' || isFilterFunction(a)) continue;
+        if (a.binding.kind !== 'unbound' || a.isQueryFunction) continue;
         all.push({
           label: a.name,
           insert: operationInsert(a, false),
@@ -466,7 +455,7 @@ export function urlSuggestions(ctx: CaretContext, deps: SuggestionDeps): Suggest
       if (single) all.push(...navs());
       else all.push(...keywords(['$count'], 'Number of rows'));
       for (const a of deps.operations) {
-        if (a.binding.kind === 'unbound' || isFilterFunction(a)) continue;
+        if (a.binding.kind === 'unbound' || a.isQueryFunction) continue;
         // `crmbaseentity`: bound to any table
         const t = a.binding.entityType;
         if (t !== table.logicalName && t !== 'crmbaseentity') continue;
