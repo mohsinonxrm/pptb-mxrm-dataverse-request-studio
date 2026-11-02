@@ -317,3 +317,28 @@ describe('review fixes', () => {
     expect(r.items.map((s) => s.label)).toContain('Microsoft.Dynamics.CRM.ExportPdfDocument');
   });
 });
+
+describe('ranking', () => {
+  it('puts the shortest starts-with match first once something is typed', () => {
+    const many = ['contactinvoicescollection', 'contactleadscollection', 'contacts'].map((s) => ({
+      logicalName: s,
+      entitySetName: s,
+      displayName: s,
+    }));
+    const r = urlSuggestions(at('cont|')!, { ...deps, entities: many, operations: [] });
+    expect(r.items[0].label).toBe('contacts');
+    const none = urlSuggestions(at('|')!, { ...deps, entities: many, operations: [] });
+    expect(none.items[0].label).toBe('contactinvoicescollection');
+  });
+});
+
+describe('query functions', () => {
+  it('leaves out $filter query functions that the CSDL declares unbound', () => {
+    const last7 = {
+      ...op('Last7Days', 'Function', { kind: 'unbound' }, ['PropertyName']),
+      returnType: { kind: 'primitive', typeName: 'Edm.Boolean' },
+    } as CsdlAction;
+    const r = urlSuggestions(at('La|')!, { ...deps, operations: [...deps.operations, last7] });
+    expect(r.items.map((s) => s.label)).not.toContain('Last7Days');
+  });
+});

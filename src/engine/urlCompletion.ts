@@ -378,6 +378,17 @@ function resolveTable(
   return { table, path };
 }
 
+/**
+ * A `$filter` query function (Last7Days, Contains, …), not a path segment.
+ * Dataverse declares them unbound, so `isQueryFunction` (which looks for
+ * IsBound) can miss them: match their signature too.
+ */
+const isFilterFunction = (a: CsdlAction) =>
+  a.isQueryFunction ||
+  (a.kind === 'Function' &&
+    a.parameters[0]?.name === 'PropertyName' &&
+    a.returnType?.typeName === 'Edm.Boolean');
+
 const operationInsert = (a: CsdlAction, bound: boolean) => {
   const name = bound ? `${a.namespace}.${a.name}` : a.name;
   if (a.kind === 'Action') return name;
@@ -439,7 +450,7 @@ export function urlSuggestions(ctx: CaretContext, deps: SuggestionDeps): Suggest
       }
       // An unbound function or action can start the path too
       for (const a of deps.operations) {
-        if (a.binding.kind !== 'unbound' || a.isQueryFunction) continue;
+        if (a.binding.kind !== 'unbound' || isFilterFunction(a)) continue;
         all.push({
           label: a.name,
           insert: operationInsert(a, false),
@@ -455,7 +466,7 @@ export function urlSuggestions(ctx: CaretContext, deps: SuggestionDeps): Suggest
       if (single) all.push(...navs());
       else all.push(...keywords(['$count'], 'Number of rows'));
       for (const a of deps.operations) {
-        if (a.binding.kind === 'unbound' || a.isQueryFunction) continue;
+        if (a.binding.kind === 'unbound' || isFilterFunction(a)) continue;
         // `crmbaseentity`: bound to any table
         const t = a.binding.entityType;
         if (t !== table.logicalName && t !== 'crmbaseentity') continue;
@@ -526,9 +537,14 @@ export function urlSuggestions(ctx: CaretContext, deps: SuggestionDeps): Suggest
   return { ...rank(all, ctx.prefix), ...(needTable ? { needTable } : {}) };
 }
 
-/** Labels starting with the prefix first, then other matches; capped. */
 /** `$select` → `select`, `_parentcustomerid_value` → `parentcustomerid_value`. */
 const bare = (s: string) => s.replace(/^[$_]/, '');
+
+/**
+ * Labels starting with the prefix first, shortest first (`cont` →
+ * `contacts` before `contactinvoicescollection`), then other matches;
+ * capped. Nothing typed keeps the list's own order.
+ */
 
 function rank(
   all: UrlSuggestion[],
@@ -542,6 +558,8 @@ function rank(
     if (!p || label.startsWith(p)) starts.push(s);
     else if (label.includes(p) || s.displayName?.toLowerCase().includes(p)) contains.push(s);
   }
+  // Stable: equal lengths keep their order
+  if (p) starts.sort((a, b) => a.label.length - b.label.length);
   const matched = [...starts, ...contains];
   // A list holding only what's already typed has nothing to offer
   if (matched.length === 1 && matched[0].insert.toLowerCase() === prefix.trim().toLowerCase()) {
