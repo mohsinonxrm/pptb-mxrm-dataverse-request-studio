@@ -14,10 +14,16 @@ import type { CsdlAction } from '../metadata/actionsCsdl';
 
 beforeAll(registerFixtureTables);
 
+/** `marked` without its one `|` caret marker, and where the marker was. */
+function unmark(marked: string): { text: string; caret: number } {
+  const caret = marked.indexOf('|');
+  return { text: marked.slice(0, caret) + marked.slice(caret + 1), caret };
+}
+
 /** The context at `|` in `marked`. */
 function at(marked: string, mode: UrlMode = 'url', set?: string): CaretContext | null {
-  const caret = marked.indexOf('|');
-  return urlCaretContext(marked.replace('|', ''), caret, mode, set);
+  const { text, caret } = unmark(marked);
+  return urlCaretContext(text, caret, mode, set);
 }
 
 const op = (
@@ -266,7 +272,7 @@ describe('review fixes', () => {
   it('inserts mid-word without repeating what follows the word', () => {
     const apply = (marked: string, insert: string) => {
       const ctx = at(marked)!;
-      return applySuggestion(marked.replace('|', ''), ctx, {
+      return applySuggestion(unmark(marked).text, ctx, {
         label: insert,
         insert,
         kind: 'keyword',
