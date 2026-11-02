@@ -69,6 +69,7 @@ import { decodeForDisplay } from '../primitives/decodeForDisplay';
 import { readClipboardText } from '../host/pptbBridge';
 import { notify } from '../shell/dialogs';
 import { addRun, useRecentRuns } from '../state/runHistory';
+import { useUrlSuggest } from '../primitives/useUrlSuggest';
 
 const initialState = (): RetrieveNextLinkState => ({
   url: '',
@@ -171,6 +172,13 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
     [state, allEntities],
   );
   const analysis = useMemo(() => analyzeNextLink(state.url, env.host), [state.url, env.host]);
+  // Completion when the link is typed or edited rather than pasted (#268)
+  const urlSuggest = useUrlSuggest({
+    value: state.url,
+    onChange: (v) => set('url', v, 'url'),
+    mode: 'url',
+    multiline: true,
+  });
 
   const markDirty = (id: ClauseId) =>
     setState((s) => {
@@ -347,11 +355,12 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
             <Textarea
               rows={6}
               value={state.url}
-              onChange={(_, d) => set('url', d.value, 'url')}
+              {...urlSuggest.fieldProps}
               placeholder={`https://${env.host}${env.apiBase}/<entityset>?$select=…&$skiptoken=…`}
               style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 11 }}
             />
           </Field>
+          {urlSuggest.list}
 
           {/* Errors stack — one MessageBar per error so each is independently readable.
             Mirrors what the URL-bar AdvisoryDrawer shows; redundancy is intentional
