@@ -33,6 +33,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   values, lookup targets and date behaviour load when the JSON view opens, in
   one request per column type.
 
+- **Hand-typed URLs get suggestions** ([#268]). The Batch custom request URL and
+  Retrieve query options, the Paste OData URL dialog and Retrieve Next Link list
+  what fits where the caret is:
+  - **Path:** tables and unbound functions and actions, then a row's navigation
+    properties and bound operations, or a table's `$count`.
+  - **Query options:** option names, columns in `$select` and `$orderby`
+    (lookups as `_<column>_value`), `asc` / `desc`, navigation properties in
+    `$expand` and the options inside `$expand(…)`, for the nav's own table.
+  - **`$filter`:** columns, `nav/column` paths, `contains` / `startswith` /
+    `endswith`, then operators and `and` / `or`.
+
+  The list opens as you type, not when you paste a URL. ↑ / ↓ move through it,
+  Enter or Tab inserts, Esc closes it, and Ctrl+Space opens it again. *Advanced
+  Find only* narrows it like the pickers. Lambdas (`any` / `all`) aren't
+  suggested yet.
+
 - **Results suggest the next step** ([#291]):
   - **0 rows:** **Edit $filter** opens the $filter, **Run without $filter**
     removes it from the builder and runs again (with **Restore $filter**
