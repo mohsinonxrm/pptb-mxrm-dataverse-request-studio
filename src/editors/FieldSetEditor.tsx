@@ -105,7 +105,7 @@ import {
   type DecodedFieldBody,
   type UnmappedBodyKey,
 } from '../engine/fieldBody';
-import { useColumnDetail } from '../host/useColumnDetail';
+import { useColumnDetail, useTableDetail } from '../host/useColumnDetail';
 import {
   behaviorHint,
   behaviorOf,
@@ -2071,18 +2071,27 @@ function JsonEditPane({
   nullSupported: boolean;
   advancedFindOnly: boolean;
 }) {
-  // Completions, hover and type checks for the body (#268). Lookup targets'
-  // entity sets come from their metadata when loaded, else the table list,
-  // which is awaited (usually cached) so the JSON worker restarts once.
+  // Completions, hover and type checks for the body (#268). The table's
+  // first load has no options, lookup targets or date behavior, so the
+  // whole table is enriched here. Lookup targets' entity sets come from
+  // their metadata when loaded, else the table list. Both are awaited
+  // (usually cached), so the JSON worker restarts once.
   const { entities, loading: entitiesLoading } = useLiveEntities();
+  const { table: liveTable, loading: detailLoading } = useTableDetail(table.logicalName);
   const jsonSchema = useMemo(() => {
+    const tbl = liveTable ?? table;
+    const live = new Map(tbl.columns.map((c) => [c.logicalName, c]));
     const sets = new Map(entities.map((e) => [e.logicalName, e.entitySetName]));
-    return buildBodySchema(table, writable, {
-      nullSupported,
-      suggest: (c) => isColumnInScope(c, advancedFindOnly),
-      entitySetOf: (t) => findTable(t)?.entitySetName ?? sets.get(t),
-    });
-  }, [table, writable, nullSupported, advancedFindOnly, entities]);
+    return buildBodySchema(
+      tbl,
+      writable.map((c) => live.get(c.logicalName) ?? c),
+      {
+        nullSupported,
+        suggest: (c) => isColumnInScope(c, advancedFindOnly),
+        entitySetOf: (t) => findTable(t)?.entitySetName ?? sets.get(t),
+      },
+    );
+  }, [table, liveTable, writable, nullSupported, advancedFindOnly, entities]);
 
   const keyList = (
     <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
@@ -2206,7 +2215,7 @@ function JsonEditPane({
             height="100%"
             language="json"
             value={text}
-            jsonSchema={entitiesLoading ? null : jsonSchema}
+            jsonSchema={entitiesLoading || detailLoading ? null : jsonSchema}
             onChange={(v) => onChange(v ?? '')}
             theme={themeMode === 'dark' ? 'vs-dark' : 'light'}
             options={{

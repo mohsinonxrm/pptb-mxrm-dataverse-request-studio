@@ -16,7 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     polymorphic lookups.
   - **Values:**
     - Choice, Status and State columns list their values with labels, for
-      example `1 · Accounting`; multi-select choices list theirs as strings.
+      example `Accounting · 1`; typing a number narrows the list. Multi-select
+      choices list theirs as strings.
     - A lookup key inserts `"/<entityset>(<guid>)"`, with the GUID selected.
   - **Hover:** a key shows its column's display name, type and whether it's
     required.
@@ -28,7 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   With *Advanced Find only* on, columns Advanced Find hides aren't listed, but
   they still get hover text and type checks. Unknown keys and annotations
-  aren't underlined, because the pane already lists them.
+  aren't underlined, because the pane already lists them. The table's option
+  values, lookup targets and date behaviour load when the JSON view opens, in
+  one request per column type.
 
 - **Results suggest the next step** ([#291]):
   - **0 rows:** **Edit $filter** opens the $filter, **Run without $filter**

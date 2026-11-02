@@ -44,7 +44,7 @@ describe('buildBodySchema', () => {
         body: '/contacts(${1:00000000-0000-0000-0000-000000000000})',
       },
     ]);
-    expect(bind.description).toContain('"/contacts(<guid>)", or null to clear it');
+    expect(bind.description).toContain('"/contacts({guid})", or null to clear it');
   });
 
   it('leaves the entity set as a placeholder when it isn’t known', () => {
@@ -54,7 +54,7 @@ describe('buildBodySchema', () => {
     expect(bind.defaultSnippets?.[0].body).toBe(
       '/${1:contacts}(${2:00000000-0000-0000-0000-000000000000})',
     );
-    expect(bind.description).toContain('"/<contact entity set>(<guid>)".');
+    expect(bind.description).toContain('"/{contact entity set}({guid})".');
   });
 
   it('gives a polymorphic lookup one key per target, named after its nav property', () => {
@@ -120,6 +120,35 @@ describe('buildBodySchema', () => {
     ]);
   });
 
+  it('falls back to the nav properties’ targets until the column’s targets load', () => {
+    const bare = {
+      ...contact,
+      columns: contact.columns.map((c) =>
+        c.logicalName === 'parentcustomerid' ? ({ ...c, targets: [] } as ColumnMeta) : c,
+      ),
+    };
+    const s = buildBodySchema(bare, writable(bare), { nullSupported: true, entitySetOf });
+    expect(props(s)['parentcustomerid_account@odata.bind'].description).toContain('→ account).');
+    expect(props(s)['parentcustomerid_contact@odata.bind'].defaultSnippets?.[0].label).toBe(
+      '/contacts(<guid>)',
+    );
+    expect(props(s)['parentcustomerid@odata.bind']).toBeUndefined();
+  });
+
+  it('describes a lookup with no known targets without snippets', () => {
+    const tbl: TableMeta = {
+      ...account,
+      columns: account.columns.map((c) =>
+        c.logicalName === 'primarycontactid' ? ({ ...c, targets: [] } as ColumnMeta) : c,
+      ),
+      navigationProperties: [],
+    };
+    const s = buildBodySchema(tbl, writable(tbl), { nullSupported: false, entitySetOf });
+    const bind = props(s)['primarycontactid@odata.bind'];
+    expect(bind.description).toContain('(Lookup). Value: "/{entity set}({guid})".');
+    expect(bind.defaultSnippets).toEqual([]);
+  });
+
   it('describes date-only columns without a time part', () => {
     const date = (dateTimeBehavior: string) =>
       ({
@@ -138,8 +167,8 @@ describe('buildBodySchema', () => {
   it('completes a multi-select to its values, as strings', () => {
     const s = buildBodySchema(account, writable(account), { nullSupported: true, entitySetOf });
     expect(props(s).sample_tags.defaultSnippets).toEqual([
-      { label: '"100" · A', description: 'A. Add more values after a comma.', body: '100' },
-      { label: '"200" · B', description: 'B. Add more values after a comma.', body: '200' },
+      { label: 'A · "100"', description: 'A. Add more values after a comma.', body: '100' },
+      { label: 'B · "200"', description: 'B. Add more values after a comma.', body: '200' },
     ]);
   });
 
@@ -148,8 +177,8 @@ describe('buildBodySchema', () => {
     expect(props(s).industrycode).toMatchObject({
       type: ['integer', 'null'],
       defaultSnippets: [
-        { label: '1 · Accounting', description: 'Accounting', body: 1 },
-        { label: '2 · Agriculture', description: 'Agriculture', body: 2 },
+        { label: 'Accounting · 1', description: 'Accounting', body: 1 },
+        { label: 'Agriculture · 2', description: 'Agriculture', body: 2 },
       ],
     });
     expect(props(s).industrycode.description).toContain('Values: 1 = Accounting, 2 = Agriculture.');

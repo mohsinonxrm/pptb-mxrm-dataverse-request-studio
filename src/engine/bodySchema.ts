@@ -100,10 +100,11 @@ function columnSchema(c: ColumnMeta, nullable: boolean): BodyJsonSchema {
   // Choices complete to their values, labelled in the list. Not an `enum`:
   // Monaco would list bare numbers (the labels only in the details pane),
   // and the decoder maps any integer, as Dataverse reports a wrong one.
-  // Booleans get true / false from their type.
+  // Label first: the list sorts by label as text (1, 10, 2 by value), and
+  // typing filters by the value. Booleans get true / false from their type.
   if (INT_CHOICE_TYPES.has(c.attributeType) && options?.length) {
     schema.defaultSnippets = options.map((o) => ({
-      label: `${o.value} · ${o.label}`,
+      label: `${o.label} · ${o.value}`,
       description: o.label,
       body: o.value,
     }));
@@ -115,7 +116,7 @@ function columnSchema(c: ColumnMeta, nullable: boolean): BodyJsonSchema {
     schema.patternErrorMessage = 'Expected comma-separated option values, e.g. "1,2".';
     if (options?.length) {
       schema.defaultSnippets = options.map((o) => ({
-        label: `"${o.value}" · ${o.label}`,
+        label: `${o.label} · "${o.value}"`,
         description: `${o.label}. Add more values after a comma.`,
         body: String(o.value),
       }));
@@ -137,17 +138,22 @@ function bindKeysOf(
   const navs = tbl.navigationProperties.filter(
     (n: NavProperty) => n.cardinality === 'ManyToOne' && n.referencingAttribute === c.logicalName,
   );
+  // Targets come with the column's details; until they load (or if that
+  // failed), the navs name them
+  const targets = c.targets.length
+    ? c.targets
+    : [...new Set(navs.map((n) => n.targetEntity).filter((t) => t !== 'owner'))];
   const out = new Map<string, string[]>();
-  const add = (key: string, targets: string[]) =>
-    out.set(key, [...new Set([...(out.get(key) ?? []), ...targets])]);
+  const add = (key: string, ts: string[]) =>
+    out.set(key, [...new Set([...(out.get(key) ?? []), ...ts])]);
   for (const n of navs) {
     // An Owner column's single nav targets `owner`; its rows are users or teams
-    add(`${n.name}@odata.bind`, c.targets.includes(n.targetEntity) ? [n.targetEntity] : c.targets);
+    add(`${n.name}@odata.bind`, targets.includes(n.targetEntity) ? [n.targetEntity] : targets);
   }
   const covered = new Set([...out.values()].flat());
-  const rest = c.targets.filter((t) => !covered.has(t));
+  const rest = targets.filter((t) => !covered.has(t));
   if (rest.length > 0 || out.size === 0) {
-    add(`${c.logicalName}@odata.bind`, rest.length > 0 ? rest : c.targets);
+    add(`${c.logicalName}@odata.bind`, rest.length > 0 ? rest : targets);
   }
   return [...out].map(([key, targets]) => ({ key, targets }));
 }
@@ -159,11 +165,16 @@ function bindSchema(
   entitySetOf: (logicalName: string) => string | undefined,
 ): BodyJsonSchema {
   const sets = targets.map((t) => ({ target: t, set: entitySetOf(t) }));
-  const shown = sets.map((s) => `/${s.set ?? `<${s.target} entity set>`}(<guid>)`).join(' or ');
+  // Not <guid>: the hover renders the description as Markdown, which drops
+  // anything that looks like an HTML tag
+  const shown = sets.length
+    ? sets.map((s) => `/${s.set ?? `{${s.target} entity set}`}({guid})`).join(' or ')
+    : '/{entity set}({guid})';
+  const to = targets.length ? ` → ${targets.join(', ')}` : '';
   return {
     type: nullable ? ['string', 'null'] : 'string',
     description:
-      `${c.displayName} (${c.attributeType} → ${targets.join(', ')}).${requiredNote(c)} ` +
+      `${c.displayName} (${c.attributeType}${to}).${requiredNote(c)} ` +
       `Value: "${shown}"${nullable ? ', or null to clear it' : ''}.`,
     defaultSnippets: sets.map((s) => ({
       label: `/${s.set ?? s.target}(<guid>)`,

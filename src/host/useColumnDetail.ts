@@ -24,7 +24,7 @@
 // flag used to skip them, so refreshed picklists lost their options and
 // lookups their targets (#53).
 
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   findTable,
   type ColumnMeta,
@@ -48,7 +48,12 @@ import {
   type DateTimeColumnMeta,
   type MultiSelectPicklistColumnMeta,
 } from '../metadata/metadata';
-import { loadAttributeWithOptionSet, loadAttributeDetailedMetadata } from './dataverseMetadata';
+import {
+  loadAttributeWithOptionSet,
+  loadAttributeDetailedMetadata,
+  loadAttributesByTypeCast,
+} from './dataverseMetadata';
+import { activeOrg } from './activeOrg';
 import type { AttributeMetadata } from './pptbClient';
 
 // Column objects that are enriched (or need no enrichment), so we don't
@@ -140,12 +145,8 @@ function isAlreadyEnriched(col: ColumnMeta): boolean {
   }
 }
 
-// Apply detailed AttributeMetadata onto the column in the live registry
-// and re-register the table so subscribers refresh.
-function patchInto(tbl: TableMeta, columnLogical: string, raw: AttributeMetadata): void {
-  const idx = tbl.columns.findIndex((c) => c.logicalName === columnLogical);
-  if (idx < 0) return;
-  const col = tbl.columns[idx];
+// The column with detailed AttributeMetadata applied, as a new object.
+function patchColumn(col: ColumnMeta, raw: AttributeMetadata): ColumnMeta {
   const patched: ColumnMeta = { ...col };
 
   switch (patched.attributeType) {
@@ -234,9 +235,17 @@ function patchInto(tbl: TableMeta, columnLogical: string, raw: AttributeMetadata
     }
   }
 
-  const nextCols = [...tbl.columns];
-  nextCols[idx] = patched;
   __enriched.add(patched);
+  return patched;
+}
+
+// Apply detailed AttributeMetadata onto the column in the live registry
+// and re-register the table so subscribers refresh.
+function patchInto(tbl: TableMeta, columnLogical: string, raw: AttributeMetadata): void {
+  const idx = tbl.columns.findIndex((c) => c.logicalName === columnLogical);
+  if (idx < 0) return;
+  const nextCols = [...tbl.columns];
+  nextCols[idx] = patchColumn(tbl.columns[idx], raw);
   __registerLiveTable({ ...tbl, columns: nextCols });
 }
 
@@ -309,4 +318,145 @@ export function useColumnDetail(
   }, [entityLogical, columnLogical, col]);
 
   return { loading, error };
+}
+
+// ── Whole-table enrichment ─────────────────────────────────────────────
+//
+// The JSON body editor's schema (#268) describes every writable column at
+// once: options, lookup targets, date behavior. One type-cast request per
+// attribute subtype fills them all, instead of one request per column.
+
+const BULK_CASTS: { types: string[]; cast: string; select: string; expand?: string }[] = [
+  {
+    types: ['Picklist'],
+    cast: 'Microsoft.Dynamics.CRM.PicklistAttributeMetadata',
+    select: 'LogicalName,DefaultFormValue',
+    expand: 'OptionSet($select=Options)',
+  },
+  {
+    types: ['MultiSelectPicklist'],
+    cast: 'Microsoft.Dynamics.CRM.MultiSelectPicklistAttributeMetadata',
+    select: 'LogicalName,DefaultFormValue',
+    expand: 'OptionSet($select=Options)',
+  },
+  {
+    types: ['State'],
+    cast: 'Microsoft.Dynamics.CRM.StateAttributeMetadata',
+    select: 'LogicalName',
+    expand: 'OptionSet($select=Options)',
+  },
+  {
+    types: ['Status'],
+    cast: 'Microsoft.Dynamics.CRM.StatusAttributeMetadata',
+    select: 'LogicalName',
+    expand: 'OptionSet($select=Options)',
+  },
+  {
+    types: ['Boolean'],
+    cast: 'Microsoft.Dynamics.CRM.BooleanAttributeMetadata',
+    select: 'LogicalName',
+    expand: 'OptionSet($select=TrueOption,FalseOption)',
+  },
+  {
+    // Customer and Owner columns are LookupAttributeMetadata too
+    types: ['Lookup', 'Customer', 'Owner'],
+    cast: 'Microsoft.Dynamics.CRM.LookupAttributeMetadata',
+    select: 'LogicalName,Targets',
+  },
+  {
+    types: ['DateTime'],
+    cast: 'Microsoft.Dynamics.CRM.DateTimeAttributeMetadata',
+    select: 'LogicalName,Format,DateTimeBehavior',
+  },
+];
+
+// Column objects a bulk fetch covers (found or not), so a column the
+// response leaves as it was doesn't trigger another round. Marked when the
+// fetch starts, so re-renders meanwhile don't repeat it; unmarked if it
+// fails or the connection switches, so the next render of the table tries
+// again. Separate from `__enriched`, which would stop useColumnDetail too.
+const __bulkTried = new WeakSet<ColumnMeta>();
+
+function needsBulk(c: ColumnMeta): boolean {
+  return (
+    !__enriched.has(c) &&
+    !__bulkTried.has(c) &&
+    !isAlreadyEnriched(c) &&
+    BULK_CASTS.some((b) => b.types.includes(c.attributeType))
+  );
+}
+
+/** Enrich every column of `tbl` that needs it, one request per subtype. */
+async function enrichTable(tbl: TableMeta): Promise<void> {
+  const org = activeOrg();
+  const cols = tbl.columns.filter(needsBulk);
+  for (const c of cols) __bulkTried.add(c);
+  const casts = BULK_CASTS.filter((b) => cols.some((c) => b.types.includes(c.attributeType)));
+  const rows = new Map<string, AttributeMetadata>();
+  await Promise.all(
+    casts.map(async (b) => {
+      try {
+        const list = await loadAttributesByTypeCast(tbl.logicalName, b.cast, b.select, b.expand);
+        for (const r of list) rows.set(r.LogicalName, r);
+      } catch (e) {
+        console.warn(`[metadata] ${b.cast} details for ${tbl.logicalName} failed`, e);
+        for (const c of cols) if (b.types.includes(c.attributeType)) __bulkTried.delete(c);
+      }
+    }),
+  );
+  // Another org's registry now: its table isn't this one
+  if (activeOrg() !== org) {
+    for (const c of cols) __bulkTried.delete(c);
+    return;
+  }
+  // Patch only the columns we fetched for. One a refresh or useColumnDetail
+  // replaced in the meantime is left to them.
+  const cur = findTable(tbl.logicalName);
+  if (!cur) return;
+  let changed = false;
+  const nextCols = cur.columns.map((c) => {
+    const raw = rows.get(c.logicalName);
+    if (!raw || !cols.includes(c)) return c;
+    changed = true;
+    const patched = patchColumn(c, { ...raw, AttributeType: c.attributeType });
+    __bulkTried.add(patched);
+    return patched;
+  });
+  if (changed) __registerLiveTable({ ...cur, columns: nextCols });
+}
+
+/**
+ * Hook: the live table, with every column's type-specific metadata loaded
+ * (options, lookup targets, date behavior). `loading` until the fetches
+ * land; on failure the columns stay as they were, and the next change to
+ * the table (or remount) tries again.
+ */
+export function useTableDetail(entityLogical: string | null | undefined): {
+  table: TableMeta | undefined;
+  loading: boolean;
+} {
+  const tbl = useSyncExternalStore(__subscribeLiveTables, () =>
+    entityLogical ? findTable(entityLogical) : undefined,
+  );
+  const [busy, setBusy] = useState(false);
+  // The table object the last fetch ran for: a failed fetch leaves its
+  // columns pending, but that table is done loading
+  const [settled, setSettled] = useState<TableMeta>();
+  const run = useRef(0);
+  const pending = !!tbl && tbl !== settled && tbl.columns.some(needsBulk);
+
+  useEffect(() => {
+    if (!tbl || !tbl.columns.some(needsBulk)) return;
+    const id = ++run.current;
+    setBusy(true);
+    // Not cancelled on cleanup: the patch re-registers the table, which
+    // re-runs this effect, and `busy` must still clear.
+    void enrichTable(tbl).finally(() => {
+      if (run.current !== id) return;
+      setSettled(tbl);
+      setBusy(false);
+    });
+  }, [tbl]);
+
+  return { table: tbl, loading: busy || pending };
 }
