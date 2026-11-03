@@ -59,6 +59,11 @@ const deps: SuggestionDeps = {
       ...op('ContainValues', 'Function', { kind: 'entity', entityType: 'account' }),
       isQueryFunction: true,
     },
+    // As Dataverse declares them: unbound (#384)
+    {
+      ...op('Last7Days', 'Function', { kind: 'unbound' }, ['PropertyName']),
+      isQueryFunction: true,
+    },
   ],
 };
 const labels = (marked: string, mode: UrlMode = 'url', set?: string) => {
@@ -335,16 +340,5 @@ describe('ranking', () => {
     expect(r.items[0].label).toBe('contacts');
     const none = urlSuggestions(at('|')!, { ...deps, entities: many, operations: [] });
     expect(none.items[0].label).toBe('contactinvoicescollection');
-  });
-});
-
-describe('query functions', () => {
-  it('leaves out $filter query functions that the CSDL declares unbound', () => {
-    const last7 = {
-      ...op('Last7Days', 'Function', { kind: 'unbound' }, ['PropertyName']),
-      returnType: { kind: 'primitive', typeName: 'Edm.Boolean' },
-    } as CsdlAction;
-    const r = urlSuggestions(at('La|')!, { ...deps, operations: [...deps.operations, last7] });
-    expect(r.items.map((s) => s.label)).not.toContain('Last7Days');
   });
 });
