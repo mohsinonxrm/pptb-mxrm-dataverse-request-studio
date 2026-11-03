@@ -723,8 +723,8 @@ export const useStudioStyles = makeStyles({
     fontSize: '10px',
     padding: '2px 7px',
     borderRadius: tokens.borderRadiusSmall,
-    backgroundColor: tokens.colorPaletteLavenderBackground2,
-    color: tokens.colorPaletteLavenderForeground2,
+    backgroundColor: 'var(--color-request-relate-tint)',
+    color: 'var(--color-request-relate-text)',
   },
   fnPrefix: {
     fontFamily: tokens.fontFamilyMonospace,
@@ -846,7 +846,7 @@ export const useStudioStyles = makeStyles({
     lineHeight: 1.55,
   },
   generatedKey: {
-    color: tokens.colorPaletteLavenderForeground2,
+    color: 'var(--color-request-relate-text)',
     fontWeight: 600,
   },
 

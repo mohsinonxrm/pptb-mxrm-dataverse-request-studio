@@ -145,9 +145,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (**Saved**, **Refresh**, **Copy URL**, **Copy ID**, **Open**, **Copy**,
     **Save** in the Code tab, **Paste** and **Clear** in Retrieve NextLink,
     and a binary file's **Change**): the tooltip now describes the button.
-  - The status pill ("200 OK · 82 ms") and the URL bar's `$select`,
-    `$filter`, … names meet 4.5:1 contrast in light and dark themes, and so
-    do the purple function labels in the $filter editor.
+    In the $filter editor, **NOT** is named by its text and the query
+    function picker has a name.
+  - The status pill ("200 OK · 82 ms") is a light tint with a coloured
+    outline, and its time is no longer faded.
+  - The purple of the URL bar's `$select`, `$filter`, … names and the
+    $filter editor's function labels follows the theme: a shade deeper in
+    light, the lighter "relate" purple in dark (it stayed the light-theme
+    purple before). The ƒ badge is dark violet in dark.
+  - In dark, the selected **AND** / **OR** is black on its colour instead of
+    white.
+  - All of these meet 4.5:1 contrast in light and dark.
 - **Execute Function no longer lists query functions** ([#384]). `Last7Days`,
   `Contains`, `Between` and the other `$filter` query functions only work
   inside a `$filter`, and the picker was meant to hide them. It missed them

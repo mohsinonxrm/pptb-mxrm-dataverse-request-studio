@@ -403,12 +403,17 @@ function FilterGroupCard({
             <ReOrderDotsHorizontal20Regular className={s.dragHandle} aria-hidden={!gripProps} />
           </span>
         )}
+        {/* Text on the stripe color is --color-method-fg: white on the light
+            theme's deep colors, black on the dark theme's light tints, where
+            white was 2.3:1 (#387) */}
         <SegmentedToggle ariaLabel="Combinator">
           <ToggleButton
             checked={group.combinator === 'and'}
             onClick={() => setComb('and')}
             style={
-              group.combinator === 'and' ? { backgroundColor: stripe, color: '#fff' } : undefined
+              group.combinator === 'and'
+                ? { backgroundColor: stripe, color: 'var(--color-method-fg)' }
+                : undefined
             }
           >
             AND
@@ -417,7 +422,9 @@ function FilterGroupCard({
             checked={group.combinator === 'or'}
             onClick={() => setComb('or')}
             style={
-              group.combinator === 'or' ? { backgroundColor: stripe, color: '#fff' } : undefined
+              group.combinator === 'or'
+                ? { backgroundColor: stripe, color: 'var(--color-method-fg)' }
+                : undefined
             }
           >
             OR
@@ -449,7 +456,8 @@ function FilterGroupCard({
                 ? { backgroundColor: tokens.colorPaletteRedBackground3, color: '#fff' }
                 : {}),
             }}
-            aria-label={group.negated ? 'Disable group NOT' : 'Negate group'}
+            // Named by its text, "NOT", with aria-pressed for on/off; the
+            // tooltip describes it (label in name, #387)
           >
             NOT
           </ToggleButton>
@@ -592,7 +600,7 @@ function AddMenu({
           <Button
             size="small"
             appearance="subtle"
-            style={{ color: tokens.colorPaletteLavenderForeground2 }}
+            style={{ color: 'var(--color-request-relate-text)' }}
             icon={
               <span
                 style={{
@@ -600,7 +608,7 @@ function AddMenu({
                   fontWeight: 700,
                   fontSize: 14,
                   lineHeight: 1,
-                  color: tokens.colorPaletteLavenderForeground2,
+                  color: 'var(--color-request-relate-text)',
                 }}
               >
                 ƒ
@@ -1344,6 +1352,7 @@ function FunctionBlock({
         <span className={s.fnPrefix}>Microsoft.Dynamics.CRM.</span>
         <Combobox
           size="small"
+          aria-label="Query function"
           value={op?.label ?? fn.op}
           selectedOptions={[fn.op]}
           onOptionSelect={(_, d) => d.optionValue && onFnChange(d.optionValue)}

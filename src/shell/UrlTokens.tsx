@@ -24,9 +24,9 @@ export function UrlTokens({ url, host }: { url: string; host: string }) {
 
   const hostColor = tokens.colorNeutralForeground3;
   const baseColor = tokens.colorNeutralForeground2;
-  // The v2.2 purple, as a theme token: #8764b8 was 4.42:1 on the bar and
-  // didn't follow the dark theme (#387)
-  const keyColor = tokens.colorPaletteLavenderForeground2;
+  // The v2.2 "relate" purple, themed: #8764b8 was 4.42:1 on the bar and the
+  // same in dark (#387). See --color-request-relate-text in index.html.
+  const keyColor = 'var(--color-request-relate-text)';
   const valColor = tokens.colorBrandForeground1;
   const sepColor = tokens.colorNeutralForeground4;
 
