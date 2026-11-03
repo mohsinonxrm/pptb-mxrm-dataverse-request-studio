@@ -24,7 +24,9 @@ export function UrlTokens({ url, host }: { url: string; host: string }) {
 
   const hostColor = tokens.colorNeutralForeground3;
   const baseColor = tokens.colorNeutralForeground2;
-  const keyColor = '#8764b8'; // matches the .tk-key purple from v2.2 (Fluent 2 "relate")
+  // The v2.2 purple, as a theme token: #8764b8 was 4.42:1 on the bar and
+  // didn't follow the dark theme (#387)
+  const keyColor = tokens.colorPaletteLavenderForeground2;
   const valColor = tokens.colorBrandForeground1;
   const sepColor = tokens.colorNeutralForeground4;
 

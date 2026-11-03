@@ -19,7 +19,7 @@ import { MethodPill } from '../primitives/MethodPill';
 import { useStudioStyles } from '../primitives/styles';
 import { usePersistedSettings } from '../host/usePersistedSettings';
 import type { RecentRun } from '../state/readState';
-import { runDetail, timeAgo } from './runLabels';
+import { runAccessibleName, runDetail, timeAgo } from './runLabels';
 
 /** Runs whose method, URL, status or summary contain every word of `query`. */
 export function filterRuns(runs: readonly RecentRun[], query: string): RecentRun[] {
@@ -89,11 +89,7 @@ export function RunHistoryDialog({
                   role="listitem"
                   className={restorable(r) ? s.recentRow : s.recentRowStatic}
                   tabIndex={restorable(r) ? 0 : undefined}
-                  aria-label={
-                    restorable(r)
-                      ? `Restore run: ${r.method} ${r.url}, status ${r.status || 'error'}`
-                      : undefined
-                  }
+                  aria-label={restorable(r) ? runAccessibleName(r) : undefined}
                   title={
                     `${new Date(r.ts).toLocaleString()} · ${r.url}` +
                     (restorable(r) ? '' : ' · This run can’t be restored.')
@@ -107,6 +103,7 @@ export function RunHistoryDialog({
                   }}
                 >
                   <MethodPill method={r.method as never} size="sm" />
+                  {/* Read as "GET just now", not "GETjust now" (#387); flex hides the space */}{' '}
                   <span style={{ flexShrink: 0, minWidth: 150 }}>
                     {timeAgo(r.ts)} · {r.status || 'error'}
                     {runDetail(r)}

@@ -302,7 +302,7 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
             >
               {tbl?.primaryKey ?? 'id'}: {resolvedId}
             </code>
-            <Tooltip content="Copy record GUID" relationship="label">
+            <Tooltip content="Copy record GUID" relationship="description">
               <Button
                 size="small"
                 appearance="subtle"
@@ -317,7 +317,7 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
                 row survives, so we keep them. */}
             {recordUrl && !(ctx.operation === 'delete' && !ctx.clearedColumn) && (
               <>
-                <Tooltip content="Copy record URL" relationship="label">
+                <Tooltip content="Copy record URL" relationship="description">
                   <Button
                     size="small"
                     appearance="subtle"
@@ -327,7 +327,10 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
                     Copy URL
                   </Button>
                 </Tooltip>
-                <Tooltip content="Open the record's Web API URL in a new tab" relationship="label">
+                <Tooltip
+                  content="Open the record's Web API URL in a new tab"
+                  relationship="description"
+                >
                   <Button
                     size="small"
                     appearance="subtle"

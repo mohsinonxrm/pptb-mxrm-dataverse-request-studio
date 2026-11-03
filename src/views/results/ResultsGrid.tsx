@@ -62,6 +62,7 @@ import type { RowRenderer } from '@fluentui-contrib/react-data-grid-react-window
 import { ArrowSortUp16Regular, ArrowSortDown16Regular } from '@fluentui/react-icons';
 
 import { findTable } from '../../metadata/metadata';
+import { rowSelectLabel } from './rowSelectLabel';
 import type { ExpandSpec } from '../../editors/ExpandEditor';
 import type { OrderbySpec } from '../../editors/OrderbyEditor';
 import { usePersistedSettings } from '../../host/usePersistedSettings';
@@ -783,12 +784,17 @@ export function ResultsGrid({
   );
 
   // ── Row renderer: skeleton while user is fast-scrolling ──
+  const primaryName = rootTable?.primaryName;
   const renderRow: RowRenderer<Record<string, unknown>> = useCallback(
-    ({ item, rowId }, style, _index, isScrolling) => (
+    ({ item, rowId }, style, index, isScrolling) => (
       <DataGridRow<Record<string, unknown>>
         key={rowId}
         style={{ ...style, height: `${rowHeight}px` }}
         className={styles.row}
+        // Each row's checkbox gets a name, like the header's (#387)
+        selectionCell={{
+          checkboxIndicator: { 'aria-label': rowSelectLabel(item, primaryName, index) },
+        }}
       >
         {({ renderCell }) => (
           <DataGridCell focusMode="group">
@@ -803,7 +809,7 @@ export function ResultsGrid({
         )}
       </DataGridRow>
     ),
-    [styles.row, rowHeight],
+    [styles.row, rowHeight, primaryName],
   );
 
   // ── Infinite scroll: trigger onLoadMore when scrolled near the bottom ──

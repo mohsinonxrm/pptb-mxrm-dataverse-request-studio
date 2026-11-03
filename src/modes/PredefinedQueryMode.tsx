@@ -903,7 +903,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
                         {selectedQuery.layoutColumns.map((c) => (
                           <Tooltip
                             key={c.fullName}
-                            relationship="label"
+                            relationship="description"
                             content={
                               c.isLink
                                 ? `${c.fullName} — joined column via link alias \`${c.linkAlias}\` · width ${c.width}px`

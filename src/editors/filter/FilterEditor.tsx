@@ -318,7 +318,7 @@ export function FilterEditor({
             <span className={s.generatedKey}>$filter</span>=<span>{odata}</span>
           </div>
           <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
-            <Tooltip content="Copy OData expression" relationship="label">
+            <Tooltip content="Copy OData expression" relationship="description">
               <Button
                 icon={<Copy20Regular />}
                 appearance="subtle"
@@ -592,7 +592,7 @@ function AddMenu({
           <Button
             size="small"
             appearance="subtle"
-            style={{ color: '#8764b8' }}
+            style={{ color: tokens.colorPaletteLavenderForeground2 }}
             icon={
               <span
                 style={{
@@ -600,7 +600,7 @@ function AddMenu({
                   fontWeight: 700,
                   fontSize: 14,
                   lineHeight: 1,
-                  color: '#8764b8',
+                  color: tokens.colorPaletteLavenderForeground2,
                 }}
               >
                 ƒ

@@ -237,7 +237,7 @@ function CodePane({
               {code.length.toLocaleString()} chars ·{' '}
               {Math.round((new Blob([code]).size / 1024) * 10) / 10} KB
             </Caption1>
-            <Tooltip content="Copy code" relationship="label">
+            <Tooltip content="Copy code" relationship="description">
               <Button
                 icon={<Copy20Regular />}
                 appearance="subtle"
@@ -248,7 +248,10 @@ function CodePane({
               </Button>
             </Tooltip>
             {fmt === 'openapi' && (
-              <Tooltip content="Save the OpenAPI document as a JSON file" relationship="label">
+              <Tooltip
+                content="Save the OpenAPI document as a JSON file"
+                relationship="description"
+              >
                 <Button
                   icon={<ArrowDownload20Regular />}
                   appearance="subtle"
@@ -363,7 +366,7 @@ function EditorPane({
             Reset
           </Button>
         </Tooltip>
-        <Tooltip content="Copy current editor contents" relationship="label">
+        <Tooltip content="Copy current editor contents" relationship="description">
           <Button
             icon={<Copy20Regular />}
             appearance="subtle"

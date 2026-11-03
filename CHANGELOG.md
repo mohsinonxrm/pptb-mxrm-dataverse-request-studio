@@ -135,6 +135,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🐛 Fixed
 
+- **Screen readers and speech input get the right names; status and URL
+  colours are readable** ([#387]):
+  - Each results row's checkbox is named after the record (or its row
+    number), like the header's **Select all rows**.
+  - Recent runs, and the rows in run history, are named by what they show
+    ("GET just now · 200 · 3 rows") and then their URL, so speech users can
+    say what they see. So are the buttons whose tooltip used to rename them
+    (**Saved**, **Refresh**, **Copy URL**, **Copy ID**, **Open**, **Copy**,
+    **Save** in the Code tab, **Paste** and **Clear** in Retrieve NextLink,
+    and a binary file's **Change**): the tooltip now describes the button.
+  - The status pill ("200 OK · 82 ms") and the URL bar's `$select`,
+    `$filter`, … names meet 4.5:1 contrast in light and dark themes, and so
+    do the purple function labels in the $filter editor.
 - **Execute Function no longer lists query functions** ([#384]). `Last7Days`,
   `Contains`, `Between` and the other `$filter` query functions only work
   inside a `$filter`, and the picker was meant to hide them. It missed them
@@ -280,6 +293,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#373]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/373
 [#376]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/376
 [#384]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/384
+[#387]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/387
 
 ## [1.5.0-beta.1] - 2026-10-30
 
