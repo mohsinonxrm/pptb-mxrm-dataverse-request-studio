@@ -10,7 +10,7 @@ import type { RequestType } from '../registry/requestTypes';
 import type { RecentRun } from '../state/readState';
 import { useModeHistory } from '../state/runHistory';
 import { RunHistoryDialog } from './RunHistoryDialog';
-import { runDetail, timeAgo } from './runLabels';
+import { runAccessibleName, runDetail, timeAgo } from './runLabels';
 import { notify } from './dialogs';
 
 export interface SidebarClauseItem {
@@ -134,11 +134,7 @@ export function Sidebar({
                   role={isRestorable(r) ? 'button' : undefined}
                   tabIndex={isRestorable(r) ? 0 : undefined}
                   title={isRestorable(r) ? `Restore this run · ${r.url}` : r.url}
-                  aria-label={
-                    isRestorable(r)
-                      ? `Restore run: ${r.method} ${r.url}, status ${r.status || 'error'}`
-                      : undefined
-                  }
+                  aria-label={isRestorable(r) ? runAccessibleName(r) : undefined}
                   onClick={() => isRestorable(r) && restore(r)}
                   onKeyDown={(e) => {
                     if (isRestorable(r) && (e.key === 'Enter' || e.key === ' ')) {
@@ -148,6 +144,7 @@ export function Sidebar({
                   }}
                 >
                   <MethodPill method={r.method as never} size="sm" />
+                  {/* Read as "GET just now", not "GETjust now" (#387); flex hides the space */}{' '}
                   <span
                     style={{
                       flexGrow: 1,

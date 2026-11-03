@@ -230,7 +230,8 @@ export function ResultsCommandBar({
   return (
     <div className={s.bar}>
       <Toolbar size="small" aria-label="Results actions">
-        <Tooltip content="Re-run the request" relationship="label">
+        {/* A description, not a label: the name is the visible "Refresh" (#387) */}
+        <Tooltip content="Re-run the request" relationship="description">
           <ToolbarButton
             appearance="subtle"
             icon={isLoading ? <Spinner size="tiny" /> : <ArrowClockwise20Regular />}
@@ -271,7 +272,7 @@ export function ResultsCommandBar({
 
         <ToolbarDivider />
 
-        <Tooltip content="Copy the resolved request URL" relationship="label">
+        <Tooltip content="Copy the resolved request URL" relationship="description">
           <ToolbarButton
             appearance="subtle"
             icon={<Link20Regular />}

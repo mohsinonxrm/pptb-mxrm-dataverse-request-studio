@@ -35,3 +35,15 @@ export function runDetail(r: Pick<RecentRun, 'modeId' | 'summary' | 'rowCount'>)
   if (n === undefined) return ' · — rows';
   return ` · ${n.toLocaleString()} ${n === 1 ? 'row' : 'rows'}`;
 }
+
+/**
+ * The accessible name of a restorable run: the line as shown (method, time,
+ * status, detail), then the URL, so it starts with the visible text that
+ * speech users say (WCAG 2.5.3, #387). The History dialog shows the URL
+ * too, which this then contains as well.
+ */
+export function runAccessibleName(
+  r: Pick<RecentRun, 'method' | 'url' | 'ts' | 'status' | 'modeId' | 'summary' | 'rowCount'>,
+): string {
+  return `${r.method} ${timeAgo(r.ts)} · ${r.status || 'error'}${runDetail(r)} ${r.url}, restore run`;
+}

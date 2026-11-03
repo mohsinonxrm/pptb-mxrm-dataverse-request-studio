@@ -62,7 +62,10 @@ describe('RunHistoryDialog', () => {
     );
     const items = [...document.querySelectorAll<HTMLElement>('[role=listitem]')];
     expect(items).toHaveLength(2);
-    expect(items[0].getAttribute('aria-label')).toMatch(/^Restore run: GET/);
+    // The name starts with what the row shows (label in name, #387)
+    const shown = [...items[0].children].map((c) => c.textContent!.trim()).join(' ');
+    expect(items[0].getAttribute('aria-label')).toBe(`${shown}, restore run`);
+    expect(shown).toMatch(/^GET /);
     expect(items[1].hasAttribute('aria-label')).toBe(false);
     act(() => items[1].click());
     expect(onRestore).not.toHaveBeenCalled();

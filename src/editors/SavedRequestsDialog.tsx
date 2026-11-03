@@ -290,7 +290,7 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
                 ? 'Save current request (its saved copy was deleted)'
                 : 'No changes since last save'
           }
-          relationship="label"
+          relationship="description"
         >
           <Button
             appearance={canSave ? 'primary' : 'subtle'}
@@ -523,12 +523,9 @@ export function SavedLibraryButton({ modeId, onLoad, currentId, dirty }: SavedLi
       }}
     >
       <PopoverTrigger disableButtonEnhancement>
-        <Tooltip content="Open saved requests" relationship="label">
-          <Button
-            appearance="subtle"
-            icon={<BookmarkMultiple20Regular />}
-            aria-label="Open saved requests"
-          >
+        {/* A description, not a label: the name is the visible "Saved" (#387) */}
+        <Tooltip content="Open saved requests" relationship="description">
+          <Button appearance="subtle" icon={<BookmarkMultiple20Regular />}>
             Saved
             {modeCount > 0 && (
               <Badge appearance="tint" size="small" style={{ marginLeft: 6 }}>

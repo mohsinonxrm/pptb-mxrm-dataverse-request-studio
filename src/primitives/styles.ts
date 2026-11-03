@@ -723,8 +723,8 @@ export const useStudioStyles = makeStyles({
     fontSize: '10px',
     padding: '2px 7px',
     borderRadius: tokens.borderRadiusSmall,
-    backgroundColor: '#efe8f6',
-    color: '#8764b8',
+    backgroundColor: 'var(--color-request-relate-tint)',
+    color: 'var(--color-request-relate-text)',
   },
   fnPrefix: {
     fontFamily: tokens.fontFamilyMonospace,
@@ -846,7 +846,7 @@ export const useStudioStyles = makeStyles({
     lineHeight: 1.55,
   },
   generatedKey: {
-    color: '#8764b8',
+    color: 'var(--color-request-relate-text)',
     fontWeight: 600,
   },
 
@@ -1044,18 +1044,6 @@ export const useStudioStyles = makeStyles({
   detailVal: {
     fontSize: '13px',
     color: tokens.colorNeutralForeground1,
-  },
-
-  // ── Status pill ────────────────────────────────────────
-  statusPill: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '4px',
-    padding: '3px 8px',
-    borderRadius: tokens.borderRadiusCircular,
-    fontSize: '11px',
-    fontWeight: 600,
-    fontFamily: tokens.fontFamilyMonospace,
   },
 
   // ── Empty state ────────────────────────────────────────

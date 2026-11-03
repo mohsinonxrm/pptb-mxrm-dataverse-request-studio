@@ -62,7 +62,7 @@ function render(r: RecentRun, onRecentClick: (r: RecentRun) => void) {
     ),
   );
 }
-const row = () => host!.querySelector<HTMLElement>('[aria-label^="Restore run"]')!;
+const row = () => host!.querySelector<HTMLElement>('[aria-label$=", restore run"]')!;
 
 describe('Sidebar restore with history (#226)', () => {
   it('says the caller id was not restored', () => {
@@ -77,5 +77,11 @@ describe('Sidebar restore with history (#226)', () => {
     render(run(), vi.fn());
     act(() => row().click());
     expect(notices).toEqual([]);
+  });
+
+  it('names a run by what it shows first, then its URL (label in name, #387)', () => {
+    render(run(), vi.fn());
+    const shown = [...row().children].map((c) => c.textContent!.trim()).join(' ');
+    expect(row().getAttribute('aria-label')!.startsWith(`${shown} `)).toBe(true);
   });
 });

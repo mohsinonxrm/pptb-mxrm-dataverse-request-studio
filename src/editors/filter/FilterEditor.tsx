@@ -318,7 +318,7 @@ export function FilterEditor({
             <span className={s.generatedKey}>$filter</span>=<span>{odata}</span>
           </div>
           <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
-            <Tooltip content="Copy OData expression" relationship="label">
+            <Tooltip content="Copy OData expression" relationship="description">
               <Button
                 icon={<Copy20Regular />}
                 appearance="subtle"
@@ -403,22 +403,22 @@ function FilterGroupCard({
             <ReOrderDotsHorizontal20Regular className={s.dragHandle} aria-hidden={!gripProps} />
           </span>
         )}
+        {/* The selected combinator is a primary ToggleButton: Fluent's brand
+            background with on-brand text, which the mode cascade turns into
+            the mode's colour (index.html). The depth colour stays on the rail
+            (G-209). Was white on the depth colour, 2.3:1 in dark (#387). */}
         <SegmentedToggle ariaLabel="Combinator">
           <ToggleButton
             checked={group.combinator === 'and'}
+            appearance={group.combinator === 'and' ? 'primary' : 'secondary'}
             onClick={() => setComb('and')}
-            style={
-              group.combinator === 'and' ? { backgroundColor: stripe, color: '#fff' } : undefined
-            }
           >
             AND
           </ToggleButton>
           <ToggleButton
             checked={group.combinator === 'or'}
+            appearance={group.combinator === 'or' ? 'primary' : 'secondary'}
             onClick={() => setComb('or')}
-            style={
-              group.combinator === 'or' ? { backgroundColor: stripe, color: '#fff' } : undefined
-            }
           >
             OR
           </ToggleButton>
@@ -449,7 +449,8 @@ function FilterGroupCard({
                 ? { backgroundColor: tokens.colorPaletteRedBackground3, color: '#fff' }
                 : {}),
             }}
-            aria-label={group.negated ? 'Disable group NOT' : 'Negate group'}
+            // Named by its text, "NOT", with aria-pressed for on/off; the
+            // tooltip describes it (label in name, #387)
           >
             NOT
           </ToggleButton>
@@ -592,7 +593,7 @@ function AddMenu({
           <Button
             size="small"
             appearance="subtle"
-            style={{ color: '#8764b8' }}
+            style={{ color: 'var(--color-request-relate-text)' }}
             icon={
               <span
                 style={{
@@ -600,7 +601,7 @@ function AddMenu({
                   fontWeight: 700,
                   fontSize: 14,
                   lineHeight: 1,
-                  color: '#8764b8',
+                  color: 'var(--color-request-relate-text)',
                 }}
               >
                 ƒ
@@ -1344,6 +1345,7 @@ function FunctionBlock({
         <span className={s.fnPrefix}>Microsoft.Dynamics.CRM.</span>
         <Combobox
           size="small"
+          aria-label="Query function"
           value={op?.label ?? fn.op}
           selectedOptions={[fn.op]}
           onOptionSelect={(_, d) => d.optionValue && onFnChange(d.optionValue)}

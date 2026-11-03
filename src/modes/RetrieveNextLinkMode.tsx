@@ -325,7 +325,7 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
           </MessageBar>
 
           <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-            <Tooltip content="Paste from clipboard" relationship="label">
+            <Tooltip content="Paste from clipboard" relationship="description">
               <Button
                 icon={<ClipboardPaste20Regular />}
                 appearance="outline"
@@ -335,7 +335,7 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
                 Paste
               </Button>
             </Tooltip>
-            <Tooltip content="Clear the URL field" relationship="label">
+            <Tooltip content="Clear the URL field" relationship="description">
               <Button
                 icon={<Dismiss20Regular />}
                 appearance="subtle"
