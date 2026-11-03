@@ -1046,18 +1046,6 @@ export const useStudioStyles = makeStyles({
     color: tokens.colorNeutralForeground1,
   },
 
-  // ── Status pill ────────────────────────────────────────
-  statusPill: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '4px',
-    padding: '3px 8px',
-    borderRadius: tokens.borderRadiusCircular,
-    fontSize: '11px',
-    fontWeight: 600,
-    fontFamily: tokens.fontFamilyMonospace,
-  },
-
   // ── Empty state ────────────────────────────────────────
   emptyState: {
     display: 'flex',

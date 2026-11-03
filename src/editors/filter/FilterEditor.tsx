@@ -403,29 +403,22 @@ function FilterGroupCard({
             <ReOrderDotsHorizontal20Regular className={s.dragHandle} aria-hidden={!gripProps} />
           </span>
         )}
-        {/* Text on the stripe color is --color-method-fg: white on the light
-            theme's deep colors, black on the dark theme's light tints, where
-            white was 2.3:1 (#387) */}
+        {/* The selected combinator is a primary ToggleButton: Fluent's brand
+            background with on-brand text, which the mode cascade turns into
+            the mode's colour (index.html). The depth colour stays on the rail
+            (G-209). Was white on the depth colour, 2.3:1 in dark (#387). */}
         <SegmentedToggle ariaLabel="Combinator">
           <ToggleButton
             checked={group.combinator === 'and'}
+            appearance={group.combinator === 'and' ? 'primary' : 'secondary'}
             onClick={() => setComb('and')}
-            style={
-              group.combinator === 'and'
-                ? { backgroundColor: stripe, color: 'var(--color-method-fg)' }
-                : undefined
-            }
           >
             AND
           </ToggleButton>
           <ToggleButton
             checked={group.combinator === 'or'}
+            appearance={group.combinator === 'or' ? 'primary' : 'secondary'}
             onClick={() => setComb('or')}
-            style={
-              group.combinator === 'or'
-                ? { backgroundColor: stripe, color: 'var(--color-method-fg)' }
-                : undefined
-            }
           >
             OR
           </ToggleButton>
