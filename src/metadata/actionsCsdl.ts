@@ -110,8 +110,9 @@ export interface CsdlAction {
    * used inside `$filter` (e.g. Last7Days, Between, EqualUserId, Contains).
    * They're declared as `<Function>` in CSDL but aren't meant to be invoked
    * standalone via Execute Function; they only make sense inline in a
-   * filter expression. Detected via a structural signature in csdlProvider
-   * (IsBound + PropertyName Edm.String + return Edm.Boolean).
+   * filter expression. Detected via a structural signature in csdlProvider:
+   * first regular parameter PropertyName Edm.String, return Edm.Boolean.
+   * Dataverse declares them unbound, so IsBound isn't part of it (#384).
    *
    * Reference:
    *   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/reference/queryfunctions

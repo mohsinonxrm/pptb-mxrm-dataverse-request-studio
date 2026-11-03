@@ -103,6 +103,23 @@ const CSDL = `<?xml version="1.0" encoding="utf-8"?>
         <Parameter Name="FeatureName" Type="Edm.String" Nullable="false" />
         <ReturnType Type="Edm.Boolean" Nullable="false" />
       </Function>
+      <Action Name="ActionLike">
+        <Parameter Name="PropertyName" Type="Edm.String" Nullable="false" />
+        <ReturnType Type="Edm.Boolean" Nullable="false" />
+      </Action>
+      <Function Name="CountLike">
+        <Parameter Name="PropertyName" Type="Edm.String" Nullable="false" />
+        <ReturnType Type="Edm.Int32" Nullable="false" />
+      </Function>
+      <Function Name="IntProperty">
+        <Parameter Name="PropertyName" Type="Edm.Int32" Nullable="false" />
+        <ReturnType Type="Edm.Boolean" Nullable="false" />
+      </Function>
+      <Function Name="SecondPropertyName">
+        <Parameter Name="Other" Type="Edm.String" Nullable="false" />
+        <Parameter Name="PropertyName" Type="Edm.String" Nullable="false" />
+        <ReturnType Type="Edm.Boolean" Nullable="false" />
+      </Function>
     </Schema>
   </edmx:DataServices>
 </edmx:Edmx>`;
@@ -125,12 +142,16 @@ describe('parseCsdl', () => {
       ['GrantAccess', 'Action'],
       ['Echo', 'Action'],
       ['new_DoThing', 'Action'],
+      ['ActionLike', 'Action'],
       ['WhoAmI', 'Function'],
       ['RetrieveCount', 'Function'],
       ['Last7Days', 'Function'],
       ['Contains', 'Function'],
       ['IsActiveFor', 'Function'],
       ['IsEnabled', 'Function'],
+      ['CountLike', 'Function'],
+      ['IntProperty', 'Function'],
+      ['SecondPropertyName', 'Function'],
     ]);
     expect(new Set(actions.map((a) => a.namespace))).toEqual(new Set(['Microsoft.Dynamics.CRM']));
   });
@@ -240,13 +261,24 @@ describe('parseCsdl', () => {
       binding: { kind: 'unbound' },
     });
     expect(byName(actions, 'Contains').isQueryFunction).toBe(true);
-    // Bound: the first parameter is the binding; PropertyName comes after it
+    // Hypothetical: Dataverse emits none bound, but if one were, its first
+    // parameter would be the binding and PropertyName would come after it
     expect(byName(actions, 'IsActiveFor')).toMatchObject({
       isQueryFunction: true,
       binding: { kind: 'entity', entityType: 'account' },
     });
-    // A Boolean function without PropertyName is an ordinary function
-    expect(byName(actions, 'IsEnabled').isQueryFunction).toBeUndefined();
+  });
+
+  it('leaves operations that only partly match the query-function signature alone', () => {
+    for (const name of [
+      'IsEnabled', // no PropertyName
+      'ActionLike', // an Action
+      'CountLike', // doesn't return Edm.Boolean
+      'IntProperty', // PropertyName isn't Edm.String
+      'SecondPropertyName', // PropertyName isn't first
+    ]) {
+      expect([name, byName(actions, name).isQueryFunction]).toEqual([name, undefined]);
+    }
   });
 
   it('classifies publisher-prefixed messages as custom and the rest as OOB', () => {

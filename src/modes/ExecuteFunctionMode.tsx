@@ -425,8 +425,8 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
         <ActionPicker
           // Exclude query functions (Last7Days, Between, EqualUserId,
           // Contains, etc.) — those are $filter operators, not callable
-          // standalone. csdlProvider tags them via the IsBound + PropertyName
-          // + Edm.Boolean signature. Keeps the picker focused on actual
+          // standalone. csdlProvider tags them via the PropertyName +
+          // Edm.Boolean signature (#384). Keeps the picker focused on actual
           // invokable functions (WhoAmI, RetrieveTotalRecordCount, etc.).
           filter={(a) => a.kind === 'Function' && !a.isQueryFunction}
           title="Browse OData functions"
