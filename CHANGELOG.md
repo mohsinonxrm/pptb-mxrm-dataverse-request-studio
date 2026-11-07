@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
+- **Choose which columns Results shows** ([#292]). A Columns button in the
+  results toolbar lists every column in the response, each with a checkbox.
+  The choice is saved per table, so re-running the same table keeps it, and
+  "Show all columns" brings them all back. The button reads "Columns · 4 of
+  23" while some are hidden. CSV export and row search follow the grid's
+  columns, and a column filter on a hidden column stops applying.
+
 - **The JSON body editor knows the table** ([#268]). In a field set's JSON view
   (Create, Update, Upsert, Bulk Write rows and entity parameters):
   - **Keys:** typing `"` lists the columns the form can set. Lookups are
@@ -287,6 +294,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     bring a `support/X.Y` cut from an older tag onto this workflow before its
     first tag; and the recommended `publish` environment and `v*` tag ruleset.
 
+[#292]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/292
 [#224]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/224
 [#244]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/244
 [#236]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/236
