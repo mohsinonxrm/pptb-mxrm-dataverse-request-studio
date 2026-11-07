@@ -11,7 +11,7 @@
 //   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/use-web-api-actions
 //   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/use-web-api-functions
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Field,
   Combobox,
@@ -28,6 +28,7 @@ import {
 } from '@fluentui/react-components';
 import { Flash20Filled, Code20Filled, BoxMultiple20Regular } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
+import { FirstStep } from '../primitives/FirstStep';
 import { type CsdlAction } from '../metadata/actionsCsdl';
 import type { MessagePublisher } from '../host/messagePublishers';
 import { findTable } from '../metadata/metadata';
@@ -51,6 +52,8 @@ export interface ActionPickerProps {
   /** Called with the new selection (or null when cleared). */
   onChange: (name: string | null) => void;
   group?: RequestGroup;
+  /** The first-step button label (#297), e.g. "Choose a function". */
+  firstStep?: string;
 }
 
 // Scope sentinel: empty string = no scope picked yet (operation dropdown
@@ -68,7 +71,11 @@ export function ActionPicker({
   sub,
   onChange,
   group = 'execute',
+  firstStep = 'Choose an action',
 }: ActionPickerProps) {
+  // The Operation list opens from the first-step button (#297).
+  const [opOpen, setOpOpen] = useState(false);
+  const opRef = useRef<HTMLInputElement>(null);
   // Two-dropdown UX. Each has TWO state fields:
   //   • The committed value (`scope` / `value` — the latter is parent-owned)
   //   • The typed-input text (`scopeInput` / `opInput`) for freeform filtering
@@ -295,6 +302,16 @@ export function ActionPicker({
         )}
       </PaneHead>
 
+      {!value && !loadError && (
+        <FirstStep
+          step={firstStep}
+          onStart={() => {
+            opRef.current?.focus();
+            setOpOpen(true);
+          }}
+        />
+      )}
+
       {loadError && isCsdlSizeLimitError(loadError) ? (
         // Some PPTB releases cap getCSDLDocument at 16 MB; Dynamics orgs
         // exceed it. Explain instead of showing the raw buffer error (#79).
@@ -425,6 +442,9 @@ export function ActionPicker({
             // from `value`, the committed selection). Effects above sync
             // opInput to the selection's display name when value changes
             // externally (mode switch / Save load / scope-induced clear).
+            ref={opRef}
+            open={opOpen}
+            onOpenChange={(_, d) => setOpOpen(d.open)}
             freeform
             clearable
             value={opInput}

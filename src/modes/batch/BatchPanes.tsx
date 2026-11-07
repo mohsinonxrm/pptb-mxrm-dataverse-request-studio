@@ -26,6 +26,7 @@ import {
   TextBulletListSquare20Regular,
 } from '@fluentui/react-icons';
 import { PaneHead } from '../../editors/PaneHead';
+import { FirstStep } from '../../primitives/FirstStep';
 import { SegmentedToggle } from '../../primitives/SegmentedToggle';
 import { MethodPill } from '../../primitives/MethodPill';
 import {
@@ -122,6 +123,14 @@ export function BatchOverviewPane({
         }
         group="batch"
       />
+
+      {/* An empty batch: what it does, and Step 1 (#297). */}
+      {total === 0 && !unavailable && (
+        <FirstStep
+          step={em ? 'Add requests' : 'Add a change set'}
+          onStart={() => onAddGroup(!em)}
+        />
+      )}
 
       {em && (
         <MessageBar intent="info" layout="multiline" style={{ marginBottom: 12 }}>
