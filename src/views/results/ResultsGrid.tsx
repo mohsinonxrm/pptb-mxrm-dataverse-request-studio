@@ -67,7 +67,6 @@ import type { ExpandSpec } from '../../editors/ExpandEditor';
 import type { OrderbySpec } from '../../editors/OrderbyEditor';
 import { usePersistedSettings } from '../../host/usePersistedSettings';
 import type { GridDensity } from '../../state/displaySettings';
-import { StatusPill } from '../../primitives/StatusPill';
 
 import {
   filterDisplayableColumns,
@@ -214,10 +213,6 @@ export interface ResultsGridProps {
   showFilterRow?: boolean;
   /** Row density — Fluent DataGrid `size` (#16). */
   density?: GridDensity;
-  /** Status info rendered in the grid's bottom info bar (replaces the old top strip). */
-  status?: { code: number; ms: number; bytes: number };
-  /** Server-emitted @odata.count, when $count=true was set. */
-  serverTotal?: number;
   /**
    * Optional column-order hint used when `select` is empty. Modes that
    * source their column projection from somewhere other than $select —
@@ -251,8 +246,6 @@ export function ResultsGrid({
   onClearSearch,
   showFilterRow = false,
   density: densityProp = 'medium',
-  status,
-  serverTotal,
   preferredColumnOrder,
   onViewChange,
   emptyActions,
@@ -832,7 +825,6 @@ export function ResultsGrid({
   // sanity-check the criteria they sent (e.g. spotting a typo in a filter
   // value) without leaving the Results tab.
   if (allRows.length === 0) {
-    const responseStatus = status?.code;
     return (
       <div
         className={styles.emptyState}
@@ -849,9 +841,8 @@ export function ResultsGrid({
             maxWidth: 520,
           }}
         >
-          {responseStatus === 200
-            ? 'The request succeeded but Dataverse returned zero rows. Check your $filter / $top — or try removing conditions to widen the result set.'
-            : 'The request returned no rows.'}
+          The request succeeded but Dataverse returned zero rows. Check your $filter / $top — or try
+          removing conditions to widen the result set.
         </div>
         {emptyActions && (
           <div
@@ -864,18 +855,6 @@ export function ResultsGrid({
             }}
           >
             {emptyActions}
-          </div>
-        )}
-        {status && (
-          <div
-            style={{
-              fontSize: tokens.fontSizeBase100,
-              fontFamily: tokens.fontFamilyMonospace,
-              color: tokens.colorNeutralForeground3,
-              marginTop: 8,
-            }}
-          >
-            HTTP {status.code} · {status.ms} ms · {(status.bytes / 1024).toFixed(1)} KB
           </div>
         )}
       </div>
@@ -962,68 +941,54 @@ export function ResultsGrid({
           )}
         </div>
 
-        {/* Info bar — status + size + row count + selection (moved from top strip per UX feedback) */}
-        <div className={styles.infoBar}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            {status && (
-              <StatusPill
-                status={status.code >= 400 ? 'danger' : status.code >= 300 ? 'warning' : 'success'}
-                code={status.code}
-                ms={status.ms}
-              />
-            )}
-            {status && (
-              <span style={{ color: tokens.colorNeutralForeground3 }}>
-                {(status.bytes / 1024).toFixed(1)} KB
-              </span>
-            )}
-            <span>
-              <strong>{recordCount.toLocaleString()}</strong> row{recordCount === 1 ? '' : 's'}
+        {/* Footer — the grid's own state only: expanded lines, filters,
+            loading more pages, selection. Status, size and row counts are in
+            the summary bar at the top (#290). */}
+        {(allRows.length !== recordCount ||
+          filtering ||
+          isLoadingMore ||
+          selectedItems.size > 0 ||
+          hasCustomWidths) && (
+          <div className={styles.infoBar}>
+            <span
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}
+            >
               {allRows.length !== recordCount && (
-                <>
-                  {' '}
-                  · <strong>{allRows.length.toLocaleString()}</strong> grid lines with expanded
+                <span>
+                  <strong>{allRows.length.toLocaleString()}</strong> grid lines with expanded
                   records
-                </>
+                </span>
               )}
               {filtering && (
-                <>
-                  {' · '}
+                <span>
                   <span className={styles.filtered}>
                     Filtered: {rows.length.toLocaleString()} of {allRows.length.toLocaleString()}{' '}
                     loaded {allRows.length === recordCount ? 'rows' : 'grid lines'}
                     {hasMore ? ' (more pages not loaded)' : ''}
                   </span>{' '}
                   <Link onClick={clearFilters}>Clear filters</Link>
-                </>
+                </span>
               )}
-              {serverTotal != null && serverTotal >= 0 && (
-                <>
-                  {' '}
-                  · server total <strong>{serverTotal.toLocaleString()}</strong>
-                </>
-              )}
-              {hasMore && !isLoadingMore && ' · more available'}
               {isLoadingMore && (
                 <span className={styles.loadingMore}>
                   <Spinner size="tiny" /> Loading more…
                 </span>
               )}
             </span>
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-            {selectedItems.size > 0 && (
-              <span>
-                <strong>{selectedItems.size}</strong> selected
-              </span>
-            )}
-            {hasCustomWidths && (
-              <Link as="button" onClick={resetColumnWidths}>
-                Reset column widths
-              </Link>
-            )}
-          </span>
-        </div>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+              {selectedItems.size > 0 && (
+                <span>
+                  <strong>{selectedItems.size}</strong> selected
+                </span>
+              )}
+              {hasCustomWidths && (
+                <Link as="button" onClick={resetColumnWidths}>
+                  Reset column widths
+                </Link>
+              )}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a tagline. Search matches the sentence too, so "alternate key" finds
   Upsert. Screen readers hear it as the option's description, after its name.
 
+- **A summary line at the top of Results** ([#290]). Above the Grid / Detail,
+  JSON and Headers tabs: the status, time and size, then for a list the rows on
+  this page, the total (with `$count`) and whether more pages follow. It shows on
+  every results view, including empty results, errors and Count only, and wraps
+  in a narrow pane. The grid footer now keeps only the grid's own state: filters,
+  expanded lines, loading more pages and the selection.
 - **The JSON body editor knows the table** ([#268]). In a field set's JSON view
   (Create, Update, Upsert, Bulk Write rows and entity parameters):
   - **Keys:** typing `"` lists the columns the form can set. Lookups are
@@ -299,6 +305,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#236]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/236
 [#255]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/255
 [#268]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/268
+[#290]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/290
 [#291]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/291
 [#294]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/294
 [#226]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/226
