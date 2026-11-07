@@ -885,12 +885,15 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
           advisories={advisories}
           onAdvisoryFocus={setActivePath}
           // The Prefer toggles that apply, under the URL bar (#299).
+          // Not for PUT (one column): it has no Prefer, as in the sidebar.
           belowBar={
-            <PreferQuickRow
-              operation="update"
-              spec={state.prefer}
-              setSpec={(p) => set('prefer', p, 'prefer')}
-            />
+            isPut ? undefined : (
+              <PreferQuickRow
+                operation="update"
+                spec={state.prefer}
+                setSpec={(p) => set('prefer', p, 'prefer')}
+              />
+            )
           }
         />
       }

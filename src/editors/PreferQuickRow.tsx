@@ -23,9 +23,11 @@ export function preferEffectLine(op: PreferWriteOperation, spec: PreferSpec): st
       : 'Returns 204 No Content.';
   }
   const formatted = spec.allAnnotations || spec.formattedValues ? ', with formatted values' : '';
-  return op === 'create'
-    ? `Returns 201 Created with the new record${formatted}.`
-    : `Returns 200 OK with the ${op === 'upsert' ? 'created or updated' : 'updated'} record${formatted}.`;
+  if (op === 'create') return `Returns 201 Created with the new record${formatted}.`;
+  if (op === 'upsert') {
+    return `Returns the record${formatted}: 201 Created when it's new, 200 OK when it's updated.`;
+  }
+  return `Returns 200 OK with the updated record${formatted}.`;
 }
 
 /** What ToolBox's Execute returns, whatever the toggles say (#108). */

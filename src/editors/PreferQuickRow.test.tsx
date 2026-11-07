@@ -20,7 +20,9 @@ describe('preferEffectLine', () => {
     expect(preferEffectLine('update', { ...on, formattedValues: false })).toBe(
       'Returns 200 OK with the updated record.',
     );
-    expect(preferEffectLine('upsert', on)).toContain('created or updated record');
+    expect(preferEffectLine('upsert', on)).toBe(
+      "Returns the record, with formatted values: 201 Created when it's new, 200 OK when it's updated.",
+    );
   });
 });
 
