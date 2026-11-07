@@ -11,7 +11,10 @@ export function ModeCard({ type, urlPreview }: { type: RequestType; urlPreview: 
       <div className={s.modeCardType} style={{ color: groupColor }}>
         {type.group} · {type.altMethod ? `${type.method}/${type.altMethod}` : type.method}
       </div>
-      <div className={s.modeCardName}>{type.name}</div>
+      {/* What the request does, for people new to the Web API (#289). */}
+      <Tooltip content={type.description} relationship="description" positioning="below">
+        <div className={s.modeCardName}>{type.name}</div>
+      </Tooltip>
       {/* Use v9 Tooltip instead of the native title attribute so the chrome
           matches every other hover surface in the app, and we get
           keyboard-focus tooltips for free. */}

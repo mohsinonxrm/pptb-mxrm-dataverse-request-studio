@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
+- **Each request type says what it does** ([#289]). The request-type picker
+  shows one plain sentence under every type (for example "Get one record by
+  its ID, with the columns and related rows you choose."), and each group has
+  a tagline. Search matches the sentence too, so "alternate key" finds
+  Upsert. Screen readers hear it as the option's description, after its name.
+
 - **A summary line at the top of Results** ([#290]). Above the Grid / Detail,
   JSON and Headers tabs: the status, time and size, then for a list the rows on
   this page, the total (with `$count`) and whether more pages follow. It shows on
@@ -293,6 +299,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     bring a `support/X.Y` cut from an older tag onto this workflow before its
     first tag; and the recommended `publish` environment and `v*` tag ruleset.
 
+[#289]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/289
 [#224]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/224
 [#244]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/244
 [#236]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/236
