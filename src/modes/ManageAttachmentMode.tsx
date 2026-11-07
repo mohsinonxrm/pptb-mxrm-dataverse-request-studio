@@ -385,9 +385,9 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
             state.target === 'attachment'
               ? 'Email + record reference'
               : 'Annotation id + optional parent',
-          badge: (state.target === 'attachment' ? !!state.parentActivityId : !!state.recordId)
-            ? '✓'
-            : null,
+          status: (state.target === 'attachment' ? !!state.parentActivityId : !!state.recordId)
+            ? ('set' as const)
+            : undefined,
           badgeAppearance: 'ghost' as const,
           dirty: state.dirty.has('parent'),
         },

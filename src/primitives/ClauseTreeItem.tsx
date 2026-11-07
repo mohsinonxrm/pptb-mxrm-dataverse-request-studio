@@ -13,6 +13,16 @@ import type { RequestGroup } from '../registry/requestTypes';
 // The sidebar used to claim role="tree" without the tree keyboard model,
 // and its chevrons looked collapsible, but nothing ever collapsed.
 // Owns: icon / label / aside (badge) / dirty marker / click handler.
+
+/**
+ * One badge rule for every mode (#296):
+ *   • required — required data is missing ("required", danger tint)
+ *   • invalid  — set but invalid: bad GUID, unknown record, malformed JSON ("!", danger tint)
+ *   • set      — set and valid (checkmark, success tint), only where "set" means something
+ * Counts and other labels stay plain badges. `status` wins over `badge`.
+ */
+export type ClauseStatus = 'required' | 'invalid' | 'set';
+
 export interface ClauseTreeItemProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   icon: FC<any>;
@@ -27,6 +37,8 @@ export interface ClauseTreeItemProps {
   dirty?: boolean;
   /** Right-aligned badge (count or sub) */
   badge?: ReactNode;
+  /** Required / invalid / set — the one rule for state badges (#296). */
+  status?: ClauseStatus;
   badgeAppearance?: 'tint' | 'ghost' | 'filled' | 'outline';
   badgeColor?:
     | 'brand'
@@ -55,6 +67,7 @@ export function ClauseTreeItem(props: ClauseTreeItemProps) {
     selected,
     dirty,
     badge,
+    status,
     badgeAppearance = 'tint',
     badgeColor = 'brand',
     onSelect,
@@ -102,22 +115,34 @@ export function ClauseTreeItem(props: ClauseTreeItemProps) {
             <span className={s.srOnly}>(modified)</span>
           </>
         )}
-        {badge !== undefined &&
+        {status === 'set' ? (
+          <Badge
+            size="small"
+            appearance="tint"
+            color="success"
+            icon={<Checkmark16Filled />}
+            role="img"
+            aria-label="Set"
+          />
+        ) : status === 'required' ? (
+          <Badge size="small" appearance="tint" color="danger" className={s.ctiBadge}>
+            required
+          </Badge>
+        ) : status === 'invalid' ? (
+          <Badge
+            size="small"
+            appearance="tint"
+            color="danger"
+            className={s.ctiBadge}
+            role="img"
+            aria-label="Invalid"
+          >
+            !
+          </Badge>
+        ) : (
+          badge !== undefined &&
           badge !== null &&
-          badge !== false &&
-          /* Replace the literal '✓' string badge (reads as data, not state)
-             with an iconic Checkmark in a success-tinted badge — handled
-             here so callsites don't each have to import the icon. */
-          (badge === '✓' ? (
-            <Badge
-              size="small"
-              appearance="tint"
-              color="success"
-              icon={<Checkmark16Filled />}
-              role="img"
-              aria-label="Set"
-            />
-          ) : (
+          badge !== false && (
             // `small` with an 11px label (#200): Fluent's `extra-small` is a
             // 6px dot and squeezed text badges to ~4px. Long labels
             // ("PATCH 1 field") truncate instead of pushing the row wider.
@@ -130,7 +155,8 @@ export function ClauseTreeItem(props: ClauseTreeItemProps) {
             >
               {badge}
             </Badge>
-          ))}
+          )
+        )}
       </span>
     </button>
   );
