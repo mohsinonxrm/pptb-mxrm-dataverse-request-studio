@@ -128,7 +128,8 @@ export function BatchOverviewPane({
       {total === 0 && !unavailable && (
         <FirstStep
           step={em ? 'Add requests' : 'Add a change set'}
-          onStart={() => onAddGroup(!em)}
+          // ExecuteMultiple is one flat list: open it rather than add another.
+          onStart={() => (em && groups[0] ? onSelect(`group:${groups[0].id}`) : onAddGroup(!em))}
         />
       )}
 

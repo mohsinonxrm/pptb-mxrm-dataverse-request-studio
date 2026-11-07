@@ -76,6 +76,9 @@ export function ActionPicker({
   // The Operation list opens from the first-step button (#297).
   const [opOpen, setOpOpen] = useState(false);
   const opRef = useRef<HTMLInputElement>(null);
+  // The Operation list needs a scope first, so Step 1 starts there when none is picked.
+  const [scopeOpen, setScopeOpen] = useState(false);
+  const scopeRef = useRef<HTMLInputElement>(null);
   // Two-dropdown UX. Each has TWO state fields:
   //   • The committed value (`scope` / `value` — the latter is parent-owned)
   //   • The typed-input text (`scopeInput` / `opInput`) for freeform filtering
@@ -302,12 +305,17 @@ export function ActionPicker({
         )}
       </PaneHead>
 
-      {!value && !loadError && (
+      {!value && !loadError && !loading && (
         <FirstStep
           step={firstStep}
           onStart={() => {
-            opRef.current?.focus();
-            setOpOpen(true);
+            if (scope === SCOPE_EMPTY) {
+              scopeRef.current?.focus();
+              setScopeOpen(true);
+            } else {
+              opRef.current?.focus();
+              setOpOpen(true);
+            }
           }}
         />
       )}
@@ -361,6 +369,9 @@ export function ActionPicker({
           hint="Pick Unbound or a binding entity. Required before choosing an operation."
         >
           <Combobox
+            ref={scopeRef}
+            open={scopeOpen}
+            onOpenChange={(_, d) => setScopeOpen(d.open)}
             freeform
             clearable
             value={scopeInput}

@@ -598,7 +598,7 @@ export function WorkflowPickerPane({
           )}
         </MessageBar>
       )}
-      {!workflowId && !error && (
+      {!workflowId && !error && !loading && workflows.length > 0 && (
         <FirstStep
           step="Choose a workflow"
           onStart={() => {
