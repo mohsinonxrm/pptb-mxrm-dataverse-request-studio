@@ -773,12 +773,17 @@ export function ResultsGrid({
     });
     // The selected rows' primary IDs, for "Open in Dataverse" (#293).
     const pk = rootTable?.primaryKey;
+    // De-duplicated: a collection $expand fans one record out over several rows.
     const selectedRecordIds =
       pk && selectedItems.size > 0
-        ? allRows
-            .filter((r) => selectedItems.has(getRowId(r)))
-            .map((r) => r[pk])
-            .filter((id): id is string => typeof id === 'string')
+        ? [
+            ...new Set(
+              allRows
+                .filter((r) => selectedItems.has(getRowId(r)))
+                .map((r) => r[pk])
+                .filter((id): id is string => typeof id === 'string'),
+            ),
+          ]
         : [];
     const canOpenRecords = !!pk && allRows.some((r) => typeof r[pk] === 'string');
     onViewChange({ columns: exportColumns, rows, selectedRecordIds, canOpenRecords });
