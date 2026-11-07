@@ -38,6 +38,7 @@ import {
   ExecuteFunctionMode,
   ManageAttachmentMode,
 } from './modes/lazyModes';
+import { ModeIdContext } from './primitives/FirstStep';
 import { BatchMode, ExecuteMultipleMode } from './modes/lazyBatchModes';
 import { ErrorBoundary } from './shell/ErrorBoundary';
 import { clearModeDrafts } from './state/modeDrafts';
@@ -260,7 +261,10 @@ function ModeRouter({
       resetKey={modeId}
       onReload={clearModeDrafts}
     >
-      <ModeSwitch modeId={modeId} themeMode={themeMode} setActiveId={setActiveId} />
+      {/* The routed mode, for the Builder's first-step empty state (#297). */}
+      <ModeIdContext.Provider value={modeId}>
+        <ModeSwitch modeId={modeId} themeMode={themeMode} setActiveId={setActiveId} />
+      </ModeIdContext.Provider>
     </ErrorBoundary>
   );
 }

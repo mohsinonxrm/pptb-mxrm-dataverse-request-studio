@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
+- **A first step in every request type's Builder** ([#297]). Until the first
+  step is done, the Builder shows what the request does (the request-type
+  picker's description), "Step 1 · Choose a table" (or choose an action, a
+  function, a workflow, paste a next link, add requests, enter the parent
+  email), and a button that opens that picker. Manage File and Manage
+  Attachment now open on that step; Manage Image keeps opening on its preview,
+  where the button leads to Target.
 - **Each request type says what it does** ([#289]). The request-type picker
   shows one plain sentence under every type (for example "Get one record by
   its ID, with the columns and related rows you choose."), and each group has
@@ -293,6 +300,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     bring a `support/X.Y` cut from an older tag onto this workflow before its
     first tag; and the recommended `publish` environment and `v*` tag ruleset.
 
+[#297]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/297
 [#289]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/289
 [#224]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/224
 [#244]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/244

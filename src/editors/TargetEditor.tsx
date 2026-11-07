@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Field,
   Combobox,
@@ -27,6 +27,7 @@ import { useScopedEntities } from '../host/useScopedEntities';
 import { useOpenScope } from '../host/useOpenScope';
 import { SCOPE_TIP_BODY } from '../state/scopeChip';
 import { RecordPicker } from '../primitives/RecordPicker';
+import { FirstStep } from '../primitives/FirstStep';
 import { MoreOptionsHint, useOptionSearch } from '../primitives/optionSearch';
 import { PasteODataDialog } from './PasteODataDialog';
 import { metadata } from '../host/metadataProvider';
@@ -97,6 +98,13 @@ export function TargetEditor({
   // See https://storybooks.fluentui.dev/react/llms/components-combobox.txt
   // — "Combobox with filtering" + "Clearable Combobox" sections.
   const [value, setValue] = useState<string>(tbl?.displayName ?? '');
+  // Open state is controlled so the first-step button can open the list (#297).
+  const [listOpen, setListOpen] = useState(false);
+  const comboRef = useRef<HTMLInputElement>(null);
+  const startFirstStep = () => {
+    comboRef.current?.focus();
+    setListOpen(true);
+  };
 
   // Sync external selection → input text (happens after the metadata fetch
   // resolves on initial load, or when a parent mode resets the table).
@@ -228,6 +236,11 @@ export function TargetEditor({
         )}
       </PaneHead>
 
+      {/* Until a table is picked: what this request does, and Step 1 (#297). */}
+      {!table && !noScope && !entitiesError && (
+        <FirstStep step="Choose a table" onStart={startFirstStep} />
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 560 }}>
         <Field
           label="Table"
@@ -242,6 +255,9 @@ export function TargetEditor({
           }
         >
           <Combobox
+            ref={comboRef}
+            open={listOpen}
+            onOpenChange={(_, d) => setListOpen(d.open)}
             freeform
             clearable
             value={value}
