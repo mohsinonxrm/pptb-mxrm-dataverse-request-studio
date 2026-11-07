@@ -4,7 +4,7 @@ import { History16Regular } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import { ModeCard } from '../primitives/ModeCard';
 import { SectionHeader } from '../primitives/SectionHeader';
-import { ClauseTreeList, ClauseTreeItem } from '../primitives/ClauseTreeItem';
+import { ClauseTreeList, ClauseTreeItem, type ClauseStatus } from '../primitives/ClauseTreeItem';
 import { MethodPill } from '../primitives/MethodPill';
 import type { RequestType } from '../registry/requestTypes';
 import type { RecentRun } from '../state/readState';
@@ -22,6 +22,8 @@ export interface SidebarClauseItem {
   label: ReactNode;
   code?: boolean;
   badge?: ReactNode;
+  /** Required / invalid / set — the one badge rule (#296); wins over `badge`. */
+  status?: ClauseStatus;
   badgeAppearance?: 'tint' | 'ghost' | 'filled' | 'outline';
   badgeColor?:
     | 'brand'
@@ -209,6 +211,7 @@ function SidebarItemRenderer({
         selected={activeNode === item.id}
         dirty={item.dirty}
         badge={item.badge}
+        status={item.status}
         badgeAppearance={item.badgeAppearance}
         badgeColor={item.badgeColor}
         onSelect={() => onSelect(item.id)}
