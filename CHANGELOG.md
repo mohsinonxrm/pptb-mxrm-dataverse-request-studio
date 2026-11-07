@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
+- **Each request type says what it does** ([#289]). The request-type picker
+  shows one plain sentence under every type (for example "Get one record by
+  its ID, with the columns and related rows you choose."), and each group has
+  a tagline. Search matches the sentence too, so "alternate key" finds
+  Upsert. Screen readers hear it as the option's description, after its name.
+
 - **The JSON body editor knows the table** ([#268]). In a field set's JSON view
   (Create, Update, Upsert, Bulk Write rows and entity parameters):
   - **Keys:** typing `"` lists the columns the form can set. Lookups are
@@ -287,6 +293,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     bring a `support/X.Y` cut from an older tag onto this workflow before its
     first tag; and the recommended `publish` environment and `v*` tag ruleset.
 
+[#289]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/289
 [#224]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/224
 [#244]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/244
 [#236]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/236
