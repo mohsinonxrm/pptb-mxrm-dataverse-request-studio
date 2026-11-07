@@ -7,6 +7,7 @@
 //   • Refresh      — re-execute the current query
 //   • Retrieve all — keep fetching @odata.nextLink until exhausted
 //   • Copy URL     — copy the resolved request URL
+//   • Open in Dataverse — the selected row's form in the model-driven app (#293)
 //   • Copy TSV     — copy current rows as tab-separated (paste-friendly)
 //   • Copy JSON    — copy the OData envelope
 //   • Export       — save CSV (as shown / raw) or the JSON envelope to a
@@ -52,6 +53,7 @@ import {
   ArrowExportUp20Regular,
   Dismiss20Regular,
   Filter20Regular,
+  Open20Regular,
 } from '@fluentui/react-icons';
 import type { GridDensity } from '../../state/displaySettings';
 import { useState } from 'react';
@@ -64,6 +66,8 @@ import {
   type GridExportView,
 } from './exportResults';
 import { copyText } from '../../shell/copy';
+import { ENV } from '../../env/environment';
+import { openInBrowser, recordFormUrl } from '../../host/openInDataverse';
 
 const useStyles = makeStyles({
   bar: {
@@ -153,6 +157,9 @@ export function ResultsCommandBar({
         'smaller sizes, use ToolBox 1.2.7+ or export the request via the Code tab.'
       : 'No more pages to fetch — the response did not include @odata.nextLink. ' +
         'Set Prefer: odata.maxpagesize to enable server-side pagination.';
+
+  const selectedIds = exportView?.selectedRecordIds ?? [];
+  const openUrl = selectedIds.length === 1 ? recordFormUrl(ENV.host, table, selectedIds[0]) : null;
 
   const copyUrl = () => {
     if (requestUrl) void copyText(requestUrl, 'the request URL');
@@ -282,6 +289,26 @@ export function ResultsCommandBar({
             Copy URL
           </ToolbarButton>
         </Tooltip>
+
+        {exportView?.canOpenRecords && (
+          <Tooltip
+            content={
+              openUrl
+                ? "Open the selected row's form in the model-driven app, in the connection's browser"
+                : 'Select one row to open its form in the model-driven app'
+            }
+            relationship="description"
+          >
+            <ToolbarButton
+              appearance="subtle"
+              icon={<Open20Regular />}
+              disabled={!openUrl}
+              onClick={() => openUrl && void openInBrowser(openUrl)}
+            >
+              Open in Dataverse
+            </ToolbarButton>
+          </Tooltip>
+        )}
 
         <Menu>
           <MenuTrigger disableButtonEnhancement>

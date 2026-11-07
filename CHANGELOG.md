@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
+- **Open a returned record in Dataverse** ([#293]). "Open in Dataverse" opens
+  the record's form in the model-driven app. It's on the Retrieve Single
+  detail card, on write results that return a record (not after a delete),
+  and in the Retrieve Multiple toolbar for one selected row. Inside ToolBox
+  it opens in the browser profile set on the connection, so you're already
+  signed in. Rows without a primary ID (aggregates, `$apply`) don't offer it.
+
 - **The JSON body editor knows the table** ([#268]). In a field set's JSON view
   (Create, Update, Upsert, Bulk Write rows and entity parameters):
   - **Keys:** typing `"` lists the columns the form can set. Lookups are
@@ -287,6 +294,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     bring a `support/X.Y` cut from an older tag onto this workflow before its
     first tag; and the recommended `publish` environment and `v*` tag ruleset.
 
+[#293]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/293
 [#224]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/224
 [#244]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/244
 [#236]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/236
