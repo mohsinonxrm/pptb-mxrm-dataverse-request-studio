@@ -11,6 +11,7 @@
 //   • Copy JSON    — copy the OData envelope
 //   • Export       — save CSV (as shown / raw) or the JSON envelope to a
 //                    file via toolboxAPI.fileSystem.saveFile (#15)
+//   • Columns      — choose which columns the grid shows (#292)
 //   • Selection count + row count
 //
 // The search box and the Filter row toggle only drive ResultsGrid's
@@ -64,6 +65,7 @@ import {
   type GridExportView,
 } from './exportResults';
 import { copyText } from '../../shell/copy';
+import { ColumnsMenu } from './ColumnsMenu';
 
 const useStyles = makeStyles({
   bar: {
@@ -355,6 +357,8 @@ export function ResultsCommandBar({
             Filter row
           </ToggleButton>
         </Tooltip>
+
+        <ColumnsMenu table={table} choices={exportView?.choices ?? []} />
 
         <Menu
           checkedValues={{ density: [density] }}
