@@ -33,7 +33,7 @@ import {
   serviceProtectionLimit,
 } from '../engine/serviceProtection';
 import { useStudioStyles } from '../primitives/styles';
-import { StatusPill } from '../primitives/StatusPill';
+import { ResultsSummaryBar } from './results/ResultsSummaryBar';
 import { useAnnounceResult } from '../primitives/announce';
 import {
   HEADER_CONSENT_DECLINED_CODE,
@@ -255,12 +255,26 @@ export function ResultsView({
       : undefined;
 
   const isGrid = tab === 'data' && mode !== 'single';
+  // The summary at the top of every results view (#290)
+  // Write results keep their own status card (WriteResultCard: outcome-aware,
+  // e.g. "Partial success"), so the bar would only repeat it — or contradict it.
+  const summary = writeContext ? null : (
+    <ResultsSummaryBar
+      code={result.status}
+      ms={result.ms}
+      bytes={result.bytes}
+      rows={Array.isArray(env?.value) ? env.value.length : undefined}
+      total={serverTotal}
+      more={hasMore}
+    />
+  );
 
   if (result.outcome === 'empty') {
     return (
       <div
         style={{ display: 'flex', flexDirection: 'column', gap: 8, height: '100%', minHeight: 0 }}
       >
+        {summary}
         <TabList
           selectedValue={tab}
           onTabSelect={(_, d) => setTab(d.value as ResultsTab)}
@@ -298,7 +312,7 @@ export function ResultsView({
         minHeight: 0,
       }}
     >
-      {/* Tabs (status pill + ms + size live in the grid footer) */}
+      {summary}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <TabList
           selectedValue={tab}
@@ -407,8 +421,6 @@ export function ResultsView({
               onClearSearch={() => setSearchQuery('')}
               showFilterRow={showFilterRow}
               density={density}
-              status={{ code: result.status, ms: result.ms, bytes: result.bytes }}
-              serverTotal={serverTotal}
               preferredColumnOrder={preferredColumnOrder}
               onViewChange={setGridView}
               emptyActions={emptyActions}
@@ -427,8 +439,8 @@ export function ResultsView({
   );
 }
 
-// ResultsHeader was removed — status pill + ms + bytes + row count now live
-// in the grid's bottom info bar (see ResultsGrid `infoBar`).
+// The status, time, size and row counts live in ResultsSummaryBar, at the
+// top of every results view (#290).
 
 /** Dataverse's count limits (standard, elastic), for a response that doesn't say it hit one. */
 const COUNT_CAPS = new Set([5000, 500]);
@@ -438,9 +450,7 @@ function CountResult({ result, count }: { result: ExecResult; count: number }) {
   const s = useStudioStyles();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <StatusPill status="success" code={result.status} ms={result.ms} />
-      </div>
+      <ResultsSummaryBar code={result.status} ms={result.ms} bytes={result.bytes} />
       <div className={s.emptyState} role="status">
         <Text size={900} weight="semibold" style={{ fontVariantNumeric: 'tabular-nums' }}>
           {count.toLocaleString()}
@@ -712,12 +722,7 @@ function ErrorState({
       : 'success';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <StatusPill status={kind} code={result.status || 'Error'} ms={result.ms} />
-        <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>
-          {(result.bytes / 1024).toFixed(1)} KB
-        </Caption1>
-      </div>
+      <ResultsSummaryBar kind={kind} code={result.status} ms={result.ms} bytes={result.bytes} />
       <div
         style={{
           display: 'flex',

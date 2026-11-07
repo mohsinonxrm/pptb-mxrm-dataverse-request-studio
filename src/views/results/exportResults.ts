@@ -31,10 +31,20 @@ export interface ExportColumn {
 export interface GridExportView {
   columns: ExportColumn[];
   rows: Record<string, unknown>[];
+  /** Every column the response has, for the Columns menu (#292). */
+  choices?: ColumnChoice[];
   /** Primary IDs of the selected rows that have one (#293). */
   selectedRecordIds?: string[];
   /** The rows carry the table's primary ID, so a row can be opened (#293). */
   canOpenRecords?: boolean;
+}
+
+/** One entry in the Columns menu (#292). */
+export interface ColumnChoice {
+  /** Response key; hiding it also hides its "(Raw)" twin. */
+  key: string;
+  label: string;
+  shown: boolean;
 }
 
 /** "shown": values as the grid shows them; "raw": underlying values. */
