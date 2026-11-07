@@ -84,6 +84,10 @@ export function UrlBar({
   const [{ productionSafeMode }] = usePersistedSettings();
   // The advisory drawer, opened from the chip or from a blocked Execute (#295).
   const [advisoriesOpen, setAdvisoriesOpen] = useState(false);
+  // With nothing to list the drawer unmounts; it mustn't come back open by
+  // itself the next time an advisory appears.
+  const hasAdvisories = !!advisories && advisories.length > 0;
+  if (!hasAdvisories && advisoriesOpen) setAdvisoriesOpen(false);
   const blockers = advisories?.filter((a) => a.severity === 'error').length ?? 0;
   // With blockers listed in the drawer, Execute stays focusable and opens it.
   const blockedByAdvisories = !!disabledReason && !loading && blockers > 0;

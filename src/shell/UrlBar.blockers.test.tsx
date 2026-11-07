@@ -26,26 +26,28 @@ const blocker = (id: string): Advisory => ({
 });
 const warning: Advisory = { id: 'w', severity: 'warning', source: 'validation', title: 'Careful' };
 
+function bar(advisories: Advisory[], onExecute = vi.fn()) {
+  const errors = advisories.filter((a) => a.severity === 'error');
+  return (
+    <FluentProvider theme={webLightTheme}>
+      <UrlBar
+        method="POST"
+        url="/api/data/v9.2/accounts"
+        executeVerb="Send"
+        onExecute={onExecute}
+        loading={false}
+        advisories={advisories}
+        disabledReason={errors.length ? errors[0].title : null}
+      />
+    </FluentProvider>
+  );
+}
+
 function mount(advisories: Advisory[], onExecute = vi.fn()) {
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);
-  const errors = advisories.filter((a) => a.severity === 'error');
-  act(() =>
-    root!.render(
-      <FluentProvider theme={webLightTheme}>
-        <UrlBar
-          method="POST"
-          url="/api/data/v9.2/accounts"
-          executeVerb="Send"
-          onExecute={onExecute}
-          loading={false}
-          advisories={advisories}
-          disabledReason={errors.length ? errors[0].title : null}
-        />
-      </FluentProvider>,
-    ),
-  );
+  act(() => root!.render(bar(advisories, onExecute)));
   return onExecute;
 }
 
@@ -76,6 +78,16 @@ describe('blocked Execute (#295)', () => {
       b.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     });
     expect(surface()?.textContent).toContain('1 thing to fix before you can send');
+  });
+
+  it("doesn't reopen by itself after the blockers clear", () => {
+    mount([blocker('a')]);
+    act(() => send().click());
+    expect(surface()).not.toBeNull();
+    // The blockers clear (e.g. metadata arrives), then a new one appears.
+    act(() => root!.render(bar([])));
+    act(() => root!.render(bar([blocker('b')])));
+    expect(surface()).toBeNull();
   });
 
   it('keeps the count for warnings only, and Execute enabled', () => {
