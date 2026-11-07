@@ -297,7 +297,6 @@ export function ResultsGrid({
   // Debounced so typing stays responsive on large result sets.
   const debouncedQuery = useDebouncedValue(searchQuery, 200);
   const debouncedFilters = useDebouncedValue(columnFilters, 200);
-  const filtering = isFiltering(debouncedQuery, debouncedFilters);
 
   // ── Container ResizeObserver ──
   // Keyed on the empty state: the grid's container / header nodes only
@@ -459,6 +458,7 @@ export function ResultsGrid({
       ),
     );
   }, [debouncedFilters, shownKeys]);
+  const filtering = isFiltering(debouncedQuery, shownFilters);
   const rows = useMemo(
     () => filterRows(allRows, searchIndex, debouncedQuery, shownFilters),
     [allRows, searchIndex, debouncedQuery, shownFilters],

@@ -19,7 +19,7 @@ import {
 import { ColumnTriple20Regular, Eye20Regular } from '@fluentui/react-icons';
 import { usePersistedSettings } from '../../host/usePersistedSettings';
 import type { ColumnChoice } from './exportResults';
-import { columnsButtonLabel, withHiddenColumns } from './hiddenColumns';
+import { columnsButtonLabel, hiddenForTable, withHiddenColumns } from './hiddenColumns';
 
 const useStyles = makeStyles({
   // Long column lists scroll inside the menu.
@@ -52,7 +52,12 @@ export function ColumnsMenu({ table, choices }: ColumnsMenuProps) {
         // Keep at least one column.
         if (d.checkedItems.length === 0) return;
         const keep = new Set(d.checkedItems);
-        setHidden(choices.filter((c) => !keep.has(c.key)).map((c) => c.key));
+        // Columns hidden earlier that this response doesn't have stay hidden.
+        const listed = new Set(choices.map((c) => c.key));
+        const elsewhere = hiddenForTable(settings.hiddenColumns, table).filter(
+          (k) => !listed.has(k),
+        );
+        setHidden([...elsewhere, ...choices.filter((c) => !keep.has(c.key)).map((c) => c.key)]);
       }}
     >
       <MenuTrigger disableButtonEnhancement>
