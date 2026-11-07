@@ -12,6 +12,7 @@
 // preferences in localStorage.
 
 import type { ColumnWidthStore } from '../views/results/columnWidths';
+import type { HiddenColumnStore } from '../views/results/hiddenColumns';
 
 export type ValueDisplayMode = 'formatted' | 'raw' | 'both';
 
@@ -25,6 +26,8 @@ export interface DisplaySettings {
   valueDisplayMode: ValueDisplayMode;
   /** Results-grid column widths the user dragged, per table + column (#12). */
   columnWidths: ColumnWidthStore;
+  /** Results-grid columns hidden with the Columns menu, per table (#292). */
+  hiddenColumns: HiddenColumnStore;
   entityScopeMode: EntityScopeMode;
   advancedFindOnly: boolean;
   /** Results-grid row density (#16). */
@@ -138,6 +141,7 @@ export const defaultDisplaySettings: DisplaySettings = {
   useLogicalNames: false,
   valueDisplayMode: 'formatted',
   columnWidths: {},
+  hiddenColumns: {},
   entityScopeMode: 'publisher-solution',
   // Off by default, as in FetchXML Studio (#44).
   advancedFindOnly: false,
