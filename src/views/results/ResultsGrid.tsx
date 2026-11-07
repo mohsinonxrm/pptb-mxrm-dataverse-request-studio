@@ -80,6 +80,7 @@ import { flattenRows, ROW_KEY, topLevelRowCount } from './flattenExpansions';
 import { getCellRenderer } from './DataGridCellRenderers';
 import type { ExportColumn, GridExportView } from './exportResults';
 import { widthsForTable, withColumnWidths, withoutTableWidths } from './columnWidths';
+import { hiddenForTable, visibleColumnKeys } from './hiddenColumns';
 import { buildSearchIndex, filterRows, isFiltering, type ColumnFilters } from './gridFilter';
 
 // Row heights per density — Fluent's table row heights for each `size` (#16).
@@ -296,7 +297,6 @@ export function ResultsGrid({
   // Debounced so typing stays responsive on large result sets.
   const debouncedQuery = useDebouncedValue(searchQuery, 200);
   const debouncedFilters = useDebouncedValue(columnFilters, 200);
-  const filtering = isFiltering(debouncedQuery, debouncedFilters);
 
   // ── Container ResizeObserver ──
   // Keyed on the empty state: the grid's container / header nodes only
@@ -437,11 +437,31 @@ export function ResultsGrid({
     return filterDisplayableColumns(ordered);
   }, [allRows, select, expand, hasExplicitRootSelect, preferredColumnOrder]);
 
+  // ── Columns hidden with the Columns menu, per table (#292) ──
+  const hiddenKeys = useMemo(
+    () => hiddenForTable(settings.hiddenColumns, table),
+    [settings.hiddenColumns, table],
+  );
+  const shownKeys = useMemo(
+    () => visibleColumnKeys(columnKeys, hiddenKeys),
+    [columnKeys, hiddenKeys],
+  );
+
   // ── Client-side search + column filters over the loaded rows (#17) ──
-  const searchIndex = useMemo(() => buildSearchIndex(allRows, columnKeys), [allRows, columnKeys]);
+  const searchIndex = useMemo(() => buildSearchIndex(allRows, shownKeys), [allRows, shownKeys]);
+  // A filter typed into a column that's since been hidden no longer applies.
+  const shownFilters = useMemo(() => {
+    const shown = new Set(shownKeys);
+    return Object.fromEntries(
+      Object.entries(debouncedFilters).filter(([id]) =>
+        shown.has(id.endsWith('__raw') ? id.slice(0, -5) : id),
+      ),
+    );
+  }, [debouncedFilters, shownKeys]);
+  const filtering = isFiltering(debouncedQuery, shownFilters);
   const rows = useMemo(
-    () => filterRows(allRows, searchIndex, debouncedQuery, debouncedFilters),
-    [allRows, searchIndex, debouncedQuery, debouncedFilters],
+    () => filterRows(allRows, searchIndex, debouncedQuery, shownFilters),
+    [allRows, searchIndex, debouncedQuery, shownFilters],
   );
   const clearFilters = useCallback(() => {
     setColumnFilters({});
@@ -480,7 +500,7 @@ export function ResultsGrid({
 
   // ── Build TableColumnDefinition[] ──
   const columns = useMemo(() => {
-    return columnKeys.flatMap((key) => {
+    return shownKeys.flatMap((key) => {
       const info = columnDisplay.get(key)!;
       const sortDir = sortMap.get(key);
 
@@ -617,7 +637,7 @@ export function ResultsGrid({
         }),
       ];
     });
-  }, [columnKeys, columnDisplay, sortMap, valueMode, useLogicalNames, allRows, styles]);
+  }, [shownKeys, columnDisplay, sortMap, valueMode, useLogicalNames, allRows, styles]);
 
   // ── Persisted column widths (#12) ──
   // `liveWidths` holds widths dragged this session so the sizing options
@@ -755,8 +775,26 @@ export function ResultsGrid({
         showsRaw: isTwin || valueMode === 'raw',
       };
     });
-    onViewChange({ columns: exportColumns, rows });
-  }, [onViewChange, columns, columnDisplay, useLogicalNames, valueMode, rows]);
+    const shown = new Set(shownKeys);
+    const choices = columnKeys.map((key) => {
+      const info = columnDisplay.get(key);
+      return {
+        key,
+        label: (useLogicalNames ? info?.logicalName : info?.displayName) ?? key,
+        shown: shown.has(key),
+      };
+    });
+    onViewChange({ columns: exportColumns, rows, choices });
+  }, [
+    onViewChange,
+    columns,
+    columnDisplay,
+    useLogicalNames,
+    valueMode,
+    rows,
+    columnKeys,
+    shownKeys,
+  ]);
 
   // ── Selection ──
   const handleSelectionChange = useCallback(
