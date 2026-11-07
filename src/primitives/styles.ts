@@ -341,6 +341,8 @@ export const useStudioStyles = makeStyles({
   // Lives in the URL bar footer next to Execute. The chip is a compact
   // affordance — icon + count badge + chevron. Surface is a focused
   // popover with grouped advisories. See AdvisoryDrawer.tsx for usage.
+  // Wraps Execute so a blocked click or Enter can open the advisories (#295).
+  executeWrap: { display: 'inline-flex' },
   advisoryChip: {
     display: 'inline-flex',
     alignItems: 'center',

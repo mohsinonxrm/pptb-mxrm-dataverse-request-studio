@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
+- **The advisory chip says what to fix, and a blocked Execute opens it**
+  ([#295]). With blockers, the chip next to Execute reads "2 to fix" (warnings
+  and notes keep the icon and count) and the drawer is titled "2 things to fix
+  before you can send". Execute stays focusable while it's blocked: clicking
+  it, or pressing Enter or Space on it, opens the drawer and announces the
+  title to screen readers.
+
 - **The JSON body editor knows the table** ([#268]). In a field set's JSON view
   (Create, Update, Upsert, Bulk Write rows and entity parameters):
   - **Keys:** typing `"` lists the columns the form can set. Lookups are
@@ -287,6 +294,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     bring a `support/X.Y` cut from an older tag onto this workflow before its
     first tag; and the recommended `publish` environment and `v*` tag ruleset.
 
+[#295]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/295
 [#224]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/224
 [#244]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/244
 [#236]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/236
