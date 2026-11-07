@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Caption1, Combobox, Option, tokens } from '@fluentui/react-components';
-import type { ColumnMeta } from '../mock/metadata';
+import type { ColumnMeta } from '../metadata/metadata';
 import { MoreOptionsHint, useOptionSearch } from '../primitives/optionSearch';
 
 /**

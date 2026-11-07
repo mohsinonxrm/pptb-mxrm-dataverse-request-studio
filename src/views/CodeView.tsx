@@ -38,6 +38,7 @@ import {
 import { PowerAutomatePane } from './PowerAutomatePane';
 import type { ThemeMode } from '../theme/theme';
 import type { RequestGroup } from '../registry/requestTypes';
+import { copyText } from '../shell/copy';
 
 // Two tabs (top-level): "Code" (read-only Monaco, multi-format) and "Editor"
 // (writable Monaco — playground starter code per format, with copy/reset).
@@ -51,6 +52,7 @@ const FORMATS: CodeFormat[] = [
   'xhr',
   'powerautomate',
   'csharp',
+  'python',
   'powershell',
   'curl',
   'json',
@@ -235,18 +237,21 @@ function CodePane({
               {code.length.toLocaleString()} chars ·{' '}
               {Math.round((new Blob([code]).size / 1024) * 10) / 10} KB
             </Caption1>
-            <Tooltip content="Copy code" relationship="label">
+            <Tooltip content="Copy code" relationship="description">
               <Button
                 icon={<Copy20Regular />}
                 appearance="subtle"
                 size="small"
-                onClick={() => navigator.clipboard?.writeText(code)}
+                onClick={() => void copyText(code, 'the code')}
               >
                 Copy
               </Button>
             </Tooltip>
             {fmt === 'openapi' && (
-              <Tooltip content="Save the OpenAPI document as a JSON file" relationship="label">
+              <Tooltip
+                content="Save the OpenAPI document as a JSON file"
+                relationship="description"
+              >
                 <Button
                   icon={<ArrowDownload20Regular />}
                   appearance="subtle"
@@ -361,12 +366,12 @@ function EditorPane({
             Reset
           </Button>
         </Tooltip>
-        <Tooltip content="Copy current editor contents" relationship="label">
+        <Tooltip content="Copy current editor contents" relationship="description">
           <Button
             icon={<Copy20Regular />}
             appearance="subtle"
             size="small"
-            onClick={() => navigator.clipboard?.writeText(code)}
+            onClick={() => void copyText(code, 'the code')}
           >
             Copy
           </Button>

@@ -1,11 +1,11 @@
 import { lazy, Suspense, type ComponentType } from 'react';
 import { Spinner } from '@fluentui/react-components';
 
-// Less-used modes are code-split (#22): each loads the first time it is
-// picked, so their code (and editors only they use) stays off the startup
-// path. Chunks are served locally by PPTB, so the spinner shows only for a
-// moment on first open; later switches render immediately. The everyday
-// read/write/execute modes stay in the main bundle.
+// Every mode but Retrieve Multiple, the one DRS opens on, is code-split
+// (#22, #236): each loads the first time it is picked, so its code (and the
+// editors only it uses) stays off the startup path. Chunks are served locally
+// by PPTB, so the spinner shows only for a moment on first open; later
+// switches render immediately.
 
 function lazyMode<P extends object>(
   name: string,
@@ -60,4 +60,28 @@ export const ManageFileMode = lazyMode('ManageFileMode', () =>
 );
 export const ManageImageMode = lazyMode('ManageImageMode', () =>
   import('./ManageImageMode').then((m) => m.ManageImageMode),
+);
+export const RetrieveSingleMode = lazyMode('RetrieveSingleMode', () =>
+  import('./RetrieveSingleMode').then((m) => m.RetrieveSingleMode),
+);
+export const CreateMode = lazyMode('CreateMode', () =>
+  import('./CreateMode').then((m) => m.CreateMode),
+);
+export const UpdateMode = lazyMode('UpdateMode', () =>
+  import('./UpdateMode').then((m) => m.UpdateMode),
+);
+export const UpsertMode = lazyMode('UpsertMode', () =>
+  import('./UpsertMode').then((m) => m.UpsertMode),
+);
+export const DeleteMode = lazyMode('DeleteMode', () =>
+  import('./DeleteMode').then((m) => m.DeleteMode),
+);
+export const ExecuteActionMode = lazyMode('ExecuteActionMode', () =>
+  import('./ExecuteActionMode').then((m) => m.ExecuteActionMode),
+);
+export const ExecuteFunctionMode = lazyMode('ExecuteFunctionMode', () =>
+  import('./ExecuteFunctionMode').then((m) => m.ExecuteFunctionMode),
+);
+export const ManageAttachmentMode = lazyMode('ManageAttachmentMode', () =>
+  import('./ManageAttachmentMode').then((m) => m.ManageAttachmentMode),
 );

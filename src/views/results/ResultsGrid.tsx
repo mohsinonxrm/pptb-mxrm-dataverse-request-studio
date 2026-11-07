@@ -36,7 +36,7 @@
 //     so the grid sees a flat column list — same model as model-driven
 //     advanced-find's link-entity flattening.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   createTableColumn,
   makeStyles,
@@ -61,7 +61,8 @@ import {
 import type { RowRenderer } from '@fluentui-contrib/react-data-grid-react-window';
 import { ArrowSortUp16Regular, ArrowSortDown16Regular } from '@fluentui/react-icons';
 
-import { findTable } from '../../mock/metadata';
+import { findTable } from '../../metadata/metadata';
+import { rowSelectLabel } from './rowSelectLabel';
 import type { ExpandSpec } from '../../editors/ExpandEditor';
 import type { OrderbySpec } from '../../editors/OrderbyEditor';
 import { usePersistedSettings } from '../../host/usePersistedSettings';
@@ -232,6 +233,8 @@ export interface ResultsGridProps {
   preferredColumnOrder?: string[];
   /** Reports the columns and rows the grid lists, for CSV export (#15). */
   onViewChange?: (view: GridExportView) => void;
+  /** Buttons under the "No records matched" state: the next step (#291). */
+  emptyActions?: ReactNode;
 }
 
 export function ResultsGrid({
@@ -252,6 +255,7 @@ export function ResultsGrid({
   serverTotal,
   preferredColumnOrder,
   onViewChange,
+  emptyActions,
 }: ResultsGridProps) {
   const styles = useStyles();
   const [settings, updateSettings] = usePersistedSettings();
@@ -295,6 +299,9 @@ export function ResultsGrid({
   const filtering = isFiltering(debouncedQuery, debouncedFilters);
 
   // ── Container ResizeObserver ──
+  // Keyed on the empty state: the grid's container / header nodes only
+  // exist once there are rows, so re-attach when that flips.
+  const noRows = allRows.length === 0;
   useEffect(() => {
     const node = containerRef.current;
     if (!node) return;
@@ -306,7 +313,7 @@ export function ResultsGrid({
     });
     obs.observe(node);
     return () => obs.disconnect();
-  }, [allRows.length === 0]);
+  }, [noRows]);
 
   // ── Header ResizeObserver ──
   useEffect(() => {
@@ -315,7 +322,7 @@ export function ResultsGrid({
     const obs = new ResizeObserver(() => setHeaderHeight(node.offsetHeight));
     obs.observe(node);
     return () => obs.disconnect();
-  }, [allRows.length === 0]);
+  }, [noRows]);
 
   // ── Clear selection when results change ──
   useEffect(() => {
@@ -777,12 +784,17 @@ export function ResultsGrid({
   );
 
   // ── Row renderer: skeleton while user is fast-scrolling ──
+  const primaryName = rootTable?.primaryName;
   const renderRow: RowRenderer<Record<string, unknown>> = useCallback(
-    ({ item, rowId }, style, _index, isScrolling) => (
+    ({ item, rowId }, style, index, isScrolling) => (
       <DataGridRow<Record<string, unknown>>
         key={rowId}
         style={{ ...style, height: `${rowHeight}px` }}
         className={styles.row}
+        // Each row's checkbox gets a name, like the header's (#387)
+        selectionCell={{
+          checkboxIndicator: { 'aria-label': rowSelectLabel(item, primaryName, index) },
+        }}
       >
         {({ renderCell }) => (
           <DataGridCell focusMode="group">
@@ -797,7 +809,7 @@ export function ResultsGrid({
         )}
       </DataGridRow>
     ),
-    [styles.row, rowHeight],
+    [styles.row, rowHeight, primaryName],
   );
 
   // ── Infinite scroll: trigger onLoadMore when scrolled near the bottom ──
@@ -841,6 +853,19 @@ export function ResultsGrid({
             ? 'The request succeeded but Dataverse returned zero rows. Check your $filter / $top — or try removing conditions to widen the result set.'
             : 'The request returned no rows.'}
         </div>
+        {emptyActions && (
+          <div
+            style={{
+              display: 'flex',
+              gap: 8,
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              marginTop: 8,
+            }}
+          >
+            {emptyActions}
+          </div>
+        )}
         {status && (
           <div
             style={{

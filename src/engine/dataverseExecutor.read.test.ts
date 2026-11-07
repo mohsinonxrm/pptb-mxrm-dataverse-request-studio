@@ -2,16 +2,24 @@
 // on hosts with and without header pass-through (#219).
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  COUNT_UNREADABLE_CODE,
   HEADER_CONSENT_DECLINED_CODE,
   executeAbsoluteUrl,
   executeNextLink,
   executePredefined,
   executeRetrieveMultiple,
+  executeRetrieveSingle,
+  readCount,
   readPreferHeaders,
 } from './dataverseExecutor';
+import { COUNT_ONLY_PREFER } from './urlBuilder';
 import { makeExpandSpec } from '../editors/ExpandEditor';
 import { emptyPrefer } from '../editors/PreferEditor';
-import type { PredefinedQueryState, RetrieveNextLinkState } from '../state/readState';
+import type {
+  PredefinedQueryState,
+  RetrieveNextLinkState,
+  RetrieveSingleState,
+} from '../state/readState';
 import { registerFixtureTables, retrieveMultipleState } from '../test/fixtures';
 
 // The bridge decides host capabilities once at module load; mock it so each
@@ -154,5 +162,178 @@ describe('executePredefined', () => {
       `accounts?savedQuery=${QUERY_ID}&$top=10`,
       undefined,
     );
+  });
+});
+
+describe('read headers (#109)', () => {
+  const CALLER = '00000000-0000-0000-0000-0000000000c1';
+  // What the read modes hand over: the Headers pane as a map.
+  const PANE = {
+    Accept: 'application/json',
+    'OData-MaxVersion': '4.0',
+    'OData-Version': '4.0',
+    MSCRMCallerID: CALLER,
+    'X-Custom': 'kept in the Code tab',
+  };
+
+  it('Retrieve Multiple sends impersonation, not other rows, and keeps $top without a page size', async () => {
+    await executeRetrieveMultiple(paged(10, null), PANE);
+    expect(host.queryData).toHaveBeenCalledWith('/accounts?$top=10', { MSCRMCallerID: CALLER });
+  });
+
+  it('with a page size, sends both, and $top stays out', async () => {
+    await executeRetrieveMultiple(paged(10, 50), PANE);
+    expect(host.queryData).toHaveBeenCalledWith('/accounts', { MSCRMCallerID: CALLER, ...PAGE_50 });
+  });
+
+  it('later pages run as the same caller', async () => {
+    await executeAbsoluteUrl(
+      'https://org.crm.dynamics.com/api/data/v9.2/accounts?$skiptoken=x',
+      null,
+      PANE,
+    );
+    expect(host.queryData).toHaveBeenCalledWith('accounts?$skiptoken=x', { MSCRMCallerID: CALLER });
+  });
+
+  it('Retrieve NextLink and Predefined Query send them too', async () => {
+    await executeNextLink(
+      {
+        url: 'https://org.crm.dynamics.com/api/data/v9.2/accounts?$skiptoken=y',
+        prefer: emptyPrefer(),
+        headers: [],
+        dirty: new Set(),
+      } as unknown as RetrieveNextLinkState,
+      PANE,
+    );
+    expect(host.queryData).toHaveBeenLastCalledWith('accounts?$skiptoken=y', {
+      MSCRMCallerID: CALLER,
+    });
+    await executePredefined(predefined(null, null), PANE);
+    expect(host.queryData).toHaveBeenLastCalledWith(`accounts?savedQuery=${QUERY_ID}`, {
+      MSCRMCallerID: CALLER,
+    });
+  });
+
+  it("doesn't run as you on a host that would drop the header (PPTB < 1.2.7)", async () => {
+    host.additionalHeaders = false;
+    const r = await executeRetrieveMultiple(paged(10, null), PANE);
+    expect(host.queryData).not.toHaveBeenCalled();
+    expect(r.ok).toBe(false);
+  });
+
+  it('a plain read still sends nothing (no consent prompt)', async () => {
+    const { MSCRMCallerID: _c, 'X-Custom': _x, ...plain } = PANE;
+    await executeRetrieveMultiple(paged(10, null), plain);
+    expect(host.queryData).toHaveBeenCalledWith('/accounts?$top=10', undefined);
+  });
+});
+
+describe('Retrieve Single headers (#109)', () => {
+  const ID = '00000000-0000-0000-0000-0000000000a1';
+  const single = {
+    table: 'account',
+    recordId: ID,
+    select: [],
+    expand: [],
+    prefer: emptyPrefer(),
+    headers: [],
+    dirty: new Set(),
+  } as unknown as RetrieveSingleState;
+
+  it('sends If-None-Match, and a matching etag reads as 304 Not Modified, not an error', async () => {
+    host.queryData.mockRejectedValue(new Error('Dataverse queryData failed: HTTP 304'));
+    const r = await executeRetrieveSingle(single, { 'If-None-Match': 'W/"123"' });
+    expect(host.queryData).toHaveBeenCalledWith(`/accounts(${ID})`, { 'If-None-Match': 'W/"123"' });
+    expect(r.status).toBe(304);
+    expect(r.ok).toBe(true);
+    expect(r.statusText).toBe('Not Modified');
+  });
+
+  it("doesn't send the old If-None-Match: null default", async () => {
+    host.queryData.mockResolvedValue({ value: [{ accountid: ID }] });
+    await executeRetrieveSingle(single, { 'If-None-Match': 'null' });
+    expect(host.queryData).toHaveBeenCalledWith(`/accounts(${ID})`, undefined);
+  });
+
+  it('refuses the impersonation placeholder and both impersonation headers at once', async () => {
+    const zero = '00000000-0000-0000-0000-000000000000';
+    const r1 = await executeRetrieveSingle(single, { MSCRMCallerID: zero });
+    const r2 = await executeRetrieveSingle(single, {
+      MSCRMCallerID: ID,
+      CallerObjectId: ID,
+    });
+    expect(host.queryData).not.toHaveBeenCalled();
+    expect(JSON.stringify(r1.body)).toMatch(/needs the id of the user to run as/);
+    expect(JSON.stringify(r2.body)).toMatch(/Turn on one impersonation header, not both/);
+  });
+});
+
+describe('count only (#272)', () => {
+  const COUNT_URL = '/accounts?$select=accountid&$top=1&$count=true';
+  const counted = (maxpagesize: number | null = 50) =>
+    retrieveMultipleState({ countOnly: true, top: 5, prefer: { ...emptyPrefer(), maxpagesize } });
+  const page = (count: unknown, exceeded?: unknown) => ({
+    '@odata.count': count,
+    ...(exceeded !== undefined
+      ? { '@Microsoft.Dynamics.CRM.totalrecordcountlimitexceeded': exceeded }
+      : {}),
+    value: [{ accountid: 'x' }],
+  });
+
+  it('readCount takes @odata.count and the limit flag', () => {
+    expect(readCount(page(42))).toEqual({ count: 42 });
+    expect(readCount(page(0, false))).toEqual({ count: 0, limitExceeded: false });
+    expect(readCount(page(5000, true))).toEqual({ count: 5000, limitExceeded: true });
+    expect(readCount(page(7, 'yes'))).toEqual({ count: 7 });
+    for (const bad of [{}, null, 42, '42', page(-1), page(1.5), page('42')])
+      expect(readCount(bad)).toBeNull();
+  });
+
+  it('asks the host for one row with no page size, and returns the count', async () => {
+    host.queryData.mockResolvedValue(page(230, false));
+    const res = await executeRetrieveMultiple(counted());
+    expect(host.queryData).toHaveBeenCalledWith(COUNT_URL, undefined);
+    expect(res.outcome).toBe('ok');
+    expect(res.status).toBe(200);
+    expect(res.body).toBe(230);
+    expect(res.countLimitExceeded).toBe(false);
+  });
+
+  it('passes on the limit flag, and leaves it out when Dataverse did not say', async () => {
+    host.queryData.mockResolvedValue(page(5000, true));
+    expect((await executeRetrieveMultiple(counted())).countLimitExceeded).toBe(true);
+    host.queryData.mockResolvedValue(page(12));
+    const res = await executeRetrieveMultiple(counted());
+    expect(res.body).toBe(12);
+    expect('countLimitExceeded' in res).toBe(false);
+  });
+
+  it('with headers to send, asks again for the limit annotation, never a page size', async () => {
+    host.queryData.mockResolvedValue(page(3));
+    await executeRetrieveMultiple(counted(), { Consistency: 'Strong' });
+    expect(host.queryData).toHaveBeenCalledWith(COUNT_URL, {
+      Consistency: 'Strong',
+      Prefer: COUNT_ONLY_PREFER,
+    });
+  });
+
+  it('fails clearly when the response has no @odata.count', async () => {
+    host.queryData.mockResolvedValue({ value: [] });
+    const res = await executeRetrieveMultiple(counted());
+    expect(res.outcome).toBe('error');
+    // Dataverse did answer: the pill says 200, not "no status".
+    expect(res.status).toBe(200);
+    const err = (res.body as { error: { code: string; message: string } }).error;
+    expect(err.code).toBe(COUNT_UNREADABLE_CODE);
+    expect(err.message).toMatch(/@odata\.count/);
+  });
+
+  it('still refuses impersonation the host would drop', async () => {
+    host.additionalHeaders = false;
+    const res = await executeRetrieveMultiple(counted(), {
+      CallerObjectId: '00000000-0000-0000-0000-0000000000c1',
+    });
+    expect(res.outcome).toBe('error');
+    expect(host.queryData).not.toHaveBeenCalled();
   });
 });

@@ -55,15 +55,21 @@ import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/Pref
 import { HeadersEditor, defaultReadHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
+import { replacePathSegment } from '../views/results/nextSteps';
 import { topLevelRowCount } from '../views/results/flattenExpansions';
 import { findRequestType } from '../registry/requestTypes';
 import { runtime, type ExecResult } from '../engine/runtime';
 import { buildRetrieveNextLink } from '../engine/urlBuilder';
-import type { RetrieveNextLinkState, RecentRun } from '../state/readState';
+import type { RetrieveNextLinkState } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
-import { getEnv } from '../mock/environment';
+import { getEnv } from '../env/environment';
+import { useScopedEntities } from '../host/useScopedEntities';
 import type { Advisory } from '../primitives/advisories';
 import { decodeForDisplay } from '../primitives/decodeForDisplay';
+import { readClipboardText } from '../host/pptbBridge';
+import { notify } from '../shell/dialogs';
+import { addRun, useRecentRuns } from '../state/runHistory';
+import { useUrlSuggest } from '../primitives/useUrlSuggest';
 
 const initialState = (): RetrieveNextLinkState => ({
   url: '',
@@ -149,11 +155,30 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
   const [activeNode, setActiveNode] = useState<ClauseId>('url');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
+  // The URL the shown result came from: the builder may have changed since (#291).
+  const [runUrl, setRunUrl] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('retrieve-nextlink');
 
-  const built = useMemo(() => buildRetrieveNextLink(state), [state]);
+  // Any table can come back in a nextLink, in scope or not (#44).
+  const { allEntities } = useScopedEntities();
+  const built = useMemo(
+    () =>
+      buildRetrieveNextLink(
+        state,
+        (set) => allEntities.find((e) => e.entitySetName === set)?.logicalName,
+      ),
+    [state, allEntities],
+  );
   const analysis = useMemo(() => analyzeNextLink(state.url, env.host), [state.url, env.host]);
+  // Completion when the link is typed or edited rather than pasted (#268)
+  const urlSuggest = useUrlSuggest({
+    value: state.url,
+    onChange: (v) => set('url', v, 'url'),
+    mode: 'url',
+    multiline: true,
+  });
 
   const markDirty = (id: ClauseId) =>
     setState((s) => {
@@ -187,24 +212,20 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
   const onExecute = async () => {
     if (!analysis.ok) return;
     setLoading(true);
-    const res = await runtime.nextLink(state);
+    setRunUrl(state.url.trim());
+    const res = await runtime.nextLink(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          modeId: 'retrieve-nextlink',
-          url: state.url,
-          method: 'GET',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: topLevelRowCount(res.body) ?? 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        modeId: 'retrieve-nextlink',
+        url: state.url,
+        method: 'GET',
+        status: res.status,
+        ms: res.ms,
+        rowCount: topLevelRowCount(res.body) ?? 0,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
@@ -216,12 +237,17 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
       : null;
 
   const onPaste = async () => {
-    try {
-      const text = await navigator.clipboard?.readText();
-      if (text) set('url', text.trim(), 'url');
-    } catch {
-      // Clipboard access denied (e.g. focus required). No-op — user can paste manually.
-    }
+    // ToolBox has no clipboard read, and the webview may refuse the
+    // browser's: say so rather than doing nothing (#242).
+    const text = await readClipboardText();
+    if (text?.trim()) set('url', text.trim(), 'url');
+    else if (text === null)
+      notify("The clipboard couldn't be read here. Click in the URL box and press Ctrl+V.", {
+        title: "Couldn't paste",
+        intent: 'warning',
+      });
+    else
+      notify('The clipboard has no text to paste.', { title: 'Nothing to paste', intent: 'info' });
   };
 
   const sections = [
@@ -299,7 +325,7 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
           </MessageBar>
 
           <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-            <Tooltip content="Paste from clipboard" relationship="label">
+            <Tooltip content="Paste from clipboard" relationship="description">
               <Button
                 icon={<ClipboardPaste20Regular />}
                 appearance="outline"
@@ -309,7 +335,7 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
                 Paste
               </Button>
             </Tooltip>
-            <Tooltip content="Clear the URL field" relationship="label">
+            <Tooltip content="Clear the URL field" relationship="description">
               <Button
                 icon={<Dismiss20Regular />}
                 appearance="subtle"
@@ -329,11 +355,12 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
             <Textarea
               rows={6}
               value={state.url}
-              onChange={(_, d) => set('url', d.value, 'url')}
-              placeholder={`https://${env.host}/api/data/v9.2/<entityset>?$select=…&$skiptoken=…`}
+              {...urlSuggest.fieldProps}
+              placeholder={`https://${env.host}${env.apiBase}/<entityset>?$select=…&$skiptoken=…`}
               style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 11 }}
             />
           </Field>
+          {urlSuggest.list}
 
           {/* Errors stack — one MessageBar per error so each is independently readable.
             Mirrors what the URL-bar AdvisoryDrawer shows; redundancy is intentional
@@ -420,7 +447,13 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
       );
       break;
     case 'headers':
-      pane = <HeadersEditor items={state.headers} setItems={(h) => set('headers', h, 'headers')} />;
+      pane = (
+        <HeadersEditor
+          policy="read"
+          items={state.headers}
+          setItems={(h) => set('headers', h, 'headers')}
+        />
+      );
       break;
   }
 
@@ -468,7 +501,24 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
       >
         {tab === 'builder' && pane}
         {tab === 'code' && <CodeView themeMode={themeMode} inputs={codeInputs} />}
-        {tab === 'results' && <ResultsView result={result} mode="next" />}
+        {tab === 'results' && (
+          <ResultsView
+            result={result}
+            mode="next"
+            requestUrl={runUrl || undefined}
+            onUseEntitySet={(segment, entitySet) => {
+              // Fix the URL in the builder; if it was edited since the run and no
+              // longer has the segment, fix the URL that ran instead.
+              const fixed = replacePathSegment(state.url, segment, entitySet);
+              set(
+                'url',
+                fixed !== state.url ? fixed : replacePathSegment(runUrl ?? '', segment, entitySet),
+                'url',
+              );
+              setTab('builder');
+            }}
+          />
+        )}
       </MainTabs>
     </ModeShell>
   );

@@ -35,7 +35,7 @@ import { TargetEditor } from '../editors/TargetEditor';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { type CsdlAction } from '../mock/actionsCsdl';
+import { type CsdlAction } from '../metadata/actionsCsdl';
 import { actions as actionsProvider, fetchSourceClassificationStatus } from '../host/csdlProvider';
 import { findRequestType } from '../registry/requestTypes';
 import { buildExecuteAction, buildExecuteActionBody } from '../engine/urlBuilder';
@@ -55,6 +55,12 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
+import { invalidUrlPartReason } from '../primitives/urlParts';
+import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
+import { addRun, useRecentRuns } from '../state/runHistory';
+import { useImportedRequest } from '../state/modeHandoff';
+import { importExecuteAction } from '../engine/curlImport/applyImport';
 
 export type ActionCategory = 'oob' | 'custom-api' | 'custom-action';
 
@@ -120,7 +126,8 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns(config.registryId);
 
   // Async live action lookup. The actionsProvider caches the parsed CSDL for
   // the session, so this is one fetch on first action pick — every subsequent
@@ -160,7 +167,9 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
   );
 
   // Save / Load tracking
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   // Bound-record name cache — populated when the user picks via TargetEditor.
@@ -185,12 +194,15 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
   // workflows tables (#54). When a lookup fails (no read privilege), that
   // half falls back to a name guess — say so in the sub-modes it affects.
   const [classificationNotice, setClassificationNotice] = useState<string | null>(null);
+  // Publisher groups (#248) need the solution table; without it the list is flat.
+  const [publishersMissing, setPublishersMissing] = useState(false);
   useEffect(() => {
     if (category === 'oob') return;
     let cancelled = false;
     fetchSourceClassificationStatus()
       .then((st) => {
         if (cancelled) return;
+        setPublishersMissing(!st.publishers);
         const missing = [
           !st.customApis ? 'customapis' : null,
           !st.customActions ? 'workflows' : null,
@@ -227,20 +239,50 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
       );
     });
 
-  const disabledReason = !action
-    ? 'Pick an action.'
-    : requiresBoundRecord && !state.boundRecordId
-      ? `Action '${action.name}' is bound to ${boundEntity} — supply a source record.`
-      : bindingEntity && !bindingTable
-        ? `Can't build the URL yet — ${bindingEntity} table metadata isn't loaded.`
-        : missingRequired.length > 0
-          ? `${missingRequired.length} required param${missingRequired.length === 1 ? '' : 's'} unset: ${missingRequired
-              .slice(0, 3)
-              .map((p) => p.name)
-              .join(', ')}${missingRequired.length > 3 ? '…' : ''}`
-          : state.headers.some((h) => h.enabled && !h.name)
-            ? 'Fix empty header name.'
-            : null;
+  // Ids and names that go into the URL as-is (#221).
+  const urlPartProblem = invalidUrlPartReason(
+    requiresBoundRecord ? [['Bound record id', state.boundRecordId]] : [],
+  );
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const advisories = firstBlocker([
+    { when: !action, id: 'action-pick', title: 'Pick an action.', focusNode: 'pick' },
+    {
+      when: requiresBoundRecord && !state.boundRecordId,
+      id: 'action-bound-record',
+      title: `Action '${action?.name}' is bound to ${boundEntity} — supply a source record.`,
+      focusNode: 'target',
+    },
+    {
+      when: bindingEntity && !bindingTable,
+      id: 'action-binding-metadata',
+      title: `Can't build the URL yet — ${bindingEntity} table metadata isn't loaded.`,
+      // The source record when one is needed; otherwise the action picker.
+      focusNode: requiresBoundRecord ? 'target' : 'pick',
+    },
+    {
+      when: missingRequired.length > 0,
+      id: 'action-required',
+      title: `${missingRequired.length} required param${missingRequired.length === 1 ? '' : 's'} unset: ${missingRequired
+        .slice(0, 3)
+        .map((p) => p.name)
+        .join(', ')}${missingRequired.length > 3 ? '…' : ''}`,
+      // The first unset one: each required param is its own sidebar node.
+      focusNode: missingRequired[0] ? `param:${missingRequired[0].name}` : 'params',
+    },
+    {
+      when: state.headers.some((h) => h.enabled && !h.name),
+      id: 'action-header-name',
+      title: 'Fix empty header name.',
+      focusNode: 'headers',
+    },
+    {
+      when: urlPartProblem,
+      id: 'action-url-part',
+      title: urlPartProblem ?? '',
+      focusNode: 'target',
+    },
+  ]);
+  const disabledReason = disabledReasonFromAdvisories(advisories);
 
   const onExecute = async () => {
     setLoading(true);
@@ -248,21 +290,16 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: config.registryId,
-          url: built.relativeUrl,
-          method: 'POST',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: res.ok ? 1 : 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: config.registryId,
+        url: built.relativeUrl,
+        method: 'POST',
+        status: res.status,
+        ms: res.ms,
+        rowCount: res.ok ? 1 : 0,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
@@ -321,6 +358,25 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
     setLastSavedHash(keepHash);
   };
 
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  // cURL import (#271): a command pasted anywhere opens here. Like a recent
+  // run, it isn't a saved entry, so the save baseline stays as it was.
+  useImportedRequest(config.registryId, (request) => {
+    if (
+      request.modeId !== 'exec-action' &&
+      request.modeId !== 'exec-customapi' &&
+      request.modeId !== 'exec-customaction'
+    )
+      return;
+    setState(importExecuteAction(initialState(category), request));
+    setResult(null);
+    setBoundRecordName('');
+    setTab('builder');
+    setActivePath('pick');
+  });
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.actionName) return null;
@@ -329,11 +385,17 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
         modeId: 'exec-action' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.actionName]),
+    }, [
+      currentSerialized,
+      isDirty,
+      lastSavedId,
+      state.actionName,
+      onSavedLatest,
+      onLoadSavedLatest,
+    ]),
   );
 
   const sections = [
@@ -454,6 +516,14 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
               </MessageBarBody>
             </MessageBar>
           )}
+          {category !== 'oob' && publishersMissing && (
+            <MessageBar layout="multiline" intent="info" style={{ marginBottom: 12 }}>
+              <MessageBarBody>
+                Couldn't read the solution table (you may lack read privilege), so operations aren't
+                grouped by publisher or badged with one.
+              </MessageBarBody>
+            </MessageBar>
+          )}
           <ActionPicker
             filter={config.filter}
             title={config.picker.title}
@@ -566,10 +636,29 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
           method="POST"
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={
+            action
+              ? {
+                  operation: `${type.name} ${action.name}`,
+                  table: bindingEntity ?? undefined,
+                  scope:
+                    action.binding.kind === 'entity'
+                      ? { kind: 'records', count: 1 }
+                      : action.binding.kind === 'collection'
+                        ? { kind: 'text', text: `Bound to the ${bindingEntity} collection` }
+                        : { kind: 'text', text: 'Unbound: runs against the environment' },
+                  highImpact: true,
+                  confirmWord: action.name,
+                }
+              : null
+          }
           executeIcon={Flash20Filled}
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
+          advisories={advisories}
+          onAdvisoryFocus={setActivePath}
         />
       }
     >

@@ -21,6 +21,7 @@
 // equivalent, so that's what gets sent.
 
 import { useCallback, useMemo, useRef, useState } from 'react';
+import type { WriteConfirmSpec } from '../engine/writeConfirm';
 import {
   Document20Regular,
   Document20Filled,
@@ -37,11 +38,11 @@ import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
 import { findRequestType } from '../registry/requestTypes';
 import type { ThemeMode } from '../theme/theme';
-import type { RecentRun } from '../state/readState';
-import { ENV } from '../mock/environment';
+import { ENV } from '../env/environment';
 import { adv, disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { hashState, type SavedRequest } from '../state/savedRequests';
 import { lastPublishedRequest, usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import {
   API_BASE,
@@ -76,20 +77,24 @@ import {
 import { encodeBatch, makeBoundary } from '../engine/batch/multipart';
 import { generateExecuteMultipleCSharp } from '../engine/batch/executeMultipleCode';
 import { useScopedEntities } from '../host/useScopedEntities';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { BatchItemEditor } from './batch/BatchItemEditor';
 import { BatchGroupPane, BatchOverviewPane } from './batch/BatchPanes';
 import { BatchResultsView, type ResultRow } from './batch/BatchResultsView';
 import { BatchCodeView } from './batch/BatchCodeView';
 import { AddFromSavedDialog } from './batch/AddFromSavedDialog';
+import { addRun, useRecentRuns } from '../state/runHistory';
+import { useImportedRequest } from '../state/modeHandoff';
+import { importBatch } from '../engine/curlImport/applyImport';
 
-const CODE_FORMATS: BatchCodeFormat[] = ['http', 'fetch', 'pptb'];
+const CODE_FORMATS: BatchCodeFormat[] = ['http', 'fetch', 'python', 'pptb'];
 type EmCodeFormat = 'csharp' | BatchCodeFormat;
-const EM_CODE_FORMATS: EmCodeFormat[] = ['csharp', 'http', 'pptb'];
+const EM_CODE_FORMATS: EmCodeFormat[] = ['csharp', 'http', 'python', 'pptb'];
 const EM_CODE_LABELS: Record<EmCodeFormat, string> = {
   ...BATCH_CODE_LABELS,
   csharp: 'ExecuteMultipleRequest (C#)',
   http: 'Web API equivalent ($batch)',
+  python: 'Web API equivalent (Python)',
 };
 
 /** Job / composite modes "Add last request" doesn't offer (#198). */
@@ -117,12 +122,15 @@ export function BatchMode({
   );
   const [state, setState] = useState<BatchState>(draft.state);
   const returnResponses = state.returnResponses ?? true;
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [activePath, setActivePath] = useState('overview');
   const [tab, setTab] = useState<MainTab>('builder');
   const [run, setRun] = useState<BatchRunResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns(modeId);
   const [savedOpen, setSavedOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
@@ -132,6 +140,23 @@ export function BatchMode({
   const compiled = useMemo(() => compileBatch(state.groups, orgUrl), [state.groups, orgUrl]);
   const plan = useMemo(() => planDispatch(compiled.items), [compiled]);
   const unavailable = batchUnavailableReason();
+  // A batch with writes always asks before it's sent (#241); a read-only one doesn't.
+  const batchWriteConfirm = useMemo((): WriteConfirmSpec | null => {
+    const total = compiled.items.length;
+    const writes = compiled.items.filter((c) => c.wire && c.wire.method !== 'GET').length;
+    if (writes === 0) return null;
+    return {
+      operation: type.name,
+      scope: {
+        kind: 'text',
+        text: `${total} request${total === 1 ? '' : 's'}, ${writes} of them change${writes === 1 ? 's' : ''} data`,
+        // More than 100 writes needs the word typed, as for other bulk writes.
+        count: writes,
+      },
+      highImpact: true,
+      confirmWord: type.id === 'execute-multiple' ? 'ExecuteMultiple' : 'batch',
+    };
+  }, [compiled, type.id, type.name]);
 
   // ── State helpers ──
   const touch = (s: BatchState, id: string): BatchState => {
@@ -256,13 +281,19 @@ export function BatchMode({
           'batch-deletes',
           'validation',
           `This batch deletes ${deletes} record${deletes === 1 ? '' : 's'}`,
-          'Deletes in a batch run without the Delete mode’s confirmation. Check the ids first.',
+          'The batch’s confirmation counts writes, not the records each delete removes, and there’s no typed record name as in the Delete mode. Check the ids first.',
           'overview',
         ),
       );
     }
+    // No host that can send a batch: a blocker too, so it's listed with the
+    // others and Open goes to the overview that explains it (#294).
+    if (unavailable) {
+      out.unshift(adv.err('batch-unavailable', 'validation', unavailable, undefined, 'overview'));
+    }
     return out;
-  }, [compiled]);
+  }, [compiled, unavailable]);
+  // Without a host that can send a batch, the tooltip says so first, as before.
   const disabledReason = unavailable ?? disabledReasonFromAdvisories(advisories);
   const needsConsent =
     compiled.items.some((c) => c.wire && Object.keys(c.wire.headers).length > 0) ||
@@ -277,21 +308,16 @@ export function BatchMode({
       // The batch's own status plus a per-part summary — never one part's
       // error status (#204).
       const { status, summary, succeeded } = summarizeBatchRun(res);
-      setRecents((rs) =>
-        [
-          {
-            id: `r-${Date.now()}`,
-            modeId,
-            url: `${API_BASE}/$batch`,
-            method: 'BATCH',
-            ts: Date.now(),
-            status,
-            ms: res.ms,
-            rowCount: succeeded,
-            summary,
-          },
-          ...rs,
-        ].slice(0, 8),
+      setRecents(
+        addRun({
+          modeId,
+          url: `${API_BASE}/$batch`,
+          method: 'BATCH',
+          status,
+          ms: res.ms,
+          rowCount: succeeded,
+          summary,
+        }),
       );
       setState((s) => ({ ...s, dirty: new Set() }));
     } finally {
@@ -387,6 +413,19 @@ export function BatchMode({
   };
   // Always published (like Retrieve Multiple) so the Saved library is
   // reachable from an empty batch.
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  // cURL import (#271): a command pasted anywhere opens here. Like a recent
+  // run, it isn't a saved entry, so the save baseline stays as it was.
+  useImportedRequest(modeId, (request) => {
+    if (request.modeId !== modeId) return;
+    setState(importBatch(initialBatchState(), request));
+    setRun(null);
+    setTab('builder');
+    setActivePath('overview');
+  });
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       return {
@@ -394,11 +433,10 @@ export function BatchMode({
         modeId,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId]),
+    }, [currentSerialized, modeId, isDirty, lastSavedId, onSavedLatest, onLoadSavedLatest]),
   );
 
   // ── Sidebar ──
@@ -582,6 +620,8 @@ export function BatchMode({
           url={`${API_BASE}/$batch`}
           bytes={bodyBytes}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={batchWriteConfirm}
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}

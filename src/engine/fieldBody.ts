@@ -20,7 +20,7 @@ import {
   isLookupLike,
   type ColumnMeta,
   type TableMeta,
-} from '../mock/metadata';
+} from '../metadata/metadata';
 import type { CreateFieldValue, LookupFieldValue } from '../state/writeState';
 
 /**
@@ -217,9 +217,11 @@ function resolveTarget(targets: string[], entitySet: string): string | undefined
   );
 }
 
-const NUMBER_TYPES = new Set(['Integer', 'BigInt', 'Decimal', 'Double', 'Money']);
-const INT_CHOICE_TYPES = new Set(['Picklist', 'State', 'Status']);
-const STRING_TYPES = new Set(['String', 'Memo', 'Uniqueidentifier', 'DateTime']);
+// The JSON types `decodeFieldBody` maps, per attribute type. The JSON view's
+// schema (engine/bodySchema) uses the same sets, so its warnings agree.
+export const NUMBER_TYPES = new Set(['Integer', 'BigInt', 'Decimal', 'Double', 'Money']);
+export const INT_CHOICE_TYPES = new Set(['Picklist', 'State', 'Status']);
+export const STRING_TYPES = new Set(['String', 'Memo', 'Uniqueidentifier', 'DateTime']);
 
 const typeOfJson = (v: unknown): string =>
   Array.isArray(v) ? 'an array' : v === null ? 'null' : `a ${typeof v}`;
@@ -468,8 +470,24 @@ export function rawBodyBlocker(rawBody: string | null | undefined): string | nul
  *     needs a record id (a seeded empty lookup is dropped from the body).
  *     An explicit null never counts.
  */
+/**
+ * Whether the form treats a column as required. Columns Advanced Find hides
+ * (`owneridtype` and other system columns) don't count: the attribute load
+ * used to leave them out, and the server fills them in (#44).
+ */
+export const isRequiredColumn = (c: ColumnMeta): boolean =>
+  !!c.required && c.isValidForAdvancedFind !== false;
+
 export function mustSupplyOnCreate(c: ColumnMeta): boolean {
-  return c.requiredLevel === 'ApplicationRequired' && c.isValidForCreate !== false;
+  return (
+    c.requiredLevel === 'ApplicationRequired' &&
+    c.isValidForAdvancedFind !== false &&
+    c.isValidForCreate !== false &&
+    // File / Image columns are uploaded separately and hidden from the field
+    // set, so they can't block a create (#305).
+    c.attributeType !== 'File' &&
+    c.attributeType !== 'Image'
+  );
 }
 
 function isFieldValueSet(c: ColumnMeta, v: CreateFieldValue | undefined): boolean {

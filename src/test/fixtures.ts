@@ -3,14 +3,14 @@
 // and polymorphic Customer), multi-select choices, money / integer /
 // boolean / datetime, an alternate key, and both nav cardinalities.
 
-import { __clearLiveTables, __registerLiveTables, type TableMeta } from '../mock/metadata';
+import { __clearLiveTables, __registerLiveTables, type TableMeta } from '../metadata/metadata';
 import {
   _setTableLookup,
   type FilterGroup,
   type FilterNode,
   type FilterRule,
 } from '../editors/filter/filterTree';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { emptyApply } from '../editors/ApplyEditor';
 import { emptyPrefer } from '../editors/PreferEditor';
 import type { RetrieveMultipleState } from '../state/readState';

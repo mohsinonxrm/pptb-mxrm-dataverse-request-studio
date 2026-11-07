@@ -13,9 +13,10 @@
 import { Field, Combobox, Option, Badge, Caption1, tokens } from '@fluentui/react-components';
 import { Link20Filled } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
-import { findTable, type NavProperty } from '../mock/metadata';
+import { findTable, type NavProperty } from '../metadata/metadata';
 import { useLiveTable } from '../host/useLiveMetadata';
 import type { RequestGroup } from '../registry/requestTypes';
+import { isNavInScope, useAdvancedFindOnly } from '../state/metadataScope';
 
 export interface NavPropertyPickerProps {
   table: string;
@@ -41,6 +42,9 @@ export function NavPropertyPicker({
   const tbl = findTable(table);
   const navProps = tbl?.navigationProperties ?? [];
   const current = navProps.find((n) => n.name === value);
+  // The options follow "Advanced Find only" (#44); the chosen one stays.
+  const advancedFindOnly = useAdvancedFindOnly();
+  const offered = navProps.filter((n) => isNavInScope(n, advancedFindOnly) || n.name === value);
 
   // Warm ONLY the currently-selected nav's target — the option rows can
   // safely render the raw logical name; loading 50+ targets up-front would
@@ -64,7 +68,7 @@ export function NavPropertyPicker({
             onOptionSelect={(_, d) => onChange(d.optionValue ?? null)}
             placeholder="Pick a navigation property…"
           >
-            {navProps.map((n) => (
+            {offered.map((n) => (
               <Option key={n.name} value={n.name} text={n.name}>
                 <NavOptionRow nav={n} forOperation={forOperation} />
               </Option>
@@ -100,10 +104,10 @@ function NavOptionRow({
     <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: 600 }}>{nav.name}</span>
-        <Badge appearance="ghost" size="extra-small">
+        <Badge appearance="ghost" size="small">
           {cardinalityShort(nav.cardinality)}
         </Badge>
-        <Badge appearance="tint" color="brand" size="extra-small" style={{ marginLeft: 'auto' }}>
+        <Badge appearance="tint" color="brand" size="small" style={{ marginLeft: 'auto' }}>
           {verb}
         </Badge>
       </div>

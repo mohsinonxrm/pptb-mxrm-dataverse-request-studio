@@ -9,13 +9,13 @@ file / image / attachment operations.
 Built for [Power Platform ToolBox](https://www.powerplatformtoolbox.com/) with
 React 18, Fluent UI v9, TypeScript, and live Dataverse metadata integration.
 
-[![npm](https://img.shields.io/npm/v/@mohsinonxrm/pptb-dataverse-request-studio?label=npm)](https://www.npmjs.com/package/@mohsinonxrm/pptb-dataverse-request-studio)
-[![npm beta](https://img.shields.io/npm/v/@mohsinonxrm/pptb-dataverse-request-studio/beta?label=beta&color=orange)](https://www.npmjs.com/package/@mohsinonxrm/pptb-dataverse-request-studio?activeTab=versions)
-![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript)
-![Fluent UI](https://img.shields.io/badge/Fluent%20UI-v9-0078D4?logo=microsoft)
-![PPTB Types](https://img.shields.io/badge/%40pptb%2Ftypes-1.2.7-orange)
-![License](https://img.shields.io/badge/license-AGPL--3.0--only-green)
+[![Version](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/version.svg)](https://www.npmjs.com/package/@mohsinonxrm/pptb-dataverse-request-studio)
+![Power Platform ToolBox 1.2.0 or later](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/pptb.svg)
+![@pptb/types 1.2.7](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/pptb-types.svg)
+![React 18](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/react.svg)
+![TypeScript 5.9](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/typescript.svg)
+![Fluent UI v9](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/fluent-ui.svg)
+![License AGPL-3.0-only](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/license.svg)
 
 ---
 
@@ -23,10 +23,11 @@ React 18, Fluent UI v9, TypeScript, and live Dataverse metadata integration.
 
 DRS ships with **23 request modes** in 7 groups. Every mode is
 metadata-driven and generates the correct OData / Web API shape. The
-single-request modes emit ready-to-copy code in ten formats: `fetch`, `Xrm.WebApi`,
-`Xrm.WebApi.executeMultiple`, `XMLHttpRequest`, Power Automate, C#, PowerShell,
-cURL, JSON, and an OpenAPI 3 document; the `$batch` and ExecuteMultiple
-modes have their own HTTP / fetch / C# / PPTB outputs.
+single-request modes emit ready-to-copy code in eleven formats: `fetch`,
+`Xrm.WebApi`, `Xrm.WebApi.executeMultiple`, `XMLHttpRequest`, Power Automate,
+C#, Python (`requests`), PowerShell, cURL, JSON, and an OpenAPI 3 document.
+`$batch` has its own HTTP / fetch / Python / PPTB outputs, and ExecuteMultiple
+has C# / HTTP / Python / PPTB.
 
 ### 📖 Read group
 
@@ -152,10 +153,20 @@ modes have their own HTTP / fetch / C# / PPTB outputs.
 - **Request headers through PPTB 1.2.7+** — Create / Update / Upsert /
   Delete / Merge / Bulk Write / Execute Action / Execute Workflow headers
   (preconditions, `MSCRM.*` bypass, duplicate detection, impersonation) are
-  sent as additional headers after you approve them once in ToolBox, and so is
-  the page size of paged reads. On older hosts, write requests that depend on
-  a precondition or bypass header are blocked with an explanation.
-  `Authorization` / `Cookie` headers are never sent, saved or exported.
+  sent as additional headers after you approve them once in ToolBox. The
+  read modes, Execute Function, Associate / Disassociate and Bulk Delete Job send an
+  allow-list: impersonation (`MSCRMCallerID`, `CallerObjectId`) everywhere,
+  plus `If-None-Match`, `Consistency` and the page size on reads, and the
+  bypass headers on Associate / Disassociate; the Headers pane marks the
+  rest as Code tab only. On older hosts, requests that depend on a
+  precondition, bypass or impersonation header are blocked with an
+  explanation. `Authorization` / `Cookie` headers are never sent, saved or
+  exported.
+- **Import a cURL command** — More actions → **Import cURL command…** opens a
+  pasted `curl` command (a browser's Copy as cURL, or DRS's own cURL code) in
+  the mode that sends it: Retrieve Multiple / Single, Create, Update, Upsert,
+  Delete, Execute Action / Custom API / Custom Action, or `$batch`. It's
+  filled in, not run, and credentials and browser headers are left out.
 - **Antipattern advisories** — Surfaces real-time guidance per the
   [Microsoft query-antipatterns doc](https://learn.microsoft.com/en-us/power-apps/developer/data-platform/query-antipatterns):
   `FilteringOnCalculatedColumns`, `LargeAmountOfLogicalAttributes`, large-text
@@ -175,8 +186,11 @@ modes have their own HTTP / fetch / C# / PPTB outputs.
   dirty-state detection. Export / import as JSON, export as a Postman /
   Insomnia / Bruno collection, and copy or move requests from other
   connections. A library that can't be read is never overwritten.
-- **Recent runs** — click a run to restore it into its mode. Each mode keeps
-  its unsaved request when you switch modes.
+- **Recent runs** — click a run to restore it into its mode. Runs are kept
+  across restarts, per environment (the last 200, without response bodies or
+  credential / impersonation headers), and **Show all** searches them. Turn
+  the history off or clear it in Settings. Each mode keeps its unsaved request
+  when you switch modes.
 - **Results** — CSV export (formulas neutralised for spreadsheets), JSON
   export, Copy as TSV, and response-size hints.
 - **Accessibility** — labelled inputs, readable badges and live-region
@@ -221,9 +235,11 @@ modes have their own HTTP / fetch / C# / PPTB outputs.
 
 - [Power Platform ToolBox](https://www.powerplatformtoolbox.com/) **1.2.0 or
   later** (the tool declares `minAPI: 1.2.0`). **1.2.7 or later** is
-  recommended: it sends the write and execute modes' request headers and the
-  page size, and is required for
-  the `$batch` and ExecuteMultiple modes.
+  recommended: it sends request headers (impersonation, preconditions,
+  bypass) and the page size, and is required for
+  the `$batch` and ExecuteMultiple modes. DRS detects what the host can do
+  at runtime, so `minAPI` stays at 1.2.0 rather than locking out older
+  hosts (#273).
 - A connection to a Dataverse environment
 - For local development: **Node.js 22.22.2+, 24.15+ or 26+** and **npm** (see
   `engines` in `package.json`)
@@ -231,9 +247,71 @@ modes have their own HTTP / fetch / C# / PPTB outputs.
 ### Installation
 
 Dataverse Request Studio is available as a tool in Power Platform ToolBox.
-Install it from the tool gallery or load it as a custom tool. Prereleases are
-published to npm under the `beta` tag (for example `1.4.0-beta.1`) and use the
+Install it from the tool gallery or load it as a custom tool. Stable releases
+are published to npm under the `latest` tag. Prereleases of the next version
+are published under the `beta` tag (for example `1.5.0-beta.1`) and use the
 gold Insider icon.
+
+### Choose the entity scope
+
+The entity pickers list the entities in the scope shown on the **scope button**
+in the header, after the request type. On first run it reads **Choose scope**
+and a tip points at it. Open it to pick where entities come from:
+
+- **Publisher → solution** (default): one or more publishers, then their
+  solutions;
+- **Solution only**: one or more solutions;
+- **All entities**: everything in the environment.
+
+**Advanced Find only** is there too. Changes apply right away, and the scope is
+remembered per environment.
+
+---
+
+## ✏️ What this tool changes
+
+Dataverse Request Studio only reads from Dataverse until you send a request
+from one of the write, relate, execute, bulk or batch modes. Every request runs
+as the connected user (or the user an impersonation header names), so Dataverse
+applies that user's security roles.
+
+**Before a write is sent, it asks.** The confirmation names the target: the
+environment (connection name, URL and type, with Production highlighted), the
+operation, the table and the scope. The header shows the connection and its
+type at all times.
+
+| Request | When it asks |
+|---|---|
+| **Merge**, **Execute Action / Custom API / Custom Action**, **Execute Workflow**, **Bulk Write**, `$batch` / **ExecuteMultiple** with any write, **Associate / Disassociate** with more than one target | Always |
+| **Create**, **Update**, **Upsert**, single-target **Associate / Disassociate** | On a Production connection, with **Production safe mode** on (the default; Settings → Safety) |
+| **Delete** | Always for a whole row: type the record's name and acknowledge, in the mode itself. On a Production connection with safe mode on, the confirmation above as well |
+| **Bulk Delete Job** | Always: the confirmation names the environment, counts the matching rows, and you type the table name |
+| Reads (Retrieve, Predefined Query, Execute Function, downloads) | Never |
+
+On a Production connection with safe mode on, and for more than 100 records (or
+more than 100 writes in a batch) on any connection, you type the table name (or
+the action name, or `batch` / `ExecuteMultiple`) before the confirm button
+enables. Execute and Ctrl+Enter go through the same confirmation. If the
+connection changes while the confirmation is open, nothing is sent.
+
+What each request does in Dataverse is exactly what the URL bar and the Code
+tab show: one Web API request (or one per target for Associate / Disassociate,
+or one `$batch` per group). The binary modes (file, image, attachment) don't
+send anything from inside ToolBox: Execute returns 501, and you copy the request
+from the Code tab.
+
+**Stored on your machine, not in Dataverse:**
+
+- **Saved requests** — in the browser storage of the ToolBox tool window, one
+  library per environment (`drs:saved-requests:v1:<host>`). If a library can't
+  be read, it's copied to a backup key instead of being overwritten. Export and
+  Import write and read JSON files you pick.
+- **Settings** (logical names, value display, entity scope, Advanced Find,
+  density, column widths, Production safe mode) — in ToolBox's settings store
+  for this tool.
+- **Exports** (CSV, JSON, Postman, Insomnia, Bruno, OpenAPI) — only to files you
+  choose. Credential headers (`Authorization`, cookies) are never saved or
+  exported.
 
 ---
 
@@ -271,9 +349,17 @@ npm run preview
 # Validate manifest against PPTB registry rules
 npm run validate
 
-# Pre-publish: validate → build
-npm run finalize-package
+# Lint (ESLint, no warnings allowed)
+npm run lint
+
+# Regenerate the README badges in assets/badges/ from package.json
+npm run badges
 ```
+
+The badges at the top of this README are SVG files in `assets/badges/`, linked from
+`raw.githubusercontent.com`: Power Platform ToolBox shows the README in a window that only
+loads images from GitHub, so `img.shields.io` badges don't appear there
+([RELEASING.md](https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/blob/dev/RELEASING.md#readme-images)).
 
 ### Standalone vs PPTB-embedded
 
@@ -346,7 +432,7 @@ src/
     executeBuilders.ts       — action / function / workflow body builders
     binaryBuilders.ts        — file / image / attachment pipelines
     codeGenerators.ts        — fetch, Xrm.WebApi (+ executeMultiple), XHR,
-                               Power Automate, C#, PowerShell, cURL, JSON
+                               Power Automate, C#, Python, PowerShell, cURL, JSON
     openApiGenerator.ts      — OpenAPI 3 document for the current request
     collectionFormats.ts, savedToCollection.ts
                              — Postman / Insomnia / Bruno collection export
@@ -365,6 +451,15 @@ src/
     csdlProvider.ts          — $metadata XML parsing + action / function index
     cache.ts                 — per-org metadata caches (TTL + in-flight dedup)
     useLiveMetadata.ts, useColumnDetail.ts, useScopedEntities.ts, …
+
+  metadata/                  — Dataverse metadata model
+    metadata.ts              — table / column types + live table registry
+                               (findTable, findTableBySet)
+    actionsCsdl.ts           — CSDL action / function types
+
+  env/                       — target environment
+    environment.ts           — connected environment (getEnv, ENV) +
+                               API_VERSION / API_BASE
 
   primitives/                — small reusable UI bits
     ClauseTreeItem.tsx, SectionHeader.tsx, ModeCard.tsx, RequestTypePicker.tsx
@@ -421,6 +516,7 @@ Dataverse API)
 | `Prefer: return=representation` | ✅ (ToolBox always sends it on writes) |
 | Optimistic concurrency (`If-Match` / `If-None-Match`) | ✅ 1.2.7+ |
 | `MSCRM.*` bypass family (custom plug-ins, flows, async) | ✅ 1.2.7+ |
+| Impersonation (`MSCRMCallerID` / `CallerObjectId`) on every mode | ✅ 1.2.7+ |
 | Single-property PUT / DELETE | 📝 |
 | Alternate-key upsert | 📝 |
 | Associate / Disassociate (collection + single-valued) | ✅ |
@@ -456,9 +552,9 @@ Ideas under consideration include:
 - FetchXML and Dataverse Search API modes
 - A metadata browser mode
 - Comparing responses across runs or environments
-- Importing Postman / Insomnia collections and cURL commands
-- More code-generation targets (C# ServiceClient / IOrganizationService,
-  Python, the PowerShell Dataverse module)
+- Importing Postman / Insomnia collections
+- More code-generation targets (C# ServiceClient / IOrganizationService, the
+  PowerShell Dataverse module)
 
 ---
 

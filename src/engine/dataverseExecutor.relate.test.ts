@@ -57,7 +57,8 @@ const assoc = {
   table: 'contact',
   sourceId: SRC,
   navProperty: 'parentcustomerid_account',
-  targets: ['tgt'],
+  // A real GUID: the executor refuses ids that aren't (#221).
+  targets: ['00000000-0000-0000-0000-0000000000a1'],
 } as unknown as AssociateState;
 const disassoc = {
   table: 'contact',
@@ -138,5 +139,25 @@ describe('review follow-ups (#254)', () => {
   it("keeps the user's own If-Match, in any case", () => {
     expect(relateRequestHeaders('PATCH', { 'if-match': 'W/"5"' })).toEqual({ 'if-match': 'W/"5"' });
     expect(relateRequestHeaders('PATCH', { 'If-Match': 'W/"5"' })).toEqual({ 'If-Match': 'W/"5"' });
+  });
+});
+
+describe('ids and names that would change the URL (#221)', () => {
+  it.each([
+    ['a source id with a path', { ...assoc, sourceId: `${SRC})/contact_customer_accounts` }],
+    ['a target id that is not a GUID', { ...assoc, targets: ['tgt'] }],
+    ['a navigation property with a query', { ...assoc, navProperty: 'nav?$top=1' }],
+  ])('Associate sends nothing for %s', async (_name, s) => {
+    const r = await executeAssociate(s as AssociateState);
+    expect(host.update).not.toHaveBeenCalled();
+    expect(host.retrieve).not.toHaveBeenCalled();
+    expect(r.ok).toBe(false);
+    expect(JSON.stringify(r.body)).toMatch(/Not sent: /);
+  });
+
+  it('Disassociate sends nothing for a bad source id', async () => {
+    const r = await executeDisassociate({ ...disassoc, sourceId: 'x' } as DisassociateState);
+    expect(host.update).not.toHaveBeenCalled();
+    expect(r.ok).toBe(false);
   });
 });

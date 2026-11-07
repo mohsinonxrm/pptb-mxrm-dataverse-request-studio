@@ -155,6 +155,13 @@ export const useStudioStyles = makeStyles({
     ':hover': {
       backgroundColor: tokens.colorNeutralBackground1Hover,
     },
+    // Inset, so the sidebar's scroll box doesn't clip it (#243).
+    ':focus-visible': {
+      outlineWidth: '2px',
+      outlineStyle: 'solid',
+      outlineColor: tokens.colorStrokeFocus2,
+      outlineOffset: '-2px',
+    },
   },
   ctiSelected: {
     backgroundColor: tokens.colorBrandBackground2,
@@ -190,11 +197,17 @@ export const useStudioStyles = makeStyles({
     whiteSpace: 'nowrap',
     flexShrink: 0,
   },
-  ctiChev: {
-    width: '14px',
-    height: '14px',
-    color: tokens.colorNeutralForeground3,
-    flexShrink: 0,
+  // Text for screen readers only.
+  srOnly: {
+    position: 'absolute',
+    width: '1px',
+    height: '1px',
+    margin: '-1px',
+    padding: 0,
+    overflow: 'hidden',
+    clip: 'rect(0 0 0 0)',
+    whiteSpace: 'nowrap',
+    border: 0,
   },
   ctiIcon: {
     width: '16px',
@@ -722,8 +735,8 @@ export const useStudioStyles = makeStyles({
     fontSize: '10px',
     padding: '2px 7px',
     borderRadius: tokens.borderRadiusSmall,
-    backgroundColor: '#efe8f6',
-    color: '#8764b8',
+    backgroundColor: 'var(--color-request-relate-tint)',
+    color: 'var(--color-request-relate-text)',
   },
   fnPrefix: {
     fontFamily: tokens.fontFamilyMonospace,
@@ -845,7 +858,7 @@ export const useStudioStyles = makeStyles({
     lineHeight: 1.55,
   },
   generatedKey: {
-    color: '#8764b8',
+    color: 'var(--color-request-relate-text)',
     fontWeight: 600,
   },
 
@@ -1043,18 +1056,6 @@ export const useStudioStyles = makeStyles({
   detailVal: {
     fontSize: '13px',
     color: tokens.colorNeutralForeground1,
-  },
-
-  // ── Status pill ────────────────────────────────────────
-  statusPill: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '4px',
-    padding: '3px 8px',
-    borderRadius: tokens.borderRadiusCircular,
-    fontSize: '11px',
-    fontWeight: 600,
-    fontFamily: tokens.fontFamilyMonospace,
   },
 
   // ── Empty state ────────────────────────────────────────

@@ -1,6 +1,6 @@
 // Bulk Write sends its headers on hosts that pass them, and maps errors like the other modes (#257).
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { __registerLiveTables, type TableMeta } from '../mock/metadata';
+import { __registerLiveTables, type TableMeta } from '../metadata/metadata';
 import { defaultBypassOptions } from '../state/writeState';
 import { newBulkRow, type BulkWriteState } from './bulkWrite';
 import { executeBulkWrite } from './bulkWriteExecutor';

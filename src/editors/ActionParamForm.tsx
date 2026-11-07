@@ -16,7 +16,7 @@
 //
 // Reference: https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/use-web-api-actions
 
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import {
   Input,
   SpinButton,
@@ -28,13 +28,6 @@ import {
   Caption1,
   Badge,
   Tag,
-  TagPicker,
-  TagPickerControl,
-  TagPickerGroup,
-  TagPickerInput,
-  TagPickerList,
-  TagPickerOption,
-  useTagPickerFilter,
   MessageBar,
   MessageBarBody,
   tokens,
@@ -54,7 +47,6 @@ import {
   Settings20Filled,
   Document20Regular,
   FormNew20Regular,
-  FormNew20Filled,
   Code20Regular,
   Open20Regular,
   Link20Regular,
@@ -66,10 +58,10 @@ import { FieldSetEditor } from './FieldSetEditor';
 import type { CreateFieldValue } from '../state/writeState';
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from './PaneHead';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { RecordPicker } from '../primitives/RecordPicker';
 import { useScopedEntities } from '../host/useScopedEntities';
-import type { ActionParam, CsdlAction } from '../mock/actionsCsdl';
+import type { ActionParam, CsdlAction } from '../metadata/actionsCsdl';
 import type { ExecParamValue } from '../state/executeState';
 import { defaultEntitySpecificMode, isEntitySpecificRef } from '../engine/executeBuilders';
 import type { RequestGroup } from '../registry/requestTypes';
@@ -194,7 +186,7 @@ export function ActionParamForm({
         sub={
           <>
             Required parameters first (marked{' '}
-            <Badge appearance="tint" color="danger" size="extra-small">
+            <Badge appearance="tint" color="danger" size="small">
               req
             </Badge>
             ). Optional parameters live in the accordion below.
@@ -436,6 +428,8 @@ function ParamRow({
   const missing = param.required && isEmpty(value);
   return (
     <div
+      // The sidebar node of a required param; an advisory's Open focuses here (#294).
+      data-focus-node={`param:${param.name}`}
       className={mergeClasses(styles.inlineCard)}
       style={{
         padding: 12,
@@ -452,7 +446,7 @@ function ParamRow({
             {param.name}
           </span>
           {param.required && (
-            <Badge appearance="tint" color="danger" size="extra-small">
+            <Badge appearance="tint" color="danger" size="small">
               req
             </Badge>
           )}
@@ -492,7 +486,7 @@ function ParamInput(props: Parameters<typeof ParamInputBody>[0]) {
 }
 
 function ParamInputBody({
-  action,
+  action: _action,
   param,
   value,
   onChange,
@@ -1245,12 +1239,7 @@ function ComplexTypeInput({
             <span style={{ fontFamily: tokens.fontFamilyMonospace, fontSize: 11 }}>
               {f.name} <span style={{ color: tokens.colorNeutralForeground3 }}>· {f.type}</span>
               {f.required && (
-                <Badge
-                  appearance="tint"
-                  color="danger"
-                  size="extra-small"
-                  style={{ marginLeft: 6 }}
-                >
+                <Badge appearance="tint" color="danger" size="small" style={{ marginLeft: 6 }}>
                   req
                 </Badge>
               )}

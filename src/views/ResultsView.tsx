@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState, type ReactNode } from 'react';
 import {
   TabList,
   Tab,
@@ -11,16 +11,27 @@ import {
   MessageBar,
   MessageBarBody,
   MessageBarActions,
+  Link,
 } from '@fluentui/react-components';
 import {
   Dismiss20Regular,
   Copy20Regular,
-  ArrowDownload20Regular,
   DocumentSearch20Regular,
   ErrorCircle20Regular,
   LockClosed20Regular,
   ShieldDismiss20Regular,
+  Filter20Regular,
+  FilterDismiss20Regular,
+  Link20Regular,
+  DocumentCopy20Regular,
+  Clock20Regular,
+  ArrowClockwise20Regular,
 } from '@fluentui/react-icons';
+import {
+  SERVICE_PROTECTION_DOCS,
+  SERVICE_PROTECTION_SCOPE,
+  serviceProtectionLimit,
+} from '../engine/serviceProtection';
 import { useStudioStyles } from '../primitives/styles';
 import { StatusPill } from '../primitives/StatusPill';
 import { useAnnounceResult } from '../primitives/announce';
@@ -36,9 +47,31 @@ import { ResultsCommandBar } from './results/ResultsCommandBar';
 import type { GridExportView } from './results/exportResults';
 import { usePersistedSettings } from '../host/usePersistedSettings';
 import { RecordDetailCard } from './detail/RecordDetailCard';
-import { WriteResultCard, type WriteResultContext } from './results/WriteResultCard';
+import type { WriteResultContext } from './results/WriteResultCard';
 import type { ExpandSpec } from '../editors/ExpandEditor';
 import type { OrderbySpec } from '../editors/OrderbyEditor';
+import { copyText } from '../shell/copy';
+import { ENV } from '../env/environment';
+import { useScopedEntities } from '../host/useScopedEntities';
+import {
+  describeMissingPrivilege,
+  errorReport,
+  missingPrivilege,
+  notFoundSegment,
+  suggestEntitySet,
+} from './results/nextSteps';
+
+// The write-result card only shows after a write, so it isn't in the
+// startup bundle with Retrieve Multiple (#236).
+const WriteResultCard = lazy(() =>
+  import('./results/WriteResultCard').then((m) => ({ default: m.WriteResultCard })),
+);
+
+/** The request URL as sent: modes pass it relative to the org host. Like the
+ *  URL bar, it reads `https:///…` when there's no connection. */
+function absoluteUrl(url: string | undefined): string | undefined {
+  return url && url.startsWith('/') ? `https://${ENV.host}${url}` : url;
+}
 
 export type ResultsTab = 'data' | 'json' | 'headers';
 
@@ -63,6 +96,12 @@ export function ResultsView({
   onDismissLoadMoreNotice,
   writeContext,
   preferredColumnOrder,
+  method = 'GET',
+  onEditFilter,
+  onRunWithoutFilter,
+  onUseEntitySet,
+  notice,
+  loading = false,
 }: {
   result: ExecResult | null;
   table?: string;
@@ -110,6 +149,19 @@ export function ResultsView({
    * column order. Ignored when `select` is non-empty.
    */
   preferredColumnOrder?: string[];
+  /** HTTP method of the request, for the error report (#291). */
+  method?: string;
+  /** 0 rows: open the $filter node in the builder (#291). */
+  onEditFilter?: () => void;
+  /** 0 rows: drop the $filter and run again (#291). */
+  onRunWithoutFilter?: () => void;
+  /** 404 on an unknown entity set: switch the request to the suggested
+   *  set (#291). Without it the suggestion is shown as text only. */
+  onUseEntitySet?: (segment: string, entitySet: string) => void;
+  /** A message bar above the results, e.g. "Ran without $filter". */
+  notice?: ReactNode;
+  /** A run is in flight: Try again waits for it (#269). */
+  loading?: boolean;
 }) {
   const [tab, setTab] = useState<ResultsTab>('data');
   // Grid-local UI state. We hoist it here (not inside ResultsGrid) so the
@@ -144,8 +196,49 @@ export function ResultsView({
   // baked into WriteResultCard (412 = "ETag stale" / "precondition failed",
   // 409 = duplicate-detect, etc.), so we fall through and let it render.
   if (!result.ok && !writeContext) {
-    return <ErrorState result={result} />;
+    // The notice stays above an error too: after a failed "Run without
+    // $filter" it's the only way to get the $filter back.
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {notice}
+        <ErrorState
+          result={result}
+          method={method}
+          requestUrl={absoluteUrl(requestUrl)}
+          onUseEntitySet={onUseEntitySet}
+          onRetry={onRefresh}
+          retrying={loading}
+        />
+      </div>
+    );
   }
+
+  // Count only (#272): the body is the number of matching rows.
+  if (typeof result.body === 'number') return <CountResult result={result} count={result.body} />;
+
+  // 0 rows (#291): the grid's empty state offers the next step.
+  const emptyActions = (onEditFilter || onRunWithoutFilter || requestUrl) && (
+    <>
+      {onEditFilter && (
+        <Button icon={<Filter20Regular />} onClick={onEditFilter}>
+          Edit $filter
+        </Button>
+      )}
+      {onRunWithoutFilter && (
+        <Button icon={<FilterDismiss20Regular />} onClick={onRunWithoutFilter}>
+          Run without $filter
+        </Button>
+      )}
+      {requestUrl && (
+        <Button
+          icon={<Link20Regular />}
+          onClick={() => void copyText(absoluteUrl(requestUrl) ?? '', 'the request URL')}
+        >
+          Copy request URL
+        </Button>
+      )}
+    </>
+  );
 
   // Detect more-pages from the envelope's @odata.nextLink annotation,
   // and the server-emitted @odata.count (when $count=true was set).
@@ -240,6 +333,8 @@ export function ResultsView({
         />
       )}
 
+      {notice}
+
       {loadMoreError && (
         <MessageBar intent="error" layout="multiline">
           <MessageBarBody>{loadMoreError} Rows already loaded are kept.</MessageBarBody>
@@ -292,7 +387,9 @@ export function ResultsView({
         {tab === 'data' &&
           (mode === 'single' ? (
             writeContext ? (
-              <WriteResultCard result={result} ctx={writeContext} />
+              <Suspense fallback={<Spinner size="small" label="Loading the result…" />}>
+                <WriteResultCard result={result} ctx={writeContext} />
+              </Suspense>
             ) : (
               <DetailPane body={result.body} table={table ?? ''} />
             )
@@ -314,6 +411,7 @@ export function ResultsView({
               serverTotal={serverTotal}
               preferredColumnOrder={preferredColumnOrder}
               onViewChange={setGridView}
+              emptyActions={emptyActions}
             />
           ))}
         {tab === 'json' && <JsonPane body={result.body} />}
@@ -331,6 +429,41 @@ export function ResultsView({
 
 // ResultsHeader was removed — status pill + ms + bytes + row count now live
 // in the grid's bottom info bar (see ResultsGrid `infoBar`).
+
+/** Dataverse's count limits (standard, elastic), for a response that doesn't say it hit one. */
+const COUNT_CAPS = new Set([5000, 500]);
+
+/** A Count only result (#272): the number, and whether Dataverse stopped counting. */
+function CountResult({ result, count }: { result: ExecResult; count: number }) {
+  const s = useStudioStyles();
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <StatusPill status="success" code={result.status} ms={result.ms} />
+      </div>
+      <div className={s.emptyState} role="status">
+        <Text size={900} weight="semibold" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {count.toLocaleString()}
+        </Text>
+        <Caption1>matching row{count === 1 ? '' : 's'}</Caption1>
+        {(result.countLimitExceeded ?? COUNT_CAPS.has(count)) && (
+          <Caption1 style={{ color: tokens.colorNeutralForeground3, maxWidth: 440 }}>
+            Dataverse stops counting at 5,000 rows (500 for elastic tables),{' '}
+            {result.countLimitExceeded ? 'and more rows match.' : 'so there may be more.'} The{' '}
+            <code>RetrieveTotalRecordCount</code> function gives a total from the last 24 hours.
+          </Caption1>
+        )}
+        <Button
+          appearance="subtle"
+          icon={<Copy20Regular />}
+          onClick={() => void copyText(String(count), 'the count')}
+        >
+          Copy count
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function DetailPane({ body, table }: { body: unknown; table: string }) {
   if (!body || typeof body !== 'object') return null;
@@ -357,7 +490,7 @@ function JsonPane({ body }: { body: unknown }) {
           appearance="subtle"
           size="small"
           style={{ position: 'absolute', top: 6, right: 6, zIndex: 1 }}
-          onClick={() => navigator.clipboard?.writeText(json)}
+          onClick={() => void copyText(json, 'the JSON')}
         />
       </Tooltip>
       <pre
@@ -440,13 +573,58 @@ function isResponseSizeLimitError(message: string | undefined): boolean {
   return !!message && /16777216|exceeds the maximum size/i.test(message);
 }
 
-function ErrorState({ result }: { result: ExecResult }) {
+/** "Did you mean …?" for a 404 on an entity set the user mistyped (#291).
+ *  Only tables inside the current scope are offered. Its own component, so
+ *  the entity list is read only when there's a segment to match. */
+function EntitySetSuggestion({
+  segment,
+  onUse,
+}: {
+  segment: string;
+  onUse?: (segment: string, entitySet: string) => void;
+}) {
+  const { entities } = useScopedEntities();
+  const match = suggestEntitySet(segment, entities);
+  if (!match) return null;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <Caption1 style={{ color: tokens.colorNeutralForeground1 }}>
+        Did you mean <code>{match.entitySetName}</code> ({match.displayName || match.logicalName})?
+      </Caption1>
+      {onUse && (
+        <Button size="small" onClick={() => onUse(segment, match.entitySetName)}>
+          Use {match.entitySetName}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function ErrorState({
+  result,
+  method,
+  requestUrl,
+  onUseEntitySet,
+  onRetry,
+  retrying = false,
+}: {
+  result: ExecResult;
+  method?: string;
+  requestUrl?: string;
+  onUseEntitySet?: (segment: string, entitySet: string) => void;
+  /** Run the request again; offered when Dataverse throttled it (#269). */
+  onRetry?: () => void;
+  /** The retry is running. Dataverse asks clients not to send more until it ends. */
+  retrying?: boolean;
+}) {
   const Icon =
     result.status === 401
       ? LockClosed20Regular
       : result.status === 403
         ? ShieldDismiss20Regular
-        : ErrorCircle20Regular;
+        : result.status === 429
+          ? Clock20Regular
+          : ErrorCircle20Regular;
   const err = (result.body as { error?: { code?: string; message?: string } } | null)?.error;
   // #126 — the host caps response size; say how to shrink the response.
   // Only point at the page size where Execute sends it (#219).
@@ -487,32 +665,45 @@ function ErrorState({ result }: { result: ExecResult }) {
               'Power Platform ToolBox rejected a request header. Fix it in the Headers or Prefer pane.',
           }
         : null;
+  // #269: Dataverse's service protection limits (429).
+  const throttled = notSent ? null : serviceProtectionLimit(result);
   const title = notSent
     ? notSent.title
-    : result.status === 401
-      ? 'Unauthorized · 401'
-      : result.status === 403
-        ? 'Forbidden · 403'
-        : result.status === 404
-          ? 'Not Found · 404'
-          : result.status === 501
-            ? 'Not Implemented · 501'
-            : result.status === 0
-              ? 'Request failed'
-              : `Error · ${result.status}`;
+    : throttled
+      ? `Throttled: ${throttled.limit} · ${result.status || 429}`
+      : result.status === 401
+        ? 'Unauthorized · 401'
+        : result.status === 403
+          ? 'Forbidden · 403'
+          : result.status === 404
+            ? 'Not Found · 404'
+            : result.status === 501
+              ? 'Not Implemented · 501'
+              : result.status === 0
+                ? 'Request failed'
+                : `Error · ${result.status}`;
+  // #291: name the missing privilege when the 403 message has one.
+  const privilege = !notSent && result.status === 403 ? missingPrivilege(err?.message) : null;
+  // #291: an entity set Dataverse couldn't resolve. Matched on the message,
+  // since the host often reports no status for it.
+  const segment = notSent ? null : notFoundSegment(err?.message);
   const advice = notSent
     ? notSent.advice
-    : result.status === 401
-      ? 'Sign in to refresh your access token, then re-run.'
-      : result.status === 403
-        ? 'Caller is missing a required privilege. Check role assignments.'
-        : result.status === 404
-          ? 'Record (or entity) not found. Verify the GUID and entity set.'
-          : result.status === 501
-            ? 'The request was not sent. See the message below.'
-            : result.status === 0
-              ? noStatusAdvice(err)
-              : 'Inspect the error message below for details.';
+    : throttled
+      ? `${throttled.advice} ${SERVICE_PROTECTION_SCOPE}`
+      : result.status === 401
+        ? 'Your sign-in for this connection has expired or was revoked. Open Connection Manager in Power Platform ToolBox, sign in to the connection again, then run the request again.'
+        : result.status === 403
+          ? privilege
+            ? describeMissingPrivilege(privilege)
+            : 'Your user is missing a privilege this request needs. Check your security roles with a Dataverse administrator.'
+          : result.status === 404
+            ? 'Record (or entity) not found. Verify the GUID and entity set.'
+            : result.status === 501
+              ? 'The request was not sent. See the message below.'
+              : result.status === 0
+                ? noStatusAdvice(err)
+                : 'Inspect the error message below for details.';
   // Any failure is 'danger', including a status the host didn't report (0).
   const kind: 'success' | 'danger' | 'warning' = !result.ok
     ? 'danger'
@@ -564,6 +755,45 @@ function ErrorState({ result }: { result: ExecResult }) {
             {nestedExpandTopHint}
           </Caption1>
         )}
+        {segment && <EntitySetSuggestion segment={segment} onUse={onUseEntitySet} />}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+          {throttled && onRetry && (
+            <Button
+              appearance="primary"
+              icon={retrying ? <Spinner size="tiny" /> : <ArrowClockwise20Regular />}
+              disabled={retrying}
+              onClick={onRetry}
+            >
+              {retrying ? 'Trying again…' : 'Try again'}
+            </Button>
+          )}
+          {throttled && (
+            <Link
+              href={SERVICE_PROTECTION_DOCS}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ alignSelf: 'center' }}
+            >
+              About the limits
+            </Link>
+          )}
+          <Button
+            icon={<DocumentCopy20Regular />}
+            onClick={() =>
+              void copyText(errorReport({ result, method, requestUrl }), 'the error report')
+            }
+          >
+            Copy error report
+          </Button>
+          {requestUrl && (
+            <Button
+              icon={<Link20Regular />}
+              onClick={() => void copyText(requestUrl, 'the request URL')}
+            >
+              Copy request URL
+            </Button>
+          )}
+        </div>
         {err && (
           // `whiteSpace: pre-wrap` keeps `\n` breaks but wraps the rest;
           // `wordBreak: break-word` + `overflowWrap: anywhere` break long
@@ -597,7 +827,3 @@ function ErrorState({ result }: { result: ExecResult }) {
     </div>
   );
 }
-
-// keep import warnings down
-void Spinner;
-void ArrowDownload20Regular;

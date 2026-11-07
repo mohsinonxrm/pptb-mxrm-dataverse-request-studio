@@ -96,11 +96,16 @@ export function TopEditor({
 export function CountEditor({
   countOn,
   setCountOn,
+  countOnly = false,
+  setCountOnly,
   group = 'read',
   applyActive,
 }: {
   countOn: boolean;
   setCountOn: (b: boolean) => void;
+  /** Count only (#272): just the number of matching rows. Hidden when not wired. */
+  countOnly?: boolean;
+  setCountOnly?: (b: boolean) => void;
   group?: RequestGroup;
   /** When true, $apply is on and $count is ignored. */
   applyActive?: boolean;
@@ -113,15 +118,45 @@ export function CountEditor({
         sub="Include the total count in the response (capped at 5,000 — see totalrecordcountlimitexceeded)."
         group={group}
       />
-      {applyActive && <ApplyOverridesBanner clause="$count" />}
+      {applyActive && !countOnly && <ApplyOverridesBanner clause="$count" />}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 480 }}>
-        <Field label={countOn ? 'Including @odata.count' : 'Not including @odata.count'}>
-          <Switch checked={countOn} onChange={(_, d) => setCountOn(d.checked)} />
+        {setCountOnly && (
+          <Field
+            label="Count only"
+            hint={
+              <>
+                Get just the number of rows matching $filter, up to 5,000 (500 for elastic tables).
+                The other clauses aren&apos;t sent.
+              </>
+            }
+          >
+            <Switch
+              checked={countOnly}
+              onChange={(_, d) => setCountOnly(d.checked)}
+              aria-label="Count only"
+            />
+          </Field>
+        )}
+        <Field
+          label={
+            countOnly
+              ? 'Count only includes @odata.count'
+              : countOn
+                ? 'Including @odata.count'
+                : 'Not including @odata.count'
+          }
+        >
+          <Switch
+            checked={countOn || countOnly}
+            disabled={countOnly}
+            onChange={(_, d) => setCountOn(d.checked)}
+          />
         </Field>
         <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
           When you also need to know whether the count is capped, add the{' '}
           <code>Microsoft.Dynamics.CRM.totalrecordcount</code> and{' '}
-          <code>totalrecordcountlimitexceeded</code> annotations via Prefer.
+          <code>totalrecordcountlimitexceeded</code> annotations via Prefer. Past 5,000 rows, the{' '}
+          <code>RetrieveTotalRecordCount</code> function gives a total from the last 24 hours.
         </Text>
       </div>
     </div>

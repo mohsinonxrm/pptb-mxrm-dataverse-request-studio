@@ -67,7 +67,7 @@ import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { topLevelRowCount } from '../views/results/flattenExpansions';
 import { findRequestType } from '../registry/requestTypes';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { buildPredefinedQuery } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
 import type { PredefinedQueryState, PredefinedRelatedTarget, RecentRun } from '../state/readState';
@@ -85,6 +85,10 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
+import { invalidUrlPartReason } from '../primitives/urlParts';
+import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
+import { addRun, useRecentRuns } from '../state/runHistory';
 
 // Empty initial state — the studio is a request *builder*. Pre-seeding a
 // table or a query confused users in PPTB ("why is this random view
@@ -245,12 +249,17 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   // findTable(), which is empty until the fetch lands — keying on `state`
   // alone left the URL / Code tab blank after picking a table (#78).
   const { table: liveTable } = useLiveTable(state.table || null);
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [activeNode, setActiveNode] = useState<ClauseId>('target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
+  // The URL the shown result came from: the builder may have changed since (#291).
+  const [runUrl, setRunUrl] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('predefined-query');
 
   // Save / Load
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
@@ -271,6 +280,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   // Related-collection target (#5): the source table's entity set is part of
   // the URL, so its metadata landing must rebuild it too.
   const { table: liveSource } = useLiveTable(state.related?.sourceTable || null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable / liveSource rebuild the URL once the table and related source metadata land (#5, #78)
   const built = useMemo(() => buildPredefinedQuery(state), [state, liveTable, liveSource]);
   const tbl = findTable(state.table);
   const selectedQuery = queries.find((q) => q.id === state.queryId) ?? null;
@@ -452,36 +462,52 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.predefined(state);
+    setRunUrl(built.relativeUrl);
+    const res = await runtime.predefined(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'predefined-query',
-          url: built.relativeUrl,
-          method: 'GET',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: topLevelRowCount(res.body) ?? 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'predefined-query',
+        url: built.relativeUrl,
+        method: 'GET',
+        status: res.status,
+        ms: res.ms,
+        rowCount: topLevelRowCount(res.body) ?? 0,
+      }),
     );
     setState((ss) => ({ ...ss, dirty: new Set() }));
   };
 
-  const disabledReason = !state.table
-    ? 'Pick a table first.'
-    : !state.queryId
-      ? 'Pick a saved query or user view.'
-      : state.related && !(state.related.navProperty && state.related.recordId)
-        ? 'Pick the relationship and the row whose related records to query.'
-        : null;
+  // Ids and names that go into the URL as-is (#221).
+  const urlPartProblem = invalidUrlPartReason(
+    [
+      ['Query id', state.queryId],
+      ['Source row id', state.related?.recordId],
+    ],
+    [['Relationship', state.related?.navProperty]],
+  );
+  // Execute blockers, as advisories with a way to the fix (#294). The table,
+  // query and related row are all picked in the Target pane.
+  const advisories = firstBlocker([
+    { when: !state.table, id: 'pq-table', title: 'Pick a table first.', focusNode: 'target' },
+    {
+      when: !state.queryId,
+      id: 'pq-query',
+      title: 'Pick a saved query or user view.',
+      focusNode: 'target',
+    },
+    {
+      when: state.related && !(state.related.navProperty && state.related.recordId),
+      id: 'pq-related',
+      title: 'Pick the relationship and the row whose related records to query.',
+      focusNode: 'target',
+    },
+    { when: urlPartProblem, id: 'pq-url-part', title: urlPartProblem ?? '', focusNode: 'target' },
+  ]);
+  const disabledReason = disabledReasonFromAdvisories(advisories);
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializePredefinedQuery(state), [state]);
@@ -525,6 +551,10 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedHash(keepHash);
   };
 
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.table) return null;
@@ -533,11 +563,10 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: 'predefined-query' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.table]),
+    }, [currentSerialized, isDirty, lastSavedId, state.table, onSavedLatest, onLoadSavedLatest]),
   );
 
   const sections = [
@@ -874,7 +903,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
                         {selectedQuery.layoutColumns.map((c) => (
                           <Tooltip
                             key={c.fullName}
-                            relationship="label"
+                            relationship="description"
                             content={
                               c.isLink
                                 ? `${c.fullName} — joined column via link alias \`${c.linkAlias}\` · width ${c.width}px`
@@ -1006,7 +1035,13 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
       );
       break;
     case 'headers':
-      pane = <HeadersEditor items={state.headers} setItems={(h) => set('headers', h, 'headers')} />;
+      pane = (
+        <HeadersEditor
+          policy="read"
+          items={state.headers}
+          setItems={(h) => set('headers', h, 'headers')}
+        />
+      );
       break;
   }
 
@@ -1037,6 +1072,8 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
+          advisories={advisories}
+          onAdvisoryFocus={(id) => setActiveNode(id as ClauseId)}
         />
       }
     >
@@ -1052,6 +1089,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
             result={result}
             mode="multi"
             table={state.table}
+            requestUrl={runUrl}
             // Pass the layoutxml column order so the results grid columns
             // match what Dynamics 365 / Sales Hub shows for the same view.
             // Without this the grid falls back to JSON-key order, which on

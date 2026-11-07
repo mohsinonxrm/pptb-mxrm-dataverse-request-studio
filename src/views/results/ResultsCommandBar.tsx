@@ -63,6 +63,7 @@ import {
   type ExportValueMode,
   type GridExportView,
 } from './exportResults';
+import { copyText } from '../../shell/copy';
 
 const useStyles = makeStyles({
   bar: {
@@ -154,11 +155,11 @@ export function ResultsCommandBar({
         'Set Prefer: odata.maxpagesize to enable server-side pagination.';
 
   const copyUrl = () => {
-    if (requestUrl) navigator.clipboard?.writeText(requestUrl);
+    if (requestUrl) void copyText(requestUrl, 'the request URL');
   };
 
   const copyJson = () => {
-    navigator.clipboard?.writeText(JSON.stringify(body, null, 2));
+    void copyText(JSON.stringify(body, null, 2), 'the response JSON', { shown: false });
   };
 
   const copyTsv = () => {
@@ -182,7 +183,11 @@ export function ResultsCommandBar({
         })
         .join('\t'),
     );
-    navigator.clipboard?.writeText([header, ...lines].join('\n'));
+    void copyText(
+      [header, ...lines].join('\n'),
+      `${rows.length} ${rows.length === 1 ? 'row' : 'rows'}`,
+      { shown: false },
+    );
   };
 
   const save = async (fileName: string, content: string, filter: { name: string; ext: string }) => {
@@ -225,7 +230,8 @@ export function ResultsCommandBar({
   return (
     <div className={s.bar}>
       <Toolbar size="small" aria-label="Results actions">
-        <Tooltip content="Re-run the request" relationship="label">
+        {/* A description, not a label: the name is the visible "Refresh" (#387) */}
+        <Tooltip content="Re-run the request" relationship="description">
           <ToolbarButton
             appearance="subtle"
             icon={isLoading ? <Spinner size="tiny" /> : <ArrowClockwise20Regular />}
@@ -266,7 +272,7 @@ export function ResultsCommandBar({
 
         <ToolbarDivider />
 
-        <Tooltip content="Copy the resolved request URL" relationship="label">
+        <Tooltip content="Copy the resolved request URL" relationship="description">
           <ToolbarButton
             appearance="subtle"
             icon={<Link20Regular />}

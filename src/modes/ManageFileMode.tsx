@@ -17,7 +17,6 @@
 //   files-images-overview · file-column-data · attachment-annotation-files · getfilesasurl
 
 import { useMemo, useState } from 'react';
-import { Warning20Filled } from '@fluentui/react-icons';
 import {
   Table20Regular,
   Table20Filled,
@@ -41,7 +40,6 @@ import {
   RadioGroup,
   Radio,
   Caption1,
-  Badge,
   tokens,
   mergeClasses,
   SpinButton,
@@ -63,7 +61,7 @@ import { BinaryPipelineCard } from '../editors/BinaryPipelineCard';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { findTable, type FileColumnMeta } from '../mock/metadata';
+import { findTable, type FileColumnMeta } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildManageFile, manageFilePipeline, formatSize } from '../engine/urlBuilder';
 import { pipelineCodegen } from '../engine/binaryBuilders';
@@ -80,7 +78,12 @@ import type { ThemeMode } from '../theme/theme';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
 import { isEmbedded } from '../host/pptbBridge';
-import { adv, type Advisory } from '../primitives/advisories';
+import {
+  adv,
+  disabledReasonFromAdvisories,
+  firstBlocker,
+  type Advisory,
+} from '../primitives/advisories';
 import {
   serializeManageFile,
   deserializeManageFile,
@@ -91,6 +94,9 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
+import { invalidUrlPartReason } from '../primitives/urlParts';
+import { addRun, useRecentRuns } from '../state/runHistory';
 
 const initialState = (): ManageFileState => ({
   // Empty initial state — user picks table + record + file column from live
@@ -133,9 +139,12 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('manage-file');
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildManageFile(state), [state, liveTable]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const pipeline = useMemo(() => manageFilePipeline(state), [state, liveTable]);
   const tbl = findTable(state.table);
   const fileCol = useMemo(
@@ -160,21 +169,50 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const firstStepMethod = pipeline[0]?.method ?? 'PATCH';
 
-  const disabledReason = !tbl
-    ? 'Pick a target table first.'
-    : !state.recordId
-      ? 'Pick a source record.'
-      : !state.fileColumn
-        ? 'Pick a file column.'
-        : state.operation === 'upload' &&
-            state.source.kind === 'file' &&
-            !state.bodyBase64 &&
-            state.source.kind === 'file' &&
-            !state.fileName
-          ? 'Choose a file to upload.'
-          : state.headers.some((h) => h.enabled && !h.name)
-            ? 'Fix empty header name.'
-            : null;
+  // Ids and names that go into the URL as-is (#221).
+  const urlPartProblem = invalidUrlPartReason(
+    [['Record id', state.recordId]],
+    [['File column', state.fileColumn]],
+  );
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const blockers = firstBlocker([
+    { when: !tbl, id: 'file-table', title: 'Pick a target table first.', focusNode: 'target' },
+    {
+      when: !state.recordId,
+      id: 'file-record',
+      title: 'Pick a source record.',
+      focusNode: 'target',
+    },
+    {
+      when: !state.fileColumn,
+      id: 'file-column',
+      title: 'Pick a file column.',
+      focusNode: 'column',
+    },
+    {
+      when:
+        state.operation === 'upload' &&
+        state.source.kind === 'file' &&
+        !state.bodyBase64 &&
+        !state.fileName,
+      id: 'file-upload-source',
+      title: 'Choose a file to upload.',
+      focusNode: 'source',
+    },
+    {
+      when: state.headers.some((h) => h.enabled && !h.name),
+      id: 'file-header-name',
+      title: 'Fix empty header name.',
+      focusNode: 'headers',
+    },
+    {
+      when: urlPartProblem,
+      id: 'file-url-part',
+      title: urlPartProblem ?? '',
+      focusNode: urlPartProblem?.startsWith('File column') ? 'column' : 'target',
+    },
+  ]);
+  const disabledReason = disabledReasonFromAdvisories(blockers);
 
   // Bound-record name capture for the WriteResultCard narrative.
   const [recordName, setRecordName] = useState<string>('');
@@ -185,27 +223,24 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'manage-file',
-          url: built.relativeUrl,
-          method: firstStepMethod,
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: res.ok ? 1 : 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'manage-file',
+        url: built.relativeUrl,
+        method: firstStepMethod,
+        status: res.status,
+        ms: res.ms,
+        rowCount: res.ok ? 1 : 0,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
 
   // ── Save / Load ──
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const currentSerialized = useMemo(() => serializeManageFile(state), [state]);
@@ -246,6 +281,10 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedId(keepId);
     setLastSavedHash(keepHash);
   };
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.table) return null;
@@ -254,11 +293,10 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: 'manage-file' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.table]),
+    }, [currentSerialized, isDirty, lastSavedId, state.table, onSavedLatest, onLoadSavedLatest]),
   );
 
   // ── PPTB host-limitation advisory ──
@@ -583,7 +621,7 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
-          advisories={advisories}
+          advisories={[...blockers, ...advisories]}
           onAdvisoryFocus={setActivePath}
         />
       }

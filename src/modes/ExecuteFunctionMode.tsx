@@ -45,7 +45,7 @@ import { TargetEditor } from '../editors/TargetEditor';
 import { HeadersEditor, defaultReadHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { type CsdlAction } from '../mock/actionsCsdl';
+import { type CsdlAction } from '../metadata/actionsCsdl';
 import { actions as actionsProvider } from '../host/csdlProvider';
 import { findRequestType } from '../registry/requestTypes';
 import { buildExecuteFunction } from '../engine/urlBuilder';
@@ -65,6 +65,11 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
+import { invalidUrlPartReason } from '../primitives/urlParts';
+import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
+import { invalidFunctionParamReason } from '../engine/executeBuilders';
+import { addRun, useRecentRuns } from '../state/runHistory';
 
 // Empty initial state — no pre-seeded function. User picks from the live
 // CSDL once it loads.
@@ -88,7 +93,8 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('exec-function');
 
   // Async live function lookup. actionsProvider caches the parsed CSDL.
   const [fn, setFn] = useState<CsdlAction | undefined>(undefined);
@@ -118,7 +124,9 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
   );
 
   // Save / Load
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const [boundRecordName, setBoundRecordName] = useState<string>('');
@@ -149,39 +157,66 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
       );
     });
 
-  const disabledReason = !fn
-    ? 'Pick a function.'
-    : requiresBoundRecord && !state.boundRecordId
-      ? `Function '${fn.name}' is bound to ${boundEntity} — supply a source record.`
-      : bindingEntity && !bindingTable
-        ? `Can't build the URL yet — ${bindingEntity} table metadata isn't loaded.`
-        : missingRequired.length > 0
-          ? `${missingRequired.length} required param${missingRequired.length === 1 ? '' : 's'} unset.`
-          : state.headers.some((h) => h.enabled && !h.name)
-            ? 'Fix empty header name.'
-            : null;
+  // Ids, names and parameter values that go into the URL (#221).
+  const urlPartProblem =
+    invalidUrlPartReason(requiresBoundRecord ? [['Bound record id', state.boundRecordId]] : []) ??
+    invalidFunctionParamReason(fn?.parameters ?? [], state.paramValues);
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const advisories = firstBlocker([
+    { when: !fn, id: 'function-pick', title: 'Pick a function.', focusNode: 'pick' },
+    {
+      when: requiresBoundRecord && !state.boundRecordId,
+      id: 'function-bound-record',
+      title: `Function '${fn?.name}' is bound to ${boundEntity} — supply a source record.`,
+      focusNode: 'target',
+    },
+    {
+      when: bindingEntity && !bindingTable,
+      id: 'function-binding-metadata',
+      title: `Can't build the URL yet — ${bindingEntity} table metadata isn't loaded.`,
+      // The source record when one is needed; otherwise the action picker.
+      focusNode: requiresBoundRecord ? 'target' : 'pick',
+    },
+    {
+      when: missingRequired.length > 0,
+      id: 'function-required',
+      title: `${missingRequired.length} required param${missingRequired.length === 1 ? '' : 's'} unset.`,
+      focusNode: missingRequired[0] ? `param:${missingRequired[0].name}` : 'params',
+    },
+    {
+      when: state.headers.some((h) => h.enabled && !h.name),
+      id: 'function-header-name',
+      title: 'Fix empty header name.',
+      focusNode: 'headers',
+    },
+    {
+      when: urlPartProblem,
+      id: 'function-url-part',
+      title: urlPartProblem ?? '',
+      // 'Parameter <name>: …' names the param; each has its own node.
+      focusNode: urlPartProblem?.startsWith('Bound')
+        ? 'target'
+        : `param:${/^Parameter (\S+):/.exec(urlPartProblem ?? '')?.[1] ?? ''}`,
+    },
+  ]);
+  const disabledReason = disabledReasonFromAdvisories(advisories);
 
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.function(state);
+    const res = await runtime.function(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'exec-function',
-          url: built.relativeUrl,
-          method: 'GET',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: res.ok ? 1 : 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'exec-function',
+        url: built.relativeUrl,
+        method: 'GET',
+        status: res.status,
+        ms: res.ms,
+        rowCount: res.ok ? 1 : 0,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
@@ -234,6 +269,10 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedHash(keepHash);
   };
 
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.functionName) return null;
@@ -242,11 +281,17 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: 'exec-function' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.functionName]),
+    }, [
+      currentSerialized,
+      isDirty,
+      lastSavedId,
+      state.functionName,
+      onSavedLatest,
+      onLoadSavedLatest,
+    ]),
   );
 
   const sections = [
@@ -380,8 +425,8 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
         <ActionPicker
           // Exclude query functions (Last7Days, Between, EqualUserId,
           // Contains, etc.) — those are $filter operators, not callable
-          // standalone. csdlProvider tags them via the IsBound + PropertyName
-          // + Edm.Boolean signature. Keeps the picker focused on actual
+          // standalone. csdlProvider tags them via the PropertyName +
+          // Edm.Boolean signature (#384). Keeps the picker focused on actual
           // invokable functions (WhoAmI, RetrieveTotalRecordCount, etc.).
           filter={(a) => a.kind === 'Function' && !a.isQueryFunction}
           title="Browse OData functions"
@@ -507,6 +552,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
     case 'headers':
       pane = (
         <HeadersEditor
+          policy="impersonation"
           items={state.headers}
           setItems={(h) => set('headers', h, 'headers')}
           group="execute"
@@ -548,6 +594,8 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
+          advisories={advisories}
+          onAdvisoryFocus={setActivePath}
         />
       }
     >

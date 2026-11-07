@@ -2,7 +2,7 @@
 //
 // PPTB-only: when embedded + connected we resolve to the host's active
 // connection via `getSession().environmentUrl`. Outside PPTB we return a
-// blank env (host=''/apiBase='/api/data/v9.2') so URL construction can
+// blank env (host='', apiBase=API_BASE) so URL construction can
 // still proceed as a skeleton without crashing on a null host.
 //
 // Existing call sites that read `ENV.host` / `ENV.apiBase` keep working
@@ -10,6 +10,15 @@
 // next render.
 
 import { getSession } from '../host/pptbBridge';
+
+/**
+ * The Web API version in every URL DRS writes. It matches the PPTB host's own
+ * `DATAVERSE_API_VERSION`: Execute goes through the host, which always calls
+ * v9.2, so another version here would only change the Code tab and the URL
+ * bar, not what's sent (#224).
+ */
+export const API_VERSION = 'v9.2';
+export const API_BASE = `/api/data/${API_VERSION}`;
 
 export interface StudioEnv {
   /** Short label — env URL host or PPTB environment enum ("Production", "Dev", …). */
@@ -30,7 +39,7 @@ export interface StudioEnv {
 const EMPTY_ENV: StudioEnv = {
   name: '(no connection)',
   host: '',
-  apiBase: '/api/data/v9.2',
+  apiBase: API_BASE,
   user: '',
 };
 
@@ -47,7 +56,7 @@ export function getEnv(): StudioEnv {
     // Prefer the explicit environment label ("Production" / "Dev") when present.
     name: s.environment || host,
     host,
-    apiBase: '/api/data/v9.2',
+    apiBase: API_BASE,
     user: '',
   };
 }
@@ -76,6 +85,3 @@ export const ENV: StudioEnv = new Proxy({} as StudioEnv, {
     };
   },
 });
-
-export const fullApiUrl = (path: string, env: StudioEnv = getEnv()): string =>
-  `https://${env.host}${env.apiBase}${path.startsWith('/') ? path : '/' + path}`;

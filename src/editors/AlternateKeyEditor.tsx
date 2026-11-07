@@ -26,7 +26,7 @@ import {
 import { Key20Filled } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
 import { RecordPicker } from '../primitives/RecordPicker';
-import { altKeyColumnType, findTable, findColumn } from '../mock/metadata';
+import { altKeyColumnType, findTable, findColumn } from '../metadata/metadata';
 import type { UpsertKeyMode } from '../state/writeState';
 import type { RequestGroup } from '../registry/requestTypes';
 

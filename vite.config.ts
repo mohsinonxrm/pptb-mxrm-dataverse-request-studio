@@ -30,6 +30,56 @@ function toolIcon(): Plugin {
   };
 }
 
+// Monaco ships its own copy of DOMPurify
+// (monaco-editor/esm/vs/base/browser/dompurify/dompurify.js), so npm
+// `overrides` alone never reach the bundle: 1.4.0-beta.1 shipped 3.1.7. This
+// resolves Monaco's import to the npm `dompurify` package instead (same default
+// export, the DOMPurify instance), so security fixes come from npm at the
+// version package.json's override sets. .github/scripts/check-dompurify.mjs
+// checks the built bundle in CI and before publishing. Same approach as
+// Command Bar Studio 0.6.2 and FetchXML Studio.
+function monacoDompurify(): Plugin {
+  return {
+    name: 'drs-monaco-dompurify',
+    enforce: 'pre',
+    async resolveId(source, importer, options) {
+      if (
+        !importer ||
+        !/[\\/]monaco-editor[\\/]esm[\\/]vs[\\/]base[\\/]browser[\\/]/.test(importer)
+      )
+        return null;
+      if (!/(^|[\\/])dompurify[\\/]dompurify\.js$/.test(source)) return null;
+      // Resolved from Monaco's folder: its own (overridden) dompurify dependency.
+      return this.resolve('dompurify', importer, { ...options, skipSelf: true });
+    },
+  };
+}
+
+// The JSON language service for the in-page worker (#255,
+// src/monaco/inPageWorker.ts): json.worker.js imported as
+// `…/json.worker?in-page`, with its worker bootstrap (which would take over the
+// page's `self.onmessage`) swapped for an export of the JSONWorker class. The
+// build fails if a Monaco update changes that bootstrap.
+function monacoJsonWorkerInPage(): Plugin {
+  const bootstrap =
+    /self\.onmessage = \(\) => \{\s*initialize\(\(ctx, createData\) => \{\s*return new JSONWorker\(ctx, createData\);\s*\}\);\s*\};\s*$/;
+  return {
+    name: 'drs-monaco-json-worker-in-page',
+    transform(code, id) {
+      if (
+        !/[\\/]monaco-editor[\\/]esm[\\/]vs[\\/]language[\\/]json[\\/]json\.worker\.js\?in-page$/.test(
+          id,
+        )
+      )
+        return null;
+      if (!bootstrap.test(code)) {
+        this.error("monaco-editor's json.worker.js changed: update the in-page worker (#255)");
+      }
+      return { code: code.replace(bootstrap, 'export { JSONWorker };\n'), map: null };
+    },
+  };
+}
+
 // Opt-in bundle report (#22): `npm run build:analyze` (or ANALYZE=1).
 // Dependency-free: prints every emitted JS/CSS chunk with raw + gzip size
 // and the heaviest packages inside each chunk (by rendered bytes after tree
@@ -136,8 +186,9 @@ function bundleReport(): Plugin {
 
 // Vite config — mirrors FetchXML Studio's Monaco-bundling strategy.
 //
-//   • `optimizeDeps.include: ['monaco-editor']`
-//     Pre-bundle Monaco at dev-time so Vite doesn't try to transform its
+//   • `optimizeDeps.include` — the Monaco entry points monacoSetup imports
+//     (the editor core, the JSON service and the basic languages DRS uses,
+//     #236). Pre-bundle them at dev-time so Vite doesn't transform Monaco's
 //     deep internal imports lazily (avoids CJS/ESM interop edge cases that
 //     surface as runtime "module not found" errors).
 //
@@ -159,10 +210,20 @@ export default defineConfig({
   // (the codicon font) resolves outside the tool and fails. CI checks the
   // build for root-absolute asset URLs.
   base: './',
-  plugins: [react(), toolIcon(), bundleReport()],
+  plugins: [react(), toolIcon(), monacoDompurify(), monacoJsonWorkerInPage(), bundleReport()],
   server: { port: 5173, open: true },
   optimizeDeps: {
-    include: ['monaco-editor'],
+    include: [
+      'monaco-editor/esm/vs/editor/edcore.main',
+      'monaco-editor/esm/vs/editor/editor.api',
+      'monaco-editor/esm/vs/language/json/monaco.contribution',
+      'monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution',
+      'monaco-editor/esm/vs/basic-languages/csharp/csharp.contribution',
+      'monaco-editor/esm/vs/basic-languages/python/python.contribution',
+      'monaco-editor/esm/vs/basic-languages/powershell/powershell.contribution',
+      'monaco-editor/esm/vs/basic-languages/shell/shell.contribution',
+      'monaco-editor/esm/vs/basic-languages/xml/xml.contribution',
+    ],
   },
   build: {
     target: 'es2020',
@@ -182,6 +243,7 @@ export default defineConfig({
   test: {
     // jsdom provides DOMParser, which the CSDL parser (host/csdlProvider) relies on.
     environment: 'jsdom',
-    include: ['src/**/*.test.{ts,tsx}'],
+    // Plus the release check's tests (#372).
+    include: ['src/**/*.test.{ts,tsx}', '.github/scripts/**/*.test.mjs'],
   },
 });

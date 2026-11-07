@@ -1,16 +1,17 @@
 // URL composition for each Read mode. Returns both the relative path and the
 // rendered relative URL plus an estimated byte length for validation.
 
-import { ENV } from '../mock/environment';
+import { ENV } from '../env/environment';
 import {
   altKeyColumnType,
   findTable,
+  findTableBySet,
   findColumn,
   isLookupLike,
   type AlternateKeyDef,
   type AttributeTypeCode,
   type TableMeta,
-} from '../mock/metadata';
+} from '../metadata/metadata';
 import { bindPropertyFor, encodeFieldBody, parseRawBody } from './fieldBody';
 import { groupToOData } from '../editors/filter/filterTree';
 import { attrRefByName } from './odataAttr';
@@ -31,11 +32,10 @@ import {
   type UpsertState,
   type DeleteState,
   type MergeState,
-  type LookupFieldValue,
   type CreateFieldValue,
 } from '../state/writeState';
 import type { AssociateState, DisassociateState } from '../state/relateState';
-import { isCollectionValuedNav, isSingleValuedNav } from '../state/relateState';
+import { isSingleValuedNav } from '../state/relateState';
 
 // Re-export execute builders so callers don't have to know they live in a
 // separate module. Same surface contract — keeps imports terse.
@@ -76,6 +76,13 @@ export interface BuiltRequest {
   /** Record id segment when present (Retrieve Single) — `<guid>` extracted from `(...)` */
   recordId?: string;
 }
+
+/**
+ * Count only (#272) asks for this annotation too, so the result can say
+ * whether Dataverse stopped counting at its limit.
+ */
+export const COUNT_ONLY_PREFER =
+  'odata.include-annotations="Microsoft.Dynamics.CRM.totalrecordcountlimitexceeded"';
 
 // Keep characters that the Dataverse Web API docs render literally — slashes,
 // commas, equals, dollar signs, parentheses, spaces, and single quotes — so the
@@ -136,6 +143,17 @@ export function buildRetrieveMultiple(
     };
   }
   const parts: { key: string; value: string }[] = [];
+  // Count only (#272): one row of the id column plus `$count=true`, whose
+  // `@odata.count` is the number of rows matching $filter. Not `<set>/$count`:
+  // Dataverse rejects $filter on it ("Could not find a property named … on
+  // type 'Edm.Int32'"), and the host can't read its plain-text answer.
+  if (s.countOnly) {
+    if (tbl.primaryKey) parts.push({ key: '$select', value: enc(tbl.primaryKey) });
+    const f = s.filter.rules.length ? groupToOData(s.filter, tbl) : '';
+    if (f) parts.push({ key: '$filter', value: enc(f) });
+    parts.push({ key: '$top', value: '1' }, { key: '$count', value: 'true' });
+    return finishRetrieveMultiple(tbl, parts);
+  }
   // Encoder now takes the table so it can render the filter() stage's
   // predicate the same way the top-level $filter does (operator allowlist +
   // per-attribute literal encoding).
@@ -159,7 +177,13 @@ export function buildRetrieveMultiple(
     parts.push({ key: '$top', value: String(s.top) });
   }
   if (s.countOn) parts.push({ key: '$count', value: 'true' });
+  return finishRetrieveMultiple(tbl, parts);
+}
 
+function finishRetrieveMultiple(
+  tbl: TableMeta,
+  parts: { key: string; value: string }[],
+): BuiltRequest {
   const path = `${ENV.apiBase}/${tbl.entitySetName}`;
   const qs = joinQuery(parts);
   const relativeUrl = qs ? `${path}?${qs}` : path;
@@ -205,7 +229,11 @@ export function buildRetrieveSingle(s: RetrieveSingleState): BuiltRequest {
   };
 }
 
-export function buildRetrieveNextLink(s: RetrieveNextLinkState): BuiltRequest {
+export function buildRetrieveNextLink(
+  s: RetrieveNextLinkState,
+  /** Entity set → logical name from the environment's entity list. */
+  resolveSet?: (entitySet: string) => string | undefined,
+): BuiltRequest {
   const url = s.url || '';
   // The nextLink URL is opaque; we don't decompose it. Return as-is for display.
   // Best-effort: extract the entity-set segment for breadcrumbs.
@@ -216,14 +244,11 @@ export function buildRetrieveNextLink(s: RetrieveNextLinkState): BuiltRequest {
   let noBase = url;
   noBase = noBase.replace(/^https?:\/\/[^/]+/, '');
   noBase = noBase.replace(/^\/api\/data\/v\d+\.\d+/, '');
-  // NextLink is opaque — we don't know the entity logical name without parsing.
-  // Best-effort derivation: lop the trailing 's' for the simple case. Generators
-  // shouldn't rely on this; they branch on isNextLink instead.
-  const entityLogical = entitySet
-    ? entitySet.endsWith('ies')
-      ? entitySet.slice(0, -3) + 'y'
-      : entitySet.replace(/s$/, '')
-    : '';
+  // The table comes from the entity list (or the loaded metadata) by entity
+  // set name. Plurals don't strip back to a logical name (activitypointers,
+  // addresses, custom sets), so an unknown set stays '' rather than a guess (#224).
+  const entityLogical =
+    (entitySet && (resolveSet?.(entitySet) ?? findTableBySet(entitySet)?.logicalName)) || '';
   return {
     relativeUrl: url.replace(/^https?:\/\/[^/]+/, ''),
     relativeNoBase: noBase || '/',
@@ -644,9 +669,6 @@ export function buildMergeBody(s: MergeState): Record<string, unknown> {
   // 'subordinate' choices are skipped at body-build time, matching the
   // safe default.
   const subRow = s.subordinateSnapshot ?? undefined;
-  // Reference param kept so downstream lookups can still narrow by PK if
-  // a snapshot stores extra annotations like @odata.etag.
-  void refKey;
 
   // Compose UpdateContent — only fields the user explicitly overrode
   const update: Record<string, CreateFieldValue> = {};

@@ -54,9 +54,6 @@ import { stripCredentialRows } from '../engine/sensitiveHeaders';
 
 // ── Module-level singleton store ────────────────────────────────────
 
-// Credentials saved by an earlier build leave storage once, at startup (#217).
-if (typeof window !== 'undefined') scrubStoredCredentials();
-
 interface StoreState extends SavedLibrary {
   /** Where the unreadable text was copied, or null (none, or storage refused). */
   backupKey: string | null;
@@ -72,7 +69,7 @@ function readStore(): StoreState {
   return { ...lib, backupKey };
 }
 
-let store: StoreState = typeof window !== 'undefined' ? readStore() : EMPTY;
+let store: StoreState = EMPTY;
 const listeners = new Set<() => void>();
 
 function notify(): void {
@@ -94,6 +91,21 @@ function subscribe(cb: () => void): () => void {
 function getSnapshot(): StoreState {
   return store;
 }
+
+/**
+ * What the store does at startup: credentials saved by an earlier build
+ * leave storage (#217), then the current connection's library is read
+ * (backing up an unreadable one, #220). Runs once when the module loads;
+ * exported so tests can repeat it without re-importing the module, which
+ * was slow enough to time out under parallel load (#319).
+ */
+export function startSavedStore(): void {
+  if (typeof window === 'undefined') return;
+  scrubStoredCredentials();
+  setStore(readStore());
+}
+
+startSavedStore();
 
 const UNREADABLE_ERROR =
   "The saved requests for this connection couldn't be read, so nothing was saved over them. " +

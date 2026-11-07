@@ -126,3 +126,25 @@ export function disabledReasonFromAdvisories(advisories: Advisory[]): string | n
   if (errs.length === 1) return errs[0].title;
   return `${errs.length} blockers — open Advisories to review.`;
 }
+
+/** One check in a mode's Execute checklist (#294). */
+export interface ExecuteCheck {
+  /** Truthy when the check fails, so Execute is blocked. */
+  when: unknown;
+  id: string;
+  title: string;
+  body?: ReactNode;
+  /** The sidebar node that fixes it; the drawer's Open goes there. */
+  focusNode?: string;
+}
+
+/**
+ * The first failing check, as an error advisory (#294). Checks run in order
+ * and later ones assume the earlier ones pass (a record only matters once a
+ * table is picked), so only the first failure is reported: the same blocker
+ * the mode's Execute tooltip named before it moved into the drawer.
+ */
+export function firstBlocker(checks: ExecuteCheck[]): Advisory[] {
+  const c = checks.find((x) => x.when);
+  return c ? [adv.err(c.id, 'validation', c.title, c.body, c.focusNode)] : [];
+}

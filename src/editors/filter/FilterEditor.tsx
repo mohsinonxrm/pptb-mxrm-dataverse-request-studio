@@ -52,7 +52,7 @@ import {
   resolveNavPath,
   type ColumnMeta,
   type TableMeta,
-} from '../../mock/metadata';
+} from '../../metadata/metadata';
 import { useLiveTable } from '../../host/useLiveMetadata';
 import { ApplyOverridesBanner } from '../ApplyOverridesBanner';
 import {
@@ -84,6 +84,13 @@ import { MoreOptionsHint, useOptionSearch } from '../../primitives/optionSearch'
 import { AntipatternIcon } from '../../primitives/AntipatternIcon';
 import { detectColumnAntipatterns } from '../../engine/antipatterns';
 import { AddressChips } from './AddressChips';
+import {
+  firstOfferedColumn,
+  isColumnInScope,
+  isNavInScope,
+  scopedNavs,
+  useAdvancedFindOnly,
+} from '../../state/metadataScope';
 
 /**
  * Resolves the leaf `ColumnMeta` for a slash-delimited nav-path PLUS the
@@ -129,6 +136,7 @@ function findPendingNavTarget(rootTable: TableMeta, path: string): string | null
   return resolveNavPath(rootTable, path).pendingTarget ?? null;
 }
 import type { RequestGroup } from '../../registry/requestTypes';
+import { copyText } from '../../shell/copy';
 
 export interface FilterEditorProps {
   table: string;
@@ -154,6 +162,8 @@ export function FilterEditor({
 }: FilterEditorProps) {
   const s = useStudioStyles();
   const tbl = findTable(table);
+  // New clauses start on what the pickers offer (#44).
+  const advancedFindOnly = useAdvancedFindOnly();
   const total = useMemo(() => countRules(tree), [tree]);
   const odata = useMemo(() => (tbl ? groupToOData(tree, tbl) : ''), [tree, tbl]);
   const v = validateTree(tree, urlBytes);
@@ -185,7 +195,9 @@ export function FilterEditor({
     levelTable: TableMeta = tbl,
     levelAlias?: string,
   ) => {
-    const firstCol = levelTable.columns[0].logicalName;
+    const firstCol = (
+      firstOfferedColumn(levelTable.columns, advancedFindOnly) ?? levelTable.columns[0]
+    ).logicalName;
     const prefix = levelAlias ? `${levelAlias}/` : '';
     let child: FilterNode;
     if (kind === 'rule') child = defaultRule(prefix + firstCol);
@@ -195,18 +207,21 @@ export function FilterEditor({
     // NOTE: Dataverse query functions inside lambdas use PropertyName *without*
     // the alias prefix (the lambda scope is implicit); we therefore don't prefix
     // function `col` here even when levelAlias is set.
-    else if (kind === 'function') child = defaultFunction(levelTable, extra ?? 'LastXDays');
+    else if (kind === 'function')
+      child = defaultFunction(levelTable, extra ?? 'LastXDays', advancedFindOnly);
     else {
       // Nested lambda — Dataverse rejects this in practice, but if it
       // ever ships we'd anchor on the current level's collection navs.
-      const collections = levelTable.navigationProperties.filter(
+      const collections = scopedNavs(levelTable.navigationProperties, advancedFindOnly).filter(
         (n) => n.cardinality !== 'ManyToOne',
       );
       const nav = extra ?? collections[0]?.name;
       if (!nav) return;
       const navMeta = levelTable.navigationProperties.find((n) => n.name === nav);
       const target = navMeta ? findTable(navMeta.targetEntity) : undefined;
-      const targetFirstCol = target?.columns[0].logicalName ?? firstCol;
+      const targetFirstCol = target
+        ? (firstOfferedColumn(target.columns, advancedFindOnly) ?? target.columns[0]).logicalName
+        : firstCol;
       child = defaultLambda(nav, targetFirstCol);
     }
     setTree(addChild(tree, parentId, child));
@@ -303,12 +318,12 @@ export function FilterEditor({
             <span className={s.generatedKey}>$filter</span>=<span>{odata}</span>
           </div>
           <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
-            <Tooltip content="Copy OData expression" relationship="label">
+            <Tooltip content="Copy OData expression" relationship="description">
               <Button
                 icon={<Copy20Regular />}
                 appearance="subtle"
                 size="small"
-                onClick={() => navigator.clipboard?.writeText(odata)}
+                onClick={() => void copyText(odata, 'the OData expression')}
               >
                 Copy
               </Button>
@@ -388,22 +403,22 @@ function FilterGroupCard({
             <ReOrderDotsHorizontal20Regular className={s.dragHandle} aria-hidden={!gripProps} />
           </span>
         )}
+        {/* The selected combinator is a primary ToggleButton: Fluent's brand
+            background with on-brand text, which the mode cascade turns into
+            the mode's colour (index.html). The depth colour stays on the rail
+            (G-209). Was white on the depth colour, 2.3:1 in dark (#387). */}
         <SegmentedToggle ariaLabel="Combinator">
           <ToggleButton
             checked={group.combinator === 'and'}
+            appearance={group.combinator === 'and' ? 'primary' : 'secondary'}
             onClick={() => setComb('and')}
-            style={
-              group.combinator === 'and' ? { backgroundColor: stripe, color: '#fff' } : undefined
-            }
           >
             AND
           </ToggleButton>
           <ToggleButton
             checked={group.combinator === 'or'}
+            appearance={group.combinator === 'or' ? 'primary' : 'secondary'}
             onClick={() => setComb('or')}
-            style={
-              group.combinator === 'or' ? { backgroundColor: stripe, color: '#fff' } : undefined
-            }
           >
             OR
           </ToggleButton>
@@ -434,7 +449,8 @@ function FilterGroupCard({
                 ? { backgroundColor: tokens.colorPaletteRedBackground3, color: '#fff' }
                 : {}),
             }}
-            aria-label={group.negated ? 'Disable group NOT' : 'Negate group'}
+            // Named by its text, "NOT", with aria-pressed for on/off; the
+            // tooltip describes it (label in name, #387)
           >
             NOT
           </ToggleButton>
@@ -536,7 +552,10 @@ function AddMenu({
     levelAlias?: string,
   ) => void;
 }) {
-  const collections = table.navigationProperties.filter((n) => n.cardinality !== 'ManyToOne');
+  const advancedFindOnly = useAdvancedFindOnly();
+  const collections = scopedNavs(table.navigationProperties, advancedFindOnly).filter(
+    (n) => n.cardinality !== 'ManyToOne',
+  );
   // Every onAdd call below propagates the LEVEL's table + alias so that
   // FilterEditor.addToGroup seeds the new rule/group/function from the
   // correct entity's columns and prefixes lambda-scoped rules.
@@ -574,7 +593,7 @@ function AddMenu({
           <Button
             size="small"
             appearance="subtle"
-            style={{ color: '#8764b8' }}
+            style={{ color: 'var(--color-request-relate-text)' }}
             icon={
               <span
                 style={{
@@ -582,7 +601,7 @@ function AddMenu({
                   fontWeight: 700,
                   fontSize: 14,
                   lineHeight: 1,
-                  color: '#8764b8',
+                  color: 'var(--color-request-relate-text)',
                 }}
               >
                 ƒ
@@ -677,7 +696,10 @@ function AddLambdaPicker({
     levelAlias?: string,
   ) => void;
 }) {
-  const collections = table.navigationProperties.filter((n) => n.cardinality !== 'ManyToOne');
+  const advancedFindOnly = useAdvancedFindOnly();
+  const collections = scopedNavs(table.navigationProperties, advancedFindOnly).filter(
+    (n) => n.cardinality !== 'ManyToOne',
+  );
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
 
@@ -939,28 +961,23 @@ function RuleRow({
     return r.col ? r : { col: findColumn(table, lastSeg), ownerTable: table };
   })();
   const op = findOperator(rule.op);
+  // The pickers follow "Advanced Find only" (#44); the rule's own column
+  // stays offered so it keeps showing.
+  const advancedFindOnly = useAdvancedFindOnly();
   const noVal = op?.arity === 0;
   // Always-hidden types (File / Image — not filterable on content)
   const visibleColumns = useMemo(
     () =>
       table.columns.filter(
         (c) =>
+          (isColumnInScope(c, advancedFindOnly) || c.logicalName === rule.col) &&
           c.attributeType !== 'File' &&
           c.attributeType !== 'Image' &&
           c.isValidForRead !== false &&
           !isCompanionLogicalReadOnly(c),
       ),
-    [table],
+    [table, advancedFindOnly, rule.col],
   );
-  // Symmetric inverse filter: when the user has picked a typed operator (e.g.
-  // `contains`, which is String/Memo only), the column dropdown is narrowed to
-  // columns whose AttributeType is in op.allowedTypes. `eq`/`ne` and null-check
-  // allow every type so the picker shows the full list.
-  const columnsForCurrentOp = useMemo(() => {
-    const allowed = op?.allowedTypes;
-    if (!allowed) return visibleColumns;
-    return visibleColumns.filter((c) => allowed.includes(c.attributeType));
-  }, [visibleColumns, op]);
   // Operators valid for plain rule rows: comparison, string, null-check
   const validOps = useMemo(() => {
     if (!col) return OPERATORS.filter((o) => ['comparison', 'string'].includes(o.category));
@@ -1244,6 +1261,7 @@ function FunctionBlock({
 }) {
   const s = useStudioStyles();
   const op = findOperator(fn.op);
+  const advancedFindOnly = useAdvancedFindOnly();
   const lastSeg = fn.col.split('/').pop() ?? fn.col;
   const col = findColumn(table, lastSeg);
 
@@ -1259,6 +1277,7 @@ function FunctionBlock({
   const compatibleColumns = useMemo(() => {
     const visible = table.columns.filter(
       (c) =>
+        (isColumnInScope(c, advancedFindOnly) || c.logicalName === fn.col) &&
         c.attributeType !== 'File' &&
         c.attributeType !== 'Image' &&
         c.isValidForRead !== false &&
@@ -1267,7 +1286,7 @@ function FunctionBlock({
     const allowed = op?.allowedTypes;
     if (!allowed) return visible;
     return visible.filter((c) => allowed.includes(c.attributeType));
-  }, [table, op]);
+  }, [table, op, advancedFindOnly, fn.col]);
 
   const onColChange = (logicalName: string) =>
     onUpdate(fn.id, { col: logicalName, val: '', vals: undefined, values: undefined });
@@ -1295,14 +1314,11 @@ function FunctionBlock({
     // If the current column isn't compatible with the new function, snap to the first compatible one.
     const allowed = next.allowedTypes;
     if (allowed && col && !allowed.includes(col.attributeType)) {
-      const visible = table.columns.filter(
-        (c) =>
-          c.attributeType !== 'File' &&
-          c.attributeType !== 'Image' &&
-          c.isValidForRead !== false &&
-          !isCompanionLogicalReadOnly(c),
+      const compatible = firstOfferedColumn(
+        table.columns,
+        advancedFindOnly,
+        (c) => !isCompanionLogicalReadOnly(c) && allowed.includes(c.attributeType),
       );
-      const compatible = visible.find((c) => allowed.includes(c.attributeType));
       if (compatible) patch.col = compatible.logicalName;
     }
     onUpdate(fn.id, patch);
@@ -1329,6 +1345,7 @@ function FunctionBlock({
         <span className={s.fnPrefix}>Microsoft.Dynamics.CRM.</span>
         <Combobox
           size="small"
+          aria-label="Query function"
           value={op?.label ?? fn.op}
           selectedOptions={[fn.op]}
           onOptionSelect={(_, d) => d.optionValue && onFnChange(d.optionValue)}
@@ -1529,7 +1546,12 @@ function LambdaBlock({
   gripProps?: GripProps;
 }) {
   const s = useStudioStyles();
-  const collections = parentTable.navigationProperties.filter((n) => n.cardinality !== 'ManyToOne');
+  const advancedFindOnly = useAdvancedFindOnly();
+  // The lambda's own navigation stays offered (#44).
+  const collections = parentTable.navigationProperties.filter(
+    (n) =>
+      n.cardinality !== 'ManyToOne' && (isNavInScope(n, advancedFindOnly) || n.name === node.nav),
+  );
   const nav = parentTable.navigationProperties.find((n) => n.name === node.nav);
   // Warm the selected nav's target entity. Re-renders this block (via
   // the live-table registry subscription) when the fetch resolves so
@@ -1542,7 +1564,10 @@ function LambdaBlock({
     if (!newNav) return;
     const newTarget = findTable(newNav.targetEntity);
     const newAlias = navName[0] ?? node.alias;
-    const newCol = newTarget?.columns[0].logicalName ?? 'name';
+    const newCol = newTarget
+      ? (firstOfferedColumn(newTarget.columns, advancedFindOnly) ?? newTarget.columns[0])
+          .logicalName
+      : 'name';
     onUpdate(node.id, {
       nav: navName,
       alias: newAlias,

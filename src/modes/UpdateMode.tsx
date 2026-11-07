@@ -59,19 +59,14 @@ import { FieldSetEditor } from '../editors/FieldSetEditor';
 import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/PreferEditor';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
-import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
 import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
-import {
-  PreconditionEditor,
-  etagProblem,
-  preconditionToHeader,
-} from '../editors/PreconditionEditor';
+import { PreconditionEditor, etagProblem } from '../editors/PreconditionEditor';
 import { UpdateDiffPane } from '../editors/UpdateDiffPane';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { findTable, findColumn } from '../mock/metadata';
+import { findTable, findColumn } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildUpdate, buildUpdateBody } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
@@ -95,8 +90,14 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
 import { rawBodyBlocker, sentFieldValues } from '../engine/fieldBody';
 import { isRecordGuid } from '../primitives/guid';
+import { isColumnInScope, useAdvancedFindOnly } from '../state/metadataScope';
+import { addRun, useRecentRuns } from '../state/runHistory';
+import { useImportedRequest } from '../state/modeHandoff';
+import { importUpdate } from '../engine/curlImport/applyImport';
+import { composeHeaderItems } from '../engine/requestHeaders';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -147,12 +148,17 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   // findTable(), which is empty until the fetch lands — keying on `state`
   // alone left the URL / Code tab blank after picking a table (#78).
   const { loading: tableLoading, table: liveTable } = useLiveTable(state.table || null);
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
+  // Whether the request that produced `result` asked for return=representation.
+  const [sentReturnRep, setSentReturnRep] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('update');
 
   // Last-saved tracking → Save button dirty/clean state, library checkmark.
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
@@ -168,7 +174,9 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
       ? pickerPick.name
       : '';
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildUpdate(state), [state, liveTable]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const body = useMemo(() => buildUpdateBody(state), [state, liveTable]);
   const tbl = findTable(state.table);
 
@@ -358,6 +366,19 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // Publish save context. Hidden until the user has a table picked —
   // no point persisting an empty shell.
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  // cURL import (#271): a command pasted anywhere opens here. Like a recent
+  // run, it isn't a saved entry, so the save baseline stays as it was.
+  useImportedRequest('update', (request) => {
+    if (request.modeId !== 'update') return;
+    setState(importUpdate(initialState(), request));
+    setResult(null);
+    setTab('builder');
+    setActivePath('target');
+  });
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.table) return null;
@@ -366,11 +387,10 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: 'update' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.table]),
+    }, [currentSerialized, isDirty, lastSavedId, state.table, onSavedLatest, onLoadSavedLatest]),
   );
 
   // ── Execute guards ──
@@ -409,46 +429,25 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
     setLoading(true);
     const res = await runtime.update(state, headerItemsToObject(effectiveHeaders, null));
     setResult(res);
+    setSentReturnRep(state.prefer.returnRepresentation);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'update',
-          url: built.relativeUrl,
-          method: state.method,
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: res.ok ? 1 : 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'update',
+        url: built.relativeUrl,
+        method: state.method,
+        status: res.status,
+        ms: res.ms,
+        rowCount: res.ok ? 1 : 0,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
 
   // ── Compose effective headers ──
-  const effectiveHeaders = useMemo(() => {
-    let h = [...state.headers];
-    // Mirror the IfMatch card editor's choice onto a header for execute time
-    // (preconditionToHeader sends the ETag trimmed, #264.)
-    const cc = preconditionToHeader(state.concurrency);
-    if (cc) {
-      h.push({
-        id: `__cc__${cc.name}`,
-        name: cc.name,
-        value: cc.value,
-        enabled: true,
-        builtin: true,
-        hint: 'Auto-composed from the If-Match pane.',
-      });
-    }
-    h = applyBypassToHeaders(h, state.bypass);
-    return h;
-  }, [state.headers, state.concurrency, state.bypass]);
+  const effectiveHeaders = useMemo(() => composeHeaderItems(state), [state]);
 
   // ── Advisories — bypass family + PUT-method unsupported + GUID shape ──
   //
@@ -872,6 +871,13 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
           method={state.method}
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={{
+            operation: 'Update Record',
+            table: state.table,
+            scope: { kind: 'records', count: 1 },
+            highImpact: false,
+          }}
           disabledReason={disabledReason ?? bypassBlocker}
           loading={loading}
           onExecute={onExecute}
@@ -892,6 +898,7 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
               operation: 'update',
               table: state.table,
               recordId: state.recordId,
+              returnRepresentation: sentReturnRep,
               recordName:
                 pickedPrimaryFromPicker ||
                 (originalRow && tbl ? String(originalRow[tbl.primaryName] ?? '') : null),
@@ -922,11 +929,14 @@ function MethodPane({
   onExitPut: () => void;
 }) {
   const tbl = findTable(table);
+  // Follows "Advanced Find only" (#44); the chosen column stays.
+  const advancedFindOnly = useAdvancedFindOnly();
   const pickable = useMemo(
     () =>
       (tbl?.columns ?? [])
         .filter(
           (c) =>
+            (isColumnInScope(c, advancedFindOnly) || c.logicalName === putColumn) &&
             c.attributeType !== 'Uniqueidentifier' &&
             c.attributeType !== 'File' &&
             c.attributeType !== 'Image' &&
@@ -941,7 +951,7 @@ function MethodPane({
         )
         .slice()
         .sort((a, b) => a.displayName.localeCompare(b.displayName)),
-    [tbl],
+    [tbl, advancedFindOnly, putColumn],
   );
   // Same freeform + clearable Combobox pattern as Delete's ScopeEditor —
   // a vanilla Combobox is unusable on tables with 100+ columns; without

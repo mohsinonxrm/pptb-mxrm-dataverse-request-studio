@@ -30,12 +30,12 @@ npm install
 |---|---|
 | `npm run dev` | Vite dev server on `localhost:5173` (standalone, no PPTB host) |
 | `npm run typecheck` | `tsc -b --noEmit` — fast type-only check |
+| `npm run lint` | ESLint over the repo; no warnings allowed |
 | `npm test` / `npm run test:watch` | Vitest unit tests, once / in watch mode |
 | `npm run build` | Full production build into `dist/` |
 | `npm run preview` | Serve the production build locally |
 | `npm run format` / `npm run format:check` | Prettier write / check over the repo |
 | `npm run validate` | Run `pptb-validate` against the manifest |
-| `npm run finalize-package` | `validate` → `build` (pre-release) |
 | `npm run build:analyze` | Production build plus a bundle-size report |
 
 ### Standalone vs PPTB-embedded
@@ -58,14 +58,19 @@ returns true only in the iframe.
 
 ## Branch model
 
-- **`dev`** — default working branch. All feature work, fixes, and refactors
-  target `dev`. PRs into `dev` should be small, focused, and pass the CI
-  checks (see [Pull requests](#pull-requests)).
-- **`main`** — protected. Only updated at release time by a PR from `dev`,
-  merged with a merge commit. A release is a `vX.Y.Z` (or `vX.Y.Z-beta.N`)
-  tag on that merge commit: the Release workflow publishes it to npm and
-  creates the GitHub Release. Nobody publishes by hand; see
-  [RELEASING.md](../RELEASING.md).
+- **`dev`** — default working branch, for the release after the one in beta.
+  All feature work, fixes, and refactors target `dev`. PRs into `dev` should
+  be small, focused, and pass the CI checks (see [Pull requests](#pull-requests)).
+- **`release/X.Y`** — the next release while it's in beta. Cut from `dev` at
+  the feature freeze; `vX.Y.0-beta.N` tags are made here (npm `beta`). Only
+  fixes for that release go here, then merge forward into `dev`.
+- **`main`** — the current stable release (npm `latest`). Updated by a PR
+  from `release/X.Y` (or a `hotfix/X.Y.Z` branch), merged with a merge
+  commit and tagged `vX.Y.Z`.
+
+The Release workflow publishes each tag to npm and creates the GitHub
+Release; nobody publishes by hand. Where a fix goes, and the full release
+lifecycle, are in [RELEASING.md](../RELEASING.md).
 
 ### Workflow
 
@@ -117,8 +122,11 @@ the *what* is obvious from the diff.
 ## Code style
 
 - **TypeScript strict mode** — avoid `any`; where it's unavoidable, add a
-  comment explaining why. (The repo has no ESLint setup, so existing
-  `eslint-disable` comments are not enforced by anything.)
+  comment explaining why.
+- **ESLint** (`npm run lint`, run in CI with no warnings allowed): the
+  recommended JS / TypeScript rules, React hooks and jsx-a11y. Give a new
+  `// eslint-disable-next-line` a reason after `--`. Copy and paste go
+  through `copyText` / `readClipboardText`, not `navigator.clipboard` (#242).
 - **Prettier** formats everything — run `npm run format` before pushing;
   `npm run format:check` must pass.
 - **Fluent UI v9** primitives — prefer `@fluentui/react-components` over
@@ -144,8 +152,10 @@ src/
   main.tsx            — Vite entry point
   editors/            — composition pieces shared across modes
   engine/             — URL builders, code generators, runtime dispatch
+  env/                — target environment (getEnv, ENV, API_VERSION)
   host/               — PPTB bridge + live metadata loaders + cache
-  mock/               — type definitions + live registry (no fixtures)
+  metadata/           — table / column / CSDL action types + live table
+                        registry (findTable, findTableBySet)
   modes/              — request-mode components (23 modes; Execute Action /
                         Custom API / Custom Action share one component)
   primitives/         — small UI building blocks (pickers, pills, advisories)

@@ -192,7 +192,7 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
   const [crossMode, setCrossMode] = useState<{ existing: SavedRequest; typed: string } | null>(
     null,
   );
-  const { save, capacity, findById, findByName, error } = useSavedRequests();
+  const { save, capacity, findById, findByName, error, health } = useSavedRequests();
 
   // The remembered entry only counts while it targets the same table /
   // action as the current draft. After a target switch it belongs to a
@@ -200,6 +200,11 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
   // A same-name save then goes through the overwrite confirm below (#58).
   const lastSaved = lastSavedId ? findById(lastSavedId) : undefined;
   const ownSavedId = lastSaved && sameSaveTarget(lastSaved.state, state) ? lastSaved.id : undefined;
+  // The entry this request was saved as / loaded from was deleted from the
+  // library: the request is no longer saved anywhere, so Save is available
+  // even though nothing was edited (#308). An unreadable library looks empty
+  // too, but saving into it fails, so that doesn't count.
+  const canSave = dirty || (!!lastSavedId && !lastSaved && !health.unreadable);
 
   // Auto-suggest name whenever the dialog opens. If the user previously
   // saved this request, default to the existing name so a quick re-save
@@ -278,13 +283,19 @@ export function SaveButton({ state, modeId, dirty, lastSavedId, onSaved }: SaveB
     >
       <DialogTrigger disableButtonEnhancement>
         <Tooltip
-          content={dirty ? 'Save current request (unsaved changes)' : 'No changes since last save'}
-          relationship="label"
+          content={
+            dirty
+              ? 'Save current request (unsaved changes)'
+              : canSave
+                ? 'Save current request (its saved copy was deleted)'
+                : 'No changes since last save'
+          }
+          relationship="description"
         >
           <Button
-            appearance={dirty ? 'primary' : 'subtle'}
-            icon={dirty ? <Save20Filled /> : <Save20Regular />}
-            disabled={!dirty}
+            appearance={canSave ? 'primary' : 'subtle'}
+            icon={canSave ? <Save20Filled /> : <Save20Regular />}
+            disabled={!canSave}
             aria-label="Save request"
           >
             Save
@@ -424,9 +435,15 @@ export interface SavedLibraryButtonProps {
   onLoad: (entry: SavedRequest) => void;
   /** Optional — the currently-loaded entry's id, shown with a checkmark badge. */
   currentId?: string;
+  /**
+   * The current request has unsaved changes. Loading asks before discarding
+   * them when the request itself came from the library (`currentId`); a
+   * never-saved draft always reads as dirty, so it doesn't ask.
+   */
+  dirty?: boolean;
 }
 
-export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryButtonProps) {
+export function SavedLibraryButton({ modeId, onLoad, currentId, dirty }: SavedLibraryButtonProps) {
   const s = useStyles();
   const [open, setOpen] = useState(false);
   const [renameId, setRenameId] = useState<string | null>(null);
@@ -454,6 +471,33 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
     () => saved.filter((e) => e.modeId === modeId && (!e.orgScope || e.orgScope === scope)).length,
     [saved, modeId, scope],
   );
+  // Saved in other modes of this connection — named in the empty state so a
+  // filtered-out library doesn't read as an empty one (#308).
+  const otherModesCount = useMemo(
+    () => saved.filter((e) => e.modeId !== modeId && (!e.orgScope || e.orgScope === scope)).length,
+    [saved, modeId, scope],
+  );
+
+  const load = (entry: SavedRequest) => {
+    if (!dirty || !currentId) {
+      onLoad(entry);
+      setOpen(false);
+      return;
+    }
+    // Loading replaces the current request: don't drop unsaved edits silently (#308).
+    confirmingRef.current = true;
+    void askConfirm({
+      title: 'Discard unsaved changes?',
+      message: `Loading "${entry.name}" replaces the current request, and its unsaved changes are lost.`,
+      confirmLabel: 'Load',
+      destructive: true,
+    }).then((ok) => {
+      confirmingRef.current = false;
+      if (!ok) return;
+      onLoad(entry);
+      setOpen(false);
+    });
+  };
   const list = useMemo(
     () =>
       saved
@@ -479,12 +523,9 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
       }}
     >
       <PopoverTrigger disableButtonEnhancement>
-        <Tooltip content="Open saved requests" relationship="label">
-          <Button
-            appearance="subtle"
-            icon={<BookmarkMultiple20Regular />}
-            aria-label="Open saved requests"
-          >
+        {/* A description, not a label: the name is the visible "Saved" (#387) */}
+        <Tooltip content="Open saved requests" relationship="description">
+          <Button appearance="subtle" icon={<BookmarkMultiple20Regular />}>
             Saved
             {modeCount > 0 && (
               <Badge appearance="tint" size="small" style={{ marginLeft: 6 }}>
@@ -504,7 +545,9 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
             {health.unreadable
               ? "Saved requests couldn't be read — see below."
               : list.length === 0
-                ? 'No saved requests yet — click Save to create one.'
+                ? !allModes && otherModesCount > 0
+                  ? `No saved ${modeName(modeId)} requests · ${otherModesCount} in other modes — turn on All modes to see them.`
+                  : 'No saved requests yet — click Save to create one.'
                 : `${list.length} saved · click to load, hover for rename/delete`}
           </Caption1>
           <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -527,7 +570,11 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
         {health.unreadable ? null : list.length === 0 ? (
           <div className={s.libraryEmpty}>
             <BookmarkMultiple20Regular style={{ width: 32, height: 32, opacity: 0.4 }} />
-            <div style={{ marginTop: 8 }}>Nothing here yet.</div>
+            <div style={{ marginTop: 8 }}>
+              {!allModes && otherModesCount > 0
+                ? 'Nothing saved in this mode.'
+                : 'Nothing here yet.'}
+            </div>
           </div>
         ) : (
           <div className={s.libraryList}>
@@ -551,8 +598,7 @@ export function SavedLibraryButton({ modeId, onLoad, currentId }: SavedLibraryBu
                   }
                   onClick={() => {
                     if (isRenaming || otherMode) return;
-                    onLoad(entry);
-                    setOpen(false);
+                    load(entry);
                   }}
                 >
                   <Badge
@@ -692,7 +738,7 @@ function SavedLibraryTransfer({
 
   const applyImport = (text: string) => {
     try {
-      const { entries, invalid } = parseSavedImport(text);
+      const { entries, invalid, problems } = parseSavedImport(text);
       const r = importEntries(entries);
       if (!r.ok) {
         setStatus({ intent: 'error', title: "Couldn't import", text: r.error ?? '' });
@@ -706,8 +752,18 @@ function SavedLibraryTransfer({
           `${r.skippedFull} not imported: this connection's library is full (${MAX_SAVED}).`,
         );
       }
-      if (invalid > 0) {
-        notes.push(`${invalid} item(s) in the file weren't valid saved requests and were skipped.`);
+      // `invalid` counts both kinds; those skipped for an id or name that
+      // isn't one (#221) are named instead of counted.
+      const unreadable = invalid - problems.length;
+      if (unreadable > 0) {
+        notes.push(
+          `${unreadable} item(s) in the file weren't valid saved requests and were skipped.`,
+        );
+      }
+      if (problems.length > 0) {
+        notes.push(
+          `Skipped: ${problems.slice(0, 3).join(' ')}${problems.length > 3 ? ` (and ${problems.length - 3} more)` : ''}`,
+        );
       }
       setStatus({
         intent: r.skippedFull > 0 || invalid > 0 ? 'warning' : 'success',

@@ -49,6 +49,13 @@ in a browser. Vulnerability reports of interest:
 
 ## Supported versions
 
-Only the latest released minor version on `main` receives security fixes.
+| Version | Supported |
+|---|---|
+| The current stable release (npm `latest`) | ✅ Fixes and security fixes |
+| The previous minor release | ✅ Critical and security fixes for 30 days after the next minor ships (npm `support-X.Y`) |
+| Betas (npm `beta`) | Fixed in the next beta |
+| Anything older | ❌ |
+
+See [RELEASING.md](RELEASING.md) → *Supported versions*.
 
 Thanks for helping keep the tool safe.

@@ -45,12 +45,13 @@ import { notify } from '../shell/dialogs';
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from '../editors/PaneHead';
 import { NavPropertyPicker } from '../editors/NavPropertyPicker';
-import { AssociateTargetsEditor } from '../editors/AssociateTargetsEditor';
+import { AssociateTargetsEditor, targetsTitle } from '../editors/AssociateTargetsEditor';
+import { AllOrNothingOption } from '../editors/AllOrNothingOption';
 import { TargetEditor } from '../editors/TargetEditor';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import {
   buildDisassociate,
@@ -58,7 +59,7 @@ import {
   relateRequestHeaders,
 } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
-import { relateDoneCount } from '../engine/dataverseExecutor';
+import { MAX_CHANGE_SET, relateAsChangeSet, relateDoneCount } from '../engine/dataverseExecutor';
 import type { DisassociateState } from '../state/relateState';
 import { isCollectionValuedNav, isSingleValuedNav } from '../state/relateState';
 import type { RecentRun } from '../state/readState';
@@ -75,6 +76,10 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
+import { invalidUrlPartReason } from '../primitives/urlParts';
+import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
+import { addRun, useRecentRuns } from '../state/runHistory';
 
 // Empty initial state — same pattern as MergeMode/AssociateMode. User picks
 // the table → source record → nav property → targets (if collection-valued).
@@ -107,12 +112,15 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
   // findTable(), which is empty until the fetch lands — keying on `state`
   // alone left the URL / Code tab blank after picking a table (#78).
   const { table: liveTable } = useLiveTable(state.table || null);
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('source');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('disassociate');
 
   // Save / Load tracking
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
@@ -130,7 +138,9 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
   // unknown — warn, but don't treat it as "empty" and block Execute (#57).
   const [currentLookupError, setCurrentLookupError] = useState<string | null>(null);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildDisassociate(state), [state, liveTable]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const requests = useMemo(() => buildDisassociateRequests(state), [state, liveTable]);
   const tbl = findTable(state.table);
   const nav = state.navProperty
@@ -141,6 +151,8 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // Docs-preferred verb per cardinality (see file header).
   const method: 'DELETE' | 'PATCH' = isSingle ? 'PATCH' : 'DELETE';
+  // All or nothing (#224): the targets go as one change set, as Execute sends them.
+  const changeSet = isCollection && relateAsChangeSet(state.allOrNothing, requests.length);
 
   // ── Live source-lookup fetch (single-valued only) ──
   //
@@ -230,41 +242,84 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
     if (dirtyId) markDirty(dirtyId);
   };
 
-  const disabledReason = !tbl
-    ? 'Pick a source table first.'
-    : !state.sourceId
-      ? 'Pick a source record.'
-      : !state.navProperty
-        ? 'Pick a navigation property.'
-        : isCollection && state.targetIds.length === 0
-          ? 'Pick at least one target record to disassociate.'
-          : isSingle && currentLookup === null && !currentLookupLoading && !currentLookupError
-            ? "Source's lookup is already empty — nothing to disassociate."
-            : state.headers.some((h) => h.enabled && !h.name)
-              ? 'Fix empty header name.'
-              : null;
+  // Ids and names that go into the URL as-is (#221).
+  const urlPartProblem = invalidUrlPartReason(
+    [
+      ['Source record id', state.sourceId],
+      ...state.targetIds.map((id) => ['Target record id', id] as const),
+    ],
+    [['Navigation property', state.navProperty]],
+  );
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const advisories = firstBlocker([
+    { when: !tbl, id: 'disassoc-table', title: 'Pick a source table first.', focusNode: 'source' },
+    {
+      when: !state.sourceId,
+      id: 'disassoc-source',
+      title: 'Pick a source record.',
+      focusNode: 'source',
+    },
+    {
+      when: !state.navProperty,
+      id: 'disassoc-nav',
+      title: 'Pick a navigation property.',
+      focusNode: 'nav',
+    },
+    {
+      when: isCollection && state.targetIds.length === 0,
+      id: 'disassoc-targets',
+      title: 'Pick at least one target record to disassociate.',
+      focusNode: 'target',
+    },
+    {
+      when: isSingle && currentLookup === null && !currentLookupLoading && !currentLookupError,
+      id: 'disassoc-lookup-empty',
+      title: "Source's lookup is already empty — nothing to disassociate.",
+      focusNode: 'target',
+    },
+    {
+      when: changeSet && requests.length > MAX_CHANGE_SET,
+      id: 'disassoc-change-set-cap',
+      title: `All or nothing sends at most ${MAX_CHANGE_SET} requests in one change set; this has ${requests.length}. Remove targets or turn it off.`,
+      focusNode: 'target',
+    },
+    {
+      when: state.headers.some((h) => h.enabled && !h.name),
+      id: 'disassoc-header-name',
+      title: 'Fix empty header name.',
+      focusNode: 'headers',
+    },
+    {
+      when: urlPartProblem,
+      id: 'disassoc-url-part',
+      title: urlPartProblem ?? '',
+      focusNode: urlPartProblem?.startsWith('Target')
+        ? 'target'
+        : urlPartProblem?.startsWith('Navigation')
+          ? 'nav'
+          : 'source',
+    },
+  ]);
+  const disabledReason = disabledReasonFromAdvisories(advisories);
 
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.disassociate(state);
+    const res = await runtime.disassociate(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'disassociate',
-          url: built.relativeUrl,
-          method,
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: relateDoneCount(res, requests.length) ?? 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'disassociate',
+        url: built.relativeUrl,
+        method,
+        status: res.status,
+        ms: res.ms,
+        rowCount: relateDoneCount(res, requests.length) ?? 0,
+        // Recent runs shows no row count for writes (#309); say how many links were done.
+        summary: `${relateDoneCount(res, requests.length) ?? 0} of ${requests.length} unlinked`,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
@@ -312,6 +367,10 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedHash(keepHash);
   };
 
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.table) return null;
@@ -320,11 +379,10 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: 'disassociate' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.table]),
+    }, [currentSerialized, isDirty, lastSavedId, state.table, onSavedLatest, onLoadSavedLatest]),
   );
 
   const sections = [
@@ -381,11 +439,7 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
           id: 'target',
           icon: PersonAccounts20Regular,
           iconFilled: PersonAccounts20Filled,
-          label: isSingle
-            ? 'Target — implicit'
-            : state.targetIds.length > 1
-              ? 'Target records'
-              : 'Target record',
+          label: isSingle ? 'Target — implicit' : targetsTitle(false, state.targetIds.length),
           badge: isSingle ? '∅' : state.targetIds.length || null,
           badgeAppearance: 'tint' as const,
           badgeColor: state.targetIds.length > 0 ? ('success' as const) : ('subtle' as const),
@@ -473,6 +527,8 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
           setTargetIds={(ids) => set('targetIds', ids, 'target')}
           targetNames={state.targetNames}
           setTargetNames={(n) => set('targetNames', n)}
+          setAllOrNothing={(v) => set('allOrNothing', v || undefined, 'target')}
+          changeSet={changeSet}
           currentLookup={currentLookup}
           currentLookupLoading={currentLookupLoading}
           currentLookupError={currentLookupError}
@@ -482,6 +538,7 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
     case 'headers':
       pane = (
         <HeadersEditor
+          policy="relate"
           items={state.headers}
           setItems={(h) => set('headers', h, 'headers')}
           group="relate"
@@ -511,6 +568,7 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
             description: r.targetId ? `target ${r.targetId}` : 'clear lookup (null)',
           }))
         : undefined,
+    changeSet,
   };
 
   // ── Build the WriteResultCard context. For single-valued, the "targets"
@@ -544,9 +602,18 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
           method={method}
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={{
+            operation: nav ? `Disassociate (${nav.name})` : 'Disassociate',
+            table: state.table,
+            scope: { kind: 'records', count: Math.max(1, state.targetIds.length) },
+            highImpact: state.targetIds.length > 1,
+          }}
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
+          advisories={advisories}
+          onAdvisoryFocus={setActivePath}
         />
       }
     >
@@ -587,6 +654,8 @@ function TargetPane({
   setTargetIds,
   targetNames,
   setTargetNames,
+  setAllOrNothing,
+  changeSet,
   currentLookup,
   currentLookupLoading,
   currentLookupError,
@@ -595,6 +664,8 @@ function TargetPane({
   setTargetIds: (ids: string[]) => void;
   targetNames: Record<string, string>;
   setTargetNames: (next: Record<string, string>) => void;
+  setAllOrNothing: (next: boolean) => void;
+  changeSet: boolean;
   currentLookup: CurrentLookup | null;
   currentLookupLoading: boolean;
   currentLookupError: string | null;
@@ -608,7 +679,7 @@ function TargetPane({
       <div>
         <PaneHead
           icon={PersonAccounts20Filled}
-          title="Target record"
+          title={targetsTitle(false, state.targetIds.length)}
           sub="Pick a navigation property first."
           group="relate"
         />
@@ -725,39 +796,45 @@ function TargetPane({
   }
 
   // Collection-valued: reuse the AssociateTargetsEditor for multi-target picking.
-  // Same UX as Associate — live RecordPicker, dedupe, name cache.
+  // Same UX as Associate — live RecordPicker, dedupe, name cache. Its pane
+  // head carries Disassociate's own wording (DELETE, not POST — #307).
   return (
-    <div>
-      <PaneHead
-        icon={PersonAccounts20Filled}
-        title={state.targetIds.length > 1 ? 'Target records' : 'Target record'}
-        sub={
-          <>
-            Pick one or more <code>{targetTbl?.logicalName}</code> rows to remove from the
-            collection. Each fires a separate DELETE request per docs — the target rows are{' '}
-            <strong>not</strong> deleted, only the links.
-          </>
-        }
-        group="relate"
-      />
-      <AssociateTargetsEditor
-        table={state.table}
-        navProperty={state.navProperty}
-        targets={state.targetIds}
-        setTargets={setTargetIds}
-        targetNames={targetNames}
-        setTargetNames={setTargetNames}
-        group="relate"
-        resolvedMethod={null}
-      />
-    </div>
+    <AssociateTargetsEditor
+      table={state.table}
+      navProperty={state.navProperty}
+      targets={state.targetIds}
+      setTargets={setTargetIds}
+      targetNames={targetNames}
+      setTargetNames={setTargetNames}
+      group="relate"
+      resolvedMethod={null}
+      verb="DELETE"
+      changeSet={changeSet}
+      footer={
+        <AllOrNothingOption
+          checked={!!state.allOrNothing}
+          onChange={setAllOrNothing}
+          targets={state.targetIds.length}
+          verb="DELETE"
+        />
+      }
+      sub={
+        <>
+          Pick one or more <code>{targetTbl?.logicalName}</code> rows to remove from the collection.
+          {changeSet
+            ? 'The DELETE requests go together as one change set'
+            : 'Each fires a separate DELETE request per docs'}{' '}
+          — the target rows are <strong>not</strong> deleted, only the links.
+        </>
+      }
+    />
   );
 }
 
 // ──────────────────────────────────────────────────────────────
 // URL shape comparison card — surfaces both wire shapes per cardinality
 // ──────────────────────────────────────────────────────────────
-function UrlShapeComparison({ nav }: { nav: import('../mock/metadata').NavProperty }) {
+function UrlShapeComparison({ nav }: { nav: import('../metadata/metadata').NavProperty }) {
   const s = useStudioStyles();
   const isSingle = isSingleValuedNav(nav);
   return (
@@ -810,7 +887,7 @@ function UrlShapeCard({
           <Badge
             appearance="tint"
             color="brand"
-            size="extra-small"
+            size="small"
             style={{ marginLeft: 'auto', fontWeight: 700 }}
           >
             ACTIVE
@@ -835,7 +912,7 @@ function UrlShapeCard({
   );
 }
 
-function cardinalityShort(c: import('../mock/metadata').NavProperty['cardinality']): string {
+function cardinalityShort(c: import('../metadata/metadata').NavProperty['cardinality']): string {
   switch (c) {
     case 'OneToMany':
       return '1:N';

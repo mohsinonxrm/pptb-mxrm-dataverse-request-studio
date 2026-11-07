@@ -11,6 +11,7 @@
 // variable such as `callerId` (#217, see engine/sensitiveHeaders).
 
 import { impersonationVar, isCredentialHeader } from './sensitiveHeaders';
+import { encodeSpaces } from '../primitives/urlParts';
 
 /** One HTTP request in an exported collection. */
 export interface CollectionRequest {
@@ -47,7 +48,19 @@ export const COLLECTION_FORMAT_LABELS: Record<CollectionFormat, string> = {
   bruno: 'Bruno collection (JSON)',
 };
 
-export function buildCollection(fmt: CollectionFormat, input: CollectionInput): string {
+export function buildCollection(fmt: CollectionFormat, collection: CollectionInput): string {
+  const encode = (r: CollectionRequest): CollectionRequest => ({
+    ...r,
+    path: encodeSpaces(r.path),
+  });
+  const input: CollectionInput = {
+    ...collection,
+    items: collection.items.map((it) =>
+      it.kind === 'folder'
+        ? { ...it, steps: it.steps.map(encode) }
+        : { ...encode(it), kind: it.kind },
+    ),
+  };
   switch (fmt) {
     case 'postman':
       return JSON.stringify(toPostman(input), null, 2);

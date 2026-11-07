@@ -44,19 +44,14 @@ import { AlternateKeyEditor } from '../editors/AlternateKeyEditor';
 import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/PreferEditor';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
-import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
 import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
-import {
-  PreconditionEditor,
-  etagProblem,
-  preconditionToHeader,
-} from '../editors/PreconditionEditor';
+import { PreconditionEditor, etagProblem } from '../editors/PreconditionEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { writeResultName } from '../views/results/writeResultName';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import {
   altKeyReservedCharColumns,
@@ -80,8 +75,13 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
 import { missingRequiredColumns, rawBodyBlocker } from '../engine/fieldBody';
 import { isRecordGuid } from '../primitives/guid';
+import { addRun, useRecentRuns } from '../state/runHistory';
+import { useImportedRequest } from '../state/modeHandoff';
+import { importUpsert } from '../engine/curlImport/applyImport';
+import { composeHeaderItems } from '../engine/requestHeaders';
 
 // Empty initial state — user picks the table first, which then re-seeds
 // the key shape (GUID by default; switches to first alternate key once
@@ -124,18 +124,25 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
   // findTable(), which is empty until the fetch lands — keying on `state`
   // alone left the URL / Code tab blank after picking a table (#78).
   const { table: liveTable } = useLiveTable(state.table || null);
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
+  // Whether the request that produced `result` asked for return=representation.
+  const [sentReturnRep, setSentReturnRep] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('upsert');
 
   // Save / Load tracking (Save button dirty/clean, library checkmark).
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildUpsert(state), [state, liveTable]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const body = useMemo(() => buildUpsertBody(state), [state, liveTable]);
   const tbl = findTable(state.table);
 
@@ -214,44 +221,25 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
     setLoading(true);
     const res = await runtime.upsert(state, headerItemsToObject(effectiveHeaders, null));
     setResult(res);
+    setSentReturnRep(state.prefer.returnRepresentation);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'upsert',
-          url: built.relativeUrl,
-          method: 'PATCH',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: res.ok ? 1 : 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'upsert',
+        url: built.relativeUrl,
+        method: 'PATCH',
+        status: res.status,
+        ms: res.ms,
+        rowCount: res.ok ? 1 : 0,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
 
   // ── Compose effective headers ──
-  const effectiveHeaders = useMemo(() => {
-    let h = [...state.headers];
-    const cc = preconditionToHeader(state.concurrency);
-    if (cc) {
-      h.push({
-        id: `__cc__${cc.name}`,
-        name: cc.name,
-        value: cc.value,
-        enabled: true,
-        builtin: true,
-        hint: 'Auto-composed from the Concurrency pane.',
-      });
-    }
-    h = applyBypassToHeaders(h, state.bypass);
-    return h;
-  }, [state.headers, state.concurrency, state.bypass]);
+  const effectiveHeaders = useMemo(() => composeHeaderItems(state), [state]);
 
   // ── Advisories — bypass + GUID + alt-key host limitation ──
   const advisories = useMemo<Advisory[]>(() => {
@@ -398,6 +386,19 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
   };
 
   // Publish — hidden until a table is picked.
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  // cURL import (#271): a command pasted anywhere opens here. Like a recent
+  // run, it isn't a saved entry, so the save baseline stays as it was.
+  useImportedRequest('upsert', (request) => {
+    if (request.modeId !== 'upsert') return;
+    setState(importUpsert(initialState(), request));
+    setResult(null);
+    setTab('builder');
+    setActivePath('target');
+  });
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.table) return null;
@@ -406,22 +407,13 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: 'upsert' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.table]),
+    }, [currentSerialized, isDirty, lastSavedId, state.table, onSavedLatest, onLoadSavedLatest]),
   );
 
   const returnRep = state.prefer.returnRepresentation;
-  const concurrencyBadge =
-    state.concurrency.kind === 'update-only'
-      ? 'If-Match: *'
-      : state.concurrency.kind === 'etag'
-        ? 'If-Match: etag'
-        : state.concurrency.kind === 'create-only'
-          ? 'If-None-Match: *'
-          : 'no precondition';
   const keyBadge = state.key.kind === 'guid' ? 'GUID' : 'alt key';
 
   const sections = [
@@ -723,6 +715,13 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
           method="PATCH"
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={{
+            operation: 'Upsert Record',
+            table: state.table,
+            scope: { kind: 'records', count: 1 },
+            highImpact: false,
+          }}
           disabledReason={disabledReason ?? bypassBlocker}
           loading={loading}
           onExecute={onExecute}
@@ -747,6 +746,7 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
               // via the advisory, so this path rarely fires in practice).
               recordId: state.key.kind === 'guid' ? state.key.recordId : null,
               recordName: writeResultName(tbl?.primaryName, result?.body, state.fieldValues),
+              returnRepresentation: sentReturnRep,
             }}
           />
         )}

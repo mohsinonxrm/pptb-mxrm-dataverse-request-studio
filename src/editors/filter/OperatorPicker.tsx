@@ -13,7 +13,7 @@ import {
 } from '@fluentui/react-components';
 import { ChevronDown20Regular } from '@fluentui/react-icons';
 import { OP_CATEGORIES, operatorsFor, findOperator, type OpCategory } from './operators';
-import type { ColumnMeta } from '../../mock/metadata';
+import type { ColumnMeta } from '../../metadata/metadata';
 
 export function OperatorPicker({
   table,

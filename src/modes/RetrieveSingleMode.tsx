@@ -38,6 +38,7 @@ import {
   LineHorizontal320Filled,
   Link20Regular,
 } from '@fluentui/react-icons';
+import { tokens } from '@fluentui/react-components';
 import { Sidebar, type SidebarClauseItem } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
@@ -51,7 +52,7 @@ import { ExpandRouter } from '../editors/expand/ExpandRouter';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { countRules } from '../editors/filter/filterTree';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildRetrieveSingle } from '../engine/urlBuilder';
 import { relatedMetadataAdvisories } from '../engine/navPath';
@@ -71,9 +72,12 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
-import { takeModeHandoff } from '../state/modeHandoff';
+import { useLatestCallback } from '../primitives/useLatestCallback';
+import { takeModeHandoff, useImportedRequest } from '../state/modeHandoff';
 import type { Advisory } from '../primitives/advisories';
 import { isRecordGuid } from '../primitives/guid';
+import { addRun, useRecentRuns } from '../state/runHistory';
+import { importRetrieveSingle } from '../engine/curlImport/applyImport';
 
 const initialState = (): RetrieveSingleState => ({
   table: '',
@@ -81,9 +85,9 @@ const initialState = (): RetrieveSingleState => ({
   select: [],
   expand: [],
   prefer: { ...emptyPrefer(), formattedValues: true },
-  headers: defaultReadHeaders().map((h) =>
-    h.name === 'If-None-Match' ? { ...h, enabled: true } : h,
-  ),
+  // If-None-Match used to be on (`null`) by default. Execute sends it now
+  // (#109), and `null` never matches an etag, so it's off until you add one.
+  headers: defaultReadHeaders(),
   dirty: new Set(),
 });
 
@@ -107,12 +111,17 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   // saved-request reload / pasted URL where no expand editor was opened.
   // `related.version` re-encodes `built` when a related table lands (#63).
   const related = useWarmReferencedTables(state.table || null, { expand: state.expand });
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
+  // The URL the shown result came from: the builder may have changed since (#291).
+  const [runUrl, setRunUrl] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('retrieve-single');
 
   // Last-saved tracking — drives the Save button's primary/subtle state
   // and lights up the checkmark next to the current entry in the library.
@@ -202,6 +211,19 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   // Publish our save context to the FrameHeader's Save / Saved-library
   // buttons. Hidden automatically when no table is picked (nothing useful
   // to save yet).
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  // cURL import (#271): a command pasted anywhere opens here. Like a recent
+  // run, it isn't a saved entry, so the save baseline stays as it was.
+  useImportedRequest('retrieve-single', (request) => {
+    if (request.modeId !== 'retrieve-single') return;
+    setState(importRetrieveSingle(initialState(), request));
+    setResult(null);
+    setTab('builder');
+    setActivePath('target');
+  });
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.table) return null;
@@ -210,17 +232,18 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: 'retrieve-single' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.table]),
+    }, [currentSerialized, isDirty, lastSavedId, state.table, onSavedLatest, onLoadSavedLatest]),
   );
 
   // ── Advisories ────────────────────────────────────────────────────
   // RetrieveSingle's gates are tight — a missing or malformed recordId is
   // the only common error class. Surfacing it via the URL bar drawer keeps
   // the failure mode consistent with the bigger modes (no silent disable).
+  const relatedPendingKey = related.pending.join(',');
+  const relatedFailedKey = related.failed.join(',');
   const advisories: Advisory[] = useMemo(() => {
     const out: Advisory[] = [];
     if (state.table && !state.recordId) {
@@ -246,36 +269,26 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
     out.push(...relatedMetadataAdvisories(related.pending, related.failed));
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    state.table,
-    state.recordId,
-    tbl?.displayName,
-    related.pending.join(','),
-    related.failed.join(','),
-  ]);
+  }, [state.table, state.recordId, tbl?.displayName, relatedPendingKey, relatedFailedKey]);
 
   // ── Execute ───────────────────────────────────────────────────────
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.retrieveSingle(state);
+    setRunUrl(built.relativeUrl);
+    const res = await runtime.retrieveSingle(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'retrieve-single',
-          url: built.relativeUrl,
-          method: 'GET',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: res.outcome === 'ok' ? 1 : 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'retrieve-single',
+        url: built.relativeUrl,
+        method: 'GET',
+        status: res.status,
+        ms: res.ms,
+        rowCount: res.outcome === 'ok' ? 1 : 0,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
@@ -390,7 +403,7 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
         label: (
           <span>
             {it.nav}{' '}
-            <span style={{ opacity: 0.55, fontWeight: 400 }}>
+            <span style={{ color: tokens.colorNeutralForeground3, fontWeight: 400 }}>
               → {target?.displayName ?? nav?.targetEntity ?? '?'}
             </span>
           </span>
@@ -544,7 +557,11 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
         break;
       case 'headers':
         pane = (
-          <HeadersEditor items={state.headers} setItems={(h) => set('headers', h, 'headers')} />
+          <HeadersEditor
+            policy="read"
+            items={state.headers}
+            setItems={(h) => set('headers', h, 'headers')}
+          />
         );
         break;
     }
@@ -585,7 +602,9 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
       <MainTabs tab={tab} onTabChange={setTab} resultCount={result?.outcome === 'ok' ? 1 : null}>
         {tab === 'builder' && pane}
         {tab === 'code' && <CodeView themeMode={themeMode} inputs={codeInputs} />}
-        {tab === 'results' && <ResultsView result={result} mode="single" table={state.table} />}
+        {tab === 'results' && (
+          <ResultsView result={result} mode="single" table={state.table} requestUrl={runUrl} />
+        )}
       </MainTabs>
     </ModeShell>
   );

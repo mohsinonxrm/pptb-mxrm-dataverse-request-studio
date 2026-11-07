@@ -10,8 +10,7 @@
 // nested `updateExpand` helper so deeply-nested edits don't leak.
 
 import { Caption1, MessageBar, MessageBarBody, Spinner, tokens } from '@fluentui/react-components';
-import { useStudioStyles } from '../../primitives/styles';
-import { findTable } from '../../mock/metadata';
+import { findTable } from '../../metadata/metadata';
 import { useLiveTable } from '../../host/useLiveMetadata';
 import { type ExpandSpec } from '../ExpandEditor';
 import {
@@ -85,7 +84,7 @@ export function ExpandRouter({
   const walked: Walk = (() => {
     let entity = rootEntity;
     let siblings = rootExpand;
-    let breadcrumb: { label: string; path: string }[] = [
+    const breadcrumb: { label: string; path: string }[] = [
       { label: findTable(rootEntity)?.displayName ?? rootEntity, path: 'expand' },
     ];
     // The cardinality of the most-recently-stepped-into expand. When we
@@ -309,7 +308,6 @@ function ScopedClause({
   onPatch: (patch: Partial<ExpandSpec>) => void;
   group: RequestGroup;
 }) {
-  const s = useStudioStyles();
   // Breadcrumb header common to every nested clause
   const crumb = (
     <div
@@ -335,7 +333,6 @@ function ScopedClause({
       ))}
     </div>
   );
-  void s;
 
   // Single-valued navs (ManyToOne / lookups):
   //   Dataverse error reads: "Only $select and $filter clause can be provided

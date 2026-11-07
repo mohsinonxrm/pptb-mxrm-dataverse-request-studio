@@ -50,7 +50,6 @@ import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from './PaneHead';
 import {
   findTable,
-  findColumn,
   columnOptions,
   isLookupLike,
   isCompanionLogicalReadOnly,
@@ -59,7 +58,7 @@ import {
   type LookupColumnMeta,
   type CustomerColumnMeta,
   type OwnerColumnMeta,
-} from '../mock/metadata';
+} from '../metadata/metadata';
 // Live snapshots are passed in as props (see MergeFieldDiffProps.target /
 // .sub). We no longer read from the mock store.
 import type { CreateFieldValue, LookupFieldValue, MergeFieldChoice } from '../state/writeState';
@@ -362,7 +361,7 @@ function MergeRow({
               <Badge
                 appearance="tint"
                 color="success"
-                size="extra-small"
+                size="small"
                 style={{ alignSelf: 'flex-start' }}
               >
                 auto-fill
@@ -372,10 +371,10 @@ function MergeRow({
         </div>
       </Td>
       <Td tone="target">
-        <ValueCell col={col} value={targetVal} tbl={tbl} />
+        <ValueCell col={col} value={targetVal} />
       </Td>
       <Td tone="sub">
-        <ValueCell col={col} value={subVal} tbl={tbl} />
+        <ValueCell col={col} value={subVal} />
       </Td>
       <Td>
         {/* Choice picker */}
@@ -504,8 +503,7 @@ function Td({ children, tone }: { children: React.ReactNode; tone?: 'target' | '
   );
 }
 
-function ValueCell({ col, value, tbl }: { col: ColumnMeta; value: unknown; tbl: TableMeta }) {
-  void tbl;
+function ValueCell({ col, value }: { col: ColumnMeta; value: unknown }) {
   if (value == null || value === '') {
     return (
       <span style={{ color: tokens.colorNeutralForeground3, fontStyle: 'italic', fontSize: 11 }}>

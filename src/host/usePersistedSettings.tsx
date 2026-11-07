@@ -17,7 +17,7 @@
 // The publisher / solution selection is stored per org (#52) — its GUIDs
 // only exist in the environment they were picked in. Consumers see the
 // active org's selection; an org without one starts unconfigured, which
-// shows the "Entity scope not configured" banner instead of an empty list.
+// shows the scope chip's "Choose scope" empty state instead of an empty list.
 // The first org seen after upgrading inherits the old global selection.
 
 import {
@@ -45,6 +45,8 @@ import { useActiveOrg } from './activeOrg';
 type Ctx = [DisplaySettings, (next: DisplaySettings) => void];
 
 const SettingsContext = createContext<Ctx | null>(null);
+// True once the stored settings were read (or there's no storage to read).
+const SettingsLoadedContext = createContext(false);
 
 function persist(next: PersistedDisplaySettings): void {
   if (typeof window !== 'undefined' && window.toolboxAPI?.settings?.set) {
@@ -59,6 +61,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const storedRef = useRef(stored);
   storedRef.current = stored;
   const loadedRef = useRef(false);
+  const [loaded, setLoaded] = useState(false);
   const org = useActiveOrg();
   const orgRef = useRef(org);
   orgRef.current = org;
@@ -79,6 +82,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       try {
         if (typeof window === 'undefined' || !window.toolboxAPI?.settings?.get) {
           loadedRef.current = true;
+          if (mountedRef.current) setLoaded(true);
           return;
         }
         const persisted = await window.toolboxAPI.settings.get(DISPLAY_SETTINGS_KEY);
@@ -96,6 +100,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         loadedRef.current = true;
         storedRef.current = next;
         setStored(next);
+        setLoaded(true);
         if (pending.length > 0) persist(next);
       } catch (err) {
         console.warn('⚙️ Failed to load settings from toolboxAPI:', err);
@@ -154,9 +159,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   return (
     <SettingsContext.Provider value={[settings, updateSettings]}>
-      {children}
+      <SettingsLoadedContext.Provider value={loaded}>{children}</SettingsLoadedContext.Provider>
     </SettingsContext.Provider>
   );
+}
+
+/**
+ * True once the stored settings have been read, so UI that depends on a
+ * remembered value (the scope chip's first-run tip) doesn't flash first.
+ */
+export function useSettingsLoaded(): boolean {
+  return useContext(SettingsLoadedContext);
 }
 
 /**

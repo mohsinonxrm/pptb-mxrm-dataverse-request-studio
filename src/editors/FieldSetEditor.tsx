@@ -89,31 +89,31 @@ import {
   type MoneyColumnMeta,
   type DecimalColumnMeta,
   type DoubleColumnMeta,
-  type BigIntColumnMeta,
   type BooleanColumnMeta,
   type LookupColumnMeta,
   type CustomerColumnMeta,
   type OwnerColumnMeta,
-} from '../mock/metadata';
+} from '../metadata/metadata';
 import { useLookupRecords } from '../host/useLookupRecords';
 import {
   decodeFieldBody,
   encodeFieldBody,
+  isRequiredColumn,
   mustSupplyOnCreate,
   parseRawBody,
   suppliedColumnTest,
   type DecodedFieldBody,
   type UnmappedBodyKey,
 } from '../engine/fieldBody';
-import { useColumnDetail } from '../host/useColumnDetail';
+import { useColumnDetail, useTableDetail } from '../host/useColumnDetail';
 import {
   behaviorHint,
   behaviorOf,
-  combineDateAndTime,
   isDateOnlyColumn,
   localZoneLabel,
   parseDateTimeValue,
-  serializeDateTimeValue,
+  withPickedDate,
+  withPickedTime,
 } from './dateTimeValue';
 // Monaco — same instance + worker setup as CodeView. The `loader.config`
 // side-effect lives in src/monaco/monacoSetup.ts, which the MonacoEditor
@@ -122,6 +122,10 @@ import Editor from '../monaco/MonacoEditor';
 import type { ThemeMode } from '../theme/theme';
 import type { CreateFieldValue, LookupFieldValue } from '../state/writeState';
 import type { RequestGroup } from '../registry/requestTypes';
+import { isColumnInScope, scopedColumns, useAdvancedFindOnly } from '../state/metadataScope';
+import { buildBodySchema } from '../engine/bodySchema';
+import { useLiveEntities } from '../host/useLiveMetadata';
+import { copyText } from '../shell/copy';
 
 // ──────────────────────────────────────────────────────────────
 // System-managed columns we hide from the Create form.
@@ -436,7 +440,7 @@ export function FieldSetEditor({
     const writableById = new Map(writable.map((c) => [c.logicalName, c]));
 
     // Required columns in metadata order (regardless of whether they're populated)
-    const requiredCols = writable.filter((c) => c.required);
+    const requiredCols = writable.filter(isRequiredColumn);
     const requiredIds = new Set(requiredCols.map((c) => c.logicalName));
 
     // Then user-added non-required fields in insertion order. Sourced
@@ -465,7 +469,7 @@ export function FieldSetEditor({
     if (filter === 'common') {
       pool = pool.filter(
         (c) =>
-          c.required ||
+          isRequiredColumn(c) ||
           c.logicalName === tbl?.primaryName ||
           c.logicalName === 'statecode' ||
           c.logicalName === 'statuscode' ||
@@ -484,11 +488,14 @@ export function FieldSetEditor({
     return pool;
   }, [writable, values, nullFields, filter, search, tbl, inWorkingSet]);
 
-  // Pool of fields available to add (writable, not currently visible)
+  // Pool of fields available to add (writable, not currently visible). It
+  // follows "Advanced Find only" (#44); required and filled-in fields always
+  // show, since they come from `writable`.
+  const advancedFindOnly = useAdvancedFindOnly();
   const addable = useMemo(() => {
     const visibleIds = new Set(visible.map((c) => c.logicalName));
-    return writable.filter((c) => !visibleIds.has(c.logicalName));
-  }, [writable, visible]);
+    return scopedColumns(writable, advancedFindOnly).filter((c) => !visibleIds.has(c.logicalName));
+  }, [writable, visible, advancedFindOnly]);
 
   if (!tbl) {
     return (
@@ -674,6 +681,10 @@ export function FieldSetEditor({
           onStay={() => setSwitchIssue(null)}
           themeMode={themeMode}
           onChange={onJsonChange}
+          table={tbl}
+          writable={writable}
+          nullSupported={nullFieldsSupported}
+          advancedFindOnly={advancedFindOnly}
         />
       )}
 
@@ -785,7 +796,7 @@ function FieldRow({
   onClearNull: () => void;
 }) {
   const s = useStudioStyles();
-  const isMissing = col.required && (requiredOnWrite ? !populated : isNull);
+  const isMissing = isRequiredColumn(col) && (requiredOnWrite ? !populated : isNull);
 
   const rs = useFieldRowStyles();
   return (
@@ -806,7 +817,7 @@ function FieldRow({
           <span style={{ fontWeight: 500, color: tokens.colorNeutralForeground1 }}>
             {col.displayName}
           </span>
-          {col.required && (
+          {isRequiredColumn(col) && (
             <Tooltip
               content={
                 requiredOnWrite
@@ -815,7 +826,7 @@ function FieldRow({
               }
               relationship="description"
             >
-              <Badge appearance="tint" color="danger" size="extra-small">
+              <Badge appearance="tint" color="danger" size="small">
                 req
               </Badge>
             </Tooltip>
@@ -886,7 +897,7 @@ function FieldRow({
                 <Badge
                   appearance="filled"
                   color="warning"
-                  size="extra-small"
+                  size="small"
                   style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: 700 }}
                 >
                   null
@@ -944,7 +955,7 @@ function FieldRow({
       </div>
 
       {/* Remove */}
-      {!col.required ? (
+      {!isRequiredColumn(col) ? (
         <Tooltip content="Remove field from the body" relationship="label">
           <Button
             size="small"
@@ -1359,12 +1370,14 @@ function DateTimeFieldInput({
       onChange('');
       return;
     }
-    // Keep the time already picked when the date changes.
-    onChange(serializeDateTimeValue(combineDateAndTime(d, isDateOnly ? null : current), col));
+    // Keep the time already picked when the date changes (as stored, #337).
+    onChange(withPickedDate(value, d, col));
   };
   const writeTime = (d: Date | null | undefined) => {
-    if (!d || !current) return;
-    onChange(serializeDateTimeValue(combineDateAndTime(current, d), col));
+    if (!d) return;
+    // Null when it's the time already shown: the picker reports on blur too.
+    const next = withPickedTime(value, d, col);
+    if (next !== null) onChange(next);
   };
 
   // What's on the wire — shown under the pickers so the zone is never a
@@ -1507,6 +1520,7 @@ function MultiChoiceTagPicker({
   value: number[] | undefined;
   onChange: (v: number[]) => void;
 }) {
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- columnOptions() is a new array for Boolean / option-less columns; these small memos just recompute then
   const options = columnOptions(col) ?? [];
   const [query, setQuery] = useState('');
   const selected = (value ?? []).map(String);
@@ -2034,6 +2048,10 @@ function JsonEditPane({
   onStay,
   themeMode,
   onChange,
+  table,
+  writable,
+  nullSupported,
+  advancedFindOnly,
 }: {
   text: string;
   error: string | null;
@@ -2047,7 +2065,34 @@ function JsonEditPane({
   onStay: () => void;
   themeMode: ThemeMode;
   onChange: (text: string) => void;
+  table: TableMeta;
+  /** The columns the form can set; the schema offers the same (#268). */
+  writable: ColumnMeta[];
+  nullSupported: boolean;
+  advancedFindOnly: boolean;
 }) {
+  // Completions, hover and type checks for the body (#268). The table's
+  // first load has no options, lookup targets or date behavior, so the
+  // whole table is enriched here. Lookup targets' entity sets come from
+  // their metadata when loaded, else the table list. Both are awaited
+  // (usually cached), so the JSON worker restarts once.
+  const { entities, loading: entitiesLoading } = useLiveEntities();
+  const { table: liveTable, loading: detailLoading } = useTableDetail(table.logicalName);
+  const jsonSchema = useMemo(() => {
+    const tbl = liveTable ?? table;
+    const live = new Map(tbl.columns.map((c) => [c.logicalName, c]));
+    const sets = new Map(entities.map((e) => [e.logicalName, e.entitySetName]));
+    return buildBodySchema(
+      tbl,
+      writable.map((c) => live.get(c.logicalName) ?? c),
+      {
+        nullSupported,
+        suggest: (c) => isColumnInScope(c, advancedFindOnly),
+        entitySetOf: (t) => findTable(t)?.entitySetName ?? sets.get(t),
+      },
+    );
+  }, [table, liveTable, writable, nullSupported, advancedFindOnly, entities]);
+
   const keyList = (
     <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
       {unmapped.map((u) => (
@@ -2170,6 +2215,7 @@ function JsonEditPane({
             height="100%"
             language="json"
             value={text}
+            jsonSchema={entitiesLoading || detailLoading ? null : jsonSchema}
             onChange={(v) => onChange(v ?? '')}
             theme={themeMode === 'dark' ? 'vs-dark' : 'light'}
             options={{
@@ -2198,7 +2244,7 @@ function JsonEditPane({
             appearance="subtle"
             // z-index above Monaco's chrome so the copy button stays clickable.
             style={{ position: 'absolute', top: 6, right: 6, zIndex: 2 }}
-            onClick={() => navigator.clipboard?.writeText(text)}
+            onClick={() => void copyText(text, 'the body JSON')}
           />
         </Tooltip>
       </div>

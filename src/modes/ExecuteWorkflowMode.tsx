@@ -19,6 +19,7 @@ import {
   Table20Filled,
   LineHorizontal320Regular,
   LineHorizontal320Filled,
+  ArrowSync20Regular,
 } from '@fluentui/react-icons';
 import {
   Field,
@@ -26,8 +27,10 @@ import {
   Option,
   Caption1,
   Badge,
+  Button,
   tokens,
   MessageBar,
+  MessageBarActions,
   MessageBarBody,
   MessageBarTitle,
   Spinner,
@@ -44,7 +47,7 @@ import { WorkflowArgumentsCard } from '../editors/WorkflowArgumentsCard';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildExecuteWorkflow, buildExecuteWorkflowBody } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
@@ -63,6 +66,10 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
+import { invalidUrlPartReason } from '../primitives/urlParts';
+import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
+import { addRun, useRecentRuns } from '../state/runHistory';
 
 // Workflow shape used by the picker — the wire response fields are
 // camelCased differently per the OData convention (workflowid not Id, etc).
@@ -93,7 +100,8 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('exec-workflow');
 
   const built = useMemo(() => buildExecuteWorkflow(state), [state]);
   const body = useMemo(() => buildExecuteWorkflowBody(state), [state]);
@@ -107,6 +115,9 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
   const [workflows, setWorkflows] = useState<WorkflowRow[]>([]);
   const [workflowsLoading, setWorkflowsLoading] = useState(false);
   const [workflowsError, setWorkflowsError] = useState<string | null>(null);
+  // Bumped by Retry to run the load again (#306).
+  const [workflowsReload, setWorkflowsReload] = useState(0);
+  const hasHost = typeof window !== 'undefined' && !!window.dataverseAPI?.queryData;
   useEffect(() => {
     let cancelled = false;
     if (typeof window === 'undefined' || !window.dataverseAPI?.queryData) {
@@ -151,7 +162,7 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [workflowsReload]);
 
   const wf = state.workflowId ? workflows.find((w) => w.id === state.workflowId) : undefined;
   // Warm the workflow's primary-entity metadata as soon as a workflow is
@@ -163,7 +174,9 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
   const tbl = wf ? findTable(wf.primaryEntity) : undefined;
 
   // Save / Load
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const [entityRecordName, setEntityRecordName] = useState<string>('');
@@ -183,13 +196,34 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
     if (dirtyId) markDirty(dirtyId);
   };
 
-  const disabledReason = !wf
-    ? 'Pick a workflow.'
-    : !state.entityId
-      ? `Pick a ${wf.primaryEntity} record to run the workflow on.`
-      : state.headers.some((h) => h.enabled && !h.name)
-        ? 'Fix empty header name.'
-        : null;
+  // Ids and names that go into the URL as-is (#221).
+  const urlPartProblem = invalidUrlPartReason([
+    ['Workflow id', state.workflowId],
+    ['Record id', state.entityId],
+  ]);
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const advisories = firstBlocker([
+    { when: !wf, id: 'workflow-pick', title: 'Pick a workflow.', focusNode: 'pick' },
+    {
+      when: !state.entityId,
+      id: 'workflow-record',
+      title: `Pick a ${wf?.primaryEntity} record to run the workflow on.`,
+      focusNode: 'target',
+    },
+    {
+      when: state.headers.some((h) => h.enabled && !h.name),
+      id: 'workflow-header-name',
+      title: 'Fix empty header name.',
+      focusNode: 'headers',
+    },
+    {
+      when: urlPartProblem,
+      id: 'workflow-url-part',
+      title: urlPartProblem ?? '',
+      focusNode: urlPartProblem?.startsWith('Workflow') ? 'pick' : 'target',
+    },
+  ]);
+  const disabledReason = disabledReasonFromAdvisories(advisories);
 
   const onExecute = async () => {
     setLoading(true);
@@ -197,21 +231,16 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'exec-workflow',
-          url: built.relativeUrl,
-          method: 'POST',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: res.ok ? 1 : 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'exec-workflow',
+        url: built.relativeUrl,
+        method: 'POST',
+        status: res.status,
+        ms: res.ms,
+        rowCount: res.ok ? 1 : 0,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
@@ -264,6 +293,10 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedHash(keepHash);
   };
 
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.workflowId) return null;
@@ -272,11 +305,17 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: 'exec-workflow' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.workflowId, workflows]),
+    }, [
+      currentSerialized,
+      isDirty,
+      lastSavedId,
+      state.workflowId,
+      onSavedLatest,
+      onLoadSavedLatest,
+    ]),
   );
 
   const sections = [
@@ -340,6 +379,7 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
           workflows={workflows}
           loading={workflowsLoading}
           error={workflowsError}
+          onRetry={hasHost ? () => setWorkflowsReload((n) => n + 1) : undefined}
           workflowId={state.workflowId}
           setWorkflowId={(id) => {
             setState((s) => ({ ...s, workflowId: id, entityId: null }));
@@ -431,10 +471,23 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
           method="POST"
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={
+            wf
+              ? {
+                  operation: `Execute Workflow "${wf.name}"`,
+                  table: wf.primaryEntity || undefined,
+                  scope: { kind: 'records', count: 1 },
+                  highImpact: true,
+                }
+              : null
+          }
           executeIcon={Flowchart20Filled}
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
+          advisories={advisories}
+          onAdvisoryFocus={setActivePath}
         />
       }
     >
@@ -460,16 +513,20 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
   );
 }
 
-function WorkflowPickerPane({
+/** Exported for tests. */
+export function WorkflowPickerPane({
   workflows,
   loading,
   error,
+  onRetry,
   workflowId,
   setWorkflowId,
 }: {
   workflows: WorkflowRow[];
   loading: boolean;
   error: string | null;
+  /** Runs the workflow load again. Omitted outside PPTB, where it can't succeed. */
+  onRetry?: () => void;
   workflowId: string | null;
   setWorkflowId: (id: string | null) => void;
 }) {
@@ -509,15 +566,32 @@ function WorkflowPickerPane({
           <Badge appearance="ghost" icon={<Spinner size="extra-tiny" />}>
             loading…
           </Badge>
-        ) : (
+        ) : error ? null : (
           <Badge appearance="ghost">
             {workflows.length} workflow{workflows.length === 1 ? '' : 's'}
           </Badge>
         )}
       </PaneHead>
-      {error && (
+      {error && !loading && (
         <MessageBar intent="error" layout="multiline" style={{ marginBottom: 12, maxWidth: 760 }}>
-          <MessageBarBody>Couldn't load workflows: {error}</MessageBarBody>
+          <MessageBarBody>
+            <MessageBarTitle>Couldn't load workflows</MessageBarTitle>
+            {error}
+          </MessageBarBody>
+          {onRetry && (
+            <MessageBarActions
+              containerAction={
+                <Button
+                  appearance="primary"
+                  size="small"
+                  icon={<ArrowSync20Regular />}
+                  onClick={onRetry}
+                >
+                  Retry
+                </Button>
+              }
+            />
+          )}
         </MessageBar>
       )}
       <div style={{ maxWidth: 760 }}>
@@ -547,9 +621,11 @@ function WorkflowPickerPane({
             placeholder={
               loading
                 ? 'Loading workflows…'
-                : workflows.length === 0
-                  ? 'No activated workflows in this environment'
-                  : 'Search workflows…'
+                : error
+                  ? 'Workflows didn’t load'
+                  : workflows.length === 0
+                    ? 'No activated workflows in this environment'
+                    : 'Search workflows…'
             }
             disabled={loading || workflows.length === 0}
             listbox={{ style: { maxHeight: 420 } }}

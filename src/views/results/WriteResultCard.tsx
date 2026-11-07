@@ -32,13 +32,15 @@ import {
   CheckmarkCircle16Filled,
   ErrorCircle16Filled,
   SubtractCircle16Regular,
+  ArrowUndo16Regular,
+  DocumentCopy20Regular,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../../primitives/styles';
 import { canOpenInMode, openInMode } from '../../state/modeHandoff';
 import { StatusPill } from '../../primitives/StatusPill';
 import { RecordDetailCard } from '../detail/RecordDetailCard';
-import { ENV } from '../../mock/environment';
-import { findTable } from '../../mock/metadata';
+import { ENV } from '../../env/environment';
+import { findTable } from '../../metadata/metadata';
 import {
   HEADER_CONSENT_DECLINED_CODE,
   HEADER_REJECTED_CODE,
@@ -46,6 +48,9 @@ import {
   type ExecResult,
   type RelateTargetResult,
 } from '../../engine/dataverseExecutor';
+import { SERVICE_PROTECTION_SCOPE, serviceProtectionLimit } from '../../engine/serviceProtection';
+import { copyText } from '../../shell/copy';
+import { errorReport } from './nextSteps';
 
 export type WriteOperation =
   | 'create'
@@ -62,6 +67,23 @@ export type WriteOperation =
   | 'manage-image'
   | 'manage-attachment';
 
+/** How an operation reads in a sentence: "Dataverse didn't run this update". */
+const OPERATION_NOUN: Record<WriteOperation, string> = {
+  create: 'create',
+  update: 'update',
+  upsert: 'upsert',
+  delete: 'delete',
+  merge: 'merge',
+  associate: 'associate',
+  disassociate: 'disassociate',
+  action: 'action call',
+  function: 'function call',
+  workflow: 'workflow run',
+  'manage-file': 'file request',
+  'manage-image': 'image request',
+  'manage-attachment': 'attachment request',
+};
+
 export interface WriteResultContext {
   operation: WriteOperation;
   /** Target table logical name — drives RecordDetailCard if body present. */
@@ -77,6 +99,11 @@ export interface WriteResultContext {
   /** Merge: the two record names for the success line. */
   targetName?: string | null;
   subordinateName?: string | null;
+  /**
+   * Update / Upsert asked for `Prefer: return=representation`. ToolBox's
+   * update passes no row back, so the card says why there's none (#224).
+   */
+  returnRepresentation?: boolean;
   /**
    * Associate / Disassociate — the nav property name (e.g.
    * `contact_customer_accounts`) and the count of targets that were
@@ -150,6 +177,7 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
     : result.outcome === 'partial' ||
         result.status === 412 ||
         result.status === 404 ||
+        result.status === 429 ||
         result.status === 409
       ? 'warning'
       : 'danger';
@@ -177,7 +205,7 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
     canOpenInMode();
   const recordUrl =
     resolvedId && tbl
-      ? `https://${ENV.host}/api/data/v9.2/${tbl.entitySetName}(${resolvedId})`
+      ? `https://${ENV.host}${ENV.apiBase}/${tbl.entitySetName}(${resolvedId})`
       : null;
 
   // The body — if Create/Update/Upsert returned a representation, we
@@ -221,6 +249,15 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
                 {narrative.body}
               </Caption1>
             )}
+            {family === 'success' &&
+              ctx.returnRepresentation &&
+              (ctx.operation === 'update' || ctx.operation === 'upsert') &&
+              !hasReturnedRecord && (
+                <Caption1 style={{ display: 'block', color: tokens.colorNeutralForeground3 }}>
+                  You asked for return=representation, but ToolBox&apos;s update doesn&apos;t pass
+                  the row back.{canRetrieve && ' Retrieve this record to see it.'}
+                </Caption1>
+              )}
           </div>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <StatusPill
@@ -265,12 +302,12 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
             >
               {tbl?.primaryKey ?? 'id'}: {resolvedId}
             </code>
-            <Tooltip content="Copy record GUID" relationship="label">
+            <Tooltip content="Copy record GUID" relationship="description">
               <Button
                 size="small"
                 appearance="subtle"
                 icon={<Copy20Regular />}
-                onClick={() => navigator.clipboard?.writeText(resolvedId)}
+                onClick={() => void copyText(resolvedId, 'the record ID')}
               >
                 Copy ID
               </Button>
@@ -280,17 +317,20 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
                 row survives, so we keep them. */}
             {recordUrl && !(ctx.operation === 'delete' && !ctx.clearedColumn) && (
               <>
-                <Tooltip content="Copy record URL" relationship="label">
+                <Tooltip content="Copy record URL" relationship="description">
                   <Button
                     size="small"
                     appearance="subtle"
                     icon={<Copy20Regular />}
-                    onClick={() => navigator.clipboard?.writeText(recordUrl)}
+                    onClick={() => void copyText(recordUrl, 'the record URL')}
                   >
                     Copy URL
                   </Button>
                 </Tooltip>
-                <Tooltip content="Open the record's Web API URL in a new tab" relationship="label">
+                <Tooltip
+                  content="Open the record's Web API URL in a new tab"
+                  relationship="description"
+                >
                   <Button
                     size="small"
                     appearance="subtle"
@@ -323,6 +363,27 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
                 </Button>
               </Tooltip>
             )}
+          </div>
+        )}
+        {/* Every failure can be copied as a report (#291). */}
+        {!result.ok && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
+            <Button
+              size="small"
+              appearance="subtle"
+              icon={<DocumentCopy20Regular />}
+              onClick={() =>
+                void copyText(
+                  errorReport({
+                    result,
+                    operation: `${ctx.operation}${ctx.table ? ` on ${ctx.table}` : ''}`,
+                  }),
+                  'the error report',
+                )
+              }
+            >
+              Copy error report
+            </Button>
           </div>
         )}
       </div>
@@ -393,6 +454,15 @@ function buildNarrative(
       return {
         title: 'Not sent — header rejected',
         body: err?.message ?? 'Power Platform ToolBox rejected a request header.',
+      };
+    }
+    // Service protection limits (#269): Dataverse refused the request
+    // before running it, so the write wasn't applied.
+    const throttled = serviceProtectionLimit(result);
+    if (throttled) {
+      return {
+        title: `Throttled: ${throttled.limit}`,
+        body: `Dataverse didn't run this ${OPERATION_NOUN[ctx.operation]}. ${throttled.advice} ${SERVICE_PROTECTION_SCOPE}`,
       };
     }
     if (result.status === 412) {
@@ -542,7 +612,9 @@ function buildNarrative(
       return {
         title:
           n > 1 ? `Associated ${n} records to ${entityDisplay}` : `Associated to ${entityDisplay}`,
-        body: `Linked ${targetsFrag} to ${sourceFrag} ${navLabel}.`.replace(/\s+\./, '.'),
+        body:
+          `Linked ${targetsFrag} to ${sourceFrag} ${navLabel}.`.replace(/\s+\./, '.') +
+          (result.changeSet ? ' Sent as one change set.' : ''),
       };
     }
     case 'disassociate': {
@@ -563,7 +635,7 @@ function buildNarrative(
             ? `Removed ${n} link${n === 1 ? '' : 's'} from ${sourceFrag} ${navLabel}.`.replace(
                 /\s+\./,
                 '.',
-              )
+              ) + (result.changeSet ? ' Sent as one change set.' : '')
             : `Cleared the lookup on ${sourceFrag} ${navLabel}.`.replace(/\s+\./, '.'),
       };
     }
@@ -576,7 +648,7 @@ function buildNarrative(
         title: `Action: ${opName}`,
         body:
           result.status === 200 || result.status === 201
-            ? `Executed ${opName}${boundFrag}. Server returned a result body — see JSON / Results tabs.`
+            ? `Executed ${opName}${boundFrag}. Server returned a result body — see the JSON tab.`
             : `Executed ${opName}${boundFrag}. Server returned 204 No Content — no return value.`,
       };
     }
@@ -587,7 +659,7 @@ function buildNarrative(
         : '';
       return {
         title: `Function: ${opName}`,
-        body: `Invoked ${opName}${boundFrag}. Result body in JSON / Results tabs.`,
+        body: `Invoked ${opName}${boundFrag}. The result body is in the JSON tab.`,
       };
     }
     case 'workflow': {
@@ -675,10 +747,12 @@ function relateNarrative(
   if (ctx.operation !== 'associate' && ctx.operation !== 'disassociate') return null;
   if (!showTargetList(result)) return null;
   const n = result.targets!.length;
-  const { done, skipped, failed } = relateTargetCounts(result);
+  const counts = relateTargetCounts(result);
+  const { done, skipped, failed } = counts;
+  const rolledBack = counts['rolled-back'];
   // Every target linked / unlinked, or the single target failed: the
   // regular framings say it best.
-  if ((failed === 0 && skipped === 0) || (failed === n && n === 1)) return null;
+  if ((failed === 0 && skipped === 0 && rolledBack === 0) || (failed === n && n === 1)) return null;
   const assoc = ctx.operation === 'associate';
   const plural = (k: number) => `${k} record${k === 1 ? '' : 's'}`;
   const sourceFrag = name
@@ -696,6 +770,37 @@ function relateNarrative(
   const rerun = assoc
     ? 'Fix the failures and Execute again: targets that are already linked are skipped.'
     : 'Fix the failures, remove the targets that were unlinked, and Execute again: every listed target is sent again.';
+
+  // All or nothing (#224): the change set failed, so none of it applied.
+  if (rolledBack > 0) {
+    const op = assoc ? 'Associate' : 'Disassociate';
+    const sent = failed + rolledBack;
+    const requests = `${sent} request${sent === 1 ? '' : 's'}`;
+    if (failed > 0) {
+      return {
+        title: `${op} failed — nothing changed`,
+        body: (
+          `The ${requests} went as one change set. One failed, so Dataverse rolled back the ` +
+          `other ${rolledBack}: nothing was changed on ${sourceFrag}${navLabel}.` +
+          skippedFrag +
+          ' Fix the failure and Execute again.'
+        ).trim(),
+      };
+    }
+    // The failure isn't tied to one target (or the call itself failed):
+    // say what it was, since no target row carries it.
+    const message = (result.body as { error?: { message?: string } } | null)?.error?.message;
+    return {
+      title: `${op} failed — change set not applied`,
+      body: (
+        `The change set of ${requests} failed${message ? `: ${message.replace(/\.?$/, '.')}` : '.'} ` +
+        `Dataverse applies a change set whole or not at all, so none of them should have changed ` +
+        `${sourceFrag}${navLabel}.` +
+        skippedFrag +
+        ' If the connection dropped, check the links before you Execute again.'
+      ).trim(),
+    };
+  }
 
   if (failed === 0) {
     const verb = assoc ? 'Linked' : 'Removed links to';
@@ -755,9 +860,11 @@ function TargetResultList({
         : 'Unlinked'
       : t.state === 'skipped'
         ? 'Already linked · skipped'
-        : t.status
-          ? `Failed · ${t.status} ${t.statusText ?? ''}`.trim()
-          : 'Failed';
+        : t.state === 'rolled-back'
+          ? 'Not applied'
+          : t.status
+            ? `Failed · ${t.status} ${t.statusText ?? ''}`.trim()
+            : 'Failed';
   return (
     <div className={s.inlineCard} style={{ padding: 12 }}>
       <Caption1
@@ -780,13 +887,17 @@ function TargetResultList({
               ? CheckmarkCircle16Filled
               : t.state === 'skipped'
                 ? SubtractCircle16Regular
-                : ErrorCircle16Filled;
+                : t.state === 'rolled-back'
+                  ? ArrowUndo16Regular
+                  : ErrorCircle16Filled;
           const color =
             t.state === 'done'
               ? tokens.colorPaletteGreenForeground1
               : t.state === 'skipped'
                 ? tokens.colorNeutralForeground3
-                : tokens.colorPaletteRedForeground1;
+                : t.state === 'rolled-back'
+                  ? tokens.colorPaletteDarkOrangeForeground1
+                  : tokens.colorPaletteRedForeground1;
           const name = names[t.targetId];
           return (
             <div key={t.targetId} style={{ display: 'flex', gap: 8, minWidth: 0 }}>
@@ -812,7 +923,9 @@ function TargetResultList({
                         ? 'success'
                         : t.state === 'skipped'
                           ? 'informative'
-                          : 'danger'
+                          : t.state === 'rolled-back'
+                            ? 'warning'
+                            : 'danger'
                     }
                   >
                     {label(t)}

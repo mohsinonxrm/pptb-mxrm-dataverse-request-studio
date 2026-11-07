@@ -1,5 +1,5 @@
-// Mock Dataverse metadata — modeled after the real Web API
-// AttributeMetadata response shapes.
+// Dataverse table metadata and the live table registry. The types are modeled
+// after the Web API AttributeMetadata response shapes.
 //
 // Each column carries:
 //   - logicalName / displayName / required / description
@@ -12,8 +12,8 @@
 //
 // Field shapes are a discriminated union keyed on `attributeType`.
 //
-// ── Reference: when the real Web API is wired up ────────────────────────────
-// This mock maps 1:1 to the Dataverse Web API metadata endpoint at
+// ── Reference: where these shapes come from ─────────────────────────────────
+// These types map 1:1 to the Dataverse Web API metadata endpoint at
 //   GET /api/data/v9.2/EntityDefinitions(LogicalName='<table>')
 //     ?$expand=Attributes(...) — cast to the typed metadata classes
 //
@@ -121,6 +121,9 @@ export interface BaseColumnMeta {
   /** True iff this attribute can be read. Always true on standard
    *  attributes; surfaced for defensive $select filtering in Read modes. */
   isValidForRead?: boolean;
+  /** Shown in Advanced Find. Only the pickers use it, when "Advanced Find
+   *  only" is on (#44, state/metadataScope). Missing = true. */
+  isValidForAdvancedFind?: boolean;
   /**
    * True iff the attribute is exposed via the OData / Web API. Hard wall —
    * if false, the attribute can't be selected, filtered, ordered, or
@@ -472,6 +475,8 @@ export interface NavProperty {
    * single source attribute).
    */
   referencingAttribute?: string;
+  /** Shown in Advanced Find; scopes the relationship pickers (#44). Missing = true. */
+  isValidForAdvancedFind?: boolean;
 }
 
 /**
@@ -490,8 +495,9 @@ export interface AlternateKeyDef {
   columns: string[];
   /**
    * AttributeType of key columns that aren't in the table's loaded `columns`
-   * (the basic load is filtered to IsValidForAdvancedFind, so e.g.
-   * `canvasapp.componentstate` / `overwritetime` are missing). Filled by the
+   * (the basic load used to be filtered to IsValidForAdvancedFind, so e.g.
+   * `canvasapp.componentstate` / `overwritetime` were missing; #44 loads it
+   * unfiltered). Filled by the
    * live metadata provider so key literals are typed correctly (#64).
    */
   columnTypes?: Record<string, AttributeTypeCode>;
@@ -578,6 +584,10 @@ export function __subscribeLiveTables(cb: () => void): () => void {
   __liveListeners.add(cb);
   return () => __liveListeners.delete(cb);
 }
+/** Removes one of the active org's tables (#335). */
+export function __unregisterLiveTable(logicalName: string): void {
+  if (liveTablesOf().delete(logicalName)) notifyLiveTables();
+}
 /** Clears the active org's tables. */
 export function __clearLiveTables(): void {
   liveTablesOf().clear();
@@ -627,6 +637,10 @@ export const TABLES: TableMeta[] = new Proxy([] as TableMeta[], {
  */
 export const findTable = (logicalName: string): TableMeta | undefined =>
   liveTablesOf().get(logicalName);
+
+/** The loaded table with this entity set name (`accounts` → account), if any. */
+export const findTableBySet = (entitySetName: string): TableMeta | undefined =>
+  Array.from(liveTablesOf().values()).find((t) => t.entitySetName === entitySetName);
 
 export const findColumn = (table: TableMeta, logicalName: string): ColumnMeta | undefined =>
   table.columns.find((c) => c.logicalName === logicalName);

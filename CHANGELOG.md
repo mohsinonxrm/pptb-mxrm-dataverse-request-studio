@@ -7,6 +7,741 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ✨ Added
+
+- **The JSON body editor knows the table** ([#268]). In a field set's JSON view
+  (Create, Update, Upsert, Bulk Write rows and entity parameters):
+  - **Keys:** typing `"` lists the columns the form can set. Lookups are
+    listed as their `@odata.bind` keys, one per target for Customer and other
+    polymorphic lookups.
+  - **Values:**
+    - Choice, Status and State columns list their values with labels, for
+      example `Accounting · 1`; typing a number narrows the list. Multi-select
+      choices list theirs as strings.
+    - A lookup key inserts `"/<entityset>(<guid>)"`, with the GUID selected.
+  - **Hover:** a key shows its column's display name, type and whether it's
+    required.
+  - **Type check:** a value of the wrong JSON type is underlined, for example
+    text in a Currency column. The check follows the same rules as switching
+    back to the Form view, with one difference: a multi-select value given as
+    an array is underlined too, because a JSON body is sent as typed and
+    Dataverse wants `"1,2"`.
+
+  With *Advanced Find only* on, columns Advanced Find hides aren't listed, but
+  they still get hover text and type checks. Unknown keys and annotations
+  aren't underlined, because the pane already lists them. The table's option
+  values, lookup targets and date behaviour load when the JSON view opens, in
+  one request per column type.
+
+- **Hand-typed URLs get suggestions** ([#268]). The Batch custom request URL and
+  Retrieve query options, the Paste OData URL dialog and Retrieve Next Link list
+  what fits where the caret is:
+  - **Path:** tables and unbound functions and actions, then a row's navigation
+    properties and bound operations, or a table's `$count`.
+  - **Query options:** option names, columns in `$select` and `$orderby`
+    (lookups as `_<column>_value`), `asc` / `desc`, navigation properties in
+    `$expand` and the options inside `$expand(…)`, for the nav's own table.
+  - **`$filter`:** columns, `nav/column` paths, `contains` / `startswith` /
+    `endswith`, then operators and `and` / `or`.
+
+  The list opens as you type, not when you paste a URL. ↑ / ↓ move through it,
+  Enter or Tab inserts, Esc closes it, and Ctrl+Space opens it again. *Advanced
+  Find only* narrows it like the pickers. Lambdas (`any` / `all`) aren't
+  suggested yet.
+
+- **Results suggest the next step** ([#291]):
+  - **0 rows:** **Edit $filter** opens the $filter, **Run without $filter**
+    removes it from the builder and runs again (with **Restore $filter**
+    afterwards), and **Copy request URL**.
+  - **403:** the card names the missing privilege when Dataverse's message has
+    one, for example `prvReadAccount` (Read access on account).
+  - **401:** the card says to sign in to the connection again in ToolBox's
+    Connection Manager.
+  - **Unknown entity set** ("Resource not found for the segment …"): the card
+    suggests the closest table in your entity scope. In Retrieve NextLink,
+    **Use** fixes the URL.
+  - **Every error**, including failed writes: **Copy error report** copies the
+    method, URL, status, error code and message. It never includes request
+    headers, so no credentials or impersonation ids.
+- **Every mode lists what blocks Execute in Advisories** ([#294]). Create,
+  Associate, Disassociate, Execute Action / Function / Workflow, Manage File /
+  Image / Attachment, Predefined Query, `$batch`, Bulk Write and Bulk Delete
+  used to explain a disabled Execute only in its tooltip. Now the blocker is
+  in the Advisories drawer, like the read modes, and **Open** goes to the
+  sidebar node that fixes it, for example the first unset required parameter
+  or the first Bulk Write row with a problem. What blocks Execute is
+  unchanged.
+- **Open on any advisory shows the Builder and focuses the field** ([#294]),
+  from any tab, in every mode.
+- **Recent runs survive a reload or restart** ([#226]). Each mode keeps its
+  runs against each environment: the last 200 runs, with the request, status,
+  row count, duration and time. Response bodies are never kept, and neither
+  are credential or impersonation headers.
+  - Under Recent runs, **Show all** (or **Search runs**) opens the mode's
+    history: search by URL, status or method, and click a run to restore it.
+  - Settings → **Request history** turns it off (which also clears it) or
+    clears it.
+- **Throttling is explained** ([#269]). When Dataverse's service protection
+  limits refuse a request (429: `0x80072322` requests, `0x80072321` execution
+  time, `0x80072326` concurrent requests), the result names the limit and says
+  what to do. Read results offer **Try again**; a failed write says it didn't
+  run.
+  - **Retrieve all** pauses instead of failing. The rows so far are kept, and
+    **Continue** asks for the refused page again.
+  - Waiting the exact `Retry-After` time needs response headers, which
+    ToolBox doesn't pass through yet.
+- **Count only in Retrieve Multiple** ([#272]). Under $count, **Count only**
+  shows just the number of rows matching your $filter, with **Copy count**.
+  It asks for one row with `$count=true` and reads `@odata.count`, because
+  Dataverse rejects $filter on `<set>/$count` and ToolBox can't read that
+  plain-text answer. Dataverse counts up to 5,000 rows (500 for elastic
+  tables); past that, the result says more rows match. Pasting a `/$count` URL
+  turns Count only on.
+- **Python code** ([#270]). The Code tab has a **Python** format that sends
+  the request with `requests`: the URL, your headers, and the body as a
+  Python dict (or the file's bytes for an upload). Multi-request modes send
+  each request in order on one session. In `$batch` and ExecuteMultiple,
+  **Python (requests)** posts the multipart body. Put your token in
+  `ACCESS_TOKEN`.
+- **Import a cURL command** ([#271]). More actions (**…**) → **Import cURL
+  command…** reads a pasted `curl` command, for example from your
+  browser's Copy as cURL (bash or cmd) or DRS's own cURL code, and opens it
+  in the mode that sends it, filled in but not run:
+  - GET a table → Retrieve Multiple (the query is checked like Paste OData
+    URL), GET a row → Retrieve Single.
+  - POST to a table → Create, PATCH → Update with `If-Match` or Upsert
+    without it, DELETE → Delete (a row or one column). The body opens in the
+    field set's JSON view; Prefer, `If-Match` and the bypass headers fill
+    their panes.
+  - POST to an action → Execute Action, Custom API or Custom Action, with
+    the body read into its parameters (row references and new rows
+    included). A parameter it can't read is refused, not sent as null.
+  - POST `$batch` → `$batch`, with change sets kept.
+  - `Authorization`, cookies and browser headers are left out, and the
+    dialog lists what was left out or changed. Functions, associations,
+    alternate keys and file uploads aren't imported yet.
+- **All or nothing for Associate and Disassociate** ([#224]). With two or
+  more targets on a one-to-many or many-to-many relationship, turn on **All
+  or nothing** under the target records to send their requests as one
+  `$batch` change set. If any target fails, Dataverse rolls back the rest, so
+  nothing is linked or unlinked; the results list the failed target and mark
+  the others **Not applied**. A change set holds at most 1,000 requests. It's off by default: each target
+  is still sent on its own, and a failure leaves the targets before it
+  changed. The Code tab follows the choice: with it on, fetch, Python, C#,
+  PowerShell and cURL post one `$batch`, and `Xrm.WebApi.executeMultiple`
+  nests the requests in a change set. Needs Power Platform ToolBox 1.2.7 or
+  later; on an older ToolBox the option is unavailable and the requests go
+  one at a time.
+
+### 🐛 Fixed
+
+- **Screen readers and speech input get the right names; status and URL
+  colours are readable** ([#387]):
+  - Each results row's checkbox is named after the record (or its row
+    number), like the header's **Select all rows**.
+  - Recent runs, and the rows in run history, are named by what they show
+    ("GET just now · 200 · 3 rows") and then their URL, so speech users can
+    say what they see. So are the buttons whose tooltip used to rename them
+    (**Saved**, **Refresh**, **Copy URL**, **Copy ID**, **Open**, **Copy**,
+    **Save** in the Code tab, **Paste** and **Clear** in Retrieve NextLink,
+    and a binary file's **Change**): the tooltip now describes the button.
+    In the $filter editor, **NOT** is named by its text and the query
+    function picker has a name.
+  - The status pill ("200 OK · 82 ms") is a Fluent filled badge, as the
+    design specifies, with a check on success, and its time is no longer
+    faded.
+  - The purple of the URL bar's `$select`, `$filter`, … names and the
+    $filter editor's function labels follows the theme as the design pairs
+    it: a shade deeper in light, the lighter "relate" purple in dark (it
+    stayed the light-theme purple before). The ƒ badge is dark violet in
+    dark.
+  - The selected **AND** / **OR** is a Fluent primary button: brand blue
+    with white text in Retrieve modes, the mode's colour elsewhere. In dark it
+    was white on a light tint.
+  - All of these meet 4.5:1 contrast in light and dark.
+- **Execute Function no longer lists query functions** ([#384]). `Last7Days`,
+  `Contains`, `Between` and the other `$filter` query functions only work
+  inside a `$filter`, and the picker was meant to hide them. It missed them
+  because Dataverse declares them unbound.
+- **JSON bodies are checked in the PPTB VS Code extension** ([#255]). The
+  extension serves DRS's files from another origin than the page, so
+  Monaco's workers couldn't start. The JSON editors then showed no error
+  squiggles and offered no formatting or folding, and threw an error on
+  every edit. Where a worker can't start, the same code now runs on the
+  page. That includes a worker that fails after it was created, for
+  example one a host's CSP forbids, or one whose file is gone after DRS
+  updated while open. ToolBox desktop still uses real workers.
+- **Update and Upsert results show what came back** ([#224]). A 204 used
+  to show a made-up `{"@odata.context": "update"}` body in the JSON tab;
+  now it shows none. ToolBox's update passes no row back, even with
+  `Prefer: return=representation` (Upsert's default), so the result says so
+  and points to **Retrieve this record**.
+- **Retrieve NextLink names the right table** ([#224]). The table came from
+  trimming the entity set's plural (`mailboxes` became `mailboxe`); now it's
+  looked up in the environment's entity list, and left blank when unknown.
+- **Manage Image's preview has a sidebar entry** ([#224]). The pane with the
+  operation banner, the 144×144 preview tile and the pipeline had no sidebar
+  item: once you left it, only loading a request (or **Open** on _Image
+  operations run externally_) brought it back, so the picked record's
+  initials on the tile went unseen. A **Preview** section now heads the
+  sidebar, named after the picked record and badged with its initials, and
+  **Open** highlights it.
+
+### 🔄 Changed
+
+- **A smaller, faster-loading package** ([#236]). The npm package is about
+  1.8 MB (6.7 MB unpacked), down from 3.6 MB (14.5 MB), and DRS loads less
+  at startup:
+  - The editors load only the languages DRS shows (JSON, FetchXML and the
+    Code tab's formats) instead of all of Monaco's: its TypeScript, CSS and
+    HTML language services (~7.6 MB of workers) and ~80 language files are
+    gone.
+  - Every mode except Retrieve Multiple, the one DRS opens on, loads the
+    first time you pick it, as do the Code tab, the cURL import and the
+    write-result card. The startup bundle is ~1.7 MB, down from ~2 MB.
+  - The editors still highlight every Code tab format, and JSON is still
+    checked, formatted and folded. The JavaScript in the Code tab's Editor
+    playground loses what TypeScript's language service gave it: error
+    squiggles, completions, hover and formatting.
+  - CI fails the build if the package, or its startup bundle, grows past
+    its budget, or if an unused Monaco worker comes back.
+- **The Insider icon's gold corner is bigger, deeper gold and flush with the
+  corner** ([#363]). The old stamp's right point sat inside the hexagon's edge,
+  leaving a thin blue gap, and the light gold faded at small sizes. The stamp
+  now fills the corner, about 1.5 times larger, in two tones of gold
+  (`#CC8A00` and `#F2A100`) split on the same diagonal as the blue.
+  Prerelease builds only; the release icon is unchanged. Same change as
+  FetchXML Studio.
+- **The README's badges show in the ToolBox** ([#373]). Power Platform ToolBox
+  shows a tool's README in a window that only loads images from GitHub, so the
+  `img.shields.io` badges didn't appear there. They're now SVG files in
+  `assets/badges/`, linked from `raw.githubusercontent.com` as in Command Bar
+  Studio and FetchXML Studio, and generated from `package.json` by
+  `npm run badges`: version, Power Platform ToolBox ≥ 1.2.0, `@pptb/types`,
+  React, TypeScript, Fluent UI and license. The version badge links to npm, in
+  place of the npm `latest` and `beta` badges. The links point at `main`, so
+  the ToolBox shows them from the 1.5.0 release on.
+
+### 🔧 Internal
+
+- Executor clean-ups ([#224]): one `API_VERSION` constant, matching the
+  `v9.2` ToolBox calls; unused exports and `void` import keepers removed;
+  the executor's module header describes what it does today. Manage
+  Image's preview tile takes its initials from the picked record instead of
+  a fixed `?`.
+- `src/mock/` is renamed for what it holds ([#224]): the table registry and
+  CSDL action types are in `src/metadata/`, the environment in `src/env/`.
+  No behaviour change.
+- One header composition ([#244]): Create, Update, Upsert, Delete, Merge
+  and Bulk Write, the collection exports and `$batch` all build the
+  precondition, duplicate-detection and bypass headers in
+  `engine/requestHeaders.ts`, so Execute, the Code tab and exports can't
+  drift apart. A test checks they match.
+- One Recent-runs push ([#244]): every mode adds its run with `addRun`,
+  which stamps the id and time and keeps the list at `RECENT_SHOWN`.
+- **Releases check what they must update** ([#372]). A new `check-release.mjs`
+  runs in CI (every PR, and pushes to the long-lived branches) and in the
+  release build. It fails when any of these don't match `package.json`'s
+  version:
+  - the version's shape (`X.Y.Z`, `X.Y.Z-beta.N` or `X.Y.Z-rc.N`);
+  - `package-lock.json`;
+  - the CHANGELOG (a dated `[X.Y.Z]` section with entries, under a single
+    `[Unreleased]`);
+  - after the build, the bundled icon (the Insider icon for pre-releases).
+
+  The GitHub Release notes are built by the same script: the PPTB requirement,
+  the CHANGELOG section and a link to the full CHANGELOG, then GitHub's PR
+  list. A release no longer falls back to a PR list alone when the section is
+  missing, because the check fails first. RELEASING.md gains a table of what
+  every release changes and an *After every release* checklist, and forward
+  merges now keep the higher version. Ported from FetchXML Studio's check.
+- **The release check covers the README badges** ([#373]): the files in
+  `assets/badges/` match `package.json`, the README shows them, and no README
+  image comes from `img.shields.io`.
+- **The release workflow is hardened** ([#376]), as FetchXML Studio's was.
+  - **Separate jobs:** `release.yml` is split into `build`, `publish` and
+    `github-release`. The job that installs and runs the dependencies
+    (`npm ci --ignore-scripts`, no cache, tests, build) only reads the
+    repository. Only `publish` can get the npm OIDC token, only for a tag push,
+    and it installs no project dependencies: it publishes the tarball `build`
+    packed. Only `github-release` can write to the repository.
+  - **More checks before publishing:** the release build now also runs the
+    runtime audit, lint and the root-absolute asset check, so a tag on a commit
+    that skipped CI can't publish. The package-contents check now runs on the
+    tarball that gets published, not a dry-run pack.
+  - **Pinned versions:** npm is pinned to 11.21.1 instead of `npm@latest`, and
+    Node to 24.22.0. Actions are pinned by commit SHA (checkout v7.0.1,
+    setup-node v7.1.0, upload-artifact v7.0.2, download-artifact v8.0.2), each
+    at least 14 days old.
+  - **Rehearsal:** running the workflow by hand runs every check and
+    `npm publish --dry-run`, with no npm token and no GitHub Release. A stable
+    version that isn't on `main` yet rehearses as `latest`, with a warning.
+  - **`latest` can't move back:** a stable tag gets `latest` only for main's own
+    version line, and a `support/X.Y` commit is checked first. Support branches
+    merge forward into `main`, so before this, a support release first published
+    (or retried after a failed publish) once its commit had reached `main` would
+    have gone to `latest`.
+  - **CI** uses the same Node and action pins and `npm ci --ignore-scripts`,
+    doesn't keep the checkout's token, and runs the runtime audit.
+  - **RELEASING.md** covers the jobs, the pins, re-runs and rehearsals; how to
+    bring a `support/X.Y` cut from an older tag onto this workflow before its
+    first tag; and the recommended `publish` environment and `v*` tag ruleset.
+
+[#224]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/224
+[#244]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/244
+[#236]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/236
+[#255]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/255
+[#268]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/268
+[#291]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/291
+[#294]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/294
+[#226]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/226
+[#269]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/269
+[#272]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/272
+[#270]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/270
+[#271]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/271
+[#363]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/363
+[#372]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/372
+[#373]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/373
+[#376]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/376
+[#384]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/384
+[#387]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/387
+
+## [1.5.0-beta.1] - 2026-10-30
+
+The first 1.5.0 beta. Writes now ask before they're sent, naming the
+environment, and Production gets a safe mode that's on by default ([#241]).
+Read and execute requests send their headers, and impersonation is never
+dropped silently ([#109]). The entity scope moves from Settings to a button in
+the header ([#42]). Ids, names and filter values are checked and typed before
+they go into a URL ([#221]). There are also accessibility, metadata-cache and
+copy fixes, and 272 new tests for the write path.
+
+Still a **prerelease** on the npm `beta` tag, with the gold Insider icon.
+Power Platform ToolBox **1.2.7 or later** is recommended: older hosts can't
+send request headers, so a request with an impersonation header isn't sent
+on them.
+
+### ✨ Added
+
+- **The entity scope is a button in the header** ([#42]), after the request
+  type, instead of Settings → Query Scope. It reads **Choose scope** until you
+  pick one, then the scope itself (`Contoso › Sales Core v1.2.0`, `+1` for
+  more, or **All entities**), with the full list as a tooltip when it's cut
+  off. Its popover holds the entity source, publishers, solutions and
+  Advanced Find only, and changes apply right away, per environment as
+  before:
+  - removing a publisher also removes its solutions;
+  - solutions are grouped Unmanaged / Managed, show `Name vX.Y.Z`, and search
+    matches the name, unique name or version;
+  - on first run a tip points at the button, once per environment;
+  - without a scope, the entity picker is disabled and reads "Choose a scope
+    to list entities", and the pane's **Choose scope** opens the popover. With
+    one, it counts the entities in scope.
+
+  The same design as FetchXML Studio's and Command Bar Studio's. Settings
+  keeps a pointer to the button.
+- **Writes ask before they're sent** ([#241]). The confirmation names the
+  target: the environment (connection name, URL and type, with Production
+  highlighted), the operation, the table and the scope. Execute and Ctrl+Enter
+  both go through it.
+  - Merge, Execute Action / Custom API / Custom Action, Execute Workflow, Bulk
+    Write, `$batch` and ExecuteMultiple with writes, and multi-target
+    Associate / Disassociate always ask.
+  - Create, Update, Upsert, Delete and single-target Associate / Disassociate
+    ask on a Production connection.
+  - On Production, and for more than 100 records (or batch writes) anywhere,
+    you type the table (or operation) name before the button enables.
+  - If the connection changes while the confirmation is open, nothing is sent.
+  - The Bulk Delete Job confirmation names the environment too.
+- **The header shows the connection and its environment type** inside
+  ToolBox too, with Production in red ([#241]).
+- **Production safe mode** in Settings → Safety, on by default ([#241]).
+- **README: "What this tool changes"** lists every request that changes data,
+  when it asks, and what DRS stores locally ([#241]).
+- **Read, Execute Function, Associate / Disassociate and Bulk Delete Job
+  requests send their headers** ([#109]). The Headers pane says which rows
+  Execute sends and marks the rest as Code tab only. Later pages of a
+  Retrieve Multiple send the first page's headers, so they run as the same
+  user. It's an allow-list, so a plain read still sends none and never asks
+  for consent:
+  - impersonation (`MSCRMCallerID`, and a new `CallerObjectId` preset for
+    the Microsoft Entra object id) in all of them;
+  - `If-None-Match` and `Consistency` on reads. A matching etag shows as
+    **304 Not Modified**, not as an error;
+  - the bypass headers on Associate / Disassociate.
+  The page size's `Prefer` still keeps ToolBox's
+  `odata.include-annotations="*"`; other preferences stay in the Code tab.
+- **Impersonation is never dropped silently** ([#109]).
+  - On a ToolBox older than 1.2.7, which can't send headers, a request with
+    an impersonation header isn't sent, instead of running as you. The same
+    goes for Associate / Disassociate with a bypass header.
+  - Both impersonation headers at once, or the presets' all-zero
+    placeholder, aren't sent either.
+  - A declined header prompt on Associate / Disassociate asks once and sends
+    nothing, rather than falling back to a request without your headers.
+- **Execute Custom API and Custom Action list your own operations first**
+  ([#248]). A Dynamics org has well over a thousand of them, nearly all
+  Microsoft's. The Operation list now groups them:
+  - **Your org & ISVs** first, **Microsoft** below. Nothing is hidden, and
+    search covers both groups (publisher names too).
+  - Each one shows its solution's publisher, and so does the summary card.
+  - The Scope list counts your own operations per scope ("12 ops, 2 yours").
+  - Execute Action (WinOpportunity, QualifyLead, …) is unchanged.
+
+### 🐛 Fixed
+
+- **The sidebar works with a screen reader and the keyboard** ([#243]). It
+  announced itself as a tree, but arrow keys did nothing, nested clauses
+  were read as top-level ones, and every parent said "expanded" although
+  nothing collapses. It's now a "Request structure" navigation landmark:
+  - each section has a heading and is a list named by it, and nested
+    clauses (an `$expand` relationship's clauses, required parameters, Bulk
+    Write rows) are nested lists, so their level is read;
+  - Tab moves between clauses, Enter or Space opens one, and the open one
+    is marked as current;
+  - the chevrons, which looked collapsible but weren't, are gone;
+  - the "modified" marker and the ✓ badge are read out;
+  - keyboard focus shows a ring inside the sidebar;
+  - the table name after an expanded relationship (`primarycontactid →
+    Contact`) has enough contrast to read.
+- **Small labels are readable again** ([#330]). Badges such as "req",
+  "null", "File", "max 32 MB", "soon", "lookup" and the Results count used
+  Fluent's extra-small size, a 10px dot, so their text spilled out or was
+  cut off. They now use the small size, as the sidebar badges do since
+  [#200].
+- **Expired metadata is refetched, not served as fresh** ([#334]). The table
+  list, and the columns of a table not yet loaded this session, are cached
+  for an hour. When that hour is up and they're fetched again, other pickers
+  now wait for the fetch instead of getting the old data, and a failed fetch
+  is retried on the next use instead of the old data counting as fresh for
+  another hour.
+- **Retrieve Multiple's checks run once the table's columns arrive**
+  ([#347]). A saved request loaded before its table's metadata showed no
+  advisories, and Execute wasn't blocked for a query Dataverse rejects, until
+  you changed something.
+- **Save and the Saved library use the current request and environment**
+  ([#347]). The header kept calling the handlers from when the mode last
+  published them, so they could read old data. Loading a saved Retrieve
+  Multiple request whose table this environment doesn't have now says so,
+  even when the table list arrived after the mode opened.
+- **Text follow-ups** ([#317]):
+  - Associate and Disassociate say "Target record" when one target is
+    picked or the relationship takes only one, in the pane and the sidebar,
+    and "Target records" otherwise.
+  - An action or function that returns `Collection(<type>)` lists one item's
+    properties when the type is known, and a Custom API response with a
+    publisher prefix (`msdyn_ActivateProcessesResponse`) lists its
+    properties and is labelled complex, instead of being described as an
+    entity. On a Dynamics org that's several hundred operations.
+- **Copy buttons go through ToolBox and say whether they worked** ([#242]).
+  Inside ToolBox, the webview can refuse the browser clipboard, and a
+  refused copy did nothing at all: you then pasted whatever was on the
+  clipboard before. Every Copy button (URL bar, Code tab, results, write
+  result, previews, Power Automate, …) now uses ToolBox's own clipboard
+  inside ToolBox (the browser's outside it), and confirms the copy with a
+  short "Copied" note or on the button itself. When it fails, it says
+  "Couldn't copy" and what to do instead. Retrieve NextLink's Paste says
+  when the clipboard can't be read.
+- **Choosing a file no longer reads it into memory** ([#222]). Manage File,
+  Image and Attachment Data keep the file's name, size and type only: Execute
+  can't send binary content from inside ToolBox, and the Code tab uses a
+  placeholder for the bytes, so a large file used to freeze the tool for
+  nothing. Manage Image previews the chosen image through an object URL (up
+  to 5 MB). A pasted base64 body is capped at 10 MB, with a message.
+- **Non-ASCII file names work in generated upload code** ([#222]). The
+  `x-ms-file-name` header only takes ASCII (and `fetch` / XHR throw on such
+  a header), so a name like `报告.pdf` or `Résumé.docx` travels as the
+  `x-ms-file-name` query parameter instead, as Microsoft documents, in both
+  the single-request and chunked uploads.
+- **Invalidating one table's metadata now refetches it** ([#335]). The next
+  read used to return the old table from the in-memory registry. Nothing
+  invalidates a single table yet, so this changes nothing you can see today.
+- **"Advanced Find only" works, and is off by default** ([#44]), matching
+  FetchXML Studio:
+  - Off: the table, column and relationship pickers offer everything.
+  - On: they offer only what Advanced Find shows (`IsValidForAdvancedFind`).
+    Image and File columns are always offered.
+  - Metadata now loads unfiltered, and only the pickers are scoped, so a
+    column already in a request keeps working either way. Before, the switch
+    did nothing, and columns and relationships that Advanced Find hides were
+    never offered.
+  - The read pickers still never offer columns that can't be read, and new
+    sorts, filter rules and functions start on a column the picker offers.
+  - The Create form doesn't treat columns Advanced Find hides (such as
+    `owneridtype`) as required, as before.
+  - A setting saved by an earlier version is reset to off once.
+  - Loading a saved request, pasting a URL and a batch item's entity set
+    check the table against every table, so a saved request for a table
+    outside the Query Scope loads instead of being reported missing.
+- **Ids and names are checked before they go into a URL** ([#221]). A record
+  id must be a GUID, and a navigation property or column name a plain name,
+  before Execute enables. This applies in Associate, Disassociate, Execute
+  Action / Function / Workflow, Predefined Query and the file, image and
+  attachment modes. The other modes already checked. The executor refuses
+  them too, so a value like `x)/other_nav` can't send a different request.
+- **A query function on a related table's column is caught inside `any` /
+  `all` too** ([#336]). Dataverse rejects a function such as `EqualUserId`
+  whose column runs through a relationship
+  (`PropertyName='parentcustomerid_account/ownerid'`). Outside a lambda
+  this already blocked Execute with an explanation; inside one it wasn't
+  checked, so the request was sent and failed.
+- **Filter values are typed** ([#221]). A number, GUID or date column's
+  value goes into `$filter` unquoted only when it is one. Anything else is
+  quoted and escaped, and Execute is blocked with a message naming the value,
+  instead of a Dataverse 400. The DateTime fallback now escapes quotes. The
+  same applies to the Dataverse query functions (`LastXDays`, `Under`, …),
+  `$expand` inner filters and Bulk Delete Job. Filter column, lambda and
+  `$expand` names must be names too. EntityName columns (`objecttypecode`)
+  are now compared as strings, as the Web API expects.
+- **Execute Function parameters are typed the same way** ([#221]). GUID and
+  date values go into the URL unquoted only when they are one, and record
+  references are escaped.
+- **Imported saved requests are checked deeply** ([#221]). Entries whose
+  ids, names or query trees would change the URL are skipped, and the import
+  status says which and why. Copying or moving from another connection's
+  library applies the same check.
+- **Retrieve Single no longer turns on `If-None-Match: null`** by default
+  ([#109]). Execute sends that header now, and `null` never matches an etag;
+  saved requests that have it still run without it.
+- **Time zone independent times in a DST gap keep their digits** ([#337]).
+  Such a time is stored as typed, with no conversion. When it fell in the
+  hour your clocks skip (02:30 on a spring-forward day), the results grid and
+  the Update / Merge comparison showed it an hour later, and changing only
+  its date, or just clicking into the time picker and out, sent the later
+  time. The time picker itself still shows it an hour on, because it can
+  only hold a local time.
+- **Exported URLs encode spaces** ([#221]). Postman, Insomnia and Bruno
+  collections, cURL / fetch / XHR / C# / PowerShell code and the HTTP-action
+  URIs write `%20`. The URL bar still shows spaces.
+
+### 🔧 Internal
+
+- **Release model leftovers** ([#197]):
+  - `.github/dependabot.yml` sends grouped weekly updates into `dev` with a 14-day
+    cooldown, the same policy as FetchXML Studio and Command Bar Studio.
+    `RELEASING.md` describes it.
+  - `SECURITY.md` has the shared supported-versions table.
+- **Alternate-key column types go through the shared type lookup**
+  ([#318]). Key columns typed separately (#64) now resolve the way every
+  other column does, Image and File included. No visible change: a key
+  column can't be an Image or File column.
+- **Saved-request tests no longer re-import the store per test** ([#319]).
+  The store's startup (credential scrub, then read) is one function,
+  `startSavedStore()`, that the module runs at load and the tests call
+  directly. Those tests went from about 415 ms to about 20 ms each, so
+  they no longer time out when several test runs share the machine. One
+  test still loads the module afresh to check the startup wiring.
+- **ESLint and a package check in CI** ([#273]), as in FetchXML Studio and
+  Command Bar Studio:
+  - `npm run lint` runs ESLint (recommended JS / TypeScript rules, React
+    hooks, jsx-a11y) with no warnings allowed, in CI. It also stops direct
+    `navigator.clipboard` use (#242). Fixing its findings removed dead code
+    and caught a crash: the `$apply` editor called two hooks after an early
+    return, so React threw when a table's metadata arrived after the
+    editor first rendered.
+  - CI and the release workflow check what `npm pack` would publish: the
+    files ToolBox needs, no sources or source maps, and a size budget.
+  - `npm run finalize-package` is gone; CI and the release workflow cover
+    it. `minAPI` stays at 1.2.0: DRS detects what the host can do at
+    runtime.
+- **Tests for the write path** ([#235]): 272 new tests, 804 in all.
+  - A parity test checks, mode by mode, that Execute sends exactly what the
+    Code tab shows: method, URL, body and headers, apart from the documented
+    differences (headers the host builds, the reads' allow-list and page
+    size).
+  - The write executors' refusals: PUT of one column, alternate-key Upsert,
+    single-property Delete, unsafe ids, and impersonation on an older
+    ToolBox.
+  - Modules that had no tests: date and time values, the bypass headers,
+    workflow arguments, request validation, the query advisories, mode
+    drafts, the metadata cache and provider, and the ToolBox bridge's events.
+
+[#197]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/197
+[#42]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/42
+[#347]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/347
+[#330]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/330
+[#242]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/242
+[#317]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/317
+[#334]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/334
+[#235]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/235
+[#273]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/273
+[#319]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/319
+[#318]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/318
+[#248]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/248
+[#335]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/335
+[#222]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/222
+[#44]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/44
+[#336]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/336
+[#109]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/109
+[#221]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/221
+[#337]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/337
+[#241]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/241
+
+## [1.4.0] - 2026-10-30
+
+The first stable release since 1.1.4, and the biggest so far. The work planned
+for v1.2.0, v1.3.0 and v1.4.0 ships together, so there are no 1.2.x or 1.3.x
+releases. It was iterated through `1.4.0-beta.1` to `1.4.0-beta.3` (detailed
+below), and each beta was verified end to end in Power Platform ToolBox
+against live Dataverse environments.
+
+Request headers and page sizes on Execute need **Power Platform ToolBox 1.2.7
+or later**. On older versions DRS keeps working and explains what can't be
+sent.
+
+### ✨ Added
+
+- **Four new modes:** Bulk Write (`CreateMultiple` / `UpdateMultiple` /
+  `UpsertMultiple`), Bulk Delete Job, `$batch` (change sets with `$n`
+  references) and ExecuteMultiple ([#8], [#10], [#9], [#11]).
+- **Request headers through ToolBox 1.2.7+:** the Headers pane, `Prefer`
+  (page size, annotations) and `If-Match` are sent on Execute, and the write,
+  Execute Action and Execute Workflow modes send impersonation and bypass
+  headers, after a one-time approval in ToolBox ([#43], [#23], [#266]).
+- **A reworked results grid:** paging that honours your page size, Retrieve all
+  that pauses every 50,000 rows, CSV / JSON export and Copy as TSV ([#12],
+  [#219], [#223]).
+- **A portable saved-request library:** export / import, other connections'
+  libraries, and requests that never overwrite or silently lose each other.
+- **Smaller additions:** an OpenAPI 3 document in the Code tab, Recent runs that
+  restore a request, Predefined Query over a row's related records, and Execute
+  Workflow's declared input arguments ([#28], [#2], [#5], [#4]).
+
+### 🔄 Changed
+
+- **Update sends `If-Match: *` by default** on ToolBox 1.2.7+, so an Update of a
+  record that doesn't exist fails instead of creating it.
+- **Execute Custom API / Custom Action list every operation by type**, and each
+  mode keeps its unsaved request when you switch modes.
+- **In-app dialogs** replace the browser's native confirm / alert boxes, and
+  errors show the real status.
+- **Faster startup:** Monaco and the less-used modes load on demand.
+
+### 🛡️ Security and data safety
+
+- **Credential headers are never sent, saved or exported** ([#217]).
+- **CSV export and Copy as TSV neutralise spreadsheet formulas** ([#239]).
+- **The Monaco editor bundles DOMPurify 3.4.17**, and CI and the release
+  workflow check it.
+- **Writes can't create records by accident:** Update and single-valued
+  Associate / Disassociate guard against it on every ToolBox version.
+
+### 🐛 Fixed since the last stable release
+
+Dozens of fixes, listed under each beta below. The ones found while testing the
+betas:
+- Manage Image Data and Manage File Data list their columns ([#305]).
+- Malformed ETags are caught before they're sent ([#264]).
+- A startup race that could leave DRS without a connection ([#281]).
+- Execute Workflow can retry a failed workflow list ([#306]).
+
+### ⚠️ Known issues
+
+- **`$batch` continue-on-error:** ToolBox's `$batch` response parser fails when
+  a failed request is followed by more requests. DRS explains it and suggests
+  putting requests that might fail last ([#198]).
+- **Execute modes on very large environments:** ToolBox 1.2.7 and 1.2.8 can't
+  load a `$metadata` document over 16 MB. The fix is merged in ToolBox
+  ([PowerPlatformToolBox/desktop-app#737](https://github.com/PowerPlatformToolBox/desktop-app/pull/737));
+  until a ToolBox release includes it, DRS explains the limit ([#79]).
+- **ToolBox VS Code extension:** Monaco's workers may run on the main thread,
+  so JSON IntelliSense may not work there ([#255]).
+- **Tool icon:** ToolBox draws SVG tool icons as a single-colour mask until
+  [PowerPlatformToolBox/desktop-app#738](https://github.com/PowerPlatformToolBox/desktop-app/pull/738)
+  ships ([#25]).
+- **Sidebar keyboard navigation:** the clause tree has no arrow-key model yet
+  ([#243]).
+- **Binary modes** (file / image / attachment) compose the request and its
+  code, but Execute returns 501 because ToolBox doesn't expose those
+  operations.
+
+[#2]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/2
+[#4]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/4
+[#5]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/5
+[#8]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/8
+[#9]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/9
+[#10]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/10
+[#11]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/11
+[#12]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/12
+[#23]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/23
+[#25]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/25
+[#28]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/28
+[#43]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/43
+[#79]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/79
+[#198]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/198
+[#217]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/217
+[#219]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/219
+[#223]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/223
+[#239]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/239
+[#243]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/243
+[#255]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/255
+[#264]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/264
+[#266]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/266
+[#281]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/281
+[#305]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/305
+[#306]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/306
+
+## [1.4.0-beta.3] - 2026-10-27
+
+The third 1.4.0 beta fixes what a full regression pass on beta.2 turned up
+([#304]). The headline fix: Manage Image Data and Manage File Data can pick
+columns again. The rest are smaller fixes to error handling, wording and
+the saved-request library.
+
+Still a **prerelease** on the npm `beta` tag, with the gold Insider icon.
+Every fix was verified in Power Platform ToolBox 1.2.8 against a live
+Dataverse environment.
+
+### 🐛 Fixed
+
+- **Manage Image Data and Manage File Data list their columns again**
+  ([#305]). Image and File columns report the type `Virtual` and aren't
+  Advanced Find-eligible, so DRS dropped them, and both modes said the table
+  had no Image or File columns, even Account's `entityimage`.
+  - They're now loaded in the same metadata request, and `entityimage` can
+    also be used in `$select`.
+  - Each column's size limit and full-size image setting come from the
+    environment, so upload size checks use the column's real limit, and the
+    table's primary image is marked as thumbnail-only.
+  - **Order by** doesn't offer Image or File columns, which can't be sorted
+    on.
+  - A required Image or File column no longer blocks Create or Bulk Write.
+    Those columns are uploaded separately and aren't in the field set.
+- **Execute Workflow can retry a failed workflow list** ([#306]). If loading
+  the on-demand workflows fails (for example a brief `HTTP 401` from the
+  host), the error has a **Retry** button, and the picker says the workflows
+  didn't load instead of "No activated workflows in this environment".
+- **Associate and Disassociate name the right HTTP verb** ([#307]).
+  Disassociate's targets pane said each target fires a POST; it fires a
+  DELETE. Single-valued navigation properties said a PUT sets the lookup;
+  it's a PATCH with `<nav>@odata.bind`. Disassociate also showed the "Target
+  records" heading twice.
+- **Saved-request library** ([#308]):
+  - With **All modes** off, an empty list says how many requests are saved
+    in other modes, instead of "No saved requests yet".
+  - Loading a saved request over a saved request you've edited asks before
+    discarding your changes.
+  - After you delete the saved entry a request came from, **Save** works
+    again without editing the request first.
+- **Smaller wording fixes** ([#309]):
+  - Execute Action and Execute Function results point at the **JSON** tab.
+  - The response properties of an action or Custom API come from the
+    environment's `$metadata`, including inherited properties, instead of a
+    note about a "mock CSDL".
+  - Recent runs show a row count only for reads ("1 row", "6 rows"), not
+    "204 · 1 rows" for writes. Associate and Disassociate say how many
+    links were done ("3 of 5 linked"), and Bulk Write how many rows were
+    written.
+  - The **Learn more** link on an unknown-column error goes to *Select
+    columns*, or *Order rows* for `$orderby`.
+
+[#304]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/304
+[#305]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/305
+[#306]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/306
+[#307]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/307
+[#308]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/308
+[#309]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/309
+
 ## [1.4.0-beta.2] - 2026-10-24
 
 The second 1.4.0 beta fixes the issues found while testing beta.1 and
@@ -21,6 +756,14 @@ finishes the v1.4.0 milestone:
 Still a **prerelease** on the npm `beta` tag, with the gold Insider icon.
 Every fix was verified in Power Platform ToolBox 1.2.8 against a live
 Dataverse environment.
+
+### 🛡️ Security
+
+- **DOMPurify 3.4.17 in the Monaco editor.** Monaco bundles its own copy of
+  DOMPurify, and 1.4.0-beta.1 shipped 3.1.7, which open Dependabot alerts
+  (up to high severity) cover. The build now swaps in the npm package at
+  3.4.17, and CI and the release workflow check the bundled version.
+  Command Bar Studio and FetchXML Studio use the same fix.
 
 ### 🐛 Fixed
 

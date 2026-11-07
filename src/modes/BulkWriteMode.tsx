@@ -66,24 +66,23 @@ import { TargetEditor } from '../editors/TargetEditor';
 import { FieldSetEditor, seedRequiredFieldValues } from '../editors/FieldSetEditor';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
-import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
 import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
-import { disabledReasonFromAdvisories } from '../primitives/advisories';
+import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { StatusPill } from '../primitives/StatusPill';
-import { findTable, type TableMeta } from '../mock/metadata';
+import { findTable, type TableMeta } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import type { ExecResult } from '../engine/runtime';
 import { defaultBypassOptions, type CreateFieldValue } from '../state/writeState';
-import type { RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
-import { copyToClipboardSafe, isEmbedded } from '../host/pptbBridge';
+import { isEmbedded } from '../host/pptbBridge';
 import { hashState, type SavedRequest } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
 import {
   BULK_ELASTIC_SUGGESTED,
   BULK_OPERATIONS,
@@ -91,7 +90,7 @@ import {
   OPERATION_INFO,
   buildBulkWrite,
   buildBulkWriteBody,
-  bulkDisabledReason,
+  bulkBlocker,
   deserializeBulkWrite,
   duplicateBulkRow,
   newBulkRow,
@@ -104,6 +103,9 @@ import {
   type SerializedBulkWriteState,
 } from '../engine/bulkWrite';
 import { checkBulkSupport, executeBulkWrite, idsFromResult } from '../engine/bulkWriteExecutor';
+import { copyText } from '../shell/copy';
+import { addRun, useRecentRuns } from '../state/runHistory';
+import { composeHeaderItems } from '../engine/requestHeaders';
 
 const MODE_ID = 'bulk-write' as const;
 const GROUP = 'bulk' as const;
@@ -127,13 +129,16 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType(MODE_ID);
   const [state, setState] = useState(initialState);
   const { table: liveTable } = useLiveTable(state.table || null);
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [resultOp, setResultOp] = useState<BulkOperation>('CreateMultiple');
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns(MODE_ID);
   const [support, setSupport] = useState<BulkSupport>({ state: 'idle' });
   const [importOpen, setImportOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -141,7 +146,9 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
 
   const tbl = findTable(state.table);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildBulkWrite(state), [state, liveTable]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const { body, issues } = useMemo(() => buildBulkWriteBody(state), [state, liveTable]);
   const info = OPERATION_INFO[state.operation];
 
@@ -207,21 +214,34 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
   };
 
   // ── Headers / advisories ──
-  const headers = useMemo(
-    () => applyBypassToHeaders(state.headers, state.bypass),
-    [state.headers, state.bypass],
-  );
-  const advisories = useMemo(
+  const headers = useMemo(() => composeHeaderItems(state), [state]);
+  const bypassAdvisories = useMemo(
     () => [
       ...detectBypassAdvisories(state.bypass, 'bypass'),
       ...detectUnsentHeaderAdvisories({ op: 'create', bypass: state.bypass }),
     ],
     [state.bypass],
   );
-  const bypassBlocker = disabledReasonFromAdvisories(advisories);
-  const disabledReason =
-    bulkDisabledReason(state, issues, support) ??
-    (support.state === 'checking' ? `Checking ${state.operation} availability…` : null);
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const blocker = bulkBlocker(state, issues, support);
+  const blockers = firstBlocker([
+    {
+      when: blocker,
+      id: blocker?.id ?? '',
+      title: blocker?.reason ?? '',
+      focusNode: blocker?.focusNode,
+    },
+    {
+      when: support.state === 'checking',
+      id: 'bulk-checking',
+      title: `Checking ${state.operation} availability…`,
+      focusNode: 'operation',
+    },
+  ]);
+  const advisories = [...blockers, ...bypassAdvisories];
+  // The tooltip names the checklist blocker first, as before; bypass errors
+  // only when nothing else blocks (#294).
+  const disabledReason = blockers[0]?.title ?? disabledReasonFromAdvisories(bypassAdvisories);
 
   // ── Execute ──
   const onExecute = async () => {
@@ -234,20 +254,19 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
     setLoading(false);
     setTab('results');
     const ids = idsFromResult(res.body);
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          modeId: MODE_ID,
-          url: built.relativeUrl,
-          method: 'POST',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: res.ok ? ids.length || state.rows.length : 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        modeId: MODE_ID,
+        url: built.relativeUrl,
+        method: 'POST',
+        status: res.status,
+        ms: res.ms,
+        rowCount: res.ok ? ids.length || state.rows.length : 0,
+        // Recent runs shows no row count for writes (#309).
+        summary: res.ok
+          ? `${ids.length || state.rows.length} ${(ids.length || state.rows.length) === 1 ? 'row' : 'rows'} written`
+          : undefined,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
@@ -277,6 +296,10 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(null);
     setActivePath('rows');
   };
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.table) return null;
@@ -285,11 +308,10 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: MODE_ID,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.table]),
+    }, [currentSerialized, isDirty, lastSavedId, state.table, onSavedLatest, onLoadSavedLatest]),
   );
 
   // ── Sidebar ──
@@ -534,7 +556,14 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
           method="POST"
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
-          disabledReason={disabledReason ?? bypassBlocker}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={{
+            operation: `Bulk Write · ${state.operation}`,
+            table: state.table,
+            scope: { kind: 'records', count: state.rows.length },
+            highImpact: true,
+          }}
+          disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
           advisories={advisories}
@@ -1098,7 +1127,12 @@ function BulkResult({ result, operation }: { result: ExecResult; operation: Bulk
           <div>
             <Button
               icon={<Copy20Regular />}
-              onClick={() => void copyToClipboardSafe(ids.join('\n')).then(() => setCopied(true))}
+              onClick={() =>
+                void copyText(ids.join('\n'), 'the IDs', {
+                  toastOnSuccess: false,
+                  shown: false,
+                }).then((ok) => ok && setCopied(true))
+              }
             >
               {copied ? 'Copied' : 'Copy ids'}
             </Button>

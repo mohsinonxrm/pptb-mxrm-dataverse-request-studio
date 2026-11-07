@@ -36,6 +36,9 @@ import {
   type WireRequest,
 } from '../../engine/batch/batchModel';
 import { encodePart } from '../../engine/batch/multipart';
+import { API_BASE } from '../../env/environment';
+import { scopedNavs, useAdvancedFindOnly } from '../../state/metadataScope';
+import { useUrlSuggest } from '../../primitives/useUrlSuggest';
 
 const OPS: { id: BatchOpKind; label: string }[] = [
   { id: 'create', label: 'Create (POST)' },
@@ -78,16 +81,30 @@ export function BatchItemEditor({
   onMove: (delta: -1 | 1) => void;
   onMoveToGroup: (groupId: string) => void;
 }) {
-  const { entities } = useScopedEntities();
+  const { entities, allEntities } = useScopedEntities();
+  // Completion in the free-text URL and query options (#268)
+  const urlSuggest = useUrlSuggest({
+    value: item.url,
+    onChange: (url) => onChange({ url }),
+    mode: 'url',
+  });
+  const querySuggest = useUrlSuggest({
+    value: item.query,
+    onChange: (query) => onChange({ query }),
+    mode: 'query',
+    entitySet: item.entitySet,
+  });
   // Resolve the entity set back to a logical name for navigation-property hints.
   const logical = useMemo(
-    () => entities.find((e) => e.entitySetName === item.entitySet.trim())?.logicalName ?? null,
-    [entities, item.entitySet],
+    () => allEntities.find((e) => e.entitySetName === item.entitySet.trim())?.logicalName ?? null,
+    [allEntities, item.entitySet],
   );
   const { table } = useLiveTable(item.op === 'associate' ? logical : null);
+  const advancedFindOnly = useAdvancedFindOnly();
   const navs = useMemo(
-    () => (table?.navigationProperties ?? []).filter(isCollectionValuedNav),
-    [table],
+    () =>
+      scopedNavs(table?.navigationProperties ?? [], advancedFindOnly).filter(isCollectionValuedNav),
+    [table, advancedFindOnly],
   );
   const listId = `drs-batch-sets-${item.id}`;
   const navListId = `drs-batch-navs-${item.id}`;
@@ -206,16 +223,13 @@ export function BatchItemEditor({
               </Dropdown>
             </Field>
             <Field
-              label="URL (relative to /api/data/v9.2/)"
+              label={`URL (relative to ${API_BASE}/)`}
               hint="e.g. WhoAmI, accounts?$top=5, $1/primarycontactid/$ref"
               style={{ gridColumn: 'span 2' }}
             >
-              <Input
-                value={item.url}
-                onChange={(_, d) => onChange({ url: d.value })}
-                input={{ style: mono }}
-              />
+              <Input value={item.url} {...urlSuggest.fieldProps} input={{ style: mono }} />
             </Field>
+            {urlSuggest.list}
           </>
         )}
         {usesSet && (
@@ -251,12 +265,13 @@ export function BatchItemEditor({
           <Field label="Query options" hint="Without the leading ?">
             <Input
               value={item.query}
-              onChange={(_, d) => onChange({ query: d.value })}
+              {...querySuggest.fieldProps}
               placeholder="$select=name&$top=10"
               input={{ style: mono }}
             />
           </Field>
         )}
+        {item.op === 'retrieve' && querySuggest.list}
         {item.op === 'associate' && (
           <>
             <Field label="Navigation property (collection-valued)">

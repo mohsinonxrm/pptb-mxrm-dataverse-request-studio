@@ -54,10 +54,13 @@ export async function loadEntityMetadata(logicalName: string): Promise<EntityMet
   return metadata;
 }
 
-/** Entity attributes — basic projection. */
+/**
+ * Entity attributes — basic projection. Unfiltered by default: the pickers
+ * apply "Advanced Find only" locally, and lookups need every column (#44).
+ */
 export async function loadEntityAttributes(
   logicalName: string,
-  advancedFindOnly: boolean = true,
+  advancedFindOnly: boolean = false,
 ): Promise<AttributeMetadata[]> {
   const cache = pinMetadataCache();
   const cacheKey = `${logicalName}_${advancedFindOnly}`;
@@ -165,7 +168,8 @@ export async function loadAttributeDetailedMetadata(
 /** Entity relationships — 1:N, N:1, N:N. */
 export async function loadEntityRelationships(
   logicalName: string,
-  advancedFindOnly: boolean = true,
+  // Unfiltered by default, like the attributes (#44).
+  advancedFindOnly: boolean = false,
 ): Promise<{
   oneToMany: RelationshipMetadata[];
   manyToOne: RelationshipMetadata[];

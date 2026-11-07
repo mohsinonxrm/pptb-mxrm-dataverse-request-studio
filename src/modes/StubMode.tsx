@@ -9,7 +9,6 @@ import {
   Body1,
 } from '@fluentui/react-components';
 import { useState } from 'react';
-import { useStudioStyles } from '../primitives/styles';
 import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
@@ -25,8 +24,6 @@ export function StubMode({
   onPick: (id: string) => void;
 }) {
   const type = findRequestType(requestId);
-  const s = useStudioStyles();
-  void s;
   const [tab, setTab] = useState<MainTab>('builder');
   return (
     <ModeShell

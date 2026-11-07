@@ -19,8 +19,7 @@ import { BulkDeleteMode } from './modes/BulkDeleteMode.lazy';
 import { RetrieveMultipleMode } from './modes/RetrieveMultipleMode';
 // Bulk Write loads on first use (#8, #22).
 import { BulkWriteMode } from './modes/BulkWriteMode.lazy';
-import { RetrieveSingleMode } from './modes/RetrieveSingleMode';
-// Less-used modes load on first use (#22).
+// Every mode but Retrieve Multiple loads on first use (#22, #236).
 import {
   RetrieveNextLinkMode,
   PredefinedQueryMode,
@@ -30,23 +29,24 @@ import {
   ExecuteWorkflowMode,
   ManageFileMode,
   ManageImageMode,
+  RetrieveSingleMode,
+  CreateMode,
+  UpdateMode,
+  UpsertMode,
+  DeleteMode,
+  ExecuteActionMode,
+  ExecuteFunctionMode,
+  ManageAttachmentMode,
 } from './modes/lazyModes';
-import { CreateMode } from './modes/CreateMode';
-import { UpdateMode } from './modes/UpdateMode';
 import { BatchMode, ExecuteMultipleMode } from './modes/lazyBatchModes';
-import { UpsertMode } from './modes/UpsertMode';
-import { DeleteMode } from './modes/DeleteMode';
-import { ExecuteActionMode } from './modes/ExecuteActionMode';
-import { ExecuteFunctionMode } from './modes/ExecuteFunctionMode';
-import { ManageAttachmentMode } from './modes/ManageAttachmentMode';
 import { ErrorBoundary } from './shell/ErrorBoundary';
 import { clearModeDrafts } from './state/modeDrafts';
 import { StubMode } from './modes/StubMode';
-import { findTable } from './mock/metadata';
+import { findTable } from './metadata/metadata';
 import { _setTableLookup } from './editors/filter/filterTree';
 import { HostProvider, useHostSession } from './host/HostContext';
 import { SettingsProvider } from './host/usePersistedSettings';
-import { OpenSettingsProvider } from './host/useOpenSettings';
+import { OpenScopeProvider } from './host/useOpenScope';
 import { activeOrg, onActiveOrgChange } from './host/activeOrg';
 
 // Wire metadata lookup into the filter-tree encoder (avoids a circular import).
@@ -107,14 +107,14 @@ function ThemedApp() {
 
   return (
     <FluentProvider theme={fluentTheme} style={{ height: '100vh' }}>
-      <OpenSettingsProvider>
+      <OpenScopeProvider>
         <Frame
           themeMode={themeMode}
           setThemeMode={setLocalTheme}
           activeId={activeId}
           setActiveId={setActiveId}
         />
-      </OpenSettingsProvider>
+      </OpenScopeProvider>
       {/* In-app confirm dialogs and notices; replaces the native confirm/alert boxes (#111). */}
       <AppDialogHost />
     </FluentProvider>

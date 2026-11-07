@@ -1,4 +1,6 @@
-import type { FC, ReactNode } from 'react';
+import { useId, useState, type FC, type ReactNode } from 'react';
+import { Button } from '@fluentui/react-components';
+import { History16Regular } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import { ModeCard } from '../primitives/ModeCard';
 import { SectionHeader } from '../primitives/SectionHeader';
@@ -6,6 +8,10 @@ import { ClauseTreeList, ClauseTreeItem } from '../primitives/ClauseTreeItem';
 import { MethodPill } from '../primitives/MethodPill';
 import type { RequestType } from '../registry/requestTypes';
 import type { RecentRun } from '../state/readState';
+import { useModeHistory } from '../state/runHistory';
+import { RunHistoryDialog } from './RunHistoryDialog';
+import { runAccessibleName, runDetail, timeAgo } from './runLabels';
+import { notify } from './dialogs';
 
 export interface SidebarClauseItem {
   id: string; // selectable key
@@ -27,7 +33,7 @@ export interface SidebarClauseItem {
     | 'severe'
     | 'important';
   dirty?: boolean;
-  /** Children rendered with depth=1 */
+  /** Clauses nested under this one: a nested list, one level deeper */
   children?: SidebarClauseItem[];
 }
 
@@ -58,31 +64,52 @@ export function Sidebar({
   onRecentClick,
 }: SidebarProps) {
   const s = useStudioStyles();
+  const uid = useId();
   // A recent-run row is a button only when it can actually restore
   // something (#2): the mode wired a handler and the run has a snapshot.
   const isRestorable = (r: RecentRun) => !!onRecentClick && r.snapshot !== undefined;
+  // A kept run had its caller id removed (#226): say so, since the restored
+  // request now runs as the signed-in user.
+  const restore = (r: RecentRun) => {
+    onRecentClick?.(r);
+    if (r.impersonationCleared) {
+      notify(
+        'This run impersonated another user. History doesn’t keep the caller id, so the restored request runs as you: set MSCRMCallerID or CallerObjectId again in Headers to impersonate.',
+        { title: 'Impersonation not restored' },
+      );
+    }
+  };
+  // Every run kept for this mode and environment (#226); the sidebar lists the latest.
+  const history = useModeHistory(type.id, recents);
+  const [historyOpen, setHistoryOpen] = useState(false);
   return (
     <aside className={s.sidebar}>
       <ModeCard type={type} urlPreview={urlPreview} />
 
       <div className={s.sidebarScroll}>
-        {sections.map((sec) => (
-          <span key={sec.id}>
-            <SectionHeader meta={sec.meta}>{sec.label}</SectionHeader>
-            <ClauseTreeList ariaLabel={sec.label}>
-              {sec.items.map((item) => (
-                <SidebarItemRenderer
-                  key={item.id}
-                  item={item}
-                  activeNode={activeNode}
-                  onSelect={onSelect}
-                  group={type.group}
-                  depth={0}
-                />
-              ))}
-            </ClauseTreeList>
-          </span>
-        ))}
+        {/* The clauses (#243): a list of buttons per section, each list
+            named by its heading. Nested clauses are nested lists. */}
+        <nav aria-label="Request structure">
+          {sections.map((sec) => (
+            <div key={sec.id}>
+              <SectionHeader id={`${uid}-${sec.id}`} meta={sec.meta}>
+                {sec.label}
+              </SectionHeader>
+              <ClauseTreeList labelledBy={`${uid}-${sec.id}`}>
+                {sec.items.map((item) => (
+                  <SidebarItemRenderer
+                    key={item.id}
+                    item={item}
+                    activeNode={activeNode}
+                    onSelect={onSelect}
+                    group={type.group}
+                    depth={0}
+                  />
+                ))}
+              </ClauseTreeList>
+            </div>
+          ))}
+        </nav>
 
         {/* Hide the entire Recent runs section until there are runs. An
             empty-state ("No runs yet…") block adds ~50px of dead chrome
@@ -90,7 +117,13 @@ export function Sidebar({
             time the user clicks Execute. */}
         {recents.length > 0 && (
           <>
-            <SectionHeader meta={`${recents.length} run${recents.length === 1 ? '' : 's'}`}>
+            <SectionHeader
+              meta={
+                history.length > recents.length
+                  ? `${recents.length} of ${history.length}`
+                  : `${recents.length} run${recents.length === 1 ? '' : 's'}`
+              }
+            >
               Recent runs
             </SectionHeader>
             <div style={{ padding: '4px 0' }}>
@@ -101,20 +134,17 @@ export function Sidebar({
                   role={isRestorable(r) ? 'button' : undefined}
                   tabIndex={isRestorable(r) ? 0 : undefined}
                   title={isRestorable(r) ? `Restore this run · ${r.url}` : r.url}
-                  aria-label={
-                    isRestorable(r)
-                      ? `Restore run: ${r.method} ${r.url}, status ${r.status || 'error'}`
-                      : undefined
-                  }
-                  onClick={() => isRestorable(r) && onRecentClick?.(r)}
+                  aria-label={isRestorable(r) ? runAccessibleName(r) : undefined}
+                  onClick={() => isRestorable(r) && restore(r)}
                   onKeyDown={(e) => {
                     if (isRestorable(r) && (e.key === 'Enter' || e.key === ' ')) {
                       e.preventDefault();
-                      onRecentClick?.(r);
+                      restore(r);
                     }
                   }}
                 >
                   <MethodPill method={r.method as never} size="sm" />
+                  {/* Read as "GET just now", not "GETjust now" (#387); flex hides the space */}{' '}
                   <span
                     style={{
                       flexGrow: 1,
@@ -124,15 +154,33 @@ export function Sidebar({
                     }}
                   >
                     {/* status 0 = the host failed the call without an HTTP status */}
-                    {timeAgo(r.ts)} · {r.status || 'error'} ·{' '}
-                    {r.summary ?? `${r.rowCount ?? '—'} rows`}
+                    {timeAgo(r.ts)} · {r.status || 'error'}
+                    {runDetail(r)}
                   </span>
                 </div>
               ))}
+              <Button
+                appearance="subtle"
+                size="small"
+                icon={<History16Regular />}
+                onClick={() => setHistoryOpen(true)}
+                style={{ marginTop: 2 }}
+              >
+                {history.length > recents.length
+                  ? `Show all ${history.length} runs`
+                  : 'Search runs'}
+              </Button>
             </div>
           </>
         )}
       </div>
+      <RunHistoryDialog
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        modeName={type.name}
+        runs={history}
+        onRestore={onRecentClick ? restore : undefined}
+      />
     </aside>
   );
 }
@@ -151,9 +199,8 @@ function SidebarItemRenderer({
   group: any;
   depth: 0 | 1 | 2 | 3;
 }) {
-  const expandable = !!item.children?.length;
   return (
-    <span>
+    <li>
       <ClauseTreeItem
         icon={item.icon}
         iconFilled={item.iconFilled}
@@ -164,33 +211,24 @@ function SidebarItemRenderer({
         badge={item.badge}
         badgeAppearance={item.badgeAppearance}
         badgeColor={item.badgeColor}
-        expandable={expandable}
-        expanded={expandable}
         onSelect={() => onSelect(item.id)}
         group={group}
         depth={depth}
       />
-      {item.children?.map((child) => (
-        <SidebarItemRenderer
-          key={child.id}
-          item={child}
-          activeNode={activeNode}
-          onSelect={onSelect}
-          group={group}
-          depth={Math.min(3, depth + 1) as 0 | 1 | 2 | 3}
-        />
-      ))}
-    </span>
+      {!!item.children?.length && (
+        <ClauseTreeList>
+          {item.children.map((child) => (
+            <SidebarItemRenderer
+              key={child.id}
+              item={child}
+              activeNode={activeNode}
+              onSelect={onSelect}
+              group={group}
+              depth={Math.min(3, depth + 1) as 0 | 1 | 2 | 3}
+            />
+          ))}
+        </ClauseTreeList>
+      )}
+    </li>
   );
-}
-
-function timeAgo(ts: number): string {
-  const s = Math.floor((Date.now() - ts) / 1000);
-  if (s < 60) return 'just now';
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m} min ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h} hr ago`;
-  const d = Math.floor(h / 24);
-  return `${d}d ago`;
 }

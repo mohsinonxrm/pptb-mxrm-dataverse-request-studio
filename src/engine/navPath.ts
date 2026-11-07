@@ -2,7 +2,7 @@
 //
 // The $filter encoder (and the picker, antipattern scanner, etc.) resolve a
 // nav-path leaf's type against the RELATED entity's metadata (see
-// `resolveNavPath` in mock/metadata.ts). That only works if the related
+// `resolveNavPath` in metadata/metadata.ts). That only works if the related
 // entity has been fetched into the live registry. Today metadata is loaded
 // lazily — only when the user manually drills the column picker — so a request
 // that arrives fully-formed (saved-request reload, pasted OData URL, or a
@@ -20,7 +20,7 @@
 // for this pass. Warming triggers a registry update; the hook re-runs and the
 // walk now reaches one level deeper. Repeats until the whole graph is warm.
 
-import { findTable, type TableMeta } from '../mock/metadata';
+import { findTable, type TableMeta } from '../metadata/metadata';
 import type { FilterGroup } from '../editors/filter/filterTree';
 import type { ExpandSpec } from '../editors/ExpandEditor';
 import type { OrderbySpec } from '../editors/OrderbyEditor';
