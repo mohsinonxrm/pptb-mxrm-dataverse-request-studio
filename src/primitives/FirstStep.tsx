@@ -49,7 +49,7 @@ export function FirstStep({ step, onStart }: FirstStepProps) {
       <Icon className={s.icon} style={{ color: groupColorVar(type.group) }} aria-hidden />
       <div className={s.text}>
         <Subtitle2>{type.name}</Subtitle2>
-        <Body1 className={s.sub}>{type.sub}.</Body1>
+        <Body1 className={s.sub}>{type.description}</Body1>
         <Caption1 className={s.step}>Step 1 · {step}</Caption1>
         <Button appearance="primary" className={s.action} onClick={onStart}>
           {step}

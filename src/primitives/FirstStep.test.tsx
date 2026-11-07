@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import { FluentProvider, webLightTheme } from '@fluentui/react-components';
 import { FirstStep, ModeIdContext } from './FirstStep';
+import { findRequestType } from '../registry/requestTypes';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -24,7 +25,7 @@ describe('FirstStep', () => {
     );
     const region = host.querySelector('section')!;
     expect(region.getAttribute('aria-label')).toBe('Get started with Create Record');
-    expect(region.textContent).toContain('Insert one.');
+    expect(region.textContent).toContain(findRequestType('create').description);
     expect(region.textContent).toContain('Step 1 · Choose a table');
     act(() => region.querySelector('button')!.click());
     expect(onStart).toHaveBeenCalledTimes(1);
