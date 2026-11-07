@@ -1,5 +1,5 @@
 // One summary line at the top of every results view (#290): status, time,
-// size, then for collections the rows on this page, the server total
+// size, then for collections the rows loaded so far, the server total
 // (`@odata.count`) and whether more pages follow (`@odata.nextLink`).
 // The grid footer keeps only what's about the grid itself (filters,
 // selection, loading more pages).
@@ -32,7 +32,7 @@ export interface ResultsSummaryBarProps {
   kind?: StatusKind;
   /** What the pill shows when `code` is 0. */
   codeLabel?: string;
-  /** Rows on this page (loaded so far), for a collection. */
+  /** Rows loaded so far, for a collection (pages append as they load). */
   rows?: number;
   /** `@odata.count`, when the request asked for it. */
   total?: number;
@@ -67,7 +67,7 @@ export function ResultsSummaryBar({
     parts.push(
       <span key="rows">
         <span className={s.strong}>{rows.toLocaleString()}</span> row{rows === 1 ? '' : 's'}
-        {more ? ' on this page' : ''}
+        {more ? ' loaded' : ''}
       </span>,
     );
   }

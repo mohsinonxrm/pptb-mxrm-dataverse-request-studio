@@ -38,7 +38,7 @@ describe('ResultsSummaryBar', () => {
         '200 OK',
         '238 ms',
         '4.2 KB',
-        '12 rows on this page',
+        '12 rows loaded',
         `total ${(1342).toLocaleString()}`,
         'more pages',
       ],

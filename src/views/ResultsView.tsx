@@ -256,7 +256,9 @@ export function ResultsView({
 
   const isGrid = tab === 'data' && mode !== 'single';
   // The summary at the top of every results view (#290)
-  const summary = (
+  // Write results keep their own status card (WriteResultCard: outcome-aware,
+  // e.g. "Partial success"), so the bar would only repeat it — or contradict it.
+  const summary = writeContext ? null : (
     <ResultsSummaryBar
       code={result.status}
       ms={result.ms}
