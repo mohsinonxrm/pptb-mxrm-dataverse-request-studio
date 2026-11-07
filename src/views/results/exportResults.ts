@@ -31,6 +31,10 @@ export interface ExportColumn {
 export interface GridExportView {
   columns: ExportColumn[];
   rows: Record<string, unknown>[];
+  /** Primary IDs of the selected rows that have one (#293). */
+  selectedRecordIds?: string[];
+  /** The rows carry the table's primary ID, so a row can be opened (#293). */
+  canOpenRecords?: boolean;
 }
 
 /** "shown": values as the grid shows them; "raw": underlying values. */

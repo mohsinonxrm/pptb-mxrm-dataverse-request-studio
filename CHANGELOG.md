@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
+- **Open a returned record in Dataverse** ([#293]). "Open in Dataverse" opens
+  the record's form in the model-driven app. It's on the Retrieve Single
+  detail card, on write results that return a record (not after a delete),
+  and in the Retrieve Multiple toolbar for one selected row. Inside ToolBox
+  it opens in the browser profile set on the connection, so you're already
+  signed in. Rows without a primary ID (aggregates, `$apply`) don't offer it.
 - **Each request type says what it does** ([#289]). The request-type picker
   shows one plain sentence under every type (for example "Get one record by
   its ID, with the columns and related rows you choose."), and each group has
@@ -293,6 +299,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     bring a `support/X.Y` cut from an older tag onto this workflow before its
     first tag; and the recommended `publish` environment and `v*` tag ruleset.
 
+[#293]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/293
 [#289]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/289
 [#224]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/224
 [#244]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/244
