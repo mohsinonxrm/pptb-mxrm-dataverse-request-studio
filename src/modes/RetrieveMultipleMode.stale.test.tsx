@@ -75,6 +75,9 @@ function saved(filter: FilterNode[] = []): SavedRequest {
   } as SavedRequest;
 }
 
+// Blocked: disabled, or aria-disabled while it opens the advisories (#295).
+const blocked = (b: HTMLButtonElement | undefined) =>
+  !!b && (b.disabled || b.getAttribute('aria-disabled') === 'true');
 const executeButton = () =>
   [...hostEl!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Execute');
 
@@ -108,12 +111,12 @@ describe('RetrieveMultipleMode', () => {
     act(() => published!.onLoadSaved(saved([fnOnNavPath])));
     render();
     // No metadata yet: nothing can be checked, so nothing blocks.
-    expect(executeButton()?.disabled).toBe(false);
+    expect(blocked(executeButton())).toBe(false);
 
     registerFixtureTables();
     host.liveTable = findTable('account');
     render();
-    expect(executeButton()?.disabled).toBe(true);
+    expect(blocked(executeButton())).toBe(true);
   });
 
   it('loads with the current table list, not the one from when the context was published', () => {
