@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
+- **Prefer toggles under the URL bar for Create, Update and Upsert** ([#299]).
+  A compact row under the URL bar has `return=representation` and Formatted
+  values, plus one line on what the choice returns (for example "Returns 201
+  Created with the new record, with formatted values."). It edits the same
+  settings as the sidebar's Prefer pane, so a change in either place shows in
+  both and in the Code tab. Inside ToolBox an info icon explains that ToolBox
+  sets Prefer itself on Execute. Read types keep their own Prefer pane.
+
 - **The JSON body editor knows the table** ([#268]). In a field set's JSON view
   (Create, Update, Upsert, Bulk Write rows and entity parameters):
   - **Keys:** typing `"` lists the columns the form can set. Lookups are
@@ -287,6 +295,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     bring a `support/X.Y` cut from an older tag onto this workflow before its
     first tag; and the recommended `publish` environment and `v*` tag ruleset.
 
+[#299]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/299
 [#224]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/224
 [#244]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/244
 [#236]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/236

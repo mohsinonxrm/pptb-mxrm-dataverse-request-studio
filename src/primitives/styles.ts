@@ -288,6 +288,8 @@ export const useStudioStyles = makeStyles({
   // ── URL bar (footer) — Fluent v9 shadow8 per v2.2 anatomy "Frame shell" rule
   // (footer is the opposite edge of the same frame chrome, so it mirrors the
   // header's elevation rather than dropping a shadow inside the body)
+  // The URL bar with a row under it (#299).
+  urlBarStack: { display: 'flex', flexDirection: 'column', minWidth: 0, zIndex: 2 },
   footer: {
     display: 'flex',
     alignItems: 'center',

@@ -42,6 +42,7 @@ import { SelectEditor } from '../editors/SelectEditor';
 import { FieldSetEditor } from '../editors/FieldSetEditor';
 import { AlternateKeyEditor } from '../editors/AlternateKeyEditor';
 import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/PreferEditor';
+import { PreferQuickRow } from '../editors/PreferQuickRow';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
@@ -727,6 +728,14 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
           onExecute={onExecute}
           advisories={advisories}
           onAdvisoryFocus={setActivePath}
+          // The Prefer toggles that apply, under the URL bar (#299).
+          belowBar={
+            <PreferQuickRow
+              operation="upsert"
+              spec={state.prefer}
+              setSpec={(p) => set('prefer', p, 'prefer')}
+            />
+          }
         />
       }
     >

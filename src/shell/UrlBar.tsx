@@ -1,6 +1,6 @@
 import { Button, Tooltip, tokens, Caption1, Spinner } from '@fluentui/react-components';
 import { Copy20Regular, Play20Filled, Open20Regular } from '@fluentui/react-icons';
-import type { FC } from 'react';
+import type { FC, ReactNode } from 'react';
 import { useCallback, useEffect, useRef } from 'react';
 import { useStudioStyles } from '../primitives/styles';
 import { MethodPill } from '../primitives/MethodPill';
@@ -61,6 +61,8 @@ export interface UrlBarProps {
    * Delete Job).
    */
   writeConfirm?: WriteConfirmSpec | null;
+  /** A row under the bar, e.g. the write types' Prefer toggles (#299). */
+  belowBar?: ReactNode;
 }
 
 export function UrlBar({
@@ -75,6 +77,7 @@ export function UrlBar({
   onAdvisoryFocus,
   bytes,
   writeConfirm,
+  belowBar,
 }: UrlBarProps) {
   const ExecIcon = executeIcon ?? Play20Filled;
   const s = useStudioStyles();
@@ -182,7 +185,7 @@ export function UrlBar({
     if (loading) announce('Running request…');
   }, [loading]);
 
-  return (
+  const bar = (
     <footer className={s.footer}>
       <MethodPill method={method} />
       <Tooltip content={fullUrl} relationship="description" positioning="above">
@@ -236,5 +239,13 @@ export function UrlBar({
         </Button>
       </Tooltip>
     </footer>
+  );
+  if (!belowBar) return bar;
+  // The frame's last grid row holds both, so the row sits flush under the bar.
+  return (
+    <div className={s.urlBarStack}>
+      {bar}
+      {belowBar}
+    </div>
   );
 }
