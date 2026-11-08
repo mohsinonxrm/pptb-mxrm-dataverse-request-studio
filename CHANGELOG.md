@@ -53,6 +53,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🔄 Changed
 
+- **Choosing a scope is one step, asked once** ([#397]). Without an entity
+  scope, the first-run screen had three prompts saying the same thing: the
+  scope button in primary blue, a tip pointing at it, and a "No entities listed
+  yet" message with its own primary button. Now the scope button is always an
+  outline button, like the rest of the header, and the Target pane's first-step
+  card says **Step 1 · Choose a scope**, with the one button that opens it. The
+  tip is gone. Execute stays the screen's primary action, as Fluent 2 asks.
 - **One sidebar badge rule in every mode** ([#296]). A clause shows
   **required** when required data is missing, **!** when it's set but invalid
   (a bad GUID, a row with problems), and a checkmark when it's set and valid.
@@ -79,6 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#297]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/297
 [#298]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/298
 [#385]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/385
+[#397]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/397
 
 ## [1.6.0-beta.1] - 2026-11-07
 

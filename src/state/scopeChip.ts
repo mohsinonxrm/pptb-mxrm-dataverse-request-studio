@@ -17,10 +17,6 @@ export interface ChipSolution {
   version?: string;
 }
 
-export const SCOPE_TIP_TITLE = 'Choose where entities come from';
-export const SCOPE_TIP_BODY =
-  'Pick a publisher and one or more solutions to list their entities, or switch to All entities to see everything.';
-
 /** "Sales Core v1.2.0": the first three version parts tell a patch from its parent. */
 export function solutionTagLabel(solution: ChipSolution): string {
   const version = solution.version?.split('.').slice(0, 3).join('.');

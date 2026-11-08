@@ -14,18 +14,12 @@ import {
   MessageBarActions,
   type ComboboxProps,
 } from '@fluentui/react-components';
-import {
-  Table20Filled,
-  ArrowReset20Regular,
-  ArrowSync20Regular,
-  Filter20Regular,
-} from '@fluentui/react-icons';
+import { Table20Filled, ArrowReset20Regular, ArrowSync20Regular } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
 import { findTable } from '../metadata/metadata';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
 import { useOpenScope } from '../host/useOpenScope';
-import { SCOPE_TIP_BODY } from '../state/scopeChip';
 import { RecordPicker } from '../primitives/RecordPicker';
 import { FirstStep } from '../primitives/FirstStep';
 import { MoreOptionsHint, useOptionSearch } from '../primitives/optionSearch';
@@ -166,26 +160,9 @@ export function TargetEditor({
 
   return (
     <div>
-      {noScope && (
-        <MessageBar intent="info" style={{ marginBottom: tokens.spacingVerticalM, width: '100%' }}>
-          <MessageBarBody>
-            <MessageBarTitle>No entities listed yet</MessageBarTitle>
-            {SCOPE_TIP_BODY}
-          </MessageBarBody>
-          <MessageBarActions
-            containerAction={
-              <Button
-                appearance="primary"
-                size="small"
-                icon={<Filter20Regular />}
-                onClick={openScope}
-              >
-                Choose scope
-              </Button>
-            }
-          />
-        </MessageBar>
-      )}
+      {/* No scope yet (#397): Step 1 is choosing one, in the same first-step
+          card as every other mode's first step (#297). */}
+      {noScope && <FirstStep step="Choose a scope" onStart={openScope} />}
       {entitiesError && !entitiesLoading && (
         <MessageBar intent="error" style={{ marginBottom: tokens.spacingVerticalM, width: '100%' }}>
           <MessageBarBody>

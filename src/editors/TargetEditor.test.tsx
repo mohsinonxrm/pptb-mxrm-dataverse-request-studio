@@ -1,5 +1,5 @@
-// TargetEditor without an entity scope (#42): the shared empty state, a
-// disabled picker, and Choose scope opening the header's scope popover.
+// TargetEditor without an entity scope (#42, #397): Step 1 is choosing a scope,
+// the picker is disabled, and the step's button opens the header's scope popover.
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -67,16 +67,16 @@ afterEach(() => {
 });
 
 describe('TargetEditor without a scope', () => {
-  it('shows the shared empty state and disables the picker', () => {
+  it('shows Step 1 · Choose a scope and disables the picker', () => {
     render();
-    expect(el!.textContent).toContain('No entities listed yet');
-    expect(el!.textContent).toContain('or switch to All entities to see everything.');
-    expect(el!.textContent).not.toContain('Open Settings');
+    expect(el!.textContent).toContain('Step 1 · Choose a scope');
+    expect(el!.textContent).not.toContain('No entities listed yet');
+    expect(el!.textContent).not.toContain('Step 1 · Choose a table');
     expect(picker().disabled).toBe(true);
     expect(picker().placeholder).toBe('Choose a scope to list entities');
 
     const choose = [...el!.querySelectorAll('button')].find(
-      (b) => b.textContent?.trim() === 'Choose scope',
+      (b) => b.textContent?.trim() === 'Choose a scope',
     );
     act(() => choose!.click());
     expect(host.openScope).toHaveBeenCalledTimes(1);
@@ -84,7 +84,7 @@ describe('TargetEditor without a scope', () => {
 
   it('keeps a table already picked clearable', () => {
     render('account');
-    expect(el!.textContent).toContain('No entities listed yet');
+    expect(el!.textContent).toContain('Step 1 · Choose a scope');
     expect(picker().disabled).toBe(false);
   });
 
@@ -95,7 +95,7 @@ describe('TargetEditor without a scope', () => {
       { logicalName: 'contact', displayName: 'Contact', entitySetName: 'contacts' },
     ];
     render();
-    expect(el!.textContent).not.toContain('No entities listed yet');
+    expect(el!.textContent).not.toContain('Choose a scope');
     expect(picker().disabled).toBe(false);
     expect(el!.textContent).toContain('2 entities in scope');
   });
