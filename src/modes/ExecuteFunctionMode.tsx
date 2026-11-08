@@ -65,6 +65,9 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
+import { invalidUrlPartReason } from '../primitives/urlParts';
+import { invalidFunctionParamReason } from '../engine/executeBuilders';
 
 // Empty initial state — no pre-seeded function. User picks from the live
 // CSDL once it loads.
@@ -118,7 +121,9 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
   );
 
   // Save / Load
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const [boundRecordName, setBoundRecordName] = useState<string>('');
@@ -149,6 +154,10 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
       );
     });
 
+  // Ids, names and parameter values that go into the URL (#221).
+  const urlPartProblem =
+    invalidUrlPartReason(requiresBoundRecord ? [['Bound record id', state.boundRecordId]] : []) ??
+    invalidFunctionParamReason(fn?.parameters ?? [], state.paramValues);
   const disabledReason = !fn
     ? 'Pick a function.'
     : requiresBoundRecord && !state.boundRecordId
@@ -159,11 +168,11 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
           ? `${missingRequired.length} required param${missingRequired.length === 1 ? '' : 's'} unset.`
           : state.headers.some((h) => h.enabled && !h.name)
             ? 'Fix empty header name.'
-            : null;
+            : urlPartProblem;
 
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.function(state);
+    const res = await runtime.function(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setLoading(false);
     setTab('results');
@@ -234,6 +243,10 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedHash(keepHash);
   };
 
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.functionName) return null;
@@ -242,11 +255,17 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: 'exec-function' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.functionName]),
+    }, [
+      currentSerialized,
+      isDirty,
+      lastSavedId,
+      state.functionName,
+      onSavedLatest,
+      onLoadSavedLatest,
+    ]),
   );
 
   const sections = [
@@ -507,6 +526,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
     case 'headers':
       pane = (
         <HeadersEditor
+          policy="impersonation"
           items={state.headers}
           setItems={(h) => set('headers', h, 'headers')}
           group="execute"

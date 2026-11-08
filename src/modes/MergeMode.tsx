@@ -25,7 +25,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Table20Regular,
   Table20Filled,
   PersonAccounts20Regular,
   PersonAccounts20Filled,
@@ -95,6 +94,7 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
 import { isRecordGuid } from '../primitives/guid';
 
 // ──────────────────────────────────────────────────────────────
@@ -140,7 +140,9 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
   // findTable(), which is empty until the fetch lands — keying on `state`
   // alone left the URL / Code tab blank after picking a table (#78).
   const { table: liveTable } = useLiveTable(state.table || null);
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
@@ -194,9 +196,11 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
   const pendingLookupTargets = subLookupTargets.filter((t) => !findTable(t));
   const failedPending = pendingLookupTargets.filter((t) => failedLookupTargets.includes(t));
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildMerge(state), [state, liveTable]);
   // Keyed on the pending targets too, so the body rebuilds once they load.
   const pendingKey = pendingLookupTargets.join('|');
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable / pendingKey rebuild the body once the table and lookup targets' metadata land
   const body = useMemo(() => buildMergeBody(state), [state, liveTable, pendingKey]);
 
   // ── Live row fetches ──
@@ -451,6 +455,10 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedHash(keepHash);
   };
 
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.table) return null;
@@ -459,11 +467,10 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: 'merge' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.table]),
+    }, [currentSerialized, isDirty, lastSavedId, state.table, onSavedLatest, onLoadSavedLatest]),
   );
 
   // Merge has its own canonical section structure:
@@ -706,6 +713,16 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
           method="POST"
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={{
+            operation: 'Merge Records',
+            table: state.table,
+            scope: {
+              kind: 'text',
+              text: '2 records: the subordinate merges into the master and is deactivated',
+            },
+            highImpact: true,
+          }}
           disabledReason={disabledReason ?? bypassBlocker}
           loading={loading}
           onExecute={onExecute}
@@ -1003,7 +1020,7 @@ function EntityPane({
 }) {
   const tbl = findTable(state.table);
   // The UNSCOPED entity list: Merge's tables are fixed by the platform, so
-  // the user's Query Scope (default: publisher solutions, none picked yet)
+  // the user's entity scope (default: publisher solutions, none picked yet)
   // must not hide them — it left this dropdown empty on a fresh install (#97).
   const { allEntities, allLoading } = useScopedEntities();
   // Cross-reference the docs-supported logical names against the live

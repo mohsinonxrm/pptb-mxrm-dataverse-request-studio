@@ -30,12 +30,18 @@ import {
 } from './pptbClient';
 import { pinMetadataCache } from './cache';
 import { useActiveOrg } from './activeOrg';
+import { subscribeMetadataReset } from './metadataProvider';
 
-export function usePublisherFilter() {
+const NONE: PublisherWithSolutions[] = [];
+
+/** `enabled: false` skips the publisher fetch (the scope chip in another mode). */
+export function usePublisherFilter(enabled = true) {
   // ── Layer 1: publishers + solutions (combined) ──
-  const [publishersWithSolutions, setPublishersWithSolutions] = useState<PublisherWithSolutions[]>(
-    [],
-  );
+  // Tagged with the org it came from, so another org's list never shows.
+  const [loadedFor, setLoadedFor] = useState<{ org: string; data: PublisherWithSolutions[] }>({
+    org: '',
+    data: NONE,
+  });
   const [publishersLoading, setPublishersLoading] = useState(false);
   const [publishersError, setPublishersError] = useState<string | null>(null);
 
@@ -53,9 +59,14 @@ export function usePublisherFilter() {
 
   // Reload when the PPTB connection switches to another org (#52).
   const org = useActiveOrg();
+  const publishersWithSolutions = loadedFor.org === org ? loadedFor.data : NONE;
+  // …and after "Refresh metadata" clears the cache.
+  const [resets, setResets] = useState(0);
+  useEffect(() => subscribeMetadataReset(() => setResets((n) => n + 1)), []);
 
   // ── Effect 1: load publishers + solutions on mount ──
   useEffect(() => {
+    if (!enabled) return;
     let mounted = true;
 
     async function loadPublishersWithSolutions() {
@@ -64,7 +75,9 @@ export function usePublisherFilter() {
       const metadataCache = pinMetadataCache();
       const cached = metadataCache.getPublishersWithSolutions();
       if (cached) {
-        setPublishersWithSolutions(cached);
+        setLoadedFor({ org, data: cached });
+        setPublishersLoading(false);
+        setPublishersError(null);
         return;
       }
 
@@ -73,7 +86,7 @@ export function usePublisherFilter() {
         setPublishersError(null);
         const data = await getPublishersWithSolutions();
         if (mounted) {
-          setPublishersWithSolutions(data);
+          setLoadedFor({ org, data });
           metadataCache.setPublishersWithSolutions(data);
         }
       } catch (err) {
@@ -86,8 +99,10 @@ export function usePublisherFilter() {
     loadPublishersWithSolutions();
     return () => {
       mounted = false;
+      // A fetch cut short (org switch, disabled) isn't loading any more.
+      setPublishersLoading(false);
     };
-  }, [org]);
+  }, [org, enabled, resets]);
 
   // ── Effect 2: cascade publisher → solution selection ──
   useEffect(() => {

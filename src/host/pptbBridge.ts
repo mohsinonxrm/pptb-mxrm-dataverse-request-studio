@@ -42,6 +42,8 @@ export interface HostSession {
   environmentUrl: string;
   /** Environment label from the host — "Dev" / "Test" / "UAT" / "Production" or empty. */
   environment: string;
+  /** The connection's name in ToolBox (e.g. "Contoso Prod"), or empty. Shown in write confirmations (#241). */
+  connectionName: string;
   /**
    * True once the initial host handshake (theme + active connection) has
    * resolved. Always true standalone. Lets consumers tell "still connecting"
@@ -69,6 +71,7 @@ let session: HostSession = {
   theme: readBootTheme(),
   environmentUrl: '',
   environment: '',
+  connectionName: '',
   handshakeDone: !EMBEDDED,
 };
 
@@ -112,6 +115,7 @@ interface ConnectionSnapshot {
   connected: boolean;
   environmentUrl: string;
   environment: string;
+  connectionName: string;
 }
 
 /**
@@ -145,11 +149,20 @@ async function fetchActiveConnection(
 ): Promise<(ConnectionSnapshot & { id: string | null }) | null> {
   try {
     const c = await api.connections?.getActiveConnection?.();
-    if (!c) return { connected: false, environmentUrl: '', environment: '', id: null };
+    if (!c) {
+      return {
+        connected: false,
+        environmentUrl: '',
+        environment: '',
+        connectionName: '',
+        id: null,
+      };
+    }
     return {
       connected: true,
       environmentUrl: c.url ?? '',
       environment: c.environment ?? '',
+      connectionName: c.name ?? '',
       id: typeof c.id === 'string' && c.id ? c.id : null,
     };
   } catch (e) {
@@ -236,6 +249,7 @@ async function refetchConnection(
         connected: false,
         environmentUrl: '',
         environment: '',
+        connectionName: '',
         handshakeDone: true,
       });
       return;
@@ -458,11 +472,32 @@ export const dvHost = {
     return h ? dv().execute(req, undefined, h) : dv().execute(req);
   },
 
-  // Relationships
-  associate: (primary: string, id: string, rel: string, target: string, targetId: string) =>
-    dv().associate(primary, id, rel, target, targetId),
-  disassociate: (primary: string, id: string, rel: string, targetId: string) =>
-    dv().disassociate(primary, id, rel, targetId),
+  // Relationships. Headers (1.2.7+): impersonation and bypass (#109).
+  associate: (
+    primary: string,
+    id: string,
+    rel: string,
+    target: string,
+    targetId: string,
+    headers?: DataverseAPI.AdditionalHeaders,
+  ) => {
+    const h = sendHeaders(headers);
+    return h
+      ? dv().associate(primary, id, rel, target, targetId, undefined, h)
+      : dv().associate(primary, id, rel, target, targetId);
+  },
+  disassociate: (
+    primary: string,
+    id: string,
+    rel: string,
+    targetId: string,
+    headers?: DataverseAPI.AdditionalHeaders,
+  ) => {
+    const h = sendHeaders(headers);
+    return h
+      ? dv().disassociate(primary, id, rel, targetId, undefined, h)
+      : dv().disassociate(primary, id, rel, targetId);
+  },
 
   // ── Metadata ────────────────────────────────────────────────────────
   // We expose three flavors:
@@ -540,22 +575,53 @@ export const tbHost = {
  * Copy text to the clipboard. Uses the host's clipboard API inside PPTB
  * (which goes through Electron's IPC and avoids the focus requirement that
  * navigator.clipboard sometimes hits in iframes), falls back to the browser
- * clipboard when standalone.
+ * clipboard when standalone. Rejects when nothing could copy it (#242):
+ * no clipboard at all used to resolve as if the text had been copied.
+ * Buttons go through `copyText` in `shell/copy.tsx`, which reports both.
  */
 export async function copyToClipboardSafe(text: string): Promise<void> {
+  let hostError: unknown;
   if (EMBEDDED && typeof window !== 'undefined' && window.toolboxAPI) {
     try {
       await window.toolboxAPI.utils.copyToClipboard(text);
       return;
     } catch (e) {
+      hostError = e;
       console.warn(
         '[pptbBridge] toolboxAPI.utils.copyToClipboard failed, falling back to navigator.clipboard',
         e,
       );
     }
   }
+  // Inside ToolBox, its own error says more than the webview's refusal.
+  const failure = (fallback: unknown) =>
+    hostError === undefined
+      ? fallback
+      : hostError instanceof Error
+        ? hostError
+        : new Error(String(hostError));
   if (typeof navigator !== 'undefined' && navigator.clipboard) {
-    await navigator.clipboard.writeText(text);
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (e) {
+      throw failure(e);
+    }
+  }
+  throw failure(new Error('no clipboard is available'));
+}
+
+/**
+ * Read text from the clipboard, or null when it can't be read. ToolBox has
+ * no clipboard read, so this is the browser API, which the webview may
+ * refuse (it needs focus and permission) (#242).
+ */
+export async function readClipboardText(): Promise<string | null> {
+  try {
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.readText) return null;
+    return await navigator.clipboard.readText();
+  } catch {
+    return null;
   }
 }
 

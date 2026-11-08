@@ -44,6 +44,7 @@ import {
 } from './expandTree';
 import type { ExpandSpec } from '../ExpandEditor';
 import type { RequestGroup } from '../../registry/requestTypes';
+import { useAdvancedFindOnly } from '../../state/metadataScope';
 
 export interface ExpandOverviewProps {
   /** Parent-entity logical name at this level. */
@@ -91,7 +92,11 @@ export function ExpandOverview({
   const isNested = parentCardinality !== null;
   const parentIsNN = parentCardinality === 'ManyToMany';
   const parentIsCollection = parentCardinality === 'OneToMany';
-  const available = availableNavsAt(parentEntity, siblings, { parentCardinality });
+  const advancedFindOnly = useAdvancedFindOnly();
+  const available = availableNavsAt(parentEntity, siblings, {
+    parentCardinality,
+    advancedFindOnly,
+  });
   const totalNavs = totalExpandCount(rootExpand);
   // Per /webapi/query/join-tables: when the query has NO nested $expand
   // anywhere, expanded collections come back un-paged — up to 5,000 rows

@@ -12,7 +12,7 @@ import { tokens } from '@fluentui/react-components';
  */
 export function UrlTokens({ url, host }: { url: string; host: string }) {
   // Strip leading host if present
-  let rest = url.startsWith(`https://${host}`) ? url.slice(`https://${host}`.length) : url;
+  const rest = url.startsWith(`https://${host}`) ? url.slice(`https://${host}`.length) : url;
   let beforeQ = rest;
   let qs = '';
   const qIdx = rest.indexOf('?');

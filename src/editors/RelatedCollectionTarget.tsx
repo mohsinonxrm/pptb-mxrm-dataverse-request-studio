@@ -17,6 +17,7 @@ import { findTable, type TableMeta } from '../mock/metadata';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { RecordPicker } from '../primitives/RecordPicker';
 import type { PredefinedRelatedTarget } from '../state/readState';
+import { isNavInScope, useAdvancedFindOnly } from '../state/metadataScope';
 
 interface RelationshipOption {
   relationshipName: string;
@@ -26,12 +27,21 @@ interface RelationshipOption {
   manyToMany: boolean;
 }
 
-/** Relationships through which rows of `table` form a collection on another row. */
-export function relatedCollectionOptions(table: TableMeta): RelationshipOption[] {
+/**
+ * Relationships through which rows of `table` form a collection on another
+ * row. With `advancedFindOnly`, only those Advanced Find shows (#44), plus
+ * `keep` (the one already chosen).
+ */
+export function relatedCollectionOptions(
+  table: TableMeta,
+  advancedFindOnly = false,
+  keep?: string,
+): RelationshipOption[] {
   const seen = new Set<string>();
   const out: RelationshipOption[] = [];
   for (const n of table.navigationProperties) {
     if (n.cardinality === 'OneToMany') continue;
+    if (!isNavInScope(n, advancedFindOnly) && n.relationshipName !== keep) continue;
     const key = `${n.relationshipName}|${n.targetEntity}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -74,7 +84,11 @@ export function RelatedCollectionTarget({
   value: PredefinedRelatedTarget;
   onChange: (next: PredefinedRelatedTarget) => void;
 }) {
-  const options = useMemo(() => relatedCollectionOptions(table), [table]);
+  const advancedFindOnly = useAdvancedFindOnly();
+  const options = useMemo(
+    () => relatedCollectionOptions(table, advancedFindOnly, value.relationshipName),
+    [table, advancedFindOnly, value.relationshipName],
+  );
   const { table: source, loading } = useLiveTable(value.sourceTable || null);
 
   // Resolve the source-side nav once the source table's metadata lands.
@@ -105,7 +119,9 @@ export function RelatedCollectionTarget({
         validationMessage={
           options.length
             ? undefined
-            : `${table.displayName} has no lookups or many-to-many relationships.`
+            : advancedFindOnly && relatedCollectionOptions(table).length > 0
+              ? `None of ${table.displayName}'s lookups or many-to-many relationships are shown in Advanced Find. Turn off "Advanced Find only" in Settings to see them.`
+              : `${table.displayName} has no lookups or many-to-many relationships.`
         }
       >
         <Dropdown

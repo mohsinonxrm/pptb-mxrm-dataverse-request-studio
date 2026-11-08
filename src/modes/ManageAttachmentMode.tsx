@@ -97,6 +97,8 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
+import { invalidUrlPartReason } from '../primitives/urlParts';
 
 // Default cap = Organization.MaxUploadFileSize default per doc (5 MB).
 const DEFAULT_MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -162,6 +164,11 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const firstStepMethod = pipeline[0]?.method ?? 'POST';
 
+  // Ids and names that go into the URL as-is (#221).
+  const urlPartProblem = invalidUrlPartReason([
+    ['Record id', state.recordId],
+    ['Parent activity id', state.parentActivityId],
+  ]);
   const disabledReason =
     state.operation === 'upload' && state.target === 'attachment' && !state.parentActivityId
       ? 'Pick the parent email activity for the attachment.'
@@ -176,7 +183,7 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
             ? 'Choose a file to upload.'
             : state.headers.some((h) => h.enabled && !h.name)
               ? 'Fix empty header name.'
-              : null;
+              : urlPartProblem;
 
   const onExecute = async () => {
     setLoading(true);
@@ -204,7 +211,9 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
   };
 
   // ── Save / Load ──
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const currentSerialized = useMemo(() => serializeManageAttachment(state), [state]);
@@ -240,6 +249,10 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedId(keepId);
     setLastSavedHash(keepHash);
   };
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(
       () => ({
@@ -247,11 +260,10 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: 'manage-attachment' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       }),
-      [currentSerialized, isDirty, lastSavedId],
+      [currentSerialized, isDirty, lastSavedId, onSavedLatest, onLoadSavedLatest],
     ),
   );
 

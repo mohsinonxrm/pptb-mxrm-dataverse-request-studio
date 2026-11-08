@@ -1,8 +1,8 @@
 // The saved-request store never writes over data it couldn't read (#220).
 import { act } from 'react';
-import { createRoot } from 'react-dom/client';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { UseSavedRequestsApi } from './useSavedRequests';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { startSavedStore, useSavedRequests, type UseSavedRequestsApi } from './useSavedRequests';
 import type { SavedRequest } from './savedRequests';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -11,21 +11,30 @@ const KEY = 'drs:saved-requests:v1:default';
 const entry = (id: string, modeId = 'update', extra: Partial<SavedRequest> = {}): SavedRequest =>
   ({ id, name: id, modeId, orgScope: 'default', state: {}, savedAt: 1, ...extra }) as SavedRequest;
 
-/** Load the store fresh (it reads storage at import) and render one consumer. */
+const roots: Root[] = [];
+
+/**
+ * Start the store as the app does (scrub, then read storage) and render one
+ * consumer. Not a fresh `import()` per test: that was slow enough to time
+ * out under parallel load (#319).
+ */
 async function mountStore(): Promise<() => UseSavedRequestsApi> {
-  vi.resetModules();
-  const { useSavedRequests } = await import('./useSavedRequests');
+  act(() => startSavedStore());
   let api!: UseSavedRequestsApi;
   function Probe() {
     api = useSavedRequests();
     return null;
   }
   const root = createRoot(document.createElement('div'));
+  roots.push(root);
   await act(async () => root.render(<Probe />));
   return () => api;
 }
 
 beforeEach(() => localStorage.clear());
+afterEach(() => {
+  for (const r of roots.splice(0)) act(() => r.unmount());
+});
 
 describe('useSavedRequests with an unreadable library', () => {
   it('refuses every write, keeps the stored text and a backup, until a new library is started', async () => {
@@ -83,14 +92,14 @@ describe('useSavedRequests with items it cannot use', () => {
 describe('useSavedRequests error after a new library (#220 review)', () => {
   it("drops the 'couldn't be read' error once another consumer started a new library", async () => {
     localStorage.setItem(KEY, 'not json');
-    vi.resetModules();
-    const { useSavedRequests } = await import('./useSavedRequests');
+    act(() => startSavedStore());
     const apis: UseSavedRequestsApi[] = [];
     function Probe({ i }: { i: number }) {
       apis[i] = useSavedRequests();
       return null;
     }
     const root = createRoot(document.createElement('div'));
+    roots.push(root);
     await act(async () =>
       root.render(
         <>

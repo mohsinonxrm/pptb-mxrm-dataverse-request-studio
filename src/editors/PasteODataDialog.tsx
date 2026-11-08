@@ -60,7 +60,8 @@ export function PasteODataDialog({ children, onApply }: PasteODataDialogProps) {
   const [text, setText] = useState('');
   const [result, setResult] = useState<ParseResult | null>(null);
   const [parsing, setParsing] = useState(false);
-  const { entities } = useScopedEntities();
+  // A pasted URL may name any table, in scope or not (#44).
+  const { allEntities: entities } = useScopedEntities();
 
   const resolveEntitySet = useMemo(() => {
     return (entitySetName: string): string | undefined => {

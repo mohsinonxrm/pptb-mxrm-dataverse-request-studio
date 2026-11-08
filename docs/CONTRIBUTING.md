@@ -30,12 +30,12 @@ npm install
 |---|---|
 | `npm run dev` | Vite dev server on `localhost:5173` (standalone, no PPTB host) |
 | `npm run typecheck` | `tsc -b --noEmit` — fast type-only check |
+| `npm run lint` | ESLint over the repo; no warnings allowed |
 | `npm test` / `npm run test:watch` | Vitest unit tests, once / in watch mode |
 | `npm run build` | Full production build into `dist/` |
 | `npm run preview` | Serve the production build locally |
 | `npm run format` / `npm run format:check` | Prettier write / check over the repo |
 | `npm run validate` | Run `pptb-validate` against the manifest |
-| `npm run finalize-package` | `validate` → `build` (pre-release) |
 | `npm run build:analyze` | Production build plus a bundle-size report |
 
 ### Standalone vs PPTB-embedded
@@ -122,8 +122,11 @@ the *what* is obvious from the diff.
 ## Code style
 
 - **TypeScript strict mode** — avoid `any`; where it's unavoidable, add a
-  comment explaining why. (The repo has no ESLint setup, so existing
-  `eslint-disable` comments are not enforced by anything.)
+  comment explaining why.
+- **ESLint** (`npm run lint`, run in CI with no warnings allowed): the
+  recommended JS / TypeScript rules, React hooks and jsx-a11y. Give a new
+  `// eslint-disable-next-line` a reason after `--`. Copy and paste go
+  through `copyText` / `readClipboardText`, not `navigator.clipboard` (#242).
 - **Prettier** formats everything — run `npm run format` before pushing;
   `npm run format:check` must pass.
 - **Fluent UI v9** primitives — prefer `@fluentui/react-components` over

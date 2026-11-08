@@ -22,6 +22,7 @@ import {
   ChartMultiple20Filled,
   Link20Regular,
 } from '@fluentui/react-icons';
+import { tokens } from '@fluentui/react-components';
 import { Sidebar, type SidebarClauseItem } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
@@ -67,6 +68,7 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
 import type { ThemeMode } from '../theme/theme';
 // Live-metadata hook: subscribes to the registry so child editors
 // (SelectEditor, FilterEditor, OrderbyEditor, ExpandEditor, lambdas)
@@ -171,7 +173,9 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   });
   // Entity list — used to validate saved-request loads against the
   // current org (block load if the entity has been uninstalled).
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -284,6 +288,10 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // the hook clears on unmount so a stale mode doesn't bleed across
   // mode switches. The setter is stable, so React only re-runs the
   // effect when the value object identity changes — which we want.
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(
       () => ({
@@ -291,11 +299,10 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: 'retrieve-multiple' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       }),
-      [currentSerialized, isDirty, lastSavedId],
+      [currentSerialized, isDirty, lastSavedId, onSavedLatest, onLoadSavedLatest],
     ),
   );
 
@@ -310,6 +317,9 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // The page size the run's first page asked for. Later pages must ask for
   // the same one, even if the Prefer pane has changed since (#219).
   const runPageSizeRef = useRef<number | null>(null);
+  // The headers the run was sent with: later pages send the same ones, or a
+  // page after the first would run as the signed-in user (#109).
+  const runHeadersRef = useRef<Record<string, string> | undefined>(undefined);
   // Bumped by Stop to end a Retrieve All, keeping the rows already merged.
   const pagingIdRef = useRef(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -344,7 +354,8 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     const run = startRun();
     setLoading(true);
     runPageSizeRef.current = state.prefer.maxpagesize;
-    const res = await runtime.retrieveMultiple(state);
+    runHeadersRef.current = headerItemsToObject(state.headers, null);
+    const res = await runtime.retrieveMultiple(state, runHeadersRef.current);
     // A newer Execute (e.g. Refresh clicked mid-flight) owns the results now.
     if (runIdRef.current !== run) return;
     setResult(res);
@@ -421,7 +432,11 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     if (!nextLink || isLoadingMore) return;
     const status = beginPaging();
     try {
-      const more = await runtime.absoluteUrl(nextLink, runPageSizeRef.current);
+      const more = await runtime.absoluteUrl(
+        nextLink,
+        runPageSizeRef.current,
+        runHeadersRef.current,
+      );
       if (status() !== 'current') return;
       if (!more.ok) {
         setPageError(`Couldn't load the next page: ${describePageError(more)}`);
@@ -443,7 +458,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     try {
       const outcome = await retrieveAll({
         nextLink,
-        fetchPage: (url) => runtime.absoluteUrl(url, runPageSizeRef.current),
+        fetchPage: (url) => runtime.absoluteUrl(url, runPageSizeRef.current, runHeadersRef.current),
         commit: commitPages,
         status,
       });
@@ -476,6 +491,8 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // ── Advisories — query antipatterns + stripped wildcards ────────────
   // Detection runs on every render (cheap — pure tree walks); the
   // AdvisoryDrawer + URL-bar consume the result.
+  const relatedPendingKey = related.pending.join(',');
+  const relatedFailedKey = related.failed.join(',');
   const advisories = useMemo(() => {
     // When $apply is on, the top-level $filter is silently ignored by Dataverse
     // and the active filter is the apply.prefilter (filter() stage). Feed the
@@ -593,6 +610,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
       ...nestingAdvisories,
       ...relatedMetadataAdvisories(related.pending, related.failed),
     ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- related.pending / failed are new arrays every render, so keyed on their joined contents; liveTable re-runs it when the table's metadata lands
   }, [
     state.table,
     state.select,
@@ -601,8 +619,13 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     state.expand,
     state.apply,
     state.top,
-    related.pending.join(','),
-    related.failed.join(','),
+    relatedPendingKey,
+    relatedFailedKey,
+    // The detectors and validateRequest read the table through findTable().
+    // A saved request loaded before its table's metadata arrives would
+    // otherwise keep the empty result, and no Execute blocker, until the
+    // request changed.
+    liveTable,
   ]);
 
   const blockerReason = disabledReasonFromAdvisories(advisories);
@@ -698,7 +721,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
         label: (
           <span>
             {it.nav}{' '}
-            <span style={{ opacity: 0.55, fontWeight: 400 }}>
+            <span style={{ color: tokens.colorNeutralForeground3, fontWeight: 400 }}>
               → {target?.displayName ?? nav?.targetEntity ?? '?'}
             </span>
           </span>
@@ -1006,7 +1029,11 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
         break;
       case 'headers':
         pane = (
-          <HeadersEditor items={state.headers} setItems={(h) => set('headers', h, 'headers')} />
+          <HeadersEditor
+            policy="read"
+            items={state.headers}
+            setItems={(h) => set('headers', h, 'headers')}
+          />
         );
         break;
     }

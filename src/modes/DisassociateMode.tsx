@@ -45,7 +45,7 @@ import { notify } from '../shell/dialogs';
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from '../editors/PaneHead';
 import { NavPropertyPicker } from '../editors/NavPropertyPicker';
-import { AssociateTargetsEditor } from '../editors/AssociateTargetsEditor';
+import { AssociateTargetsEditor, targetsTitle } from '../editors/AssociateTargetsEditor';
 import { TargetEditor } from '../editors/TargetEditor';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
@@ -75,6 +75,8 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
+import { invalidUrlPartReason } from '../primitives/urlParts';
 
 // Empty initial state — same pattern as MergeMode/AssociateMode. User picks
 // the table → source record → nav property → targets (if collection-valued).
@@ -107,7 +109,9 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
   // findTable(), which is empty until the fetch lands — keying on `state`
   // alone left the URL / Code tab blank after picking a table (#78).
   const { table: liveTable } = useLiveTable(state.table || null);
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('source');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
@@ -130,7 +134,9 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
   // unknown — warn, but don't treat it as "empty" and block Execute (#57).
   const [currentLookupError, setCurrentLookupError] = useState<string | null>(null);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildDisassociate(state), [state, liveTable]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const requests = useMemo(() => buildDisassociateRequests(state), [state, liveTable]);
   const tbl = findTable(state.table);
   const nav = state.navProperty
@@ -230,6 +236,14 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
     if (dirtyId) markDirty(dirtyId);
   };
 
+  // Ids and names that go into the URL as-is (#221).
+  const urlPartProblem = invalidUrlPartReason(
+    [
+      ['Source record id', state.sourceId],
+      ...state.targetIds.map((id) => ['Target record id', id] as const),
+    ],
+    [['Navigation property', state.navProperty]],
+  );
   const disabledReason = !tbl
     ? 'Pick a source table first.'
     : !state.sourceId
@@ -242,11 +256,11 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
             ? "Source's lookup is already empty — nothing to disassociate."
             : state.headers.some((h) => h.enabled && !h.name)
               ? 'Fix empty header name.'
-              : null;
+              : urlPartProblem;
 
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.disassociate(state);
+    const res = await runtime.disassociate(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setLoading(false);
     setTab('results');
@@ -314,6 +328,10 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedHash(keepHash);
   };
 
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.table) return null;
@@ -322,11 +340,10 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: 'disassociate' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.table]),
+    }, [currentSerialized, isDirty, lastSavedId, state.table, onSavedLatest, onLoadSavedLatest]),
   );
 
   const sections = [
@@ -383,11 +400,7 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
           id: 'target',
           icon: PersonAccounts20Regular,
           iconFilled: PersonAccounts20Filled,
-          label: isSingle
-            ? 'Target — implicit'
-            : state.targetIds.length > 1
-              ? 'Target records'
-              : 'Target record',
+          label: isSingle ? 'Target — implicit' : targetsTitle(false, state.targetIds.length),
           badge: isSingle ? '∅' : state.targetIds.length || null,
           badgeAppearance: 'tint' as const,
           badgeColor: state.targetIds.length > 0 ? ('success' as const) : ('subtle' as const),
@@ -484,6 +497,7 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
     case 'headers':
       pane = (
         <HeadersEditor
+          policy="relate"
           items={state.headers}
           setItems={(h) => set('headers', h, 'headers')}
           group="relate"
@@ -546,6 +560,13 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
           method={method}
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={{
+            operation: nav ? `Disassociate (${nav.name})` : 'Disassociate',
+            table: state.table,
+            scope: { kind: 'records', count: Math.max(1, state.targetIds.length) },
+            highImpact: state.targetIds.length > 1,
+          }}
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
@@ -610,7 +631,7 @@ function TargetPane({
       <div>
         <PaneHead
           icon={PersonAccounts20Filled}
-          title="Target record"
+          title={targetsTitle(false, state.targetIds.length)}
           sub="Pick a navigation property first."
           group="relate"
         />
@@ -807,7 +828,7 @@ function UrlShapeCard({
           <Badge
             appearance="tint"
             color="brand"
-            size="extra-small"
+            size="small"
             style={{ marginLeft: 'auto', fontWeight: 700 }}
           >
             ACTIVE

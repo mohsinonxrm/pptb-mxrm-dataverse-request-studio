@@ -1,7 +1,7 @@
 // DisplaySettings — persisted, cross-mode preferences.
 //
 // Includes display flags (logical names, value-display mode) plus the
-// active publisher / solution selections sourced from the Settings drawer.
+// active publisher / solution selections made with the header's scope chip.
 // Persisted across reloads so the user's scope sticks.
 //
 // Results-grid column widths (#12) are stored here too, keyed per table —
@@ -30,6 +30,11 @@ export interface DisplaySettings {
   /** Results-grid row density (#16). */
   gridDensity: GridDensity;
   /**
+   * Production safe mode (#241): on a Production connection every write asks
+   * first, and you type the table (or operation) name to confirm.
+   */
+  productionSafeMode: boolean;
+  /**
    * Selected publisher ids (publisherid GUIDs). Used when
    * entityScopeMode === 'publisher-solution' to narrow the solution list.
    * Empty array = no publisher chosen yet (the solutions list will be empty).
@@ -41,6 +46,11 @@ export interface DisplaySettings {
    * chosen yet (entity list will be empty in scoped modes).
    */
   selectedSolutionIds: string[];
+  /**
+   * The environments (org hosts) where the scope chip's first-run tip was
+   * dismissed (#42). It shows once per environment, until a scope is set.
+   */
+  scopeTipDismissed: string[];
 }
 
 /** Publisher / solution selection for one org — the GUIDs are per environment. */
@@ -56,7 +66,16 @@ export interface OrgScopeSelection {
  */
 export interface PersistedDisplaySettings extends DisplaySettings {
   scopeByOrg?: Record<string, OrgScopeSelection>;
+  /**
+   * 2 from 1.5.0. Before it, "Advanced Find only" did nothing and was saved
+   * as `true` by default, so a value stored without this marker is dropped
+   * once and the new default (off) applies (#44).
+   */
+  settingsRevision?: number;
 }
+
+/** The current `settingsRevision`. */
+export const SETTINGS_REVISION = 2;
 
 /**
  * The settings as seen from one org: that org's scope selection, or an
@@ -114,10 +133,13 @@ export const defaultDisplaySettings: DisplaySettings = {
   valueDisplayMode: 'formatted',
   columnWidths: {},
   entityScopeMode: 'publisher-solution',
-  advancedFindOnly: true,
+  // Off by default, as in FetchXML Studio (#44).
+  advancedFindOnly: false,
   gridDensity: 'medium',
+  productionSafeMode: true,
   selectedPublisherIds: [],
   selectedSolutionIds: [],
+  scopeTipDismissed: [],
 };
 
 /** Settings namespace prefix. Exported for any future settings keys. */
@@ -133,6 +155,8 @@ export const DISPLAY_SETTINGS_KEY = settingsKey('displaySettings');
 export function mergeWithDefaults(
   stored: Partial<PersistedDisplaySettings> | undefined,
 ): PersistedDisplaySettings {
-  if (!stored) return { ...defaultDisplaySettings };
-  return { ...defaultDisplaySettings, ...stored };
+  if (!stored) return { ...defaultDisplaySettings, settingsRevision: SETTINGS_REVISION };
+  const migrated = { ...stored };
+  if ((stored.settingsRevision ?? 1) < 2) delete migrated.advancedFindOnly;
+  return { ...defaultDisplaySettings, ...migrated, settingsRevision: SETTINGS_REVISION };
 }

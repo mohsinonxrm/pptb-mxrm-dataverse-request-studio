@@ -39,6 +39,7 @@ import { RecordDetailCard } from './detail/RecordDetailCard';
 import { WriteResultCard, type WriteResultContext } from './results/WriteResultCard';
 import type { ExpandSpec } from '../editors/ExpandEditor';
 import type { OrderbySpec } from '../editors/OrderbyEditor';
+import { copyText } from '../shell/copy';
 
 export type ResultsTab = 'data' | 'json' | 'headers';
 
@@ -357,7 +358,7 @@ function JsonPane({ body }: { body: unknown }) {
           appearance="subtle"
           size="small"
           style={{ position: 'absolute', top: 6, right: 6, zIndex: 1 }}
-          onClick={() => navigator.clipboard?.writeText(json)}
+          onClick={() => void copyText(json, 'the JSON')}
         />
       </Tooltip>
       <pre

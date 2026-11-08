@@ -66,6 +66,8 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
+import { invalidUrlPartReason } from '../primitives/urlParts';
 
 // Workflow shape used by the picker — the wire response fields are
 // camelCased differently per the OData convention (workflowid not Id, etc).
@@ -169,7 +171,9 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
   const tbl = wf ? findTable(wf.primaryEntity) : undefined;
 
   // Save / Load
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const [entityRecordName, setEntityRecordName] = useState<string>('');
@@ -189,13 +193,18 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
     if (dirtyId) markDirty(dirtyId);
   };
 
+  // Ids and names that go into the URL as-is (#221).
+  const urlPartProblem = invalidUrlPartReason([
+    ['Workflow id', state.workflowId],
+    ['Record id', state.entityId],
+  ]);
   const disabledReason = !wf
     ? 'Pick a workflow.'
     : !state.entityId
       ? `Pick a ${wf.primaryEntity} record to run the workflow on.`
       : state.headers.some((h) => h.enabled && !h.name)
         ? 'Fix empty header name.'
-        : null;
+        : urlPartProblem;
 
   const onExecute = async () => {
     setLoading(true);
@@ -270,6 +279,10 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedHash(keepHash);
   };
 
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.workflowId) return null;
@@ -278,11 +291,17 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: 'exec-workflow' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.workflowId, workflows]),
+    }, [
+      currentSerialized,
+      isDirty,
+      lastSavedId,
+      state.workflowId,
+      onSavedLatest,
+      onLoadSavedLatest,
+    ]),
   );
 
   const sections = [
@@ -438,6 +457,17 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
           method="POST"
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={
+            wf
+              ? {
+                  operation: `Execute Workflow "${wf.name}"`,
+                  table: wf.primaryEntity || undefined,
+                  scope: { kind: 'records', count: 1 },
+                  highImpact: true,
+                }
+              : null
+          }
           executeIcon={Flowchart20Filled}
           disabledReason={disabledReason}
           loading={loading}

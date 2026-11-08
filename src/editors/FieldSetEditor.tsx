@@ -89,7 +89,6 @@ import {
   type MoneyColumnMeta,
   type DecimalColumnMeta,
   type DoubleColumnMeta,
-  type BigIntColumnMeta,
   type BooleanColumnMeta,
   type LookupColumnMeta,
   type CustomerColumnMeta,
@@ -99,6 +98,7 @@ import { useLookupRecords } from '../host/useLookupRecords';
 import {
   decodeFieldBody,
   encodeFieldBody,
+  isRequiredColumn,
   mustSupplyOnCreate,
   parseRawBody,
   suppliedColumnTest,
@@ -109,11 +109,11 @@ import { useColumnDetail } from '../host/useColumnDetail';
 import {
   behaviorHint,
   behaviorOf,
-  combineDateAndTime,
   isDateOnlyColumn,
   localZoneLabel,
   parseDateTimeValue,
-  serializeDateTimeValue,
+  withPickedDate,
+  withPickedTime,
 } from './dateTimeValue';
 // Monaco — same instance + worker setup as CodeView. The `loader.config`
 // side-effect lives in src/monaco/monacoSetup.ts, which the MonacoEditor
@@ -122,6 +122,8 @@ import Editor from '../monaco/MonacoEditor';
 import type { ThemeMode } from '../theme/theme';
 import type { CreateFieldValue, LookupFieldValue } from '../state/writeState';
 import type { RequestGroup } from '../registry/requestTypes';
+import { scopedColumns, useAdvancedFindOnly } from '../state/metadataScope';
+import { copyText } from '../shell/copy';
 
 // ──────────────────────────────────────────────────────────────
 // System-managed columns we hide from the Create form.
@@ -436,7 +438,7 @@ export function FieldSetEditor({
     const writableById = new Map(writable.map((c) => [c.logicalName, c]));
 
     // Required columns in metadata order (regardless of whether they're populated)
-    const requiredCols = writable.filter((c) => c.required);
+    const requiredCols = writable.filter(isRequiredColumn);
     const requiredIds = new Set(requiredCols.map((c) => c.logicalName));
 
     // Then user-added non-required fields in insertion order. Sourced
@@ -465,7 +467,7 @@ export function FieldSetEditor({
     if (filter === 'common') {
       pool = pool.filter(
         (c) =>
-          c.required ||
+          isRequiredColumn(c) ||
           c.logicalName === tbl?.primaryName ||
           c.logicalName === 'statecode' ||
           c.logicalName === 'statuscode' ||
@@ -484,11 +486,14 @@ export function FieldSetEditor({
     return pool;
   }, [writable, values, nullFields, filter, search, tbl, inWorkingSet]);
 
-  // Pool of fields available to add (writable, not currently visible)
+  // Pool of fields available to add (writable, not currently visible). It
+  // follows "Advanced Find only" (#44); required and filled-in fields always
+  // show, since they come from `writable`.
+  const advancedFindOnly = useAdvancedFindOnly();
   const addable = useMemo(() => {
     const visibleIds = new Set(visible.map((c) => c.logicalName));
-    return writable.filter((c) => !visibleIds.has(c.logicalName));
-  }, [writable, visible]);
+    return scopedColumns(writable, advancedFindOnly).filter((c) => !visibleIds.has(c.logicalName));
+  }, [writable, visible, advancedFindOnly]);
 
   if (!tbl) {
     return (
@@ -785,7 +790,7 @@ function FieldRow({
   onClearNull: () => void;
 }) {
   const s = useStudioStyles();
-  const isMissing = col.required && (requiredOnWrite ? !populated : isNull);
+  const isMissing = isRequiredColumn(col) && (requiredOnWrite ? !populated : isNull);
 
   const rs = useFieldRowStyles();
   return (
@@ -806,7 +811,7 @@ function FieldRow({
           <span style={{ fontWeight: 500, color: tokens.colorNeutralForeground1 }}>
             {col.displayName}
           </span>
-          {col.required && (
+          {isRequiredColumn(col) && (
             <Tooltip
               content={
                 requiredOnWrite
@@ -815,7 +820,7 @@ function FieldRow({
               }
               relationship="description"
             >
-              <Badge appearance="tint" color="danger" size="extra-small">
+              <Badge appearance="tint" color="danger" size="small">
                 req
               </Badge>
             </Tooltip>
@@ -886,7 +891,7 @@ function FieldRow({
                 <Badge
                   appearance="filled"
                   color="warning"
-                  size="extra-small"
+                  size="small"
                   style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: 700 }}
                 >
                   null
@@ -944,7 +949,7 @@ function FieldRow({
       </div>
 
       {/* Remove */}
-      {!col.required ? (
+      {!isRequiredColumn(col) ? (
         <Tooltip content="Remove field from the body" relationship="label">
           <Button
             size="small"
@@ -1359,12 +1364,14 @@ function DateTimeFieldInput({
       onChange('');
       return;
     }
-    // Keep the time already picked when the date changes.
-    onChange(serializeDateTimeValue(combineDateAndTime(d, isDateOnly ? null : current), col));
+    // Keep the time already picked when the date changes (as stored, #337).
+    onChange(withPickedDate(value, d, col));
   };
   const writeTime = (d: Date | null | undefined) => {
-    if (!d || !current) return;
-    onChange(serializeDateTimeValue(combineDateAndTime(current, d), col));
+    if (!d) return;
+    // Null when it's the time already shown: the picker reports on blur too.
+    const next = withPickedTime(value, d, col);
+    if (next !== null) onChange(next);
   };
 
   // What's on the wire — shown under the pickers so the zone is never a
@@ -1507,6 +1514,7 @@ function MultiChoiceTagPicker({
   value: number[] | undefined;
   onChange: (v: number[]) => void;
 }) {
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- columnOptions() is a new array for Boolean / option-less columns; these small memos just recompute then
   const options = columnOptions(col) ?? [];
   const [query, setQuery] = useState('');
   const selected = (value ?? []).map(String);
@@ -2198,7 +2206,7 @@ function JsonEditPane({
             appearance="subtle"
             // z-index above Monaco's chrome so the copy button stays clickable.
             style={{ position: 'absolute', top: 6, right: 6, zIndex: 2 }}
-            onClick={() => navigator.clipboard?.writeText(text)}
+            onClick={() => void copyText(text, 'the body JSON')}
           />
         </Tooltip>
       </div>

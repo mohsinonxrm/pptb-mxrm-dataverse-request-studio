@@ -27,7 +27,7 @@ import { useStudioStyles } from '../primitives/styles';
 import { RequestTypePicker } from '../primitives/RequestTypePicker';
 import { SettingsDrawer } from './SettingsDrawer';
 import { usePersistedSettings } from '../host/usePersistedSettings';
-import { useRegisterOpenSettings } from '../host/useOpenSettings';
+import { ScopeChip } from './ScopeChip';
 import { useAccessMode } from '../host/useAccessMode';
 import type { ThemeMode } from '../theme/theme';
 import { getEnv } from '../mock/environment';
@@ -35,6 +35,7 @@ import { useHostSession } from '../host/HostContext';
 import { useSaveContext } from '../state/SaveContext';
 import { useRegisterModeNavigator } from '../state/modeHandoff';
 import { SaveButton, SavedLibraryButton } from '../editors/SavedRequestsDialog';
+import { EnvironmentBadge } from './confirmWrite';
 
 export function FrameHeader({
   themeMode,
@@ -53,13 +54,13 @@ export function FrameHeader({
   // keep them in standalone mode (the local dev experience needs them).
   const host = useHostSession();
   const embedded = host.embedded;
+  // The connection name, else the environment's host name.
+  const connectionLabel =
+    host.connectionName || host.environmentUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   const env = getEnv();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, updateSettings] = usePersistedSettings();
   const { accessSummary } = useAccessMode();
-  // Register the open-settings callback so any component deep in the tree
-  // (e.g. TargetEditor's guidance banner) can open the drawer without prop-drilling.
-  useRegisterOpenSettings(() => setSettingsOpen(true));
   // The mode picker lives here, so this is also where result cards switch
   // modes from (e.g. WriteResultCard's "Retrieve this record", #3).
   useRegisterModeNavigator(setActiveId);
@@ -97,7 +98,47 @@ export function FrameHeader({
           </BreadcrumbItem>
         </Breadcrumb>
       </div>
+      {/* Where the entity pickers' entities come from (#42). */}
+      <ScopeChip accessSummary={accessSummary} />
       <div className={s.spacer} />
+      {/* The connection the requests go to, also when embedded, with
+          Production highlighted (#241). */}
+      {embedded && host.connected && (connectionLabel || host.environment) && (
+        <Tooltip
+          content={`Requests go to ${host.connectionName || 'this connection'}${
+            host.environmentUrl ? ` (${host.environmentUrl.replace(/\/$/, '')})` : ''
+          }`}
+          relationship="description"
+        >
+          <span
+            data-testid="environment-indicator"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              flexShrink: 1,
+              minWidth: 0,
+              maxWidth: 260,
+              marginRight: 8,
+            }}
+          >
+            {connectionLabel && (
+              <span
+                style={{
+                  fontSize: tokens.fontSizeBase200,
+                  color: tokens.colorNeutralForeground2,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {connectionLabel}
+              </span>
+            )}
+            <EnvironmentBadge environment={host.environment} />
+          </span>
+        </Tooltip>
+      )}
       {!embedded && (
         <>
           <Badge
@@ -175,7 +216,6 @@ export function FrameHeader({
         onClose={() => setSettingsOpen(false)}
         settings={settings}
         onSettingsChange={updateSettings}
-        accessSummary={accessSummary}
       />
     </header>
   );

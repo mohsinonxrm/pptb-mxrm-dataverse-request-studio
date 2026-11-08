@@ -1,0 +1,76 @@
+# Grouped weekly version updates into dev, as in FetchXML Studio and Command Bar Studio
+# (#197). Groups take minor and patch updates only; a major arrives as its own PR so it
+# can be upgraded deliberately. New versions are proposed only once they have been
+# published for 14 days (cooldown), matching the project's supply-chain rule. Security
+# updates (enabled in repo settings) aren't held back by the cooldown.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 5
+    labels: ['dependencies']
+    commit-message:
+      prefix: 'chore(deps)'
+    groups:
+      fluentui:
+        update-types: ['minor', 'patch']
+        patterns: ['@fluentui/*', '@fluentui-contrib/*']
+      monaco:
+        update-types: ['minor', 'patch']
+        patterns: ['monaco-editor', '@monaco-editor/*']
+      pptb:
+        update-types: ['minor', 'patch']
+        patterns: ['@pptb/*']
+      dnd-kit:
+        update-types: ['minor', 'patch']
+        patterns: ['@dnd-kit/*']
+      build-tooling:
+        update-types: ['minor', 'patch']
+        patterns:
+          - 'vite'
+          - '@vitejs/*'
+          - 'typescript'
+          - 'typescript-eslint'
+          - 'eslint'
+          - 'eslint-*'
+          - '@eslint/*'
+          - 'globals'
+          - 'prettier'
+          - 'vitest'
+          - 'jsdom'
+    ignore:
+      # eslint 10 waits for eslint-plugin-jsx-a11y, which peer-requires eslint <= 9
+      - dependency-name: 'eslint'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@eslint/js'
+        update-types: ['version-update:semver-major']
+      # React is intentionally on 18 (as in the other studios); review majors manually
+      - dependency-name: 'react'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'react-dom'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@types/react'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@types/react-dom'
+        update-types: ['version-update:semver-major']
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 14
+    labels: ['dependencies']
+    commit-message:
+      prefix: 'chore(ci)'
+    groups:
+      actions:
+        patterns: ['*']

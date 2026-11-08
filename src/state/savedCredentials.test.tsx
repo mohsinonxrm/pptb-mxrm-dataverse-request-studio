@@ -1,8 +1,8 @@
 // Credential headers never reach storage through any saved-request path (#217).
 import { act } from 'react';
-import { createRoot } from 'react-dom/client';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { UseSavedRequestsApi } from './useSavedRequests';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { startSavedStore, useSavedRequests, type UseSavedRequestsApi } from './useSavedRequests';
 import type { SavedRequest } from './savedRequests';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -22,21 +22,30 @@ const entry = (id: string, extra: Partial<SavedRequest> = {}): SavedRequest =>
     ...extra,
   }) as SavedRequest;
 
-/** Load the store fresh (it scrubs and reads storage at import) and render one consumer. */
+const roots: Root[] = [];
+
+/**
+ * Start the store as the app does at load (scrub credentials, then read
+ * storage) and render one consumer. Not a fresh `import()` per test: that
+ * was slow enough to time out under parallel load (#319).
+ */
 async function mountStore(): Promise<() => UseSavedRequestsApi> {
-  vi.resetModules();
-  const { useSavedRequests } = await import('./useSavedRequests');
+  act(() => startSavedStore());
   let api!: UseSavedRequestsApi;
   function Probe() {
     api = useSavedRequests();
     return null;
   }
   const root = createRoot(document.createElement('div'));
+  roots.push(root);
   await act(async () => root.render(<Probe />));
   return () => api;
 }
 
 beforeEach(() => localStorage.clear());
+afterEach(() => {
+  for (const r of roots.splice(0)) act(() => r.unmount());
+});
 
 describe('saved requests never keep credential headers', () => {
   it('scrubs credentials an earlier build stored, in every connection, keeping other items as they are', async () => {
@@ -51,6 +60,25 @@ describe('saved requests never keep credential headers', () => {
     expect(localStorage.getItem('drs:saved-requests:v1:broken')).toBe('{not json');
     expect(JSON.stringify(api().saved)).not.toContain(TOKEN);
   });
+
+  // The one test that loads the module afresh: it checks that loading it
+  // starts the store (the scrub and the read), which the tests above call
+  // by hand. A fresh import is slow under load, hence the timeout (#319).
+  it('scrubs and reads storage when the module loads', async () => {
+    localStorage.setItem(KEY, JSON.stringify([entry('a')]));
+    vi.resetModules();
+    const fresh = await import('./useSavedRequests');
+    expect(localStorage.getItem(KEY)).not.toContain(TOKEN);
+    let api!: UseSavedRequestsApi;
+    function Probe() {
+      api = fresh.useSavedRequests();
+      return null;
+    }
+    const root = createRoot(document.createElement('div'));
+    roots.push(root);
+    await act(async () => root.render(<Probe />));
+    expect(api.saved.map((e) => e.id)).toEqual(['a']);
+  }, 30_000);
 
   it('strips them on save and on import', async () => {
     const api = await mountStore();

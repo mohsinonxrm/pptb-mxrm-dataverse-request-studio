@@ -32,8 +32,13 @@
 
 import type { TableMeta } from '../mock/metadata';
 import { findTable } from '../mock/metadata';
-import type { FilterGroup, FilterNode } from '../editors/filter/filterTree';
-import { countRules } from '../editors/filter/filterTree';
+import type { FilterGroup, FilterNode, InvalidLiteral } from '../editors/filter/filterTree';
+import {
+  collectInvalidLiterals,
+  collectInvalidNames,
+  countRules,
+  expandNameProblems,
+} from '../editors/filter/filterTree';
 import { findOperator } from '../editors/filter/operators';
 import type { ExpandSpec } from '../editors/ExpandEditor';
 import type { OrderbySpec } from '../editors/OrderbyEditor';
@@ -88,6 +93,46 @@ export function validateRequest(input: ValidateRequestInput): Advisory[] {
       );
     }
   }
+
+  // ── Literal values (#221) ────────────────────────────────────
+  // A value without its column's shape (text on a number column, a non-GUID
+  // for a GUID function) is sent quoted, so it can't change the query, but
+  // Dataverse rejects it with a 400 that doesn't say which value is wrong.
+  // Block Execute and name it instead. Covers $expand's inner filters too.
+  const literals = [
+    ...(activeFilter ? collectInvalidLiterals(activeFilter, rootTable) : []),
+    ...expandFilterLiterals(input.expand ?? [], rootTable),
+  ];
+  for (const l of literals) {
+    out.push(
+      adv.err(
+        `filter-literal-${l.nodeId}`,
+        'validation',
+        `\`${l.col}\` needs ${l.expected}, not ${JSON.stringify(l.value.length > 40 ? `${l.value.slice(0, 40)}…` : l.value)}.`,
+        "The filter value doesn't match the column's type, so Dataverse would reject the query. Fix the value in the filter.",
+        'filter',
+        'https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/query/filter-rows',
+      ),
+    );
+  }
+  // Names written into the query as they are: filter columns, lambda navs
+  // and aliases, $expand navigation properties. The pickers only offer real
+  // names; a pasted URL or an imported request might not.
+  const names = [
+    ...(activeFilter ? collectInvalidNames(activeFilter) : []),
+    ...expandNameProblems(input.expand ?? []),
+  ];
+  names.forEach((n, i) =>
+    out.push(
+      adv.err(
+        `query-name-${i}`,
+        'validation',
+        n,
+        'Only column and relationship names can go here: letters, digits and underscores, with `/` between the steps of a path.',
+        'filter',
+      ),
+    ),
+  );
 
   // ── Expand validation ────────────────────────────────────────
   if (input.expand && input.expand.length > 0) {
@@ -348,9 +393,10 @@ function validateFilterNode(
     // Nav-path inside `PropertyName` (e.g. `primarycontactid/ownerid`)
     // is rejected (tests 7.7 / 7.8). The column picker doesn't surface
     // nav-paths for function nodes, but if state arrives with one
-    // (legacy / paste / hand-edit) we should warn.
-    if (node.col && node.col.includes('/') && !node.col.startsWith((lambdaAlias ?? '') + '/')) {
-      // Strip any pure alias prefix; what's left must be a nav-path.
+    // (legacy / paste / hand-edit) we should warn. Inside a lambda the
+    // alias goes first, and the rest is checked the same way (#336).
+    if (node.col && node.col.includes('/')) {
+      // Strip the lambda alias; a `/` left over is a nav-path.
       const stripped =
         lambdaAlias && node.col.startsWith(lambdaAlias + '/')
           ? node.col.slice(lambdaAlias.length + 1)
@@ -436,6 +482,19 @@ function validateFilterNode(
     validateFilterGroup(node.inner, innerTable, node.alias, out);
     return;
   }
+}
+
+/** Invalid literals in $expand's inner filters, at every level (#221). */
+function expandFilterLiterals(items: ExpandSpec[], parentTable: TableMeta): InvalidLiteral[] {
+  const out: InvalidLiteral[] = [];
+  for (const it of items) {
+    const nav = parentTable.navigationProperties.find((n) => n.name === it.nav);
+    const target = nav ? findTable(nav.targetEntity) : undefined;
+    if (!target) continue; // metadata not loaded yet
+    if (it.filter) collectInvalidLiterals(it.filter, target, undefined, out);
+    if (it.nestedExpand) out.push(...expandFilterLiterals(it.nestedExpand, target));
+  }
+  return out;
 }
 
 // walkExpandTree was used by the $top/$orderby-when-nested advisory which

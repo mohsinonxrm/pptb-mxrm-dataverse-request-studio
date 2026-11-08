@@ -22,6 +22,12 @@
 // are what the user sees. `new Date('2026-05-01')` is UTC midnight, which
 // west of UTC is the previous local day — so never parse stored values with
 // the Date constructor except for UserLocal instants (#92).
+//
+// A local Date can't hold a time in the browser's DST gap: a time zone
+// independent 02:30 on a spring-forward day becomes 03:30 (#337). Display
+// therefore reads those digits as UTC (`displayDateOf`), and a date change
+// keeps the stored time (`withPickedDate`). Fluent's time picker only takes
+// a local Date, so it still shows such a time an hour on.
 
 import type { DateTimeBehavior, DateTimeFormat } from '../mock/metadata';
 
@@ -133,9 +139,74 @@ export function behaviorHint(col: DateTimeColumnLike, at?: Date | null): string 
   );
 }
 
+/**
+ * What to format a stored value with: a Date, and for a time zone
+ * independent value `timeZone: 'UTC'`, so its digits show as stored even
+ * when they fall in the browser's DST gap (#337). Null when unreadable.
+ */
+export function displayDateOf(
+  value: string,
+  col: DateTimeColumnLike,
+): { date: Date; timeZone?: 'UTC' } | null {
+  if (behaviorOf(col) === 'TimeZoneIndependent') {
+    const m = PARTS_RE.exec(value.trim());
+    if (!m) return null;
+    const [, y, mo, d, h, mi, s] = m;
+    const date = new Date(Date.UTC(+y, +mo - 1, +d, +(h ?? 0), +(mi ?? 0), +(s ?? 0)));
+    // Reject rollovers like 2026-02-31.
+    if (date.getUTCMonth() !== +mo - 1 || date.getUTCDate() !== +d) return null;
+    return { date, timeZone: 'UTC' };
+  }
+  const date = parseDateTimeValue(value, col);
+  return date ? { date } : null;
+}
+
 /** Display text for a stored value (diff / merge panes), without shifting it. */
 export function formatDateTimeValue(value: string, col: DateTimeColumnLike): string {
-  const d = parseDateTimeValue(value, col);
-  if (!d) return value;
-  return isDateOnlyColumn(col) ? d.toLocaleDateString() : d.toLocaleString();
+  const shown = displayDateOf(value, col);
+  if (!shown) return value;
+  const opts = { timeZone: shown.timeZone };
+  return isDateOnlyColumn(col)
+    ? shown.date.toLocaleDateString(undefined, opts)
+    : shown.date.toLocaleString(undefined, opts);
+}
+
+/**
+ * The value after the date picker picks `date`, keeping the time of day
+ * already set (seconds drop to 00, as the pickers don't show them). A time
+ * zone independent value keeps its stored hour and minute, which its local
+ * Date may have moved out of a DST gap (#337).
+ */
+export function withPickedDate(
+  value: string | undefined,
+  date: Date,
+  col: DateTimeColumnLike,
+): string {
+  const dateOnly = isDateOnlyColumn(col);
+  if (behaviorOf(col) === 'TimeZoneIndependent' && !dateOnly) {
+    const m = value ? PARTS_RE.exec(value.trim()) : null;
+    const time = m?.[4] ? `${m[4]}:${m[5]}:00` : '00:00:00';
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${time}Z`;
+  }
+  const current = parseDateTimeValue(value, col);
+  return serializeDateTimeValue(combineDateAndTime(date, dateOnly ? null : current), col);
+}
+
+/**
+ * The value after the time picker picks `time`, or null when nothing should
+ * change: no date yet, or the time already shown. The picker reports its
+ * time on blur too, and a time in a DST gap is shown an hour on, so sending
+ * the shown time back would move it (#337).
+ */
+export function withPickedTime(
+  value: string | undefined,
+  time: Date,
+  col: DateTimeColumnLike,
+): string | null {
+  const current = parseDateTimeValue(value, col);
+  if (!current) return null;
+  if (time.getHours() === current.getHours() && time.getMinutes() === current.getMinutes()) {
+    return null;
+  }
+  return serializeDateTimeValue(combineDateAndTime(current, time), col);
 }

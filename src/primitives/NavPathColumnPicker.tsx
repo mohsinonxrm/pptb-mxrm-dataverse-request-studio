@@ -53,6 +53,7 @@ import {
   type TableMeta,
 } from '../mock/metadata';
 import { useLiveTable } from '../host/useLiveMetadata';
+import { scopedColumns, scopedNavs, useAdvancedFindOnly } from '../state/metadataScope';
 
 const useStyles = makeStyles({
   // Trigger button. Fluent v9's <Button> appearance variants paint their
@@ -237,40 +238,6 @@ function navWalk(
 }
 
 /**
- * Resolves an externally-committed value (the path that went on the wire).
- * Convention: the LAST segment is the leaf column; everything before is
- * a sequence of N:1 nav segments. So we navWalk all but the last, then
- * look up the leaf on the deepest entity.
- */
-function resolveExternalPath(
-  rootTable: string,
-  path: string,
-): {
-  tables: TableMeta[];
-  current: TableMeta | undefined;
-  leaf?: ColumnMeta;
-  pendingTarget?: string;
-} {
-  if (!path) {
-    const root = findTable(rootTable);
-    return { tables: root ? [root] : [], current: root };
-  }
-  const segs = path.split('/');
-  const navSegs = segs.slice(0, -1);
-  const leafSeg = segs[segs.length - 1];
-  const walked = navWalk(rootTable, navSegs);
-  if (!walked.current) {
-    return {
-      tables: walked.tables,
-      current: undefined,
-      pendingTarget: walked.pendingTarget,
-    };
-  }
-  const leaf = walked.current.columns.find((c) => c.logicalName === leafSeg);
-  return { tables: walked.tables, current: walked.current, leaf };
-}
-
-/**
  * Display label for a path segment, given the parent entity it sits on
  * and the desired naming mode.
  */
@@ -348,9 +315,15 @@ export function NavPathColumnPicker({
 
   // ── Options at the current draft-walked level ──
   const current = draftWalked.current;
+  const advancedFindOnly = useAdvancedFindOnly();
   const { columnsAtLevel, navsAtLevel } = useMemo(() => {
     if (!current) return { columnsAtLevel: [] as ColumnMeta[], navsAtLevel: [] as NavProperty[] };
-    let cols = current.columns;
+    // The options follow "Advanced Find only" (#44); the current value is
+    // resolved from the full table above, so it keeps showing.
+    // Read pickers ($filter, $apply groupby): only readable columns.
+    let cols = scopedColumns(current.columns, advancedFindOnly).filter(
+      (c) => c.isValidForRead !== false,
+    );
     // Always hide File / Image — never meaningful in filter/groupby paths.
     cols = cols.filter((c) => c.attributeType !== 'File' && c.attributeType !== 'Image');
     if (allowedColumnTypes) cols = cols.filter((c) => allowedColumnTypes.includes(c.attributeType));
@@ -358,11 +331,11 @@ export function NavPathColumnPicker({
     // Only N:1 navs are eligible drill-in steps — per spec, conditions on
     // collection-valued navs nested in a lookup are forbidden. This also
     // makes the forbidden lambda-in-lookup pattern impossible to construct.
-    const navs = current.navigationProperties.filter(
+    const navs = scopedNavs(current.navigationProperties, advancedFindOnly).filter(
       (n: NavProperty) => n.cardinality === 'ManyToOne',
     );
     return { columnsAtLevel: cols, navsAtLevel: navs };
-  }, [current, allowedColumnTypes, leafFilter]);
+  }, [current, allowedColumnTypes, leafFilter, advancedFindOnly]);
 
   const filteredColumns = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -410,8 +383,8 @@ export function NavPathColumnPicker({
   };
 
   // ── Trigger label ──
-  // External `value` follows the "navs… + leaf" convention. Resolve via
-  // resolveExternalPath so every segment is labeled in the right scope.
+  // External `value` follows the "navs… + leaf" convention. Resolve each
+  // segment in its own table's scope so every segment is labeled right.
   const triggerLabel = useMemo(() => {
     if (!value) return placeholder;
     const segs = value.split('/');

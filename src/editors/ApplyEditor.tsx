@@ -33,7 +33,7 @@
 // component for the editing surface. Encoding is delegated to
 // `groupToOData(prefilter, table)`.
 
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   Button,
   Combobox,
@@ -55,13 +55,14 @@ import {
   Filter20Filled,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
-import { findTable } from '../mock/metadata';
+import { findTable, type ColumnMeta } from '../mock/metadata';
 import { NavPathColumnPicker } from '../primitives/NavPathColumnPicker';
 import { SortableList, SortableItem } from '../primitives/Sortable';
 import { PaneHead } from './PaneHead';
 import { FilterEditor } from './filter/FilterEditor';
 import { emptyTree, groupToOData, type FilterGroup } from './filter/filterTree';
 import type { RequestGroup } from '../registry/requestTypes';
+import { isColumnInScope, useAdvancedFindOnly } from '../state/metadataScope';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -181,29 +182,48 @@ export function ApplyEditor({
   // ── Column filters ──
   // groupby: per doc, DateTime is NOT supported. Memo / File / Image excluded
   //   because aggregating large blobs is meaningless server-side.
-  const groupableCols = useMemo(
-    () =>
-      tbl
-        ? tbl.columns.filter(
-            (c) =>
-              c.attributeType !== 'DateTime' &&
-              c.attributeType !== 'Memo' &&
-              c.attributeType !== 'File' &&
-              c.attributeType !== 'Image',
-          )
-        : [],
-    [tbl],
+  // The pickers follow "Advanced Find only" (#44), keeping the columns the
+  // spec already uses so they still resolve.
+  const advancedFindOnly = useAdvancedFindOnly();
+  const usedCols = useMemo(
+    () => new Set([...spec.groupby, ...spec.aggregates.map((a) => a.col)]),
+    [spec.groupby, spec.aggregates],
+  );
+  const offered = useCallback(
+    (c: ColumnMeta) =>
+      usedCols.has(c.logicalName) ||
+      (c.isValidForRead !== false && isColumnInScope(c, advancedFindOnly)),
+    [advancedFindOnly, usedCols],
   );
 
   // Per-function eligibility — derive once per render. The picker for each
   // aggregate row reads `colsFor(a.fn)` to scope choices.
   const colsFor = useMemo(
-    () => (fn: AggFn) => (tbl ? tbl.columns.filter((c) => isAggregateEligible(fn, c)) : []),
-    [tbl],
+    () => (fn: AggFn) =>
+      tbl ? tbl.columns.filter((c) => offered(c) && isAggregateEligible(fn, c)) : [],
+    [tbl, offered],
   );
   // Default seed for "Add scalar aggregate" — numeric columns are the safest
   // starting point.
-  const numericCols = useMemo(() => (tbl ? tbl.columns.filter(isNumeric) : []), [tbl]);
+  const numericCols = useMemo(
+    () => (tbl ? tbl.columns.filter((c) => offered(c) && isNumeric(c)) : []),
+    [tbl, offered],
+  );
+
+  // ── Pipeline preview — built from the encoder so the user sees the
+  //    actual wire format and not a hand-pretty-printed version. These two
+  //    hooks run before the `!tbl` return below: called after it, a table
+  //    arriving after the first render changed the hook count, which React
+  //    throws on (found by react-hooks/rules-of-hooks, #273). ──
+  const pipelinePreview = useMemo(() => applyToOData(spec, tbl) || '(empty)', [spec, tbl]);
+
+  // Stable ids for the aggregate row DnD. Legacy persisted aggregates may
+  // lack an `id` — fall back to a positional-but-stable token. Memo keyed
+  // on the spec.aggregates length+content so we don't churn ids each render.
+  const aggIds = useMemo(
+    () => spec.aggregates.map((a, i) => a.id ?? `__agg_${i}__`),
+    [spec.aggregates],
+  );
 
   if (!tbl) return null;
 
@@ -251,18 +271,6 @@ export function ApplyEditor({
     setSpec({ ...spec, aggregates: spec.aggregates.map((a, j) => (j === i ? { ...a, ...p } : a)) });
   const rmAgg = (i: number) =>
     setSpec({ ...spec, aggregates: spec.aggregates.filter((_, j) => j !== i) });
-
-  // ── Pipeline preview — built from the encoder so the user sees the
-  //    actual wire format and not a hand-pretty-printed version. ──
-  const pipelinePreview = useMemo(() => applyToOData(spec, tbl) || '(empty)', [spec, tbl]);
-
-  // Stable ids for the aggregate row DnD. Legacy persisted aggregates may
-  // lack an `id` — fall back to a positional-but-stable token. Memo keyed
-  // on the spec.aggregates length+content so we don't churn ids each render.
-  const aggIds = useMemo(
-    () => spec.aggregates.map((a, i) => a.id ?? `__agg_${i}__`),
-    [spec.aggregates],
-  );
 
   // ── Render ──
   return (
@@ -535,8 +543,8 @@ export function ApplyEditor({
                               // Reset col to the first one eligible for the new fn if the
                               // current pick isn't valid (e.g. switching avg → max keeps
                               // numeric; switching sum → min from datetime needs reset).
-                              const eligibleForNewFn = tbl.columns.filter((c) =>
-                                isAggregateEligible(fn, c),
+                              const eligibleForNewFn = tbl.columns.filter(
+                                (c) => offered(c) && isAggregateEligible(fn, c),
                               );
                               const stillValid = eligibleForNewFn.some(
                                 (c) => c.logicalName === a.col,

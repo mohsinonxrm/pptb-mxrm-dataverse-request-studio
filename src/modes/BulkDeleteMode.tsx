@@ -76,9 +76,11 @@ import type { RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
-import { copyToClipboardSafe } from '../host/pptbBridge';
+import { useHostSession } from '../host/HostContext';
+import { EnvironmentBadge } from '../shell/confirmWrite';
 import { hashState, type SavedRequest } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
 import {
   ASYNC_STATE,
   ASYNC_STATUS,
@@ -101,6 +103,7 @@ import {
   type JobStatus,
   type MatchCount,
 } from '../engine/bulkDeleteExecutor';
+import { copyText } from '../shell/copy';
 
 const MODE_ID = 'bulk-delete' as const;
 const GROUP = 'bulk' as const;
@@ -125,7 +128,9 @@ export function BulkDeleteMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType(MODE_ID);
   const [state, setState] = useState<BulkDeleteState>(() => ({ ...defaults(), dirty: new Set() }));
   const { table: liveTable } = useLiveTable(state.table || null);
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [activePath, setActivePath] = useState('target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
@@ -144,9 +149,11 @@ export function BulkDeleteMode({ themeMode }: { themeMode: ThemeMode }) {
   }, []);
 
   const tbl = findTable(state.table);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildBulkDelete(state), [state, liveTable]);
   const { body, problems, deletesAll } = useMemo(
     () => buildBulkDeleteBody(state, now),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
     [state, liveTable, now],
   );
   const ruleCount = useMemo(() => countRules(state.filter), [state.filter]);
@@ -172,7 +179,7 @@ export function BulkDeleteMode({ themeMode }: { themeMode: ThemeMode }) {
   const onConfirmed = async () => {
     setConfirmOpen(false);
     setLoading(true);
-    const res = await executeBulkDelete(state);
+    const res = await executeBulkDelete(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setJobId(res.ok ? jobIdFromResult(res.body) : null);
     setLoading(false);
@@ -219,6 +226,10 @@ export function BulkDeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     setJobId(null);
     setActivePath('filter');
   };
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.table) return null;
@@ -227,11 +238,10 @@ export function BulkDeleteMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: MODE_ID,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.table]),
+    }, [currentSerialized, isDirty, lastSavedId, state.table, onSavedLatest, onLoadSavedLatest]),
   );
 
   // ── Sidebar ──
@@ -374,6 +384,7 @@ export function BulkDeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     case 'headers':
       pane = (
         <HeadersEditor
+          policy="impersonation"
           items={state.headers}
           setItems={(h) => set('headers', h, 'headers')}
           group={GROUP}
@@ -663,6 +674,8 @@ function ConfirmDialog({
   const [count, setCount] = useState<MatchCount | null>(null);
   const [typed, setTyped] = useState('');
   const [ackAll, setAckAll] = useState(false);
+  const host = useHostSession();
+  const envHost = host.environmentUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   useEffect(() => {
     let cancelled = false;
     void countMatching(state).then((c) => {
@@ -698,6 +711,21 @@ function ConfirmDialog({
                 what it already deleted.
               </MessageBarBody>
             </MessageBar>
+            {/* The environment the job runs in (#241). */}
+            {host.connected && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+                <Caption1 style={{ color: tokens.colorNeutralForeground3 }}>Environment</Caption1>
+                <Text weight="semibold">{host.connectionName || envHost || '(no connection)'}</Text>
+                <EnvironmentBadge environment={host.environment} />
+                {host.connectionName && envHost && (
+                  <Caption1
+                    style={{ color: tokens.colorNeutralForeground3, wordBreak: 'break-all' }}
+                  >
+                    {envHost}
+                  </Caption1>
+                )}
+              </div>
+            )}
             <div>
               {count === null ? (
                 <Spinner size="tiny" label="Counting matching rows…" labelPosition="after" />
@@ -857,7 +885,11 @@ function JobStatusPanel({ jobId, result }: { jobId: string; result: ExecResult }
         />
         <Button
           icon={<Copy20Regular />}
-          onClick={() => void copyToClipboardSafe(jobId).then(() => setCopied(true))}
+          onClick={() =>
+            void copyText(jobId, 'the job ID', { toastOnSuccess: false }).then(
+              (ok) => ok && setCopied(true),
+            )
+          }
         >
           {copied ? 'Copied' : 'Copy job id'}
         </Button>

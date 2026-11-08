@@ -15,7 +15,7 @@
 // Reference docs:
 //   image-column-data · files-images-overview
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Table20Regular,
   Table20Filled,
@@ -32,7 +32,6 @@ import {
   ArrowUpload20Filled,
   ArrowDownload20Filled,
   Delete20Filled,
-  Warning20Filled,
 } from '@fluentui/react-icons';
 import {
   RadioGroup,
@@ -72,6 +71,9 @@ import { checkUploadSize, type ManageImageState, type FileOperation } from '../s
  * source by ~33% — for the pre-flight advisory a rough estimate (with padding
  * accounted for) is enough; we don't need to actually decode.
  */
+/** Largest chosen image previewed (an object URL, not its bytes; #222). */
+const MAX_PREVIEW_BYTES = 5 * 1024 * 1024;
+
 function approxBytesFromBase64(b64: string): number {
   if (!b64) return 0;
   const padding = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
@@ -93,6 +95,8 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
+import { invalidUrlPartReason } from '../primitives/urlParts';
 
 const initialState = (): ManageImageState => ({
   // Empty initial state — user picks everything from live metadata.
@@ -103,6 +107,7 @@ const initialState = (): ManageImageState => ({
   downloadSize: 'thumbnail',
   source: { kind: 'file' },
   fileName: '',
+  fileSize: 0,
   bodyBase64: '',
   bodyUrl: '',
   mimeType: 'image/png',
@@ -124,6 +129,29 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('manage-image');
   const draft = useModeDraft('manage-image', deserializeManageImage, initialState);
   const [state, setState] = useState(draft.state);
+  // The chosen image's preview: an object URL for the File, never its bytes
+  // in state (#222). Up to MAX_PREVIEW_BYTES; revoked when replaced and on
+  // unmount.
+  // `name` is the file it shows: a preview only applies while that's still
+  // the request's file name (not after loading a saved request, or typing
+  // another name under Paste base64).
+  const [preview, setPreview] = useState<{ url: string; name: string } | null>(null);
+  const previewRef = useRef<string | null>(null);
+  const onFile = useCallback((f: File | null) => {
+    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    previewRef.current =
+      f && f.type.startsWith('image/') && f.size <= MAX_PREVIEW_BYTES
+        ? URL.createObjectURL(f)
+        : null;
+    setPreview(previewRef.current && f ? { url: previewRef.current, name: f.name } : null);
+  }, []);
+  const previewUrl = preview && preview.name === state.fileName ? preview.url : null;
+  useEffect(
+    () => () => {
+      if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    },
+    [],
+  );
   // Live-metadata subscription so child editors re-render when columns/relationships land.
   // The live table is a memo dependency below: build*() reads metadata via
   // findTable(), which is empty until the fetch lands — keying on `state`
@@ -135,7 +163,9 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
   const [loading, setLoading] = useState(false);
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildManageImage(state), [state, liveTable]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const pipeline = useMemo(() => manageImagePipeline(state), [state, liveTable]);
   const tbl = findTable(state.table);
   const imageCol = useMemo(
@@ -164,13 +194,18 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const firstStepMethod = pipeline[0]?.method ?? 'PATCH';
 
+  // Ids and names that go into the URL as-is (#221).
+  const urlPartProblem = invalidUrlPartReason(
+    [['Record id', state.recordId]],
+    [['Image column', state.imageColumn]],
+  );
   const disabledReason = !tbl
     ? 'Pick a target table first.'
     : !state.recordId
       ? 'Pick a source record.'
       : !state.imageColumn
         ? 'Pick an image column.'
-        : state.operation === 'upload' && !state.bodyBase64 && state.source.kind === 'file'
+        : state.operation === 'upload' && state.source.kind === 'file' && !state.fileName
           ? 'Pick an image file.'
           : state.operation === 'download' &&
               state.downloadSize === 'full' &&
@@ -178,7 +213,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
             ? `${state.imageColumn} doesn't store full-size images (canStoreFullImage = false).`
             : state.headers.some((h) => h.enabled && !h.name)
               ? 'Fix empty header name.'
-              : null;
+              : urlPartProblem;
 
   // Bound-record name capture for the WriteResultCard narrative.
   const [recordName, setRecordName] = useState<string>('');
@@ -209,7 +244,9 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
   };
 
   // ── Save / Load ──
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const currentSerialized = useMemo(() => serializeManageImage(state), [state]);
@@ -231,6 +268,8 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
       return;
     }
     setState(deserializeManageImage(snap));
+    // The loaded request has no file bytes; drop the last file's preview.
+    onFile(null);
     setLastSavedId(entry.id);
     setLastSavedHash(hashState(snap));
     setResult(null);
@@ -250,6 +289,10 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedId(keepId);
     setLastSavedHash(keepHash);
   };
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.table) return null;
@@ -258,11 +301,10 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: 'manage-image' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.table]),
+    }, [currentSerialized, isDirty, lastSavedId, state.table, onSavedLatest, onLoadSavedLatest]),
   );
 
   // ── PPTB host-limitation advisory ──
@@ -519,8 +561,8 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
           setSource={(s) => set('source', s, 'source')}
           fileName={state.fileName}
           setFileName={(n) => set('fileName', n, 'source')}
-          fileSize={0}
-          setFileSize={() => undefined}
+          fileSize={state.fileSize ?? 0}
+          setFileSize={(n) => set('fileSize', n, 'source')}
           mimeType={state.mimeType}
           setMimeType={(m) => set('mimeType', m as ManageImageState['mimeType'], 'source')}
           bodyBase64={state.bodyBase64}
@@ -529,6 +571,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
           setBodyUrl={(u) => set('bodyUrl', u, 'source')}
           accept="image/png,image/jpeg,image/gif,image/bmp,image/tiff"
           group="binary"
+          onFile={onFile}
         />
       );
       break;
@@ -552,7 +595,10 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
             setSource={(s) => set('source', s, 'source')}
             setBodyBase64={(b) => set('bodyBase64', b, 'source')}
             setFileName={(n) => set('fileName', n, 'source')}
+            setFileSize={(n) => set('fileSize', n, 'source')}
             setMimeType={(m) => set('mimeType', m as ManageImageState['mimeType'], 'source')}
+            previewUrl={previewUrl}
+            onFile={onFile}
           />
           <BinaryPipelineCard
             steps={pipeline}
@@ -560,7 +606,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
             sizeAdvisory={
               state.operation === 'upload'
                 ? checkUploadSize(
-                    approxBytesFromBase64(state.bodyBase64),
+                    state.fileSize || approxBytesFromBase64(state.bodyBase64),
                     imageCol?.maxSizeInKB ? imageCol.maxSizeInKB * 1024 : undefined,
                     'image',
                   )
@@ -578,7 +624,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
           sizeAdvisory={
             state.operation === 'upload'
               ? checkUploadSize(
-                  approxBytesFromBase64(state.bodyBase64),
+                  state.fileSize || approxBytesFromBase64(state.bodyBase64),
                   imageCol?.maxSizeInKB ? imageCol.maxSizeInKB * 1024 : undefined,
                   'image',
                 )
@@ -683,7 +729,10 @@ function PreviewCard({
   setSource,
   setBodyBase64,
   setFileName,
+  setFileSize,
   setMimeType,
+  previewUrl,
+  onFile,
 }: {
   state: ManageImageState;
   imageCol: ImageColumnMeta | undefined;
@@ -691,9 +740,20 @@ function PreviewCard({
   setSource: (s: ManageImageState['source']) => void;
   setBodyBase64: (b: string) => void;
   setFileName: (n: string) => void;
+  setFileSize: (n: number) => void;
   setMimeType: (m: ManageImageState['mimeType']) => void;
+  previewUrl: string | null;
+  onFile: (f: File | null) => void;
 }) {
   const s = useStudioStyles();
+  // A chosen file previews through its object URL; pasted base64 (capped at
+  // MAX_PASTED_BASE64_BYTES) as a data URL (#222).
+  const preview =
+    state.source.kind === 'file'
+      ? previewUrl
+      : state.source.kind === 'base64' && state.bodyBase64
+        ? `data:${state.mimeType};base64,${state.bodyBase64}`
+        : null;
   const isThumb = imageCol?.isPrimaryImage && !imageCol?.canStoreFullImage;
 
   return (
@@ -732,22 +792,22 @@ function PreviewCard({
             style={{
               width: 144,
               height: 144,
-              background: state.bodyBase64
-                ? `url(data:${state.mimeType};base64,${state.bodyBase64}) center/cover`
+              background: preview
+                ? `url("${preview}") center/cover`
                 : tokens.colorNeutralBackground3,
               borderRadius: tokens.borderRadiusMedium,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: state.bodyBase64 ? '#fff' : tokens.colorNeutralForeground3,
+              color: preview ? '#fff' : tokens.colorNeutralForeground3,
               fontWeight: 700,
               fontSize: 40,
               border: `1px solid ${tokens.colorNeutralStroke2}`,
             }}
           >
-            {!state.bodyBase64 && initials}
+            {!preview && initials}
           </div>
-          {state.bodyBase64 && (
+          {(preview || (state.source.kind === 'file' && state.fileName)) && (
             <Caption1
               style={{ color: tokens.colorNeutralForeground3, display: 'block', marginTop: 4 }}
             >
@@ -764,8 +824,8 @@ function PreviewCard({
               setSource={setSource}
               fileName={state.fileName}
               setFileName={setFileName}
-              fileSize={0}
-              setFileSize={() => undefined}
+              fileSize={state.fileSize ?? 0}
+              setFileSize={setFileSize}
               mimeType={state.mimeType}
               setMimeType={(m) => setMimeType(m as ManageImageState['mimeType'])}
               bodyBase64={state.bodyBase64}
@@ -774,6 +834,7 @@ function PreviewCard({
               setBodyUrl={() => undefined}
               accept="image/png,image/jpeg,image/gif,image/bmp,image/tiff"
               group="binary"
+              onFile={onFile}
             />
           </div>
         )}

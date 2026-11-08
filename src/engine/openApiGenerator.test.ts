@@ -44,7 +44,6 @@ function inputs(
   return { method, built: b, headers: {}, ...extra };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Doc = any;
 const doc = (i: CodegenInputs): Doc => JSON.parse(generateOpenApi(i));
 const col = (name: string) => account.columns.find((c) => c.logicalName === name)!;

@@ -81,9 +81,10 @@ import type { RecentRun } from '../state/readState';
 import type { ThemeMode } from '../theme/theme';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
-import { copyToClipboardSafe, isEmbedded } from '../host/pptbBridge';
+import { isEmbedded } from '../host/pptbBridge';
 import { hashState, type SavedRequest } from '../state/savedRequests';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
 import {
   BULK_ELASTIC_SUGGESTED,
   BULK_OPERATIONS,
@@ -104,6 +105,7 @@ import {
   type SerializedBulkWriteState,
 } from '../engine/bulkWrite';
 import { checkBulkSupport, executeBulkWrite, idsFromResult } from '../engine/bulkWriteExecutor';
+import { copyText } from '../shell/copy';
 
 const MODE_ID = 'bulk-write' as const;
 const GROUP = 'bulk' as const;
@@ -127,7 +129,9 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType(MODE_ID);
   const [state, setState] = useState(initialState);
   const { table: liveTable } = useLiveTable(state.table || null);
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
@@ -141,7 +145,9 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(null);
 
   const tbl = findTable(state.table);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildBulkWrite(state), [state, liveTable]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const { body, issues } = useMemo(() => buildBulkWriteBody(state), [state, liveTable]);
   const info = OPERATION_INFO[state.operation];
 
@@ -281,6 +287,10 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(null);
     setActivePath('rows');
   };
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.table) return null;
@@ -289,11 +299,10 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: MODE_ID,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.table]),
+    }, [currentSerialized, isDirty, lastSavedId, state.table, onSavedLatest, onLoadSavedLatest]),
   );
 
   // ── Sidebar ──
@@ -538,6 +547,13 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
           method="POST"
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={{
+            operation: `Bulk Write · ${state.operation}`,
+            table: state.table,
+            scope: { kind: 'records', count: state.rows.length },
+            highImpact: true,
+          }}
           disabledReason={disabledReason ?? bypassBlocker}
           loading={loading}
           onExecute={onExecute}
@@ -1102,7 +1118,12 @@ function BulkResult({ result, operation }: { result: ExecResult; operation: Bulk
           <div>
             <Button
               icon={<Copy20Regular />}
-              onClick={() => void copyToClipboardSafe(ids.join('\n')).then(() => setCopied(true))}
+              onClick={() =>
+                void copyText(ids.join('\n'), 'the IDs', {
+                  toastOnSuccess: false,
+                  shown: false,
+                }).then((ok) => ok && setCopied(true))
+              }
             >
               {copied ? 'Copied' : 'Copy ids'}
             </Button>

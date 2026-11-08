@@ -274,7 +274,7 @@ async function throttledMetadataQuery<T>(query: string): Promise<T> {
 // ── Entity metadata ────────────────────────────────────────────────────
 
 /** Fetch every entity in the org. Sorted client-side by display name. */
-export async function getAllEntities(advancedFindOnly: boolean = true): Promise<EntityMetadata[]> {
+export async function getAllEntities(advancedFindOnly: boolean = false): Promise<EntityMetadata[]> {
   if (!isDataverseAvailable()) throw new Error('PPTB Dataverse API not available');
 
   let query =
@@ -320,7 +320,8 @@ export function isBinaryColumn(a: Pick<AttributeMetadata, 'AttributeType' | 'Att
 /** Entity attributes — basic projection. Type-specific props via separate calls. */
 export async function getEntityAttributes(
   logicalName: string,
-  advancedFindOnly: boolean = true,
+  // Unfiltered by default: the pickers scope locally (#44).
+  advancedFindOnly: boolean = false,
 ): Promise<AttributeMetadata[]> {
   if (!isDataverseAvailable()) throw new Error('PPTB Dataverse API not available');
 
@@ -584,7 +585,8 @@ export async function getAttributesByTypeCast(
 /** Three parallel queries — 1:N + N:1 + N:N. Sorted client-side by SchemaName. */
 export async function getEntityRelationships(
   logicalName: string,
-  advancedFindOnly: boolean = true,
+  // Unfiltered by default: the pickers scope locally (#44).
+  advancedFindOnly: boolean = false,
 ): Promise<{
   oneToMany: RelationshipMetadata[];
   manyToOne: RelationshipMetadata[];
@@ -675,24 +677,30 @@ export interface EntityKeyMetadata {
  * Used for alternate-key columns that the basic (IsValidForAdvancedFind)
  * attribute load leaves out (#64). Attributes that fail to load are omitted.
  */
+/** What `getAttributeTypes` returns per column: enough for `attributeTypeOf` (#318). */
+export type AttributeTypeRow = Pick<
+  AttributeMetadata,
+  'LogicalName' | 'AttributeType' | 'AttributeTypeName'
+>;
+
 export async function getAttributeTypes(
   logicalName: string,
   attributeNames: string[],
-): Promise<{ LogicalName: string; AttributeType: string }[]> {
+): Promise<AttributeTypeRow[]> {
   if (!isDataverseAvailable()) throw new Error('PPTB Dataverse API not available');
   const results = await Promise.all(
     attributeNames.map(async (a) => {
       try {
-        return await throttledMetadataQuery<{ LogicalName: string; AttributeType: string }>(
+        return await throttledMetadataQuery<AttributeTypeRow>(
           `EntityDefinitions(LogicalName='${logicalName}')/Attributes(LogicalName='${a}')` +
-            `?$select=LogicalName,AttributeType`,
+            `?$select=LogicalName,AttributeType,AttributeTypeName`,
         );
       } catch {
         return null;
       }
     }),
   );
-  return results.filter((r): r is { LogicalName: string; AttributeType: string } => !!r);
+  return results.filter((r): r is AttributeTypeRow => !!r);
 }
 
 export async function getEntityKeys(logicalName: string): Promise<EntityKeyMetadata[]> {

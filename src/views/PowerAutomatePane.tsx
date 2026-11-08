@@ -18,6 +18,7 @@ import {
 } from '@fluentui/react-components';
 import { Copy20Regular, Checkmark20Filled, Flash20Filled } from '@fluentui/react-icons';
 import type { PowerAutomateActionSpec, PowerAutomateField } from '../engine/codeGenerators';
+import { copyText } from '../shell/copy';
 
 // Form-style view that mirrors the Dataverse connector's "List rows" /
 // "Get a row by ID" action UI verbatim. Each row is a label + read-only
@@ -94,7 +95,7 @@ export function PowerAutomatePane({ spec }: PowerAutomatePaneProps) {
             size="small"
             appearance="outline"
             icon={<Copy20Regular />}
-            onClick={() => navigator.clipboard?.writeText(allAsText)}
+            onClick={() => void copyText(allAsText, 'the fields', { shown: false })}
           >
             Copy all
           </Button>
@@ -166,15 +167,12 @@ function PARow({
   const [copied, setCopied] = useState(false);
   const onCopy = () => {
     if (!field.value) return;
-    navigator.clipboard
-      ?.writeText(field.value)
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1400);
-      })
-      .catch(() => {
-        /* ignore */
-      });
+    // The button shows "Copied"; a failure is still reported (#242).
+    void copyText(field.value, `the ${field.label} value`, { toastOnSuccess: false }).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    });
   };
 
   return (

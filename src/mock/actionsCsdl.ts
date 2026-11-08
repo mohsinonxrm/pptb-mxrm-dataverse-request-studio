@@ -18,6 +18,8 @@
 //   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/reference/actions
 //   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/reference/functions
 
+import type { MessagePublisher } from '../host/messagePublishers';
+
 // ──────────────────────────────────────────────────────────────
 // Parameter type model — covers the EDM types Dataverse uses
 // ──────────────────────────────────────────────────────────────
@@ -96,6 +98,11 @@ export interface CsdlAction {
   isComposable?: boolean;
   /** Tag the source so the registry can route exec-action / exec-customapi / exec-customaction correctly. */
   source: 'oob' | 'custom-api' | 'custom-action';
+  /**
+   * Who published a Custom API or Custom Action (#248), from its solution.
+   * Unset for OOB messages and when the solutions lookup failed.
+   */
+  publisher?: MessagePublisher;
   /** Inline description from the CSDL (annotated builds only). */
   description?: string;
   /**

@@ -31,11 +31,10 @@ import {
   type UpsertState,
   type DeleteState,
   type MergeState,
-  type LookupFieldValue,
   type CreateFieldValue,
 } from '../state/writeState';
 import type { AssociateState, DisassociateState } from '../state/relateState';
-import { isCollectionValuedNav, isSingleValuedNav } from '../state/relateState';
+import { isSingleValuedNav } from '../state/relateState';
 
 // Re-export execute builders so callers don't have to know they live in a
 // separate module. Same surface contract — keeps imports terse.

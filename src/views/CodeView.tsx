@@ -38,6 +38,7 @@ import {
 import { PowerAutomatePane } from './PowerAutomatePane';
 import type { ThemeMode } from '../theme/theme';
 import type { RequestGroup } from '../registry/requestTypes';
+import { copyText } from '../shell/copy';
 
 // Two tabs (top-level): "Code" (read-only Monaco, multi-format) and "Editor"
 // (writable Monaco — playground starter code per format, with copy/reset).
@@ -240,7 +241,7 @@ function CodePane({
                 icon={<Copy20Regular />}
                 appearance="subtle"
                 size="small"
-                onClick={() => navigator.clipboard?.writeText(code)}
+                onClick={() => void copyText(code, 'the code')}
               >
                 Copy
               </Button>
@@ -366,7 +367,7 @@ function EditorPane({
             icon={<Copy20Regular />}
             appearance="subtle"
             size="small"
-            onClick={() => navigator.clipboard?.writeText(code)}
+            onClick={() => void copyText(code, 'the code')}
           >
             Copy
           </Button>

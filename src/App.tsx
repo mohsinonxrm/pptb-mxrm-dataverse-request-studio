@@ -46,7 +46,7 @@ import { findTable } from './mock/metadata';
 import { _setTableLookup } from './editors/filter/filterTree';
 import { HostProvider, useHostSession } from './host/HostContext';
 import { SettingsProvider } from './host/usePersistedSettings';
-import { OpenSettingsProvider } from './host/useOpenSettings';
+import { OpenScopeProvider } from './host/useOpenScope';
 import { activeOrg, onActiveOrgChange } from './host/activeOrg';
 
 // Wire metadata lookup into the filter-tree encoder (avoids a circular import).
@@ -107,14 +107,14 @@ function ThemedApp() {
 
   return (
     <FluentProvider theme={fluentTheme} style={{ height: '100vh' }}>
-      <OpenSettingsProvider>
+      <OpenScopeProvider>
         <Frame
           themeMode={themeMode}
           setThemeMode={setLocalTheme}
           activeId={activeId}
           setActiveId={setActiveId}
         />
-      </OpenSettingsProvider>
+      </OpenScopeProvider>
       {/* In-app confirm dialogs and notices; replaces the native confirm/alert boxes (#111). */}
       <AppDialogHost />
     </FluentProvider>

@@ -48,6 +48,12 @@ import type {
 import type { ManageFileState, ManageImageState, ManageAttachmentState } from './binaryState';
 import { getEnv } from '../mock/environment';
 import { stripCredentialRows } from '../engine/sensitiveHeaders';
+import { invalidUrlPartReason } from '../primitives/urlParts';
+import {
+  collectInvalidNames,
+  expandNameProblems,
+  type FilterGroup,
+} from '../editors/filter/filterTree';
 import {
   autoSuggestBatch,
   autoSuggestExecuteMultiple,
@@ -704,12 +710,156 @@ export function buildSavedExport(entries: SavedRequest[], orgScope: string): str
   return JSON.stringify(file, null, 2);
 }
 
+type UrlPart = readonly [label: string, value: unknown];
+
+/** What an entry puts into a URL: ids, names, and problems found in its query trees. */
+interface EntryUrlParts {
+  ids: UrlPart[];
+  names: UrlPart[];
+  /** From the filter / $expand trees (column, nav and alias names). */
+  problems?: () => string[];
+}
+
+const isGroup = (v: unknown): v is FilterGroup =>
+  !!v && typeof v === 'object' && Array.isArray((v as FilterGroup).rules);
+const filterNames = (v: unknown) => (isGroup(v) ? collectInvalidNames(v) : []);
+const expandNames = (v: unknown) =>
+  Array.isArray(v) ? expandNameProblems(v as Parameters<typeof expandNameProblems>[0]) : [];
+
+/**
+ * The values each mode puts into a URL as-is: record ids (GUIDs), names
+ * (tables, navigation properties, columns) and its query trees. Batch and
+ * ExecuteMultiple aren't listed: their items also hold alternate keys and
+ * `$n` references, and their builder checks those per item.
+ */
+const IMPORT_URL_PARTS: Partial<
+  Record<SavedModeId, (s: Record<string, unknown>) => EntryUrlParts>
+> = {
+  'retrieve-multiple': (s) => ({
+    ids: [],
+    names: [
+      ...listOf(s.select, 'Selected column'),
+      ...(Array.isArray(s.orderby)
+        ? s.orderby.map((o) => ['Sort column', (o as { col?: unknown })?.col] as const)
+        : []),
+    ],
+    problems: () => [
+      ...filterNames(s.filter),
+      ...filterNames((s.apply as { prefilter?: unknown } | undefined)?.prefilter),
+      ...expandNames(s.expand),
+    ],
+  }),
+  'retrieve-single': (s) => ({
+    ids: [['Record id', s.recordId]],
+    names: listOf(s.select, 'Selected column'),
+    problems: () => expandNames(s.expand),
+  }),
+  'predefined-query': (s) => {
+    const r = (s.related ?? {}) as Record<string, unknown>;
+    return {
+      ids: [
+        ['Query id', s.queryId],
+        ['Source row id', r.recordId],
+      ],
+      names: [
+        ['Source table', r.sourceTable],
+        ['Relationship', r.navProperty],
+      ],
+    };
+  },
+  'bulk-delete': (s) => ({ ids: [], names: [], problems: () => filterNames(s.filter) }),
+  delete: (s) => ({
+    ids: [['Record id', s.recordId]],
+    names: [['Column', (s.scope as { column?: unknown } | undefined)?.column]],
+  }),
+  update: (s) => ({ ids: [['Record id', s.recordId]], names: [['Column', s.putColumn]] }),
+  upsert: (s) => {
+    const k = (s.key ?? {}) as Record<string, unknown>;
+    return { ids: k.kind === 'guid' ? [['Record id', k.recordId]] : [], names: [] };
+  },
+  merge: (s) => ({
+    ids: [
+      ['Master record id', s.targetId],
+      ['Subordinate record id', s.subordinateId],
+    ],
+    names: [],
+  }),
+  associate: (s) => ({
+    ids: [['Source record id', s.sourceId], ...listOf(s.targets, 'Target record id')],
+    names: [['Navigation property', s.navProperty]],
+  }),
+  disassociate: (s) => ({
+    ids: [['Source record id', s.sourceId], ...listOf(s.targetIds, 'Target record id')],
+    names: [['Navigation property', s.navProperty]],
+  }),
+  'exec-action': (s) => ({ ids: [['Bound record id', s.boundRecordId]], names: [] }),
+  'exec-function': (s) => ({ ids: [['Bound record id', s.boundRecordId]], names: [] }),
+  'exec-workflow': (s) => ({
+    ids: [
+      ['Workflow id', s.workflowId],
+      ['Record id', s.entityId],
+    ],
+    names: [],
+  }),
+  'manage-file': (s) => ({
+    ids: [['Record id', s.recordId]],
+    names: [['File column', s.fileColumn]],
+  }),
+  'manage-image': (s) => ({
+    ids: [['Record id', s.recordId]],
+    names: [['Image column', s.imageColumn]],
+  }),
+  'manage-attachment': (s) => ({
+    ids: [
+      ['Record id', s.recordId],
+      ['Parent activity id', s.parentActivityId],
+      ['Parent record id', s.parentEntityId],
+    ],
+    names: [['Parent table', s.parentEntityLogical]],
+  }),
+};
+
+/** A list field as parts; a value that isn't an array is reported as one part. */
+function listOf(v: unknown, label: string): UrlPart[] {
+  return Array.isArray(v) ? v.map((x) => [label, x] as const) : v == null ? [] : [[label, v]];
+}
+
+/**
+ * Why an entry from outside this library (an import file, another
+ * connection's library) can't be loaded safely, or null (#221). Its ids must
+ * be GUIDs and its names plain names: such a file is untrusted, and a value
+ * like `x)/other_nav?$filter=…` would send a different request from the one
+ * its name describes. Empty values are fine (the mode asks for them).
+ */
+export function importedEntryProblem(e: SavedRequest): string | null {
+  const s = e.state as Record<string, unknown>;
+  const parts = IMPORT_URL_PARTS[e.modeId]?.(s) ?? { ids: [], names: [] };
+  const names: UrlPart[] = [['Table', s.table], ...parts.names];
+  for (const [label, value] of [...parts.ids, ...names]) {
+    if (value != null && typeof value !== 'string') return `${label} isn't text.`;
+  }
+  const text = (ps: UrlPart[]) => ps as ReadonlyArray<readonly [string, string | null | undefined]>;
+  const reason = invalidUrlPartReason(text(parts.ids), text(names));
+  if (reason) return reason;
+  try {
+    return parts.problems?.()[0] ?? null;
+  } catch {
+    // A tree that isn't one (nodes that aren't objects, …).
+    return "Its query can't be read.";
+  }
+}
+
 /**
  * Parse an export file. Throws an Error with a user-facing message when the
  * file isn't a saved-requests export at all; otherwise returns the valid
- * entries and how many were dropped (bad shape, unknown mode, newer schema).
+ * entries and how many were dropped (bad shape, unknown mode, newer schema,
+ * or an id or name that isn't one; `problems` says why for those).
  */
-export function parseSavedImport(text: string): { entries: SavedRequest[]; invalid: number } {
+export function parseSavedImport(text: string): {
+  entries: SavedRequest[];
+  invalid: number;
+  problems: string[];
+} {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
@@ -735,8 +885,15 @@ export function parseSavedImport(text: string): { entries: SavedRequest[]; inval
   } else {
     throw new Error('The file is not a Dataverse Request Studio saved-requests export.');
   }
-  const entries = raw.filter(isUsableEntry);
-  return { entries, invalid: raw.length - entries.length };
+  const entries: SavedRequest[] = [];
+  const problems: string[] = [];
+  for (const e of raw) {
+    if (!isUsableEntry(e)) continue;
+    const problem = importedEntryProblem(e);
+    if (problem) problems.push(`"${e.name}": ${problem}`);
+    else entries.push(e);
+  }
+  return { entries, invalid: raw.length - entries.length, problems };
 }
 
 // ── Hash + dirty detection ────────────────────────────────────────────

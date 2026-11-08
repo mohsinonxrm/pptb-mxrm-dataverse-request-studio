@@ -21,6 +21,7 @@
 // equivalent, so that's what gets sent.
 
 import { useCallback, useMemo, useRef, useState } from 'react';
+import type { WriteConfirmSpec } from '../engine/writeConfirm';
 import {
   Document20Regular,
   Document20Filled,
@@ -42,6 +43,7 @@ import { ENV } from '../mock/environment';
 import { adv, disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { hashState, type SavedRequest } from '../state/savedRequests';
 import { lastPublishedRequest, usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import {
   API_BASE,
@@ -117,7 +119,9 @@ export function BatchMode({
   );
   const [state, setState] = useState<BatchState>(draft.state);
   const returnResponses = state.returnResponses ?? true;
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [activePath, setActivePath] = useState('overview');
   const [tab, setTab] = useState<MainTab>('builder');
   const [run, setRun] = useState<BatchRunResult | null>(null);
@@ -132,6 +136,23 @@ export function BatchMode({
   const compiled = useMemo(() => compileBatch(state.groups, orgUrl), [state.groups, orgUrl]);
   const plan = useMemo(() => planDispatch(compiled.items), [compiled]);
   const unavailable = batchUnavailableReason();
+  // A batch with writes always asks before it's sent (#241); a read-only one doesn't.
+  const batchWriteConfirm = useMemo((): WriteConfirmSpec | null => {
+    const total = compiled.items.length;
+    const writes = compiled.items.filter((c) => c.wire && c.wire.method !== 'GET').length;
+    if (writes === 0) return null;
+    return {
+      operation: type.name,
+      scope: {
+        kind: 'text',
+        text: `${total} request${total === 1 ? '' : 's'}, ${writes} of them change${writes === 1 ? 's' : ''} data`,
+        // More than 100 writes needs the word typed, as for other bulk writes.
+        count: writes,
+      },
+      highImpact: true,
+      confirmWord: type.id === 'execute-multiple' ? 'ExecuteMultiple' : 'batch',
+    };
+  }, [compiled, type.id, type.name]);
 
   // ── State helpers ──
   const touch = (s: BatchState, id: string): BatchState => {
@@ -256,7 +277,7 @@ export function BatchMode({
           'batch-deletes',
           'validation',
           `This batch deletes ${deletes} record${deletes === 1 ? '' : 's'}`,
-          'Deletes in a batch run without the Delete mode’s confirmation. Check the ids first.',
+          'The batch’s confirmation counts writes, not the records each delete removes, and there’s no typed record name as in the Delete mode. Check the ids first.',
           'overview',
         ),
       );
@@ -387,6 +408,10 @@ export function BatchMode({
   };
   // Always published (like Retrieve Multiple) so the Saved library is
   // reachable from an empty batch.
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       return {
@@ -394,11 +419,10 @@ export function BatchMode({
         modeId,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId]),
+    }, [currentSerialized, modeId, isDirty, lastSavedId, onSavedLatest, onLoadSavedLatest]),
   );
 
   // ── Sidebar ──
@@ -582,6 +606,8 @@ export function BatchMode({
           url={`${API_BASE}/$batch`}
           bytes={bodyBytes}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={batchWriteConfirm}
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}

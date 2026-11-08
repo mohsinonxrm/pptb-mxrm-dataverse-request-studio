@@ -108,10 +108,10 @@ function FileColumnOption({ col }: { col: FileColumnMeta }) {
         <span style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: 600 }}>
           {col.logicalName}
         </span>
-        <Badge appearance="ghost" size="extra-small">
+        <Badge appearance="ghost" size="small">
           File
         </Badge>
-        <Badge appearance="ghost" size="extra-small" style={{ marginLeft: 'auto' }}>
+        <Badge appearance="ghost" size="small" style={{ marginLeft: 'auto' }}>
           max {formatSize((col.maxSizeInKB ?? 32768) * 1024)}
         </Badge>
       </div>
@@ -268,20 +268,20 @@ function ImageColumnOption({ col }: { col: ImageColumnMeta }) {
         <span style={{ fontFamily: tokens.fontFamilyMonospace, fontWeight: 600 }}>
           {col.logicalName}
         </span>
-        <Badge appearance="ghost" size="extra-small">
+        <Badge appearance="ghost" size="small">
           Image
         </Badge>
         {col.isPrimaryImage && (
-          <Badge appearance="tint" color="brand" size="extra-small">
+          <Badge appearance="tint" color="brand" size="small">
             primary
           </Badge>
         )}
         {col.canStoreFullImage && (
-          <Badge appearance="tint" color="success" size="extra-small">
+          <Badge appearance="tint" color="success" size="small">
             full-size
           </Badge>
         )}
-        <Badge appearance="ghost" size="extra-small" style={{ marginLeft: 'auto' }}>
+        <Badge appearance="ghost" size="small" style={{ marginLeft: 'auto' }}>
           {col.isPrimaryImage ? '144×144' : `max ${formatSize((col.maxSizeInKB ?? 10240) * 1024)}`}
         </Badge>
       </div>

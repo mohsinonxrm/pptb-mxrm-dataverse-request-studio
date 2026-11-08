@@ -15,7 +15,6 @@ import {
   Combobox,
   Option,
   Tooltip,
-  Button,
   tokens,
   Textarea,
   Persona,
@@ -38,7 +37,7 @@ import {
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { DatePicker } from '@fluentui/react-datepicker-compat';
 import { TimePicker } from '@fluentui/react-timepicker-compat';
-import { Add20Regular, Delete20Regular, Database20Regular } from '@fluentui/react-icons';
+import { Add20Regular, Database20Regular } from '@fluentui/react-icons';
 import type { OperatorDef } from './operators';
 import {
   columnOptions,
@@ -54,6 +53,7 @@ import { useLookupRecords } from '../../host/useLookupRecords';
 import { useColumnDetail } from '../../host/useColumnDetail';
 import { parseDateTimeValue } from '../dateTimeValue';
 import type { JSX } from 'react';
+import { isColumnInScope, useAdvancedFindOnly } from '../../state/metadataScope';
 
 // Filter date values are either `YYYY-MM-DD` or a UTC instant
 // (`toISOString`), whatever the column's behavior, so read them the
@@ -1111,6 +1111,7 @@ function ChoiceTagPicker({
   onChange: (v: string[]) => void;
   placeholder?: string;
 }) {
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- columnOptions() is a new array for Boolean / option-less columns; these small memos just recompute then
   const options = columnOptions(col) ?? [];
   const [query, setQuery] = useState('');
 
@@ -1183,6 +1184,7 @@ function ChoiceTagPicker({
 // ============================================================
 function ColumnRhsPicker({ rule, col, parentTable, onChange }: ValueInputProps): JSX.Element {
   const valueLabel = useContext(ValueLabelContext);
+  const advancedFindOnly = useAdvancedFindOnly();
   if (!parentTable || !col) {
     return (
       <Input
@@ -1194,8 +1196,13 @@ function ColumnRhsPicker({ rule, col, parentTable, onChange }: ValueInputProps):
       />
     );
   }
+  // Follows "Advanced Find only" (#44); the column already compared stays.
   const sameType = parentTable.columns.filter(
-    (c) => c.attributeType === col.attributeType && c.logicalName !== col.logicalName,
+    (c) =>
+      c.attributeType === col.attributeType &&
+      c.logicalName !== col.logicalName &&
+      (c.logicalName === rule.val ||
+        (c.isValidForRead !== false && isColumnInScope(c, advancedFindOnly))),
   );
   const cur = sameType.find((c) => c.logicalName === rule.val);
 

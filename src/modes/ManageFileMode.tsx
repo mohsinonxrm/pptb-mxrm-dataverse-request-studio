@@ -17,7 +17,6 @@
 //   files-images-overview · file-column-data · attachment-annotation-files · getfilesasurl
 
 import { useMemo, useState } from 'react';
-import { Warning20Filled } from '@fluentui/react-icons';
 import {
   Table20Regular,
   Table20Filled,
@@ -41,7 +40,6 @@ import {
   RadioGroup,
   Radio,
   Caption1,
-  Badge,
   tokens,
   mergeClasses,
   SpinButton,
@@ -91,6 +89,8 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
+import { invalidUrlPartReason } from '../primitives/urlParts';
 
 const initialState = (): ManageFileState => ({
   // Empty initial state — user picks table + record + file column from live
@@ -135,7 +135,9 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
   const [loading, setLoading] = useState(false);
   const [recents, setRecents] = useState<RecentRun[]>([]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildManageFile(state), [state, liveTable]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const pipeline = useMemo(() => manageFilePipeline(state), [state, liveTable]);
   const tbl = findTable(state.table);
   const fileCol = useMemo(
@@ -160,6 +162,11 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const firstStepMethod = pipeline[0]?.method ?? 'PATCH';
 
+  // Ids and names that go into the URL as-is (#221).
+  const urlPartProblem = invalidUrlPartReason(
+    [['Record id', state.recordId]],
+    [['File column', state.fileColumn]],
+  );
   const disabledReason = !tbl
     ? 'Pick a target table first.'
     : !state.recordId
@@ -174,7 +181,7 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
           ? 'Choose a file to upload.'
           : state.headers.some((h) => h.enabled && !h.name)
             ? 'Fix empty header name.'
-            : null;
+            : urlPartProblem;
 
   // Bound-record name capture for the WriteResultCard narrative.
   const [recordName, setRecordName] = useState<string>('');
@@ -205,7 +212,9 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
   };
 
   // ── Save / Load ──
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   const currentSerialized = useMemo(() => serializeManageFile(state), [state]);
@@ -246,6 +255,10 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedId(keepId);
     setLastSavedHash(keepHash);
   };
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.table) return null;
@@ -254,11 +267,10 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: 'manage-file' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.table]),
+    }, [currentSerialized, isDirty, lastSavedId, state.table, onSavedLatest, onLoadSavedLatest]),
   );
 
   // ── PPTB host-limitation advisory ──

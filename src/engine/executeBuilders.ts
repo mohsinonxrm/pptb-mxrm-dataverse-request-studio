@@ -32,6 +32,8 @@ import { type CsdlAction, type ActionParam } from '../mock/actionsCsdl';
 // API, etc.) would return an empty BuiltRequest → broken code-gen
 // snippets and missing body previews.
 import { findActionSync } from '../host/csdlProvider';
+import { ISO_DATE_RE } from '../primitives/urlParts';
+import { isRecordGuid } from '../primitives/guid';
 import type { BuiltRequest } from './urlBuilder';
 import type {
   ExecuteActionState,
@@ -495,19 +497,55 @@ export function encodeParamForBody(param: ActionParam, value: unknown): unknown 
  *     use `Target=@tid&@tid={'@odata.id':'/entitySet(<guid>)'}` instead.
  *     We emit the @odata.id form when aliased.
  */
+/**
+ * Why a function parameter value can't go into the URL as typed, or null
+ * (#221): GUIDs and record references must be GUIDs, dates ISO 8601. The
+ * encoder quotes such values, so they can't change the call, but Dataverse
+ * would reject them.
+ */
+export function invalidFunctionParamReason(
+  params: readonly ActionParam[],
+  values: Record<string, unknown>,
+): string | null {
+  for (const p of params) {
+    const v = values[p.name];
+    if (v == null || v === '') continue;
+    const ids: string[] =
+      p.type === 'Edm.Guid'
+        ? [String(v).trim()]
+        : p.type === 'Collection(Edm.Guid)' && Array.isArray(v)
+          ? v.map((x) => String(x).trim())
+          : p.type === 'EntityReference'
+            ? [String((v as { id?: unknown }).id ?? '').trim()].filter(Boolean)
+            : p.type === 'EntitySpecific' && isEntitySpecificRef(v)
+              ? [v['@ref'].trim()].filter(Boolean)
+              : [];
+    const bad = ids.find((id) => !isRecordGuid(id));
+    if (bad !== undefined) return `Parameter ${p.name}: "${bad}" isn't a GUID.`;
+    if (p.type === 'Edm.DateTimeOffset' && !ISO_DATE_RE.test(String(v).trim())) {
+      return `Parameter ${p.name}: "${String(v)}" isn't an ISO 8601 date or date-time.`;
+    }
+  }
+  return null;
+}
+
 export function encodeParamForUrl(param: ActionParam, value: unknown, aliased: boolean): string {
   if (value === null || value === undefined) return 'null';
+  // Unquoted literals only when the value has the type's shape; anything else
+  // is quoted and escaped, so it can't add parameters to the call (#221).
+  // invalidFunctionParamReason blocks Execute on those.
+  const quoted = (s: string) => `'${s.replace(/'/g, "''")}'`;
   switch (param.type) {
-    case 'Edm.String': {
-      const s = String(value).replace(/'/g, "''");
-      return `'${s}'`;
-    }
+    case 'Edm.String':
+      return quoted(String(value));
     case 'Edm.DateTimeOffset': {
       const s = String(value).trim();
-      return s === '' ? 'null' : s;
+      return s === '' ? 'null' : ISO_DATE_RE.test(s) ? s : quoted(s);
     }
-    case 'Edm.Guid':
-      return String(value);
+    case 'Edm.Guid': {
+      const s = String(value).trim();
+      return isRecordGuid(s) ? s : quoted(s);
+    }
     case 'Edm.Int32':
     case 'Edm.Int64':
     case 'Edm.Decimal':
@@ -534,14 +572,14 @@ export function encodeParamForUrl(param: ActionParam, value: unknown, aliased: b
       const tbl = findTable(ref.entityType);
       const set = tbl?.entitySetName ?? `${ref.entityType}s`;
       void aliased; // both forms use the same record-ref shape
-      return `{'@odata.id':'${set}(${ref.id})'}`;
+      return `{'@odata.id':'${set}(${ref.id.replace(/'/g, "''")})'}`;
     }
     case 'EntitySpecific': {
       // Only the reference form (#1) has a URL encoding.
       if (!isEntitySpecificRef(value) || !value['@ref'].trim() || !param.entityType) return 'null';
       const tbl = findTable(param.entityType);
       const set = tbl?.entitySetName ?? `${param.entityType}s`;
-      return `{'@odata.id':'${set}(${value['@ref'].trim()})'}`;
+      return `{'@odata.id':'${set}(${value['@ref'].trim().replace(/'/g, "''")})'}`;
     }
     default:
       return String(value);

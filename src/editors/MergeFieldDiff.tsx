@@ -50,7 +50,6 @@ import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from './PaneHead';
 import {
   findTable,
-  findColumn,
   columnOptions,
   isLookupLike,
   isCompanionLogicalReadOnly,
@@ -362,7 +361,7 @@ function MergeRow({
               <Badge
                 appearance="tint"
                 color="success"
-                size="extra-small"
+                size="small"
                 style={{ alignSelf: 'flex-start' }}
               >
                 auto-fill

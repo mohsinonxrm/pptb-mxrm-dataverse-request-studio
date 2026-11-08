@@ -73,6 +73,7 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
 import { missingRequiredColumns, rawBodyBlocker } from '../engine/fieldBody';
 
 // ──────────────────────────────────────────────────────────────
@@ -107,7 +108,9 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   // findTable(), which is empty until the fetch lands — keying on `state`
   // alone left the URL / Code tab blank after picking a table (#78).
   const { table: liveTable } = useLiveTable(state.table || null);
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
@@ -118,7 +121,9 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildCreate(state), [state, liveTable]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const body = useMemo(() => buildCreateBody(state), [state, liveTable]);
   const tbl = findTable(state.table);
 
@@ -279,6 +284,10 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   };
 
   // Publish — hidden until table picked, no point persisting empty shell.
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.table) return null;
@@ -287,11 +296,10 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: 'create' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.table]),
+    }, [currentSerialized, isDirty, lastSavedId, state.table, onSavedLatest, onLoadSavedLatest]),
   );
 
   // ── Sidebar config ──
@@ -521,6 +529,13 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
           method="POST"
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={{
+            operation: 'Create Record',
+            table: state.table,
+            scope: { kind: 'records', count: 1 },
+            highImpact: false,
+          }}
           disabledReason={disabledReason ?? bypassBlocker}
           loading={loading}
           onExecute={onExecute}

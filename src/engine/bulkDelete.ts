@@ -35,6 +35,8 @@ import { findTable, findColumn, type ColumnMeta, type TableMeta } from '../mock/
 import { ENV } from '../mock/environment';
 import type { HeaderItem } from '../editors/HeadersEditor';
 import {
+  collectInvalidLiterals,
+  collectInvalidNames,
   groupToOData,
   stripLeadingWildcards,
   type FilterGroup,
@@ -302,6 +304,13 @@ export function filterToQueryExpression(tbl: TableMeta, root: FilterGroup): Quer
   };
 
   const Criteria = group(root);
+  // Values that don't match their column's type (#221): the job, and the
+  // count query that previews it, would both fail on them.
+  for (const l of collectInvalidLiterals(root, tbl)) {
+    problems.push(`"${l.col}" needs ${l.expected}, not ${JSON.stringify(l.value)}.`);
+  }
+  // Column names that aren't names: the count query writes them as they are.
+  problems.push(...collectInvalidNames(root));
   return {
     query: problems.length ? null : { EntityName: tbl.logicalName, Criteria },
     problems,

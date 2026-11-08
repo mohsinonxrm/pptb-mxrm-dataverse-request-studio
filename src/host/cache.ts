@@ -47,13 +47,24 @@ interface CacheEntry<T> {
 // metadata" button (metadata.refreshAll), which clears every cache entry.
 const TTL_MS = 60 * 60 * 1000; // 1 hour
 
+/**
+ * An entry with a fetch in flight. The data and its timestamp stay as they
+ * were (#334): starting a refetch of expired data mustn't make it fresh, or
+ * other callers would get it instead of waiting for the fetch, and a failed
+ * refetch would leave it "fresh" for another hour with no retry.
+ */
+function withPromise<T>(entry: CacheEntry<T> | undefined, promise: Promise<T>): CacheEntry<T> {
+  return { ...entry, promise, timestamp: entry?.timestamp ?? 0 };
+}
+
 class MetadataCache {
   // ── Storage ─────────────────────────────────────────────────────────
   // Per-entity bag of related metadata (attributes/relationships/optionsets
   // are keyed inside the entities map and the sub-maps).
   private entities: Map<string, CacheEntry<EntityMetadata>> = new Map();
   private allEntitiesCache: CacheEntry<EntityMetadata[]> | undefined;
-  // Entity attributes — key format: "${logicalName}_${advancedFindOnly}".
+  // Entity attributes — key format: "${logicalName}_${advancedFindOnly}"
+  // (always `_false` now: the load is unfiltered and the pickers scope, #44).
   // Type-cast attribute drills (OptionSet, detailed numeric) reuse this map
   // with keys like "${logical}_${attr}_optionset" / "_detailed".
   private entityAttributes: Map<string, CacheEntry<AttributeMetadata[]>> = new Map();
@@ -98,7 +109,7 @@ class MetadataCache {
     return this.allEntitiesCache?.promise;
   }
   setAllEntitiesPromise(promise: Promise<EntityMetadata[]>): void {
-    this.allEntitiesCache = { ...this.allEntitiesCache, promise, timestamp: Date.now() };
+    this.allEntitiesCache = withPromise(this.allEntitiesCache, promise);
   }
   clearAllEntitiesPromise(): void {
     if (this.allEntitiesCache) delete this.allEntitiesCache.promise;
@@ -123,8 +134,7 @@ class MetadataCache {
     return this.entityAttributes.get(cacheKey)?.promise;
   }
   setAttributesPromise(cacheKey: string, promise: Promise<AttributeMetadata[]>): void {
-    const existing = this.entityAttributes.get(cacheKey);
-    this.entityAttributes.set(cacheKey, { ...existing, promise, timestamp: Date.now() });
+    this.entityAttributes.set(cacheKey, withPromise(this.entityAttributes.get(cacheKey), promise));
   }
   clearAttributesPromise(cacheKey: string): void {
     const e = this.entityAttributes.get(cacheKey);

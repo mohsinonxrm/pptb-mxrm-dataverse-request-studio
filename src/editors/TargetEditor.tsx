@@ -18,13 +18,14 @@ import {
   Table20Filled,
   ArrowReset20Regular,
   ArrowSync20Regular,
-  Settings20Regular,
+  Filter20Regular,
 } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
 import { findTable } from '../mock/metadata';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
-import { useOpenSettings } from '../host/useOpenSettings';
+import { useOpenScope } from '../host/useOpenScope';
+import { SCOPE_TIP_BODY } from '../state/scopeChip';
 import { RecordPicker } from '../primitives/RecordPicker';
 import { MoreOptionsHint, useOptionSearch } from '../primitives/optionSearch';
 import { PasteODataDialog } from './PasteODataDialog';
@@ -82,9 +83,8 @@ export function TargetEditor({
     error: entitiesError,
     retry: retryEntities,
     needsSetup,
-    scopeMode,
   } = useScopedEntities();
-  const openSettings = useOpenSettings();
+  const openScope = useOpenScope();
   const { loading: tableLoading } = useLiveTable(table || null);
   const tbl = findTable(table);
   const showRecord = onRecordChange !== undefined;
@@ -151,34 +151,28 @@ export function TargetEditor({
       .finally(() => setRefreshing(false));
   };
 
-  // Guidance banner — shown only after the entity list has finished loading
-  // AND settings indicate the scope is unconfigured. The loading gate prevents
-  // a flash for returning users whose persisted settings load async.
-  const setupHint =
-    scopeMode === 'publisher-solution'
-      ? 'Open Settings → Query Scope and select a Publisher, then pick one or more Solutions to populate this list. Or switch the Entity Source to “All Entities”.'
-      : 'Open Settings → Query Scope and select one or more Solutions to populate this list. Or switch the Entity Source to “All Entities”.';
+  // No scope yet (#42): the shared empty state, and the picker disabled.
+  // Only after the entity list has finished loading — the loading gate
+  // prevents a flash for returning users whose persisted settings load async.
+  const noScope = needsSetup && !entitiesLoading;
 
   return (
     <div>
-      {needsSetup && !entitiesLoading && (
-        <MessageBar
-          intent="warning"
-          style={{ marginBottom: tokens.spacingVerticalM, width: '100%' }}
-        >
+      {noScope && (
+        <MessageBar intent="info" style={{ marginBottom: tokens.spacingVerticalM, width: '100%' }}>
           <MessageBarBody>
-            <MessageBarTitle>Entity scope not configured</MessageBarTitle>
-            {setupHint}
+            <MessageBarTitle>No entities listed yet</MessageBarTitle>
+            {SCOPE_TIP_BODY}
           </MessageBarBody>
           <MessageBarActions
             containerAction={
               <Button
                 appearance="primary"
                 size="small"
-                icon={<Settings20Regular />}
-                onClick={openSettings}
+                icon={<Filter20Regular />}
+                onClick={openScope}
               >
-                Open Settings
+                Choose scope
               </Button>
             }
           />
@@ -244,7 +238,7 @@ export function TargetEditor({
                 ? 'Loading entity list…'
                 : entitiesError
                   ? 'Entity list failed to load'
-                  : `${entities.length} entities`
+                  : `${entities.length} ${entities.length === 1 ? 'entity' : 'entities'} in scope`
           }
         >
           <Combobox
@@ -254,7 +248,16 @@ export function TargetEditor({
             selectedOptions={table ? [table] : []}
             onChange={onChange}
             onOptionSelect={onOptionSelect}
-            placeholder={entitiesLoading ? 'Loading…' : 'Search tables by name…'}
+            // A table already picked (a restored request, another org) can
+            // still be cleared.
+            disabled={noScope && !table}
+            placeholder={
+              entitiesLoading
+                ? 'Loading…'
+                : noScope
+                  ? 'Choose a scope to list entities'
+                  : 'Search tables by name…'
+            }
             listbox={{ style: { maxHeight: 360 } }}
           >
             {matchCount === 0 && (

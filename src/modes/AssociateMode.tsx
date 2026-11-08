@@ -44,7 +44,7 @@ import { notify } from '../shell/dialogs';
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from '../editors/PaneHead';
 import { NavPropertyPicker } from '../editors/NavPropertyPicker';
-import { AssociateTargetsEditor } from '../editors/AssociateTargetsEditor';
+import { AssociateTargetsEditor, targetsTitle } from '../editors/AssociateTargetsEditor';
 import { TargetEditor } from '../editors/TargetEditor';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
@@ -75,6 +75,8 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
+import { invalidUrlPartReason } from '../primitives/urlParts';
 
 // Empty initial state. The user picks a table → record → nav property →
 // target(s) before the request can fire. Seeding with a mock account id
@@ -100,7 +102,9 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
   // findTable(), which is empty until the fetch lands — keying on `state`
   // alone left the URL / Code tab blank after picking a table (#78).
   const { table: liveTable } = useLiveTable(state.table || null);
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [activePath, setActivePath] = useState<string>('source');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
@@ -116,8 +120,11 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
   // the WriteResultCard success narrative.
   const [sourceName, setSourceName] = useState<string>('');
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildAssociate(state), [state, liveTable]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const body = useMemo(() => buildAssociateBody(state), [state, liveTable]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const requests = useMemo(() => buildAssociateRequests(state), [state, liveTable]);
 
   const tbl = findTable(state.table);
@@ -143,6 +150,14 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
     if (dirtyId) markDirty(dirtyId);
   };
 
+  // Ids and names that go into the URL as-is (#221).
+  const urlPartProblem = invalidUrlPartReason(
+    [
+      ['Source record id', state.sourceId],
+      ...state.targets.map((id) => ['Target record id', id] as const),
+    ],
+    [['Navigation property', state.navProperty]],
+  );
   const disabledReason = !tbl
     ? 'Pick a source table first.'
     : !state.sourceId
@@ -153,11 +168,11 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
           ? 'Pick at least one target record.'
           : state.headers.some((h) => h.enabled && !h.name)
             ? 'Fix empty header name.'
-            : null;
+            : urlPartProblem;
 
   const onExecute = async () => {
     setLoading(true);
-    const res = await runtime.associate(state);
+    const res = await runtime.associate(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setLoading(false);
     setTab('results');
@@ -225,6 +240,10 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
     setLastSavedHash(keepHash);
   };
 
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.table) return null;
@@ -233,11 +252,10 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
         modeId: 'associate' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.table]),
+    }, [currentSerialized, isDirty, lastSavedId, state.table, onSavedLatest, onLoadSavedLatest]),
   );
 
   // ── Sidebar ──
@@ -289,7 +307,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
           id: 'targets',
           icon: PersonAccounts20Regular,
           iconFilled: PersonAccounts20Filled,
-          label: singleValued ? 'Target record' : 'Target records',
+          label: targetsTitle(singleValued, state.targets.length),
           badge: state.targets.length || null,
           badgeAppearance: 'tint' as const,
           badgeColor: state.targets.length > 0 ? ('success' as const) : ('subtle' as const),
@@ -424,6 +442,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
     case 'headers':
       pane = (
         <HeadersEditor
+          policy="relate"
           items={state.headers}
           setItems={(h) => set('headers', h, 'headers')}
           group="relate"
@@ -473,6 +492,13 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
           method={method}
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={{
+            operation: nav ? `Associate (${nav.name})` : 'Associate',
+            table: state.table,
+            scope: { kind: 'records', count: Math.max(1, state.targets.length) },
+            highImpact: state.targets.length > 1,
+          }}
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}

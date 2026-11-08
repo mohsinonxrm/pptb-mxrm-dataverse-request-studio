@@ -55,6 +55,8 @@ import {
 } from '../state/savedRequests';
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
+import { useLatestCallback } from '../primitives/useLatestCallback';
+import { invalidUrlPartReason } from '../primitives/urlParts';
 
 export type ActionCategory = 'oob' | 'custom-api' | 'custom-action';
 
@@ -160,7 +162,9 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
   );
 
   // Save / Load tracking
-  const { entities } = useScopedEntities();
+  // Every table, not just the pickers' scope: a saved request's table only
+  // has to exist (#44).
+  const { allEntities: entities } = useScopedEntities();
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
   const [lastSavedHash, setLastSavedHash] = useState<string | null>(draft.lastSavedHash);
   // Bound-record name cache — populated when the user picks via TargetEditor.
@@ -185,12 +189,15 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
   // workflows tables (#54). When a lookup fails (no read privilege), that
   // half falls back to a name guess — say so in the sub-modes it affects.
   const [classificationNotice, setClassificationNotice] = useState<string | null>(null);
+  // Publisher groups (#248) need the solution table; without it the list is flat.
+  const [publishersMissing, setPublishersMissing] = useState(false);
   useEffect(() => {
     if (category === 'oob') return;
     let cancelled = false;
     fetchSourceClassificationStatus()
       .then((st) => {
         if (cancelled) return;
+        setPublishersMissing(!st.publishers);
         const missing = [
           !st.customApis ? 'customapis' : null,
           !st.customActions ? 'workflows' : null,
@@ -227,6 +234,10 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
       );
     });
 
+  // Ids and names that go into the URL as-is (#221).
+  const urlPartProblem = invalidUrlPartReason(
+    requiresBoundRecord ? [['Bound record id', state.boundRecordId]] : [],
+  );
   const disabledReason = !action
     ? 'Pick an action.'
     : requiresBoundRecord && !state.boundRecordId
@@ -240,7 +251,7 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
               .join(', ')}${missingRequired.length > 3 ? '…' : ''}`
           : state.headers.some((h) => h.enabled && !h.name)
             ? 'Fix empty header name.'
-            : null;
+            : urlPartProblem;
 
   const onExecute = async () => {
     setLoading(true);
@@ -321,6 +332,10 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
     setLastSavedHash(keepHash);
   };
 
+  // The header holds on to these; the stable wrappers always run this
+  // render's handlers, not the ones from when the context was published.
+  const onSavedLatest = useLatestCallback(onSaved);
+  const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
       if (!state.actionName) return null;
@@ -329,11 +344,17 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
         modeId: 'exec-action' as const,
         dirty: isDirty,
         lastSavedId,
-        onSaved,
-        onLoadSaved,
+        onSaved: onSavedLatest,
+        onLoadSaved: onLoadSavedLatest,
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSerialized, isDirty, lastSavedId, state.actionName]),
+    }, [
+      currentSerialized,
+      isDirty,
+      lastSavedId,
+      state.actionName,
+      onSavedLatest,
+      onLoadSavedLatest,
+    ]),
   );
 
   const sections = [
@@ -454,6 +475,14 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
               </MessageBarBody>
             </MessageBar>
           )}
+          {category !== 'oob' && publishersMissing && (
+            <MessageBar layout="multiline" intent="info" style={{ marginBottom: 12 }}>
+              <MessageBarBody>
+                Couldn't read the solution table (you may lack read privilege), so operations aren't
+                grouped by publisher or badged with one.
+              </MessageBarBody>
+            </MessageBar>
+          )}
           <ActionPicker
             filter={config.filter}
             title={config.picker.title}
@@ -566,6 +595,23 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
           method="POST"
           url={built.relativeUrl}
           executeVerb={type.executeVerb}
+          // What this request changes, for the write confirmation (#241).
+          writeConfirm={
+            action
+              ? {
+                  operation: `${type.name} ${action.name}`,
+                  table: bindingEntity ?? undefined,
+                  scope:
+                    action.binding.kind === 'entity'
+                      ? { kind: 'records', count: 1 }
+                      : action.binding.kind === 'collection'
+                        ? { kind: 'text', text: `Bound to the ${bindingEntity} collection` }
+                        : { kind: 'text', text: 'Unbound: runs against the environment' },
+                  highImpact: true,
+                  confirmWord: action.name,
+                }
+              : null
+          }
           executeIcon={Flash20Filled}
           disabledReason={disabledReason}
           loading={loading}
