@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-07
+
+Writes ask before they're sent, naming the environment, and Production gets a
+safe mode that's on by default ([#241]). Read and execute requests send their
+headers, and impersonation is never dropped silently ([#109]). The entity scope
+moves from Settings to a button in the header ([#42]). Ids, names and filter
+values are checked and typed before they go into a URL ([#221]). The sidebar
+works with a screen reader and the keyboard ([#243]).
+
+It was iterated through `1.5.0-beta.1` (detailed below). Since that beta, the
+Insider icon, the README badges and the release workflow changed (listed here).
+
+Request headers need **Power Platform ToolBox 1.2.7 or later**. On older hosts
+a request with an impersonation header isn't sent, and DRS explains why.
+
+### ✨ Added
+
+- **Writes ask before they're sent**, naming the environment and its type, and
+  **Production safe mode** is on by default ([#241]).
+- **The entity scope is a button in the header** ([#42]).
+- **Read, Execute Function, Associate / Disassociate and Bulk Delete Job send
+  their headers**, and impersonation is never dropped silently ([#109]).
+- **Execute Custom API and Custom Action list your own operations first**.
+
+### 🛡️ Security and data safety
+
+- **Ids, names, filter values and function parameters are checked and typed**
+  before they go into a URL, and imported saved requests are checked deeply
+  ([#221]).
+
+### 🐛 Fixed since 1.4.0
+
+Listed under the beta below. Among them: the sidebar with a screen reader and
+the keyboard ([#243]), expired metadata that was served as fresh ([#334]), and
+choosing a file no longer reads it into memory ([#222]).
+
 ### 🔄 Changed
 
 - **The Insider icon's gold corner is bigger, deeper gold and flush with the
@@ -76,6 +112,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     bring a `support/X.Y` cut from an older tag onto this workflow before its
     first tag; and the recommended `publish` environment and `v*` tag ruleset.
 
+### ⚠️ Known issues
+
+- **`$batch` continue-on-error:** ToolBox's `$batch` response parser fails when
+  a failed request is followed by more requests. DRS explains it and suggests
+  putting requests that might fail last ([#198]).
+- **Execute modes on very large environments:** ToolBox can't load a
+  `$metadata` document over 16 MB until a ToolBox release includes
+  [PowerPlatformToolBox/desktop-app#737](https://github.com/PowerPlatformToolBox/desktop-app/pull/737);
+  DRS explains the limit ([#79]).
+- **ToolBox VS Code extension:** Monaco's workers may run on the main thread,
+  so JSON IntelliSense may not work there ([#255]).
+- **Binary modes** (file / image / attachment) compose the request and its
+  code, but Execute returns 501 because ToolBox doesn't expose those
+  operations.
+
+[#42]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/42
+[#79]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/79
+[#109]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/109
+[#198]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/198
+[#221]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/221
+[#222]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/222
+[#241]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/241
+[#243]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/243
+[#255]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/255
+[#334]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/334
 [#363]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/363
 [#372]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/372
 [#373]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/373
