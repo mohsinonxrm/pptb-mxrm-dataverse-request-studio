@@ -50,6 +50,7 @@ import {
 } from './detailFieldPartitioner';
 import { CollectionSubgrid } from './CollectionSubgrid';
 import { ODataAnnotationsPanel } from './ODataAnnotationsPanel';
+import { OpenInDataverseButton } from '../../primitives/OpenInDataverseButton';
 
 export interface RecordDetailCardProps {
   /** The record to render. */
@@ -65,6 +66,8 @@ export interface RecordDetailCardProps {
    *  rendered inside an accordion panel (the accordion header IS the
    *  headline there). */
   showHeadline?: boolean;
+  /** "Open in Dataverse" in the headline (#293). Off where the caller has its own. */
+  showOpen?: boolean;
 }
 
 const DEFAULT_OPEN_OBJECTS_UP_TO_LEVEL = 1; // N:1 cards open through level 1
@@ -76,6 +79,7 @@ export function RecordDetailCard({
   entityLogical,
   level = 0,
   showHeadline = true,
+  showOpen = true,
 }: RecordDetailCardProps) {
   const tbl = findTable(entityLogical);
   const part: RecordPartition = partitionRecord(record, tbl);
@@ -101,6 +105,12 @@ export function RecordDetailCard({
             avatar={{ color: 'colorful' }}
           />
           <span style={{ flexGrow: 1 }} />
+          {showOpen && (
+            <OpenInDataverseButton
+              table={entityLogical}
+              id={record[tbl?.primaryKey ?? `${entityLogical}id`]}
+            />
+          )}
           <CheckmarkCircle20Filled style={{ color: tokens.colorPaletteGreenForeground1 }} />
         </div>
       )}
