@@ -109,8 +109,6 @@ const update = (patch: Partial<DisplaySettings>) =>
   act(() => current![1]({ ...current![0], ...patch }));
 const chip = () => document.querySelector<HTMLButtonElement>('[data-testid=scope-chip]')!;
 const bodyText = () => document.body.textContent ?? '';
-const button = (text: string) =>
-  [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === text);
 const click = (b: Element | undefined | null) =>
   act(() => {
     if (!b) throw new Error('missing element');
@@ -132,39 +130,15 @@ afterEach(() => {
 });
 
 describe('ScopeChip', () => {
-  it('says Choose scope and shows the tip on first run; Got it dismisses it for this environment', () => {
+  it('says Choose scope without a scope, and shows no first-run tip (#397)', () => {
     render();
     expect(chip().textContent).toContain('Choose scope');
     expect(chip().getAttribute('aria-label')).toBe('Choose scope');
-    expect(bodyText()).toContain('Choose where entities come from');
-
-    click(button('Got it'));
-    expect(settings().scopeTipDismissed).toEqual(['org1.crm.dynamics.com']);
-    render();
     expect(bodyText()).not.toContain('Choose where entities come from');
-  });
-
-  it("doesn't show the tip without a connection", () => {
-    host.org = '';
-    try {
-      render();
-      expect(chip().textContent).toContain('Choose scope');
-      expect(bodyText()).not.toContain('Choose where entities come from');
-    } finally {
-      host.org = 'org1.crm.dynamics.com';
-    }
-  });
-
-  it("the tip's Choose scope opens the popover", () => {
-    render();
-    const tipButtons = [...document.querySelectorAll('button')].filter(
-      (b) => b.textContent?.trim() === 'Choose scope' && b !== chip(),
+    const chooseButtons = [...document.querySelectorAll('button')].filter(
+      (b) => b.textContent?.trim() === 'Choose scope',
     );
-    expect(tipButtons).toHaveLength(1);
-    click(tipButtons[0]);
-    expect(bodyText()).toContain('Show entities from');
-    expect(bodyText()).toContain('Changes apply right away.');
-    expect(settings().scopeTipDismissed).toEqual(['org1.crm.dynamics.com']);
+    expect(chooseButtons).toEqual([chip()]);
   });
 
   it('labels the scope: publisher › solution, with +N', () => {
@@ -246,9 +220,8 @@ describe('ScopeChip', () => {
     expect(last(host.solutionEnabled)).toBe(false);
   });
 
-  it('opens from anywhere through useOpenScope (the empty state’s Choose scope)', () => {
+  it('opens from anywhere through useOpenScope (the Target pane’s Choose a scope)', () => {
     render();
-    click(button('Got it'));
     expect(bodyText()).not.toContain('Show entities from');
     act(() => openScope!());
     expect(bodyText()).toContain('Show entities from');

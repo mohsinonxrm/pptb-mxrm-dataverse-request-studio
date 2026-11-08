@@ -50,11 +50,6 @@ export interface DisplaySettings {
    */
   selectedSolutionIds: string[];
   /**
-   * The environments (org hosts) where the scope chip's first-run tip was
-   * dismissed (#42). It shows once per environment, until a scope is set.
-   */
-  scopeTipDismissed: string[];
-  /**
    * Keep each mode's runs across reloads (#226): the last 200 runs per
    * environment, without response bodies or credential / impersonation
    * headers. Off keeps Recent runs for this session only.
@@ -149,7 +144,6 @@ export const defaultDisplaySettings: DisplaySettings = {
   productionSafeMode: true,
   selectedPublisherIds: [],
   selectedSolutionIds: [],
-  scopeTipDismissed: [],
   keepRunHistory: true,
 };
 
