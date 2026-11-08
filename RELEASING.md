@@ -137,7 +137,8 @@ tracking issue** in the milestone for the stabilizing checklist.
    `## [1.5.0-beta.1] - YYYY-MM-DD` with its own `[#n]: …` link definitions (add a new
    empty `## [Unreleased]` above it), run `npm run badges`, update the README if needed,
    and PR it into `release/1.5`.
-2. Tag the merged commit on `release/1.5` and push the tag:
+2. Check the release build in PPTB (*Before every tag*), then tag the merged commit on
+   `release/1.5` and push the tag:
 
    ```bash
    git switch release/1.5 && git pull && git tag v1.5.0-beta.1 && git push origin v1.5.0-beta.1
@@ -169,7 +170,8 @@ Before promoting a beta to `latest`:
    `## [1.5.0]` CHANGELOG section that summarises the betas above their history,
    `npm run badges`, and README updates.
 2. PR `release/1.5` → `main`, merged with a merge commit.
-3. Tag the merge commit on `main` and push it:
+3. Check the release build in PPTB (*Before every tag*), then tag the merge commit on `main`
+   and push it:
 
    ```bash
    git switch main && git pull && git tag v1.5.0 && git push origin v1.5.0
@@ -182,9 +184,40 @@ Before promoting a beta to `latest`:
 
 1. Branch `hotfix/1.5.1` from `main`; fix, set the version (`1.5.1`), date its CHANGELOG
    section, run `npm run badges`; PR into `main` (merge commit).
-2. Tag `v1.5.1` on `main` → npm `latest`, then run *After every release*.
+2. Check the release build in PPTB (*Before every tag*), then tag `v1.5.1` on `main` → npm
+   `latest`, and run *After every release*.
 3. Merge `main` forward into `release/*` (if one is open) and `dev`, keeping the higher
    version (*Resolving forward-merge conflicts*) and each target's `[Unreleased]` entries.
+
+## Before every tag: the release build in PPTB
+
+Every PR is checked in PPTB on its own branch build. A tag publishes a different build: the
+branch with every merged change and the version bump, built by `release.yml` from a clean
+install, with the Insider icon for betas. Run that exact build in PPTB before pushing any tag
+(beta, rc, stable or hotfix):
+
+1. **Rehearse on the commit you'll tag:** the release-prep merge on `release/X.Y` for a beta,
+   or `main` for a stable release or hotfix: `gh workflow run release.yml --ref <branch>`. Its
+   `build` job uploads the tarball the tag would publish, as the `package` artifact.
+2. **Download and unpack it** in an empty folder: `gh run download <run-id> -n package`, then
+   `tar -xzf *.tgz`.
+3. **Load `package/` in PPTB** as a local tool (Debug → Load Local Tool), in the PPTB version
+   the tool targets (`minAPI`), on a non-production connection. Use temporary records only and
+   delete them afterwards. Check:
+   - it loads with no console errors, follows the light and dark theme, and shows the right
+     icon (the Insider icon for betas);
+   - the header shows the scope button and the connection with its environment type;
+   - a Retrieve Multiple query runs and fills the grid, and the run is still in Recent runs
+     after DRS is closed and reopened;
+   - a write asks before it's sent and names the environment; cancel it, or send it for a
+     temporary record. Delete stays disabled until the typed confirmation;
+   - the changes in this release's CHANGELOG section.
+4. **Record the result** on the release's tracking issue: the PPTB version and what was
+   checked. Then tag **the same commit**. If something fails, fix it by PR first; a new commit
+   needs a new rehearsal and a new check.
+
+The smoke test of the published beta (*Stabilizing*, step 2) stays: it checks the package as
+users install it from npm, before it goes to `latest`.
 
 ## After every release
 
@@ -266,7 +299,7 @@ publishing rights (#376, as FetchXML Studio):
 
 | Job | Runs on | Permissions | What it does |
 |---|---|---|---|
-| `build` | always | read the repository | Checks the tag and chooses the channel; checks the release metadata (`check-release.mjs`); `npm ci --ignore-scripts` (no cache); the runtime audit (no high or critical findings), lint, tests, validation, build (with the type check), no root-absolute asset URLs, the bundled icon, the DOMPurify check; writes the release notes (previewed in the run summary); packs the tarball and checks its contents. |
+| `build` | always | read the repository | Checks the tag and chooses the channel; checks the release metadata (`check-release.mjs`); `npm ci --ignore-scripts` (no cache); the runtime audit (no high or critical findings), lint, tests, validation, build (with the type check), no root-absolute asset URLs, the bundled icon, the DOMPurify check; writes the release notes (previewed in the run summary); packs the tarball, checks its contents and uploads it as the `package` artifact (the build *Before every tag* runs in PPTB). |
 | `publish` | tag push only | npm OIDC token (`id-token: write`) | Installs no project dependencies: downloads the tarball and publishes it with provenance through npm **trusted publishing** (no npm token). |
 | `rehearse` | manual run only | none | `npm publish --dry-run` of the tarball, without provenance or an npm token. |
 | `github-release` | tag push only | write the repository | Creates the GitHub Release with the notes `build` wrote: the PPTB requirement and the version's `CHANGELOG.md` section (with its link definitions), then GitHub's list of PRs. Edit the release afterwards only to add context. |
