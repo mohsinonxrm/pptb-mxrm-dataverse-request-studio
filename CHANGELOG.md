@@ -53,6 +53,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🔄 Changed
 
+- **Clearer pane names; the first tab stays "Builder"** ([#301]). The Builder
+  tab shows whichever pane the sidebar selects (Target, Field set, Headers…),
+  so a name per request type (Body, Changes, Confirm…) would be wrong on every
+  other pane. The tab keeps its name, and four labels say what they hold:
+  - Execute Action, Custom API and Custom Action: **Pick an action**, **Pick a
+    Custom API** and **Pick a custom action**, not "Pick oob action",
+    "Pick custom-api action" and "Pick custom-action action";
+  - Execute Workflow: the picker's sidebar section is **Workflow**, not
+    "Target";
+  - Merge: the first pane is **Target**, like the other modes, not
+    "Merge entity type";
+  - Manage Image Data: the preview pane opens with its title, **Image
+    preview**.
 - **Choosing a scope is one step, asked once** ([#397]). Without an entity
   scope, the first-run screen had three prompts saying the same thing: the
   scope button in primary blue, a tip pointing at it, and a "No entities listed
@@ -86,6 +99,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#297]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/297
 [#298]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/298
 [#385]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/385
+[#301]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/301
 [#397]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/397
 
 ## [1.6.0-beta.1] - 2026-11-07
