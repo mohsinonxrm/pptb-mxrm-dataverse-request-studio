@@ -421,6 +421,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
     case 'pick':
       pane = (
         <ActionPicker
+          firstStep="Choose a function"
           // Exclude query functions (Last7Days, Between, EqualUserId,
           // Contains, etc.) — those are $filter operators, not callable
           // standalone. csdlProvider tags them via the PropertyName +

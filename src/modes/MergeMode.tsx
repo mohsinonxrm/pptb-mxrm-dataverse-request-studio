@@ -23,7 +23,7 @@
 //   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/reference/merge
 //   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/merge-entity-using-web-api
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Table20Filled,
   PersonAccounts20Regular,
@@ -57,6 +57,7 @@ import { ModeShell } from '../shell/ModeShell';
 import { notify } from '../shell/dialogs';
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from '../editors/PaneHead';
+import { FirstStep } from '../primitives/FirstStep';
 import { MergeFieldDiff } from '../editors/MergeFieldDiff';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
@@ -1005,6 +1006,9 @@ function EntityPane({
   // the user's entity scope (default: publisher solutions, none picked yet)
   // must not hide them — it left this dropdown empty on a fresh install (#97).
   const { allEntities, allLoading } = useScopedEntities();
+  // The Entity list opens from the first-step button (#297).
+  const [listOpen, setListOpen] = useState(false);
+  const listRef = useRef<HTMLInputElement>(null);
   // Cross-reference the docs-supported logical names against the live
   // entity list — so we show the env's actual display names (which can be
   // customized) and skip entities the env doesn't have provisioned (lead /
@@ -1024,6 +1028,16 @@ function EntityPane({
         sub={`Pick the table to merge. The Merge action is restricted to ${MERGE_SUPPORTED_LABEL}.`}
         group="write"
       />
+      {/* Until a table is picked: what Merge does, and Step 1 (#297). */}
+      {!state.table && (
+        <FirstStep
+          step="Choose a table"
+          onStart={() => {
+            listRef.current?.focus();
+            setListOpen(true);
+          }}
+        />
+      )}
       <div style={{ maxWidth: 560 }}>
         <Field
           label="Entity"
@@ -1036,6 +1050,9 @@ function EntityPane({
           }
         >
           <Combobox
+            ref={listRef}
+            open={listOpen}
+            onOpenChange={(_, d) => setListOpen(d.open)}
             value={tbl?.displayName ?? ''}
             selectedOptions={[state.table]}
             onOptionSelect={(_, d) => {

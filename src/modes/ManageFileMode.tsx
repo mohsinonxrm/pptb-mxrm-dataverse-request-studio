@@ -135,7 +135,8 @@ export function ManageFileMode({ themeMode }: { themeMode: ThemeMode }) {
   // findTable(), which is empty until the fetch lands — keying on `state`
   // alone left the URL / Code tab blank after picking a table (#78).
   const { table: liveTable } = useLiveTable(state.table || null);
-  const [activePath, setActivePath] = useState<string>('pipeline');
+  // Open on Target until a table is picked, where the first step is (#297).
+  const [activePath, setActivePath] = useState<string>(state.table ? 'pipeline' : 'target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);

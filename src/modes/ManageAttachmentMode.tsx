@@ -22,7 +22,7 @@
 // We surface the default cap when no live value is known — the advisory has a
 // "size limit unknown" path for that case.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Table20Regular,
   Table20Filled,
@@ -59,6 +59,7 @@ import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from '../editors/PaneHead';
+import { FirstStep } from '../primitives/FirstStep';
 import { BinarySourceCard } from '../editors/BinarySourceCard';
 import { BinaryPipelineCard } from '../editors/BinaryPipelineCard';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
@@ -142,7 +143,10 @@ export function ManageAttachmentMode({ themeMode }: { themeMode: ThemeMode }) {
   const type = findRequestType('manage-attachment');
   const draft = useModeDraft('manage-attachment', deserializeManageAttachment, initialState);
   const [state, setState] = useState(draft.state);
-  const [activePath, setActivePath] = useState<string>('pipeline');
+  // Open on the parent reference until one is set, where the first step is (#297).
+  const [activePath, setActivePath] = useState<string>(
+    state.parentActivityId || state.recordId ? 'pipeline' : 'parent',
+  );
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -840,6 +844,8 @@ interface ParentEditorProps {
   onNoteTextChange: (v: string) => void;
 }
 function ParentEditor(p: ParentEditorProps) {
+  const fieldsRef = useRef<HTMLDivElement>(null);
+  const started = p.target === 'attachment' ? !!p.parentActivityId : !!p.recordId;
   return (
     <div>
       <PaneHead
@@ -856,7 +862,16 @@ function ParentEditor(p: ParentEditorProps) {
         }
         group="binary"
       />
-      <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {!started && (
+        <FirstStep
+          step={p.target === 'attachment' ? 'Enter the parent email' : 'Enter the note id'}
+          onStart={() => fieldsRef.current?.querySelector('input')?.focus()}
+        />
+      )}
+      <div
+        ref={fieldsRef}
+        style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 14 }}
+      >
         {p.target === 'attachment' ? (
           <>
             <Field

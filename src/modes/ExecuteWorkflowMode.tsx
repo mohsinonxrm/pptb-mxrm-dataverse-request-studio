@@ -11,7 +11,7 @@
 //   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/use-web-api-functions
 //   (workflows aren't actions/functions per se but invoke similarly)
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Flowchart20Regular,
   Flowchart20Filled,
@@ -41,6 +41,7 @@ import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
 import { notify } from '../shell/dialogs';
 import { PaneHead } from '../editors/PaneHead';
+import { FirstStep } from '../primitives/FirstStep';
 import { KvGrid } from '../primitives/KvGrid';
 import { RecordPicker } from '../primitives/RecordPicker';
 import { WorkflowArgumentsCard } from '../editors/WorkflowArgumentsCard';
@@ -537,6 +538,9 @@ export function WorkflowPickerPane({
   // workflow's name — we sync on selection so the input reflects the
   // current state cleanly.
   const [search, setSearch] = useState('');
+  // The Workflow list opens from the first-step button (#297).
+  const [listOpen, setListOpen] = useState(false);
+  const listRef = useRef<HTMLInputElement>(null);
   // Sync the input text to the selected workflow's name (and reset on
   // table change). User typing overrides this via onChange.
   useEffect(() => {
@@ -594,9 +598,21 @@ export function WorkflowPickerPane({
           )}
         </MessageBar>
       )}
+      {!workflowId && !error && !loading && workflows.length > 0 && (
+        <FirstStep
+          step="Choose a workflow"
+          onStart={() => {
+            listRef.current?.focus();
+            setListOpen(true);
+          }}
+        />
+      )}
       <div style={{ maxWidth: 760 }}>
         <Field label="Workflow">
           <Combobox
+            ref={listRef}
+            open={listOpen}
+            onOpenChange={(_, d) => setListOpen(d.open)}
             freeform
             clearable
             value={search}
