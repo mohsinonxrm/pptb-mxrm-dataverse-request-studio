@@ -133,12 +133,15 @@ async function load(countOnly: boolean) {
   act(() => published!.onLoadSaved(saved));
   render();
 }
+// Blocked: disabled, or aria-disabled while it opens the advisories (#295).
+const blocked = (b: HTMLButtonElement | undefined) =>
+  !!b && (b.disabled || b.getAttribute('aria-disabled') === 'true');
 const executeButton = () => button('Execute') as HTMLButtonElement | undefined;
 
 describe('RetrieveMultipleMode count only (#272)', () => {
   it('a rows request with the forbidden $top stays blocked', async () => {
     await load(false);
-    expect(executeButton()?.disabled).toBe(true);
+    expect(blocked(executeButton())).toBe(true);
     expect(hostEl!.textContent).not.toContain('Count only: just $filter is sent');
   });
 
@@ -154,7 +157,7 @@ describe('RetrieveMultipleMode count only (#272)', () => {
       headers: {},
     });
     await load(true);
-    expect(executeButton()?.disabled).toBe(false);
+    expect(blocked(executeButton())).toBe(false);
     act(() => executeButton()!.click());
     await flush();
     expect(host.retrieve).toHaveBeenCalledOnce();

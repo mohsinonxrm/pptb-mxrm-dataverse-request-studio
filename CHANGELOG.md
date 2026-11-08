@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
+- **The advisory chip says what to fix, and a blocked Execute opens it**
+  ([#295]). With blockers, the chip next to Execute reads "2 to fix" (warnings
+  and notes keep the icon and count) and the drawer is titled "2 things to fix
+  before you can send". Execute stays focusable while it's blocked: clicking
+  it, or pressing Enter or Space on it, opens the drawer and announces the
+  title to screen readers.
 - **Open a returned record in Dataverse** ([#293]). "Open in Dataverse" opens
   the record's form in the model-driven app. It's on the Retrieve Single
   detail card, on write results that return a record (not after a delete),
@@ -318,6 +324,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     first tag; and the recommended `publish` environment and `v*` tag ruleset.
 
 [#296]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/296
+[#295]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/295
 [#293]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/293
 [#292]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/292
 [#289]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/289
