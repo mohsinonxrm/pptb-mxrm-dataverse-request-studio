@@ -752,6 +752,22 @@ export function ResultsGrid({
     return out;
   }, [columns, columnDisplay, useLogicalNames, liveWidths, storedWidths]);
 
+  // ── getRowId: prefer the synthetic `__rowKey` injected by the flattener
+  //    (parent-PK alone is no longer unique once collection expands fan
+  //    rows out). Falls back to the entity's primary key, then a JSON
+  //    fingerprint. ──
+  const getRowId = useCallback(
+    (item: Record<string, unknown>) => {
+      const synthetic = item[ROW_KEY];
+      if (typeof synthetic === 'string') return synthetic;
+      const pk = rootTable?.primaryKey;
+      if (pk && typeof item[pk] === 'string') return item[pk] as string;
+      // Final fallback — rare; only when both __rowKey and PK are missing.
+      return JSON.stringify(item).slice(0, 64);
+    },
+    [rootTable?.primaryKey],
+  );
+
   // ── Export view: the grid's columns + rows, so export matches the grid ──
   useEffect(() => {
     if (!onViewChange) return;
@@ -768,6 +784,21 @@ export function ResultsGrid({
         showsRaw: isTwin || valueMode === 'raw',
       };
     });
+    // The selected rows' primary IDs, for "Open in Dataverse" (#293).
+    const pk = rootTable?.primaryKey;
+    // De-duplicated: a collection $expand fans one record out over several rows.
+    const selectedRecordIds =
+      pk && selectedItems.size > 0
+        ? [
+            ...new Set(
+              allRows
+                .filter((r) => selectedItems.has(getRowId(r)))
+                .map((r) => r[pk])
+                .filter((id): id is string => typeof id === 'string'),
+            ),
+          ]
+        : [];
+    const canOpenRecords = !!pk && allRows.some((r) => typeof r[pk] === 'string');
     const shown = new Set(shownKeys);
     const choices = columnKeys.map((key) => {
       const info = columnDisplay.get(key);
@@ -777,7 +808,7 @@ export function ResultsGrid({
         shown: shown.has(key),
       };
     });
-    onViewChange({ columns: exportColumns, rows, choices });
+    onViewChange({ columns: exportColumns, rows, choices, selectedRecordIds, canOpenRecords });
   }, [
     onViewChange,
     columns,
@@ -787,6 +818,10 @@ export function ResultsGrid({
     rows,
     columnKeys,
     shownKeys,
+    allRows,
+    selectedItems,
+    getRowId,
+    rootTable?.primaryKey,
   ]);
 
   // ── Selection ──
@@ -796,22 +831,6 @@ export function ResultsGrid({
       onSelectionChange?.(Array.from(data.selectedItems).map(String));
     },
     [onSelectionChange],
-  );
-
-  // ── getRowId: prefer the synthetic `__rowKey` injected by the flattener
-  //    (parent-PK alone is no longer unique once collection expands fan
-  //    rows out). Falls back to the entity's primary key, then a JSON
-  //    fingerprint. ──
-  const getRowId = useCallback(
-    (item: Record<string, unknown>) => {
-      const synthetic = item[ROW_KEY];
-      if (typeof synthetic === 'string') return synthetic;
-      const pk = rootTable?.primaryKey;
-      if (pk && typeof item[pk] === 'string') return item[pk] as string;
-      // Final fallback — rare; only when both __rowKey and PK are missing.
-      return JSON.stringify(item).slice(0, 64);
-    },
-    [rootTable?.primaryKey],
   );
 
   // ── Row renderer: skeleton while user is fast-scrolling ──
