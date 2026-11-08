@@ -114,6 +114,13 @@ export function bucketAdvisories(advisories: Advisory[]) {
   return { errors, warnings, infos, total: advisories.length };
 }
 
+/** The advisory chip's text when there are blockers: "2 to fix" (#295). */
+export const toFixChipText = (blockers: number): string => `${blockers} to fix`;
+
+/** The drawer title, and what's announced, when there are blockers (#295). */
+export const toFixTitle = (blockers: number): string =>
+  `${blockers} ${blockers === 1 ? 'thing' : 'things'} to fix before you can send`;
+
 /**
  * The single message that should be passed to <UrlBar disabledReason>.
  * If there are no errors, returns null. If multiple, joins with " · ".
