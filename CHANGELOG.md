@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **Unsaved** tag while it has changes. Click the name to rename it; Enter
   saves, Esc cancels. A request that was never saved shows nothing, and a long
   name truncates.
+- **A first step in every request type's Builder** ([#297]). Until the first
+  step is done, the Builder shows what the request does (the request-type
+  picker's description), "Step 1 · Choose a table" (or choose an action, a
+  function, a workflow, paste a next link, add requests, enter the parent
+  email), and a button that opens that picker. Manage File and Manage
+  Attachment now open on that step; Manage Image keeps opening on its preview,
+  where the button leads to Target.
 - **The advisory chip says what to fix, and a blocked Execute opens it**
   ([#295]). With blockers, the chip next to Execute reads "2 to fix" (warnings
   and notes keep the icon and count) and the drawer is titled "2 things to fix
@@ -224,6 +231,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🔄 Changed
 
+- **One sidebar badge rule in every mode** ([#296]). A clause shows
+  **required** when required data is missing, **!** when it's set but invalid
+  (a bad GUID, a row with problems), and a checkmark when it's set and valid.
+  The `?`, `⚠` and `req` badges some modes used are gone, so the same state
+  looks the same everywhere and matches what the advisory drawer says.
+  Retrieve Single now marks the record as **required** once a table is picked.
 - **A smaller, faster-loading package** ([#236]). The npm package is about
   1.8 MB (6.7 MB unpacked), down from 3.6 MB (14.5 MB), and DRS loads less
   at startup:
@@ -323,6 +336,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     first tag; and the recommended `publish` environment and `v*` tag ruleset.
 
 [#298]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/298
+[#297]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/297
+[#296]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/296
 [#295]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/295
 [#293]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/293
 [#292]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/292

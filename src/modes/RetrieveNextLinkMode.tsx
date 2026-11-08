@@ -51,6 +51,7 @@ import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { ModeShell } from '../shell/ModeShell';
 import { PaneHead } from '../editors/PaneHead';
+import { FirstStep } from '../primitives/FirstStep';
 import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/PreferEditor';
 import { HeadersEditor, defaultReadHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
@@ -314,6 +315,13 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
             title="Next-link URL"
             sub="Paste the @odata.nextLink returned by the previous page. The URL is opaque — clauses are not editable here."
           />
+
+          {!state.url && (
+            <FirstStep
+              step="Paste a next link"
+              onStart={() => urlSuggest.fieldProps.ref.current?.focus()}
+            />
+          )}
 
           <MessageBar layout="multiline" intent="info" style={{ marginBottom: 12 }}>
             <MessageBarBody>

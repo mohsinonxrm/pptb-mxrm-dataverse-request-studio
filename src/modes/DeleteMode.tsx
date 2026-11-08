@@ -521,13 +521,10 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
           icon: ShieldLock20Regular,
           iconFilled: ShieldLock20Filled,
           label: 'Type-to-confirm + ack',
-          badge: isWholeRow ? (confirmOk ? '✓' : 'required') : 'skipped',
+          badge: isWholeRow ? null : 'skipped',
+          status: isWholeRow ? (confirmOk ? ('set' as const) : ('required' as const)) : undefined,
           badgeAppearance: 'tint' as const,
-          badgeColor: isWholeRow
-            ? confirmOk
-              ? ('success' as const)
-              : ('danger' as const)
-            : ('subtle' as const),
+          badgeColor: 'subtle' as const,
           dirty: state.dirty.has('confirmation'),
         },
       ],

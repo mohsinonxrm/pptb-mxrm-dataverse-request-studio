@@ -329,7 +329,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
                 icon: Table20Regular,
                 iconFilled: Table20Filled,
                 label: 'Source record',
-                badge: state.boundRecordId ? '✓' : null,
+                status: state.boundRecordId ? ('set' as const) : undefined,
                 badgeAppearance: 'ghost' as const,
                 dirty: state.dirty.has('target'),
               },
@@ -370,9 +370,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
                         icon: DocumentSettings20Regular,
                         label: p.name,
                         code: true,
-                        badge: isSet ? '✓' : 'req',
-                        badgeAppearance: 'ghost' as const,
-                        badgeColor: !isSet ? ('danger' as const) : ('subtle' as const),
+                        status: isSet ? ('set' as const) : ('required' as const),
                       };
                     }) ?? [],
               },
@@ -423,6 +421,7 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
     case 'pick':
       pane = (
         <ActionPicker
+          firstStep="Choose a function"
           // Exclude query functions (Last7Days, Between, EqualUserId,
           // Contains, etc.) — those are $filter operators, not callable
           // standalone. csdlProvider tags them via the PropertyName +

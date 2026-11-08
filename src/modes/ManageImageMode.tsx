@@ -55,6 +55,7 @@ import { ModeShell } from '../shell/ModeShell';
 import { notify } from '../shell/dialogs';
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from '../editors/PaneHead';
+import { FirstStep } from '../primitives/FirstStep';
 import { TargetEditor } from '../editors/TargetEditor';
 import { ImageColumnPicker } from '../editors/BinaryColumnPickers';
 import { BinarySourceCard } from '../editors/BinarySourceCard';
@@ -423,7 +424,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
           icon: Table20Regular,
           iconFilled: Table20Filled,
           label: state.recordId ? `${tbl?.displayName ?? ''} (selected)` : 'Pick a record',
-          badge: state.recordId ? '✓' : null,
+          status: state.recordId ? ('set' as const) : undefined,
           badgeAppearance: 'ghost' as const,
           dirty: state.dirty.has('target'),
         },
@@ -638,6 +639,10 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
     case 'preview':
       pane = (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Opens here (#224); until a table is picked, Step 1 leads to Target (#297). */}
+          {!state.table && (
+            <FirstStep step="Choose a table" onStart={() => setActivePath('target')} />
+          )}
           <OperationBanner state={state} imageCol={imageCol} />
           <PreviewCard
             state={state}
