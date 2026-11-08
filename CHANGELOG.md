@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0-beta.1] - 2026-11-07
+
+The first 1.6.0 beta. Recent runs survive a reload or restart ([#226]),
+throttled requests are explained ([#269]), Retrieve Multiple can count only
+([#272]), the Code tab writes Python ([#270]) and a cURL command can be
+imported ([#271]). The JSON body editor and hand-typed URLs get suggestions
+from the table's metadata ([#268]), results suggest the next step ([#291]) and
+every mode lists what blocks Execute ([#294]). The package is about half the
+size and loads less at startup ([#236]).
+
+Still a **prerelease** on the npm `beta` tag, with the gold Insider icon.
+Power Platform ToolBox **1.2.7 or later** is recommended.
+
 ### ✨ Added
 
 - **The JSON body editor knows the table** ([#268]). In a field set's JSON view
