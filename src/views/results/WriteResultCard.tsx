@@ -51,6 +51,7 @@ import {
 import { SERVICE_PROTECTION_SCOPE, serviceProtectionLimit } from '../../engine/serviceProtection';
 import { copyText } from '../../shell/copy';
 import { errorReport } from './nextSteps';
+import { OpenInDataverseButton } from '../../primitives/OpenInDataverseButton';
 
 export type WriteOperation =
   | 'create'
@@ -340,6 +341,7 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
                     Open
                   </Button>
                 </Tooltip>
+                <OpenInDataverseButton table={ctx.table} id={resolvedId} />
               </>
             )}
             {canRetrieve && (
@@ -417,6 +419,7 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
             record={body as Record<string, unknown>}
             entityLogical={ctx.table}
             level={0}
+            showOpen={false}
           />
         </div>
       )}
