@@ -255,8 +255,9 @@ gold Insider icon.
 ### Choose the entity scope
 
 The entity pickers list the entities in the scope shown on the **scope button**
-in the header, after the request type. On first run it reads **Choose scope**
-and a tip points at it. Open it to pick where entities come from:
+in the header, after the request type. Until a scope is set it reads **Choose
+scope**, and the Target pane's first step is **Choose a scope**. Open it to pick
+where entities come from:
 
 - **Publisher → solution** (default): one or more publishers, then their
   solutions;

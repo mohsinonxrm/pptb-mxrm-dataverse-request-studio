@@ -3,8 +3,8 @@
 // Studio). It always shows the scope you're working in and opens a popover
 // with the entity source, publishers, solutions and Advanced Find only.
 // Changes apply right away, through the same per-org settings the Settings
-// drawer used to edit (#52). On first run without a scope, a teaching
-// popover points at it, once per environment.
+// drawer used to edit (#52). Without a scope it reads "Choose scope", and the
+// Target pane's first step opens it (#397).
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
@@ -25,12 +25,6 @@ import {
   TagPickerList,
   TagPickerOption,
   TagPickerOptionGroup,
-  TeachingPopover,
-  TeachingPopoverBody,
-  TeachingPopoverFooter,
-  TeachingPopoverHeader,
-  TeachingPopoverSurface,
-  TeachingPopoverTitle,
   Text,
   Tooltip,
   makeStyles,
@@ -38,15 +32,12 @@ import {
 } from '@fluentui/react-components';
 import { ChevronDown16Regular, Filter20Regular, LockClosed16Regular } from '@fluentui/react-icons';
 import type { AccessSummary, Publisher, Solution } from '../host/pptbClient';
-import { usePersistedSettings, useSettingsLoaded } from '../host/usePersistedSettings';
+import { usePersistedSettings } from '../host/usePersistedSettings';
 import { usePublisherFilter } from '../host/usePublisherFilter';
 import { useSolutionFilter } from '../host/useSolutionFilter';
-import { useActiveOrg } from '../host/activeOrg';
 import { useRegisterOpenScope } from '../host/useOpenScope';
 import type { EntityScopeMode } from '../state/displaySettings';
 import {
-  SCOPE_TIP_BODY,
-  SCOPE_TIP_TITLE,
   scopeChipText,
   solutionDetail,
   solutionMatchesSearch,
@@ -104,8 +95,6 @@ const useStyles = makeStyles({
 export function ScopeChip({ accessSummary }: { accessSummary?: AccessSummary | null }) {
   const styles = useStyles();
   const [settings, updateSettings] = usePersistedSettings();
-  const loaded = useSettingsLoaded();
-  const org = useActiveOrg();
   const mode = settings.entityScopeMode;
   const { selectedPublisherIds, selectedSolutionIds } = settings;
 
@@ -169,15 +158,6 @@ export function ScopeChip({ accessSummary }: { accessSummary?: AccessSummary | n
     return () => observer.disconnect();
   }, [text.label]);
 
-  // First run: once per environment, until a scope is set. Not before the
-  // remembered scope has loaded, so it doesn't flash.
-  const dismissedList = Array.isArray(settings.scopeTipDismissed) ? settings.scopeTipDismissed : [];
-  const showTip = loaded && !!org && !text.configured && !dismissedList.includes(org);
-  const dismissTip = () => {
-    if (!org || dismissedList.includes(org)) return;
-    updateSettings({ ...settings, scopeTipDismissed: [...dismissedList, org] });
-  };
-
   // Privileges — before the AccessSummary loads, every option is allowed
   // (deferred validation, as the Settings drawer did before #42).
   const canUsePublisherSolution = !accessSummary || accessSummary.fullFilterMode;
@@ -232,9 +212,10 @@ export function ScopeChip({ accessSummary }: { accessSummary?: AccessSummary | n
             <Button
               ref={setChip}
               className={styles.chip}
-              // Primary only once the remembered scope has loaded and there
-              // isn't one, so a returning user doesn't see it flash.
-              appearance={text.configured || !loaded ? 'outline' : 'primary'}
+              // Outline whether or not a scope is set (#397): one primary per
+              // surface, and that's the request's Send / Execute. The first-run
+              // tip still points here, and the label reads "Choose scope".
+              appearance="outline"
               size="small"
               icon={<Filter20Regular />}
               aria-label={text.ariaLabel}
@@ -287,34 +268,6 @@ export function ScopeChip({ accessSummary }: { accessSummary?: AccessSummary | n
           </div>
         </PopoverSurface>
       </Popover>
-
-      {chip && (
-        <TeachingPopover
-          open={showTip && !open}
-          onOpenChange={(_e, d) => {
-            if (!d.open) dismissTip();
-          }}
-          positioning={{ target: chip, position: 'below', align: 'start' }}
-        >
-          <TeachingPopoverSurface style={{ maxWidth: 320 }}>
-            <TeachingPopoverHeader>Tip</TeachingPopoverHeader>
-            <TeachingPopoverBody>
-              <TeachingPopoverTitle>{SCOPE_TIP_TITLE}</TeachingPopoverTitle>
-              <div>{SCOPE_TIP_BODY}</div>
-            </TeachingPopoverBody>
-            <TeachingPopoverFooter
-              primary={{
-                children: 'Choose scope',
-                onClick: () => {
-                  dismissTip();
-                  setOpen(true);
-                },
-              }}
-              secondary={{ children: 'Got it', onClick: dismissTip }}
-            />
-          </TeachingPopoverSurface>
-        </TeachingPopover>
-      )}
     </>
   );
 }
