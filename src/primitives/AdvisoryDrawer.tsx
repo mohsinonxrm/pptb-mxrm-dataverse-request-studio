@@ -38,13 +38,22 @@ import {
   ChevronDown16Regular,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from './styles';
-import { bucketAdvisories, type Advisory, type AdvisorySeverity } from './advisories';
+import {
+  bucketAdvisories,
+  toFixChipText,
+  toFixTitle,
+  type Advisory,
+  type AdvisorySeverity,
+} from './advisories';
 
 export interface AdvisoryDrawerProps {
   advisories: Advisory[];
   /** Mode-supplied focus handler. When user clicks "Open" on an advisory,
    *  the drawer calls onFocusNode(advisory.focusNode) and closes itself. */
   onFocusNode?: (nodeId: string) => void;
+  /** Controlled open state — the URL bar opens it from a blocked Execute (#295). */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 // Icon + color per severity — kept tiny and consistent with v2.2 chrome.
@@ -63,9 +72,20 @@ function severityBadgeColor(s: AdvisorySeverity): 'danger' | 'warning' | 'inform
   return s === 'error' ? 'danger' : s === 'warning' ? 'warning' : 'informative';
 }
 
-export function AdvisoryDrawer({ advisories, onFocusNode }: AdvisoryDrawerProps) {
+export function AdvisoryDrawer({
+  advisories,
+  onFocusNode,
+  open: openProp,
+  onOpenChange,
+}: AdvisoryDrawerProps) {
   const s = useStudioStyles();
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const setOpen = (next: boolean | ((o: boolean) => boolean)) => {
+    const value = typeof next === 'function' ? next(open) : next;
+    setOpenState(value);
+    onOpenChange?.(value);
+  };
   const { errors, warnings, infos, total } = bucketAdvisories(advisories);
 
   if (total === 0) return null;
@@ -95,8 +115,9 @@ export function AdvisoryDrawer({ advisories, onFocusNode }: AdvisoryDrawerProps)
             aria-label={`Advisories — ${tooltip}`}
           >
             {severityIcon(topSeverity)}
+            {/* Blockers read as "2 to fix" so the chip says why Execute is off (#295). */}
             <Badge size="small" appearance="tint" color={severityBadgeColor(topSeverity)}>
-              {total}
+              {errors.length > 0 ? toFixChipText(errors.length) : total}
             </Badge>
             <ChevronDown16Regular style={{ color: tokens.colorNeutralForeground3 }} />
           </button>
@@ -104,7 +125,9 @@ export function AdvisoryDrawer({ advisories, onFocusNode }: AdvisoryDrawerProps)
       </PopoverTrigger>
       <PopoverSurface className={s.advisorySurface}>
         <div className={s.advisoryHeader}>
-          <strong style={{ fontSize: 13 }}>Advisories</strong>
+          <strong style={{ fontSize: 13 }}>
+            {errors.length > 0 ? toFixTitle(errors.length) : 'Advisories'}
+          </strong>
           <span style={{ fontSize: 11, color: tokens.colorNeutralForeground3, marginLeft: 'auto' }}>
             {tooltip}
           </span>

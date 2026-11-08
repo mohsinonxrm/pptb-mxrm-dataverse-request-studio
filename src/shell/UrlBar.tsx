@@ -1,12 +1,12 @@
 import { Button, Tooltip, tokens, Caption1, Spinner } from '@fluentui/react-components';
 import { Copy20Regular, Play20Filled, Open20Regular } from '@fluentui/react-icons';
 import type { FC } from 'react';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStudioStyles } from '../primitives/styles';
 import { MethodPill } from '../primitives/MethodPill';
 import { AdvisoryDrawer } from '../primitives/AdvisoryDrawer';
 import { announce } from '../primitives/announce';
-import type { Advisory } from '../primitives/advisories';
+import { toFixTitle, type Advisory } from '../primitives/advisories';
 import { ENV } from '../env/environment';
 import { UrlTokens } from './UrlTokens';
 import type { HttpMethod } from '../registry/requestTypes';
@@ -82,6 +82,19 @@ export function UrlBar({
   const openAdvisoryNode = useOpenAdvisoryNode(onAdvisoryFocus);
   const fullUrl = `https://${ENV.host}${url}`;
   const [{ productionSafeMode }] = usePersistedSettings();
+  // The advisory drawer, opened from the chip or from a blocked Execute (#295).
+  const [advisoriesOpen, setAdvisoriesOpen] = useState(false);
+  // With nothing to list the drawer unmounts; it mustn't come back open by
+  // itself the next time an advisory appears.
+  const hasAdvisories = !!advisories && advisories.length > 0;
+  if (!hasAdvisories && advisoriesOpen) setAdvisoriesOpen(false);
+  const blockers = advisories?.filter((a) => a.severity === 'error').length ?? 0;
+  // With blockers listed in the drawer, Execute stays focusable and opens it.
+  const blockedByAdvisories = !!disabledReason && !loading && blockers > 0;
+  const showBlockers = () => {
+    setAdvisoriesOpen(true);
+    announce(toFixTitle(blockers));
+  };
 
   // Re-entry guard. `loading` only flips after the mode re-renders, so a
   // held / repeated Ctrl+Enter (or a click in the same frame) could start a
@@ -219,22 +232,46 @@ export function UrlBar({
         {((bytes ?? url.length) / 1024).toFixed(1)} KB
       </Caption1>
       {advisories && advisories.length > 0 && (
-        <AdvisoryDrawer advisories={advisories} onFocusNode={openAdvisoryNode} />
+        <AdvisoryDrawer
+          advisories={advisories}
+          onFocusNode={openAdvisoryNode}
+          open={advisoriesOpen}
+          onOpenChange={setAdvisoriesOpen}
+        />
       )}
-      <Tooltip
-        content={disabledReason ?? `${executeVerb} (Ctrl+Enter)`}
-        relationship={disabledReason ? 'description' : 'label'}
+      {/* A blocked Execute stays focusable (`disabledFocusable`) and a click,
+          Enter or Space opens the drawer (#295). Fluent swallows events on a
+          disabled-focusable button, so they're caught on the way down. */}
+      <span
+        className={s.executeWrap}
+        onClickCapture={blockedByAdvisories ? showBlockers : undefined}
+        onKeyDownCapture={
+          blockedByAdvisories
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  showBlockers();
+                }
+              }
+            : undefined
+        }
       >
-        <Button
-          icon={loading ? <Spinner size="tiny" /> : <ExecIcon />}
-          appearance="primary"
-          size="medium"
-          onClick={execute}
-          disabled={!!disabledReason || loading}
+        <Tooltip
+          content={disabledReason ?? `${executeVerb} (Ctrl+Enter)`}
+          relationship={disabledReason ? 'description' : 'label'}
         >
-          {executeVerb}
-        </Button>
-      </Tooltip>
+          <Button
+            icon={loading ? <Spinner size="tiny" /> : <ExecIcon />}
+            appearance="primary"
+            size="medium"
+            onClick={execute}
+            disabled={(!!disabledReason || loading) && !blockedByAdvisories}
+            disabledFocusable={blockedByAdvisories}
+          >
+            {executeVerb}
+          </Button>
+        </Tooltip>
+      </span>
     </footer>
   );
 }
