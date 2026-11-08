@@ -44,13 +44,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its ID, with the columns and related rows you choose."), and each group has
   a tagline. Search matches the sentence too, so "alternate key" finds
   Upsert. Screen readers hear it as the option's description, after its name.
-
 - **A summary line at the top of Results** ([#290]). Above the Grid / Detail,
   JSON and Headers tabs: the status, time and size, then for a list the rows on
   this page, the total (with `$count`) and whether more pages follow. It shows on
   every results view, including empty results, errors and Count only, and wraps
   in a narrow pane. The grid footer now keeps only the grid's own state: filters,
   expanded lines, loading more pages and the selection.
+
+### 🔄 Changed
+
+- **One sidebar badge rule in every mode** ([#296]). A clause shows
+  **required** when required data is missing, **!** when it's set but invalid
+  (a bad GUID, a row with problems), and a checkmark when it's set and valid.
+  The `?`, `⚠` and `req` badges some modes used are gone, so the same state
+  looks the same everywhere and matches what the advisory drawer says.
+  Retrieve Single now marks the record as **required** once a table is picked.
+
+### 🔧 Internal
+
+- **Every tag is checked in PPTB first** ([#385]). Each PR was checked in PPTB
+  on its own build, but the build a tag publishes (every merged change plus the
+  version bump, built by `release.yml`) wasn't run in PPTB until it was on npm.
+  RELEASING.md's new *Before every tag* step loads the rehearsal's `package`
+  tarball in PPTB, with a short smoke list, before any beta, stable or hotfix
+  tag. The smoke test of the published beta before `latest` stays. Same step as
+  FetchXML Studio.
+
+[#289]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/289
+[#290]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/290
+[#292]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/292
+[#293]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/293
+[#295]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/295
+[#296]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/296
+[#297]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/297
+[#298]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/298
+[#385]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/385
+
+## [1.6.0-beta.1] - 2026-11-07
+
+The first 1.6.0 beta. Recent runs survive a reload or restart ([#226]),
+throttled requests are explained ([#269]), Retrieve Multiple can count only
+([#272]), the Code tab writes Python ([#270]) and a cURL command can be
+imported ([#271]). The JSON body editor and hand-typed URLs get suggestions
+from the table's metadata ([#268]), results suggest the next step ([#291]) and
+every mode lists what blocks Execute ([#294]). The package is about half the
+size and loads less at startup ([#236]).
+
+Still a **prerelease** on the npm `beta` tag, with the gold Insider icon.
+Power Platform ToolBox **1.2.7 or later** is recommended.
+
+### ✨ Added
+
 - **The JSON body editor knows the table** ([#268]). In a field set's JSON view
   (Create, Update, Upsert, Bulk Write rows and entity parameters):
   - **Keys:** typing `"` lists the columns the form can set. Lookups are
@@ -231,12 +275,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🔄 Changed
 
-- **One sidebar badge rule in every mode** ([#296]). A clause shows
-  **required** when required data is missing, **!** when it's set but invalid
-  (a bad GUID, a row with problems), and a checkmark when it's set and valid.
-  The `?`, `⚠` and `req` badges some modes used are gone, so the same state
-  looks the same everywhere and matches what the advisory drawer says.
-  Retrieve Single now marks the record as **required** once a table is picked.
 - **A smaller, faster-loading package** ([#236]). The npm package is about
   1.8 MB (6.7 MB unpacked), down from 3.6 MB (14.5 MB), and DRS loads less
   at startup:
@@ -272,19 +310,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - One Recent-runs push ([#244]): every mode adds its run with `addRun`,
   which stamps the id and time and keeps the list at `RECENT_SHOWN`.
 
-[#298]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/298
-[#297]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/297
-[#296]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/296
-[#295]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/295
-[#293]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/293
-[#292]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/292
-[#289]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/289
 [#224]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/224
 [#244]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/244
 [#236]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/236
 [#255]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/255
 [#268]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/268
-[#290]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/290
 [#291]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/291
 [#294]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/294
 [#226]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/226
