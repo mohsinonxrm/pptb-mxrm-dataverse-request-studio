@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **Unsaved** tag while it has changes. Click the name to rename it; Enter
   saves, Esc cancels. A request that was never saved shows nothing, and a long
   name truncates.
+- **Open a returned record in Dataverse** ([#293]). "Open in Dataverse" opens
+  the record's form in the model-driven app. It's on the Retrieve Single
+  detail card, on write results that return a record (not after a delete),
+  and in the Retrieve Multiple toolbar for one selected row. Inside ToolBox
+  it opens in the browser profile set on the connection, so you're already
+  signed in. Rows without a primary ID (aggregates, `$apply`) don't offer it.
 - **Choose which columns Results shows** ([#292]). A Columns button in the
   results toolbar lists every column in the response, each with a checkbox.
   The choice is saved per table, so re-running the same table keeps it, and
@@ -311,6 +317,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     first tag; and the recommended `publish` environment and `v*` tag ruleset.
 
 [#298]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/298
+[#293]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/293
 [#292]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/292
 [#289]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/289
 [#224]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/224
