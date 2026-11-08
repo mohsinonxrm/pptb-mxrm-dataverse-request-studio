@@ -34,6 +34,7 @@ import type { ThemeMode } from '../theme/theme';
 import { getEnv } from '../env/environment';
 import { useHostSession } from '../host/HostContext';
 import { useSaveContext } from '../state/SaveContext';
+import { SavedNameTag } from './SavedNameTag';
 import { useRegisterModeNavigator } from '../state/modeHandoff';
 import { SaveButton, SavedLibraryButton } from '../editors/SavedRequestsDialog';
 import { EnvironmentBadge } from './confirmWrite';
@@ -127,6 +128,8 @@ export function FrameHeader({
           </BreadcrumbItem>
         </Breadcrumb>
       </div>
+      {/* The loaded saved request's name, and "Unsaved" while it has changes (#298). */}
+      {saveCtx && <SavedNameTag lastSavedId={saveCtx.lastSavedId} dirty={saveCtx.dirty} />}
       {/* Where the entity pickers' entities come from (#42). */}
       <ScopeChip accessSummary={accessSummary} />
       <div className={s.spacer} />

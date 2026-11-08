@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
+- **The header shows the saved request's name** ([#298]). Once a request is
+  saved or loaded from Saved, its name sits next to the request type, with an
+  **Unsaved** tag while it has changes. Click the name to rename it; Enter
+  saves, Esc cancels. A request that was never saved shows nothing, and a long
+  name truncates.
 - **A first step in every request type's Builder** ([#297]). Until the first
   step is done, the Builder shows what the request does (the request-type
   picker's description), "Step 1 · Choose a table" (or choose an action, a
@@ -330,6 +335,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     bring a `support/X.Y` cut from an older tag onto this workflow before its
     first tag; and the recommended `publish` environment and `v*` tag ruleset.
 
+[#298]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/298
 [#297]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/297
 [#296]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/296
 [#295]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/295
