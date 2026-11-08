@@ -428,10 +428,14 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
           icon: Table20Regular,
           iconFilled: Table20Filled,
           label: state.recordId ? `${tbl?.displayName ?? ''} (selected)` : 'Pick a record',
-          badge: state.recordId ? (isValidGuid(state.recordId) ? '✓' : '⚠') : null,
-          badgeAppearance: 'ghost' as const,
-          badgeColor:
-            state.recordId && !isValidGuid(state.recordId) ? ('danger' as const) : undefined,
+          // Same states as the drawer's "No record selected" / "Invalid record id".
+          status: state.recordId
+            ? isValidGuid(state.recordId)
+              ? ('set' as const)
+              : ('invalid' as const)
+            : state.table
+              ? ('required' as const)
+              : undefined,
           dirty: state.dirty.has('target'),
         },
       ],

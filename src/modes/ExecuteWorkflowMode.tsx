@@ -348,7 +348,7 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
           icon: Table20Regular,
           iconFilled: Table20Filled,
           label: state.entityId ? `${tbl?.displayName ?? ''} (selected)` : 'Pick a record',
-          badge: state.entityId ? '✓' : null,
+          status: state.entityId ? ('set' as const) : undefined,
           badgeAppearance: 'ghost' as const,
           dirty: state.dirty.has('target'),
         },

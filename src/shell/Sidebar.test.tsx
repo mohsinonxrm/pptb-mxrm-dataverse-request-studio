@@ -15,7 +15,7 @@ const SECTIONS: SidebarSection[] = [
   {
     id: 'target',
     label: 'Target',
-    items: [{ id: 'target', icon: Table20Regular, label: 'Account', badge: '✓' }],
+    items: [{ id: 'target', icon: Table20Regular, label: 'Account', status: 'set' }],
   },
   {
     id: 'query',

@@ -442,7 +442,7 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
           icon: Key20Regular,
           iconFilled: Key20Filled,
           label: state.key.kind === 'guid' ? 'By GUID' : 'By alternate key',
-          badge: keyOk ? '✓' : null,
+          status: keyOk ? ('set' as const) : undefined,
           badgeAppearance: 'ghost' as const,
           dirty: state.dirty.has('key'),
         },

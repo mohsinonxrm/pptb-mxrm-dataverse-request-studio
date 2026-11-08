@@ -333,9 +333,10 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
       icon: FormNew20Regular,
       iconFilled: FormNew20Filled,
       label: rowLabel(row, i),
-      badge: issue ? '!' : n || null,
+      badge: n || null,
+      status: issue ? ('invalid' as const) : undefined,
       badgeAppearance: 'tint' as const,
-      badgeColor: issue ? ('danger' as const) : ('success' as const),
+      badgeColor: 'success' as const,
     };
   });
   const supportBadge =
@@ -346,7 +347,7 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
         : support.state === 'checking'
           ? { badge: '…', color: 'subtle' as const }
           : support.state === 'unknown'
-            ? { badge: '?', color: 'warning' as const }
+            ? { badge: 'unknown', color: 'warning' as const }
             : { badge: null, color: 'subtle' as const };
   const sections = [
     {

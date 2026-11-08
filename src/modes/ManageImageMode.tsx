@@ -424,7 +424,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
           icon: Table20Regular,
           iconFilled: Table20Filled,
           label: state.recordId ? `${tbl?.displayName ?? ''} (selected)` : 'Pick a record',
-          badge: state.recordId ? '✓' : null,
+          status: state.recordId ? ('set' as const) : undefined,
           badgeAppearance: 'ghost' as const,
           dirty: state.dirty.has('target'),
         },
