@@ -321,9 +321,9 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const sections = [
     {
-      // The Workflow itself IS the target; the record context is "Bound to".
+      // The workflow to run; the record it runs on is "Bound to" (#301).
       id: 'workflow',
-      label: 'Target',
+      label: 'Workflow',
       meta: wf?.name ?? 'pick one',
       items: [
         {
@@ -337,8 +337,7 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
       ],
     },
     {
-      // The record context is labeled "Bound to" (not "Target") — the workflow
-      // itself is the target.
+      // The record the workflow runs on.
       id: 'target',
       label: 'Bound to',
       meta: wf ? `${tbl?.displayName ?? wf.primaryEntity} record` : '—',

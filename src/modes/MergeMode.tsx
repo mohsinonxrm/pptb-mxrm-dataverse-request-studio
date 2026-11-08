@@ -1024,7 +1024,7 @@ function EntityPane({
     <div>
       <PaneHead
         icon={Table20Filled}
-        title="Merge entity type"
+        title="Target"
         sub={`Pick the table to merge. The Merge action is restricted to ${MERGE_SUPPORTED_LABEL}.`}
         group="write"
       />

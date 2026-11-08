@@ -639,6 +639,13 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
     case 'preview':
       pane = (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Every pane opens with its title (#301). */}
+          <PaneHead
+            icon={Image20Filled}
+            title="Image preview"
+            sub="The record's image, and what this request does to it."
+            group="binary"
+          />
           {/* Opens here (#224); until a table is picked, Step 1 leads to Target (#297). */}
           {!state.table && (
             <FirstStep step="Choose a table" onStart={() => setActivePath('target')} />

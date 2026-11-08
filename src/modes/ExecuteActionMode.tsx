@@ -67,6 +67,8 @@ export type ActionCategory = 'oob' | 'custom-api' | 'custom-action';
 interface ModeConfig {
   registryId: string;
   picker: { title: string; sub: string };
+  /** The sidebar's label until one is picked (#301). */
+  pickLabel: string;
   filter: (a: CsdlAction) => boolean;
 }
 
@@ -77,6 +79,7 @@ const CONFIGS: Record<ActionCategory, ModeConfig> = {
       title: 'Browse OOB actions',
       sub: 'Out-of-the-box Dataverse actions exposed via the Microsoft.Dynamics.CRM namespace.',
     },
+    pickLabel: 'Pick an action',
     filter: (a) => a.kind === 'Action' && a.source === 'oob',
   },
   'custom-api': {
@@ -85,6 +88,7 @@ const CONFIGS: Record<ActionCategory, ModeConfig> = {
       title: 'Browse Custom APIs',
       sub: 'Custom API messages — modern replacement for custom process actions. Definition lives in the customapi table.',
     },
+    pickLabel: 'Pick a Custom API',
     filter: (a) => a.kind === 'Action' && a.source === 'custom-api',
   },
   'custom-action': {
@@ -93,6 +97,7 @@ const CONFIGS: Record<ActionCategory, ModeConfig> = {
       title: 'Browse Custom Process Actions',
       sub: 'Legacy custom process actions — defined in Workflow designer with Category = Action.',
     },
+    pickLabel: 'Pick a custom action',
     filter: (a) => a.kind === 'Action' && a.source === 'custom-action',
   },
 };
@@ -414,7 +419,7 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
           id: 'pick',
           icon: Flash20Regular,
           iconFilled: Flash20Filled,
-          label: action?.displayName ?? action?.name ?? `Pick ${category} action`,
+          label: action?.displayName ?? action?.name ?? config.pickLabel,
           code: !!action,
           // Method already lives on the URL bar pill; no sidebar badge needed.
           dirty: state.dirty.has('pick'),
