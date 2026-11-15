@@ -960,6 +960,8 @@ interface ParseFilterCtx {
   errors: ParseIssue[];
   /** Alias of the enclosing lambda, if we're recursing inside one. */
   outerAlias?: string;
+  /** Ids of rules whose RHS was a quoted string literal (code generation, #232). */
+  quoted?: Set<string>;
 }
 
 const COMPARISON_OPS = new Set(['eq', 'ne', 'gt', 'ge', 'lt', 'le']);
@@ -973,10 +975,11 @@ function emptyFilterGroup(): FilterGroup {
 function parseFilter(
   input: string,
   _table: TableMeta | undefined,
+  quoted?: Set<string>,
 ): { group: FilterGroup; warnings: ParseIssue[]; errors: ParseIssue[] } {
   const warnings: ParseIssue[] = [];
   const errors: ParseIssue[] = [];
-  const ctx: ParseFilterCtx = { toks: tokenize(input), pos: 0, warnings, errors };
+  const ctx: ParseFilterCtx = { toks: tokenize(input), pos: 0, warnings, errors, quoted };
   if (ctx.toks.length === 0) return { group: emptyFilterGroup(), warnings, errors };
   try {
     const node = parseOrExpr(ctx);
@@ -998,6 +1001,22 @@ function parseFilter(
     }
     return { group: emptyFilterGroup(), warnings, errors };
   }
+}
+
+/**
+ * Parse a decoded `$filter` value without metadata, for code generation
+ * (#232). `quoted` holds the ids of the rules whose value was a quoted
+ * string literal: the tree keeps `'5'` and `5` as the same text, and a typed
+ * SDK condition needs to tell them apart.
+ */
+export function parseFilterForCodegen(input: string): {
+  group: FilterGroup;
+  quoted: Set<string>;
+  warnings: ParseIssue[];
+  errors: ParseIssue[];
+} {
+  const quoted = new Set<string>();
+  return { ...parseFilter(input, undefined, quoted), quoted };
 }
 
 /**
@@ -1218,7 +1237,9 @@ function parseComparison(ctx: ParseFilterCtx): FilterRule {
   //   ident (datetime)     → valKind: literal, val = ident
   //   ident (guid)         → valKind: literal, val = ident
   if (rhs.kind === 'string') {
-    return { id: newId('r'), type: 'rule', col, op, val: rhs.value, valKind: 'literal' };
+    const id = newId('r');
+    ctx.quoted?.add(id);
+    return { id, type: 'rule', col, op, val: rhs.value, valKind: 'literal' };
   }
   if (rhs.kind === 'number') {
     return { id: newId('r'), type: 'rule', col, op, val: rhs.value, valKind: 'literal' };

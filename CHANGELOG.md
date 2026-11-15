@@ -50,6 +50,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every results view, including empty results, errors and Count only, and wraps
   in a narrow pane. The grid footer now keeps only the grid's own state: filters,
   expanded lines, loading more pages and the selection.
+- **C# SDK and PowerShell (Xrm) code** ([#232]). Two new Code tab formats
+  write the request as Dataverse SDK calls instead of an HTTP call.
+  **C# SDK** uses `ServiceClient`: a `QueryExpression` for a query (with
+  `$filter` as conditions and Dataverse query functions as their
+  `ConditionOperator`), an `Entity` with `Create`, `Update`, `Upsert` or
+  `Delete` for a write, `Associate` / `Disassociate`, and an
+  `OrganizationRequest` for actions and functions. **PowerShell (Xrm)** does
+  the same with the Microsoft.Xrm.Data.PowerShell module: FetchXML through
+  `Get-CrmRecordsByFetch`, `New-CrmRecord`, `Set-CrmRecord`,
+  `Invoke-CrmAction` and so on. With the table's metadata loaded, a lookup
+  becomes an `EntityReference`, a choice an `OptionSetValue` and money a
+  `Money`; the bypass and duplicate-detection headers become optional
+  parameters, and an ETag a `RowVersion`. A request with no faithful SDK form
+  (an `$expand`, a lambda, deep insert, a file's bytes, …) says why in the
+  snippet, and the C# one sends the Web API request through `ExecuteWebRequest`.
 
 ### 🔄 Changed
 
@@ -101,6 +116,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#385]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/385
 [#301]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/301
 [#397]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/397
+[#232]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/232
 
 ## [1.6.0-beta.1] - 2026-11-07
 
