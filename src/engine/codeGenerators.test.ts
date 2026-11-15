@@ -119,8 +119,10 @@ describe('generateCode — every format', () => {
     'xhr',
     'powerautomate',
     'csharp',
+    'csharp-sdk',
     'python',
     'powershell',
+    'powershell-xrm',
     'curl',
     'json',
   ])('%s produces a snippet for a simple GET', (fmt) => {

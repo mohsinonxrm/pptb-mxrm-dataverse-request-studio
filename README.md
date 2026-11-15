@@ -23,9 +23,11 @@ React 18, Fluent UI v9, TypeScript, and live Dataverse metadata integration.
 
 DRS ships with **23 request modes** in 7 groups. Every mode is
 metadata-driven and generates the correct OData / Web API shape. The
-single-request modes emit ready-to-copy code in eleven formats: `fetch`,
+single-request modes emit ready-to-copy code in thirteen formats: `fetch`,
 `Xrm.WebApi`, `Xrm.WebApi.executeMultiple`, `XMLHttpRequest`, Power Automate,
-C#, Python (`requests`), PowerShell, cURL, JSON, and an OpenAPI 3 document.
+C# (`HttpClient`), C# SDK (`ServiceClient`), Python (`requests`), PowerShell
+(`Invoke-RestMethod`), PowerShell (Microsoft.Xrm.Data.PowerShell), cURL, JSON,
+and an OpenAPI 3 document.
 `$batch` has its own HTTP / fetch / Python / PPTB outputs, and ExecuteMultiple
 has C# / HTTP / Python / PPTB.
 
@@ -178,9 +180,20 @@ has C# / HTTP / Python / PPTB.
 - **Code generators** — Every single-request mode emits the same request as `fetch`,
   `Xrm.WebApi` (CRUD helpers or `Xrm.WebApi.online.execute`),
   `Xrm.WebApi.online.executeMultiple`, `XMLHttpRequest`, C# `HttpClient`,
-  PowerShell `Invoke-RestMethod`, cURL, a JSON description and an OpenAPI 3
-  document, plus a field-by-field Power Automate (Dataverse connector) sheet.
-  Multi-request pipelines render as full ordered sequences.
+  Python `requests`, PowerShell `Invoke-RestMethod`, cURL, a JSON description
+  and an OpenAPI 3 document, plus a field-by-field Power Automate (Dataverse
+  connector) sheet. Multi-request pipelines render as full ordered sequences.
+- **SDK code** — **C# SDK** writes the request as `ServiceClient` calls:
+  `QueryExpression` (conditions, orders, `TopCount`, paging and the total
+  count), `Entity` with `Create` / `Update` / `Upsert` / `Delete`,
+  `Associate` / `Disassociate` and `OrganizationRequest`. **PowerShell (Xrm)**
+  uses the Microsoft.Xrm.Data.PowerShell cmdlets, with FetchXML for queries.
+  Values are typed from the table's metadata (`EntityReference`,
+  `OptionSetValue`, `Money`, …), the bypass headers become optional
+  parameters and an ETag a `RowVersion`. When a request has no faithful SDK
+  form (`$expand`, lambdas, `$apply`, deep insert, file bytes), the snippet
+  says why instead of guessing, and the C# one sends the Web API request
+  through `ServiceClient.ExecuteWebRequest`.
 - **Saved-request library** — per-connection, versioned, up to 200 requests
   across all modes, with auto-suggested names, rename / delete / overwrite and
   dirty-state detection. Export / import as JSON, export as a Postman /
@@ -434,6 +447,8 @@ src/
     binaryBuilders.ts        — file / image / attachment pipelines
     codeGenerators.ts        — fetch, Xrm.WebApi (+ executeMultiple), XHR,
                                Power Automate, C#, Python, PowerShell, cURL, JSON
+    sdkCodegen.ts            — C# SDK (ServiceClient) and PowerShell
+                               (Microsoft.Xrm.Data.PowerShell)
     openApiGenerator.ts      — OpenAPI 3 document for the current request
     collectionFormats.ts, savedToCollection.ts
                              — Postman / Insomnia / Bruno collection export
@@ -554,8 +569,6 @@ Ideas under consideration include:
 - A metadata browser mode
 - Comparing responses across runs or environments
 - Importing Postman / Insomnia collections
-- More code-generation targets (C# ServiceClient / IOrganizationService, the
-  PowerShell Dataverse module)
 
 ---
 
