@@ -48,7 +48,7 @@
   ],
   "features": {
     "connections": 1,
-    "minAPI": "1.2.0"
+    "minAPI": "1.2.8"
   },
   "configurations": {
     "repository": "https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio",
@@ -96,7 +96,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
-    "@pptb/types": "^1.2.7",
+    "@pptb/types": "^1.2.8",
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^5.2.0",

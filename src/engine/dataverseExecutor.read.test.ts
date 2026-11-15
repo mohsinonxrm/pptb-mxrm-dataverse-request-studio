@@ -1,5 +1,5 @@
 // What the read modes hand the host for `$top` and `Prefer: odata.maxpagesize`
-// on hosts with and without header pass-through (#219).
+// (#219), and which header rows they send (#109).
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   COUNT_UNREADABLE_CODE,
@@ -22,16 +22,13 @@ import type {
 } from '../state/readState';
 import { registerFixtureTables, retrieveMultipleState } from '../test/fixtures';
 
-// The bridge decides host capabilities once at module load; mock it so each
-// test picks the host it runs against and sees every host call.
+// Mock the bridge so each test sees every host call.
 const host = vi.hoisted(() => ({
-  additionalHeaders: true,
   queryData: vi.fn(),
 }));
 vi.mock('../host/pptbBridge', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../host/pptbBridge')>()),
   isEmbedded: () => true,
-  hostSupportsAdditionalHeaders: () => host.additionalHeaders,
   dvHost: { queryData: host.queryData },
 }));
 vi.mock('../host/metadataProvider', () => ({
@@ -61,7 +58,6 @@ function predefined(top: number | null, maxpagesize: number | null): PredefinedQ
 
 beforeEach(() => {
   registerFixtureTables();
-  host.additionalHeaders = true;
   host.queryData.mockReset().mockResolvedValue({ value: [] });
 });
 
@@ -74,33 +70,21 @@ describe('readPreferHeaders', () => {
     expect(readPreferHeaders(null)).toBeUndefined();
     expect(readPreferHeaders(0)).toBeUndefined();
   });
-
-  it('sends nothing on a host that would drop it (PPTB < 1.2.7)', () => {
-    host.additionalHeaders = false;
-    expect(readPreferHeaders(50)).toBeUndefined();
-  });
 });
 
 describe('executeRetrieveMultiple', () => {
-  it('sends the page size and leaves $top out, as the Code tab does (PPTB 1.2.7+)', async () => {
+  it('sends the page size and leaves $top out, as the Code tab does', async () => {
     await executeRetrieveMultiple(paged(10, 50));
     expect(host.queryData).toHaveBeenCalledWith('/accounts', PAGE_50);
   });
 
-  it('keeps $top when the host can’t send the page size (PPTB < 1.2.7)', async () => {
-    host.additionalHeaders = false;
-    await executeRetrieveMultiple(paged(10, 50));
-    expect(host.queryData).toHaveBeenCalledWith('/accounts?$top=10', undefined);
-  });
-
-  it('still drops $top where Dataverse rejects it (nested $expand over a collection)', async () => {
-    host.additionalHeaders = false;
+  it('leaves $top out with a nested $expand over a collection too', async () => {
     const nested = {
       ...makeExpandSpec('contact_customer_accounts'),
       nestedExpand: [makeExpandSpec('parentcustomerid_contact')],
     };
     await executeRetrieveMultiple({ ...paged(10, 50), expand: [nested] });
-    expect(host.queryData).toHaveBeenCalledWith(expect.not.stringContaining('$top'), undefined);
+    expect(host.queryData).toHaveBeenCalledWith(expect.not.stringContaining('$top'), PAGE_50);
   });
 
   it('stays header-free without a page size', async () => {
@@ -150,14 +134,13 @@ describe('next pages', () => {
 });
 
 describe('executePredefined', () => {
-  it('sends the page size and leaves $top out (PPTB 1.2.7+)', async () => {
+  it('sends the page size and leaves $top out', async () => {
     await executePredefined(predefined(10, 50));
     expect(host.queryData).toHaveBeenCalledWith(`accounts?savedQuery=${QUERY_ID}`, PAGE_50);
   });
 
-  it('keeps $top when the host can’t send the page size (PPTB < 1.2.7)', async () => {
-    host.additionalHeaders = false;
-    await executePredefined(predefined(10, 50));
+  it('keeps $top without a page size', async () => {
+    await executePredefined(predefined(10, null));
     expect(host.queryData).toHaveBeenCalledWith(
       `accounts?savedQuery=${QUERY_ID}&$top=10`,
       undefined,
@@ -212,13 +195,6 @@ describe('read headers (#109)', () => {
     expect(host.queryData).toHaveBeenLastCalledWith(`accounts?savedQuery=${QUERY_ID}`, {
       MSCRMCallerID: CALLER,
     });
-  });
-
-  it("doesn't run as you on a host that would drop the header (PPTB < 1.2.7)", async () => {
-    host.additionalHeaders = false;
-    const r = await executeRetrieveMultiple(paged(10, null), PANE);
-    expect(host.queryData).not.toHaveBeenCalled();
-    expect(r.ok).toBe(false);
   });
 
   it('a plain read still sends nothing (no consent prompt)', async () => {
@@ -326,14 +302,5 @@ describe('count only (#272)', () => {
     const err = (res.body as { error: { code: string; message: string } }).error;
     expect(err.code).toBe(COUNT_UNREADABLE_CODE);
     expect(err.message).toMatch(/@odata\.count/);
-  });
-
-  it('still refuses impersonation the host would drop', async () => {
-    host.additionalHeaders = false;
-    const res = await executeRetrieveMultiple(counted(), {
-      CallerObjectId: '00000000-0000-0000-0000-0000000000c1',
-    });
-    expect(res.outcome).toBe('error');
-    expect(host.queryData).not.toHaveBeenCalled();
   });
 });

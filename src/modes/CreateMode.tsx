@@ -42,7 +42,6 @@ import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/Pref
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
-import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
 import { Warning20Filled } from '@fluentui/react-icons';
 import { CodeView } from '../views/CodeView';
@@ -231,10 +230,7 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Advisories — bypass family ──
   const bypassAdvisories = useMemo(
-    () => [
-      ...detectBypassAdvisories(state.bypass, 'bypass'),
-      ...detectUnsentHeaderAdvisories({ op: 'create', bypass: state.bypass }),
-    ],
+    () => detectBypassAdvisories(state.bypass, 'bypass'),
     [state.bypass],
   );
   const advisories = [...blockers, ...bypassAdvisories];

@@ -1,4 +1,4 @@
-// Bulk Write sends its headers on hosts that pass them, and maps errors like the other modes (#257).
+// Bulk Write sends its headers through the host, and maps errors like the other modes (#257).
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __registerLiveTables, type TableMeta } from '../metadata/metadata';
 import { defaultBypassOptions } from '../state/writeState';
@@ -6,11 +6,10 @@ import { newBulkRow, type BulkWriteState } from './bulkWrite';
 import { executeBulkWrite } from './bulkWriteExecutor';
 import { HEADER_CONSENT_DECLINED_CODE } from './dataverseExecutor';
 
-const host = vi.hoisted(() => ({ embedded: true, additionalHeaders: true, execute: vi.fn() }));
+const host = vi.hoisted(() => ({ embedded: true, execute: vi.fn() }));
 vi.mock('../host/pptbBridge', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../host/pptbBridge')>()),
   isEmbedded: () => host.embedded,
-  hostSupportsAdditionalHeaders: () => host.additionalHeaders,
   dvHost: { execute: host.execute },
 }));
 
@@ -45,24 +44,17 @@ const HEADERS = {
 const WIRE = { 'MSCRM.BypassBusinessLogicExecution': 'CustomSync' };
 
 beforeEach(() => {
-  host.additionalHeaders = true;
   host.execute.mockReset().mockResolvedValue({ Ids: ['00000000-0000-0000-0000-0000000000a1'] });
 });
 
 describe('executeBulkWrite headers (#257)', () => {
-  it('passes the non-host-owned headers (bypass) on a host that sends them', async () => {
+  it('passes the non-host-owned headers (bypass)', async () => {
     const r = await executeBulkWrite(state, HEADERS);
     expect(host.execute).toHaveBeenCalledWith(
       expect.objectContaining({ operationName: 'CreateMultiple', entityName: 'account' }),
       WIRE,
     );
     expect(r.status).toBe(200);
-  });
-
-  it('sends nothing extra on a host that can’t (the advisory blocks bypass there)', async () => {
-    host.additionalHeaders = false;
-    await executeBulkWrite(state, HEADERS);
-    expect(host.execute).toHaveBeenCalledWith(expect.any(Object), undefined);
   });
 
   it('reports a declined header prompt as not sent', async () => {

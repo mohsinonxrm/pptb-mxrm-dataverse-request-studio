@@ -8,12 +8,10 @@
 //
 // Request headers: the write group (Create / Update / Upsert / Delete /
 // Merge), Execute Action and Execute Workflow (#266) pass the headers their
-// mode composed for the Code tab. On PPTB
-// 1.2.7+ the precondition (`If-Match` / `If-None-Match`), bypass (`MSCRM.*`)
-// and user-added headers go out as `additionalHeaders` once the user
-// approves them in the host. Headers the host builds itself (see
-// requestHeaderPolicy) stay with the host. Older hosts drop the map; there
-// `hostHeaderAdvisories` blocks the requests whose meaning depends on it.
+// mode composed for the Code tab. The precondition (`If-Match` /
+// `If-None-Match`), bypass (`MSCRM.*`) and user-added headers go out as
+// `additionalHeaders` once the user approves them in the host. Headers the
+// host builds itself (see requestHeaderPolicy) stay with the host.
 // The read group, Execute Function and Associate / Disassociate send an
 // allow-list of their headers instead (impersonation, conditional retrieve,
 // consistency, bypass; #109), and reads a `Prefer` that keeps the host's
@@ -33,17 +31,10 @@
 //      so `ResultsView` rendering doesn't need to know which executor
 //      ran.
 
-import {
-  dvHost,
-  HostNotAvailableError,
-  hostSupportsAdditionalHeaders,
-  hostSupportsBatch,
-  isEmbedded,
-} from '../host/pptbBridge';
+import { dvHost, HostNotAvailableError } from '../host/pptbBridge';
 import { metadata } from '../host/metadataProvider';
 import { cleanHostMessage } from './hostErrorText';
 import { jsonBytes } from './byteSize';
-import { hasCollectionInvolvedNestedExpand } from '../editors/expand/expandTree';
 import {
   buildRetrieveMultiple,
   COUNT_ONLY_PREFER,
@@ -90,8 +81,6 @@ import { actions } from '../host/csdlProvider';
 import {
   allowedHeaders,
   impersonationProblem,
-  isBypassHeader,
-  isImpersonationHeader,
   readRequestHeaders,
   toWireHeaders,
 } from './requestHeaderPolicy';
@@ -225,7 +214,7 @@ export const HEADER_CONSENT_DECLINED_CODE = 'DRS.HeaderConsentDeclined';
  *  `additionalHeaders` (invalid or conflicting name) before sending anything. */
 export const HEADER_REJECTED_CODE = 'DRS.HeaderRejected';
 
-// PPTB 1.2.7 checks consent and validates `additionalHeaders` BEFORE it sends
+// PPTB checks consent and validates `additionalHeaders` BEFORE it sends
 // anything, and rejects the call with these messages (desktop-app
 // dataverseHeaderConsentManager.ts / dataverseBatch.ts). Nothing reached
 // Dataverse, so we say so rather than report a Dataverse failure.
@@ -401,43 +390,18 @@ async function timed<T>(
 
 /**
  * Headers that can't be sent as they are, so the request isn't (#109):
- *   • impersonation that isn't one user's id (both headers on, or the
- *     presets' all-zero placeholder);
- *   • on a host that can't send headers (before PPTB 1.2.7), an enabled
- *     impersonation header — the request would run as the signed-in user —
- *     and, with `bypass`, a bypass header — plug-ins would still run.
+ * impersonation that isn't one user's id (both headers on, or the presets'
+ * all-zero placeholder).
  */
-export function refuseHeaderProblems(
-  headers?: Record<string, string>,
-  opts: { bypass?: boolean } = {},
-): ExecResult | null {
-  const refuse = (message: string) =>
-    mapError({ statusCode: 400, message: `Not sent: ${message}` }, 0);
+export function refuseHeaderProblems(headers?: Record<string, string>): ExecResult | null {
   const problem = impersonationProblem(headers);
-  if (problem) return refuse(problem);
-  if (!isEmbedded() || hostSupportsAdditionalHeaders() || !headers) return null;
-  const update = 'update ToolBox (1.2.7 or later), or copy the request from the Code tab.';
-  const caller = Object.keys(toWireHeaders(headers) ?? {}).find(isImpersonationHeader);
-  if (caller) {
-    return refuse(
-      `this version of Power Platform ToolBox can't send ${caller}, so the request would run ` +
-        `as you, not as the user it names. Turn the header off to run it as yourself, or ${update}`,
-    );
-  }
-  const bypass = opts.bypass && Object.keys(toWireHeaders(headers) ?? {}).find(isBypassHeader);
-  if (bypass) {
-    return refuse(
-      `this version of Power Platform ToolBox can't send ${bypass}, so plug-ins and flows would ` +
-        `still run. Turn the header off to run them, or ${update}`,
-    );
-  }
+  if (problem) return mapError({ statusCode: 400, message: `Not sent: ${problem}` }, 0);
   return null;
 }
 
-/** `toWireHeaders`, but only when the host can actually send them — so the
- *  consent-declined mapping never fires on a host that dropped them. */
+/** The headers a request hands the host as `additionalHeaders` (`toWireHeaders`). */
 export function sendable(headers?: Record<string, string>): Record<string, string> | undefined {
-  return hostSupportsAdditionalHeaders() ? toWireHeaders(headers) : undefined;
+  return toWireHeaders(headers);
 }
 
 function isExecResult(x: unknown): x is ExecResult {
@@ -449,8 +413,8 @@ function isExecResult(x: unknown): x is ExecResult {
 /**
  * What a read sends (#109): the allow-listed header rows (impersonation,
  * `If-None-Match`, `Consistency`) and a `Prefer` when the page size (#219)
- * or a Prefer row asks for more than the host's default. Only when the host
- * can send headers (1.2.7+); a plain read sends none and never prompts.
+ * or a Prefer row asks for more than the host's default. A plain read sends
+ * none and never prompts.
  * Pages after the first must carry the same headers: the same page size
  * (Dataverse "Page results"), and the same caller, or a later page would
  * run as the signed-in user.
@@ -459,7 +423,7 @@ export function readHeaders(
   headers: Record<string, string> | undefined,
   maxpagesize: number | null | undefined,
 ): Record<string, string> | undefined {
-  return hostSupportsAdditionalHeaders() ? readRequestHeaders(headers, maxpagesize) : undefined;
+  return readRequestHeaders(headers, maxpagesize);
 }
 
 /** `readHeaders` with only a page size — kept for the paging callers and tests (#219). */
@@ -478,12 +442,8 @@ export async function executeRetrieveMultiple(
   if (dropped) return dropped;
   if (s.countOnly) return executeCount(s, composed);
   const headers = readHeaders(composed, s.prefer.maxpagesize);
-  // Without the page size on the wire, dropping `$top` (as the Code tab
-  // does) would leave the query uncapped: up to 5,000 rows (#219). Except
-  // where Dataverse can reject top-level `$top` (a nested `$expand` that
-  // involves a collection, 0x80060888): there it stays dropped, as before.
-  const keepTop = !sendsPageSize(headers) && !hasCollectionInvolvedNestedExpand(s.expand, s.table);
-  const built = buildRetrieveMultiple(s, { keepTop });
+  // The page size goes on the wire, so `$top` is left out, as in the Code tab (#219).
+  const built = buildRetrieveMultiple(s);
   const res = await timed(() => dvHost.queryData(built.relativeNoBase, headers), headers);
   if (isExecResult(res)) return res;
   return ok(200, res.value, res.ms);
@@ -680,13 +640,14 @@ export async function executeCreate(
 }
 
 /**
- * Update's "Require existing record" (`If-Match: *`) on a host that can't send
- * headers (PPTB < 1.2.7, #218). Its `update()` is a plain PATCH, which
- * Dataverse treats as an upsert, so a mistyped or stale GUID would create a
- * record. Read the record first and stop unless it exists. A record deleted
- * between this read and the PATCH would still be re-created: only the header
- * closes that window of milliseconds. Returns the result to show when the
- * update must not be sent, or `null` to go ahead.
+ * "Require existing record" (`If-Match: *`) when the header doesn't go out
+ * because the user declined the host's header prompt (#218, #254). The
+ * host's `update()` is then a plain PATCH, which Dataverse treats as an
+ * upsert, so a mistyped or stale GUID would create a record. Read the record
+ * first and stop unless it exists. A record deleted between this read and the
+ * PATCH would still be re-created: only the header closes that window of
+ * milliseconds. Returns the result to show when the update must not be sent,
+ * or `null` to go ahead.
  */
 async function requireExistingRecord(table: string, id: string): Promise<ExecResult | null> {
   const meta = metadata.peekTable(table) ?? (await metadata.getTable(table));
@@ -695,7 +656,7 @@ async function requireExistingRecord(table: string, id: string): Promise<ExecRes
   );
   if (!isExecResult(res)) return null;
   const why =
-    "This host can't send If-Match: *, so Dataverse Request Studio " +
+    "If-Match: * wasn't approved, so Dataverse Request Studio " +
     'checks that the record exists before updating.';
   const err = (res.body as { error?: { code?: string; message?: string; rawMessage?: string } })
     ?.error;
@@ -727,8 +688,8 @@ async function requireExistingRecord(table: string, id: string): Promise<ExecRes
  * PATCH a record that must already exist (#254): single-valued Associate /
  * Disassociate set or clear the lookup with a PATCH of the source record,
  * which Dataverse would otherwise treat as an upsert. Sends `If-Match: *`
- * on hosts that pass headers (atomic; the user approves it once), and reads
- * the record first on hosts that can't, as `executeUpdate` does (#218).
+ * (atomic; the user approves it once), and reads the record first when the
+ * user declines the header prompt (#218).
  */
 async function patchExistingRecord(
   table: string,
@@ -737,10 +698,6 @@ async function patchExistingRecord(
   /** The mode's allow-listed headers (impersonation, bypass; #109). */
   extra?: Record<string, string>,
 ): Promise<{ ms: number; value: void } | ExecResult> {
-  if (isEmbedded() && !hostSupportsAdditionalHeaders()) {
-    const stop = await requireExistingRecord(table, id);
-    if (stop) return stop;
-  }
   const wire = sendable({ ...extra, ...PATCH_EXISTING_HEADERS });
   const res = await timed(() => dvHost.update(table, id, body, wire), wire);
   // Declining the header prompt shouldn't block setting a lookup that
@@ -788,10 +745,6 @@ export async function executeUpdate(
   const body = buildUpdateBody(s);
   // The host's `update()` is PATCH semantics. For Upsert-via-Update (when
   // concurrency is `none`) the server still does the right thing.
-  if (s.concurrency.kind === 'update-only' && isEmbedded() && !hostSupportsAdditionalHeaders()) {
-    const stop = await requireExistingRecord(s.table, s.recordId);
-    if (stop) return stop;
-  }
   const wire = sendable(headers);
   const res = await timed(() => dvHost.update(s.table, s.recordId!, body, wire), wire);
   if (isExecResult(res)) return res;
@@ -914,16 +867,16 @@ export async function executeMerge(
 // Collection-valued Associate / Disassociate is one host call per target
 // (no batch), so a run can partly succeed. Each target gets its own result
 // and a failure doesn't stop the rest (#99). With All or nothing on (#224),
-// on PPTB 1.2.7+, the targets' requests go as one change set instead
+// the targets' requests go as one change set instead
 // (`executeTransaction`): Dataverse applies all of them or none.
 
 /**
  * True when a relate run sends its targets as one change set: All or
- * nothing is on, there are 2+ targets, and the host can send a change set.
- * Standalone counts as able, so the Code tab shows the change set.
+ * nothing is on and there are 2+ targets. The same standalone, so the Code
+ * tab shows the change set.
  */
 export function relateAsChangeSet(allOrNothing: boolean | undefined, targets: number): boolean {
-  return !!allOrNothing && targets > 1 && (!isEmbedded() || hostSupportsBatch());
+  return !!allOrNothing && targets > 1;
 }
 
 /** Max target GUIDs per "which are linked?" query, to keep the URL short. */
@@ -1145,7 +1098,7 @@ export async function executeAssociate(
   s: AssociateState,
   composed?: Record<string, string>,
 ): Promise<ExecResult> {
-  const dropped = refuseHeaderProblems(composed, { bypass: true });
+  const dropped = refuseHeaderProblems(composed);
   if (dropped) return dropped;
   const sourceId = s.sourceId;
   const navProperty = s.navProperty;
@@ -1229,7 +1182,7 @@ export async function executeDisassociate(
   s: DisassociateState,
   composed?: Record<string, string>,
 ): Promise<ExecResult> {
-  const dropped = refuseHeaderProblems(composed, { bypass: true });
+  const dropped = refuseHeaderProblems(composed);
   if (dropped) return dropped;
   // Cache narrowed locals — TS doesn't carry the null-check through closure
   // scope into the loop body otherwise.
@@ -1323,7 +1276,7 @@ export async function executeAction(
     boundEntityId = s.boundRecordId;
   }
 
-  // The Headers pane's rows (impersonation, bypass, …) go out on 1.2.7+ (#266).
+  // The Headers pane's rows (impersonation, bypass, …) go out too (#266).
   const sent = sendable(headers);
   const res = await timed(
     () =>

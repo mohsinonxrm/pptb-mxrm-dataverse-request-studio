@@ -5,7 +5,7 @@
 // each host call back into the HTTP request the host sends, and compare.
 //
 // Nothing is mocked between the state and the host: the real builders, code
-// generator, executor, header policy and bridge run, on a ToolBox 1.2.7+
+// generator, executor, header policy and bridge run, on an embedded ToolBox
 // host (header pass-through). The modes' own glue is copied, not rendered:
 // each test hands both sides the header rows as the mode composes them
 // (the Bypass and Concurrency panes' rows typed in), so those panes'
@@ -28,8 +28,8 @@ interface HostCall {
   args: unknown[];
 }
 
-// A ToolBox 1.2.7+ host, in place before any module reads it: the bridge
-// detects embedding and header pass-through once, at load.
+// An embedded ToolBox host, in place before any module reads it: the bridge
+// detects embedding once, at load.
 const host = vi.hoisted(() => {
   const calls: HostCall[] = [];
   const record =
