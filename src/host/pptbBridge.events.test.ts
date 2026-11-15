@@ -1,7 +1,7 @@
 // Host events and feature detection in the bridge (#235): theme from the host
 // and `settings:updated`, connection events reaching subscribers (incl. the
-// `connection:deleted` id check), PPTB 1.2.7 header pass-through detection
-// (#219, #109) and which headers a dvHost call actually sends.
+// `connection:deleted` id check) and which headers a dvHost call actually
+// sends (#219, #109).
 // The startup connection handshake is covered in pptbBridge.connection.test.ts.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HostSession } from './pptbBridge';
@@ -32,9 +32,9 @@ function fakeHost(opts: { theme?: unknown; conn?: Conn; noEvents?: boolean } = {
   };
 }
 
-/** A fake dataverseAPI; `batch` adds `executeBatch`, the PPTB 1.2.7 probe. */
-function fakeDataverse(batch: boolean) {
-  const methods = {
+/** A fake dataverseAPI with the methods that take headers. */
+function fakeDataverse() {
+  return {
     create: vi.fn(async () => ({ id: '1' })),
     update: vi.fn(async () => undefined),
     delete: vi.fn(async () => undefined),
@@ -45,8 +45,6 @@ function fakeDataverse(batch: boolean) {
     executeBatch: vi.fn(async () => []),
     executeTransaction: vi.fn(async () => []),
   };
-  if (!batch) delete (methods as Partial<typeof methods>).executeBatch;
-  return methods;
 }
 
 // Two macrotasks: the handshake chains more than one await.
@@ -299,36 +297,6 @@ describe('standalone (no host)', () => {
   });
 });
 
-describe('feature detection', () => {
-  it('PPTB 1.2.7+ (executeBatch present) sends headers and batches', async () => {
-    const bridge = await loadBridge(fakeHost().api, fakeDataverse(true));
-    expect(bridge.hostSupportsAdditionalHeaders()).toBe(true);
-    expect(bridge.hostSupportsBatch()).toBe(true);
-    expect(bridge.pageSizeIsSent()).toBe(true);
-  });
-
-  it('an older host (no executeBatch) sends neither, and drops the page size', async () => {
-    const bridge = await loadBridge(fakeHost().api, fakeDataverse(false));
-    expect(bridge.hostSupportsAdditionalHeaders()).toBe(false);
-    expect(bridge.hostSupportsBatch()).toBe(false);
-    expect(bridge.pageSizeIsSent()).toBe(false);
-  });
-
-  it('standalone: no host headers, but the Code tab request carries the page size', async () => {
-    const bridge = await loadBridge(undefined, fakeDataverse(true));
-    expect(bridge.hostSupportsAdditionalHeaders()).toBe(false);
-    expect(bridge.hostSupportsBatch()).toBe(false);
-    expect(bridge.pageSizeIsSent()).toBe(true);
-  });
-
-  it('is decided once, when the bridge loads', async () => {
-    const dataverse = fakeDataverse(false);
-    const bridge = await loadBridge(fakeHost().api, dataverse);
-    (dataverse as Record<string, unknown>).executeBatch = vi.fn();
-    expect(bridge.hostSupportsAdditionalHeaders()).toBe(false);
-  });
-});
-
 describe('dvHost header pass-through', () => {
   const H = { MSCRM_CallerID: '00000000-0000-0000-0000-000000000001' };
   const PARAMS = { operationName: 'WhoAmI', operationType: 'function' as const };
@@ -365,8 +333,8 @@ describe('dvHost header pass-through', () => {
     ] as const;
   }
 
-  it('PPTB 1.2.7+: headers go last, after an undefined options slot', async () => {
-    const dataverse = fakeDataverse(true);
+  it('headers go last, after an undefined options slot', async () => {
+    const dataverse = fakeDataverse();
     const bridge = await loadBridge(fakeHost().api, dataverse);
     for (const [name, call, args] of calls(bridge.dvHost, H)) {
       await call();
@@ -374,8 +342,8 @@ describe('dvHost header pass-through', () => {
     }
   });
 
-  it('PPTB 1.2.7+: no headers or an empty map keeps the old call shape', async () => {
-    const dataverse = fakeDataverse(true);
+  it('no headers or an empty map leaves the headers parameter off', async () => {
+    const dataverse = fakeDataverse();
     const bridge = await loadBridge(fakeHost().api, dataverse);
     for (const headers of [undefined, {}]) {
       for (const [name, call, args] of calls(bridge.dvHost, headers)) {
@@ -386,17 +354,8 @@ describe('dvHost header pass-through', () => {
     }
   });
 
-  it('an older host drops the headers', async () => {
-    const dataverse = fakeDataverse(false);
-    const bridge = await loadBridge(fakeHost().api, dataverse);
-    for (const [name, call, args] of calls(bridge.dvHost, H)) {
-      await call();
-      expect(dataverse[name].mock.calls, name).toEqual([[...args]]);
-    }
-  });
-
   it('$batch passes non-empty outer headers and drops an empty map', async () => {
-    const dataverse = fakeDataverse(true);
+    const dataverse = fakeDataverse();
     const bridge = await loadBridge(fakeHost().api, dataverse);
     const requests = [{ method: 'GET', url: 'accounts' }] as Parameters<
       typeof bridge.dvHost.executeBatch

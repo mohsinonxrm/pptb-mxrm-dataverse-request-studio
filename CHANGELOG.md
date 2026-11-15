@@ -53,6 +53,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🔄 Changed
 
+- **Power Platform ToolBox 1.2.8 or later is required** ([#408]). DRS
+  declares `minAPI` 1.2.8 and builds against `@pptb/types` 1.2.8, as FetchXML
+  Studio and Command Bar Studio do. DRS used to run on ToolBox 1.2.0 and check
+  at runtime what the host could send (#273). Every supported host now sends
+  request headers, the page size and `$batch`, so the code and copy for older
+  hosts are gone:
+  - the "Not sent by this version of Power Platform ToolBox" notices;
+  - the Execute blockers for headers an older host would drop;
+  - the read-before-update fallback;
+  - the disabled All or nothing switch;
+  - "Execute keeps `$top`".
+
+  If you decline ToolBox's header prompt, a single-valued Associate /
+  Disassociate still checks that the record exists before it updates it.
 - **Clearer pane names; the first tab stays "Builder"** ([#301]). The Builder
   tab shows whichever pane the sidebar selects (Target, Field set, Headers…),
   so a name per request type (Body, Changes, Confirm…) would be wrong on every
@@ -101,6 +115,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#385]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/385
 [#301]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/301
 [#397]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/397
+[#408]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/408
 
 ## [1.6.0-beta.1] - 2026-11-07
 

@@ -58,7 +58,7 @@ import {
 } from '@fluentui/react-icons';
 import type { GridDensity } from '../../state/displaySettings';
 import { useState } from 'react';
-import { pageSizeIsSent, saveFileSafe } from '../../host/pptbBridge';
+import { saveFileSafe } from '../../host/pptbBridge';
 import {
   exportFileName,
   toCsv,
@@ -147,18 +147,12 @@ export function ResultsCommandBar({
   const s = useStyles();
   const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState<{ intent: 'success' | 'error'; text: string } | null>(null);
-  // A ToolBox older than 1.2.7 can't send Prefer, so `odata.maxpagesize`
-  // doesn't apply on Execute there (#219). When the response has no nextLink
-  // on such a host, explain WHY pagination is unavailable rather than just
-  // greying out the button.
+  // When the response has no nextLink, explain WHY pagination is
+  // unavailable rather than just greying out the button.
   const retrieveAllTooltip = hasMore
     ? 'Keep fetching @odata.nextLink pages until everything is loaded'
-    : !pageSizeIsSent()
-      ? "No more pages to fetch. This ToolBox version can't send Prefer: odata.maxpagesize, " +
-        "so the response uses Dataverse's default 5,000-row page size. To test paging at " +
-        'smaller sizes, use ToolBox 1.2.7+ or export the request via the Code tab.'
-      : 'No more pages to fetch — the response did not include @odata.nextLink. ' +
-        'Set Prefer: odata.maxpagesize to enable server-side pagination.';
+    : 'No more pages to fetch — the response did not include @odata.nextLink. ' +
+      'Set Prefer: odata.maxpagesize to enable server-side pagination.';
 
   const selectedIds = exportView?.selectedRecordIds ?? [];
   const openUrl = selectedIds.length === 1 ? recordFormUrl(ENV.host, table, selectedIds[0]) : null;

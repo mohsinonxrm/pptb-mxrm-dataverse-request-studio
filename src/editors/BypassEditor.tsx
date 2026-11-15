@@ -82,11 +82,7 @@ export function BypassEditor({ value, onChange, group = 'write' }: BypassEditorP
               the <code>MSCRM.*</code> bypass headers
             </>
           }
-        >
-          The <code>MSCRM.*</code> bypass headers are dropped at execute time, so{' '}
-          <strong>Execute</strong> is disabled while a bypass option is on. Copy the request from
-          the Code tab to run it elsewhere.
-        </HostHeaderNotice>
+        />
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18, maxWidth: 720 }}>
