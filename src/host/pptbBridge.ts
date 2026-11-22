@@ -31,6 +31,8 @@
 // without emitting any runtime import.
 /// <reference types="@pptb/types" />
 
+import { toBatchUrl } from './batchUrl';
+
 export interface HostSession {
   /** True when running inside PPTB (window.toolboxAPI is present). */
   embedded: boolean;
@@ -344,6 +346,44 @@ function sendHeaders(
   return headers;
 }
 
+/**
+ * One request sent as the only part of a `$batch` (#225), for the shapes
+ * ToolBox's typed calls can't send. The host sends the part as written and
+ * returns its real status and response headers.
+ */
+export interface RawRequest {
+  method: DataverseAPI.BatchMethod;
+  /** Path relative to `/api/data/v9.2/`, e.g. `accounts(<id>)/name` (see `toBatchUrl`). */
+  path: string;
+  /** Sent verbatim on the part. Any entry raises the host's consent prompt (once per tool). */
+  headers?: Record<string, string>;
+  /** An object is sent as JSON, a string as is. No binary. */
+  body?: unknown;
+  /** Defaults to the primary connection. */
+  connectionTarget?: DataverseAPI.ConnectionTarget;
+}
+
+/** What Dataverse answered to a `RawRequest`. */
+export interface RawResponse {
+  status: number;
+  statusText?: string;
+  /** The part's response headers, names lowercased (`etag`, `odata-entityid`, `location`, …). */
+  headers: Record<string, string>;
+  /** The outer `$batch` response's `x-ms-*` headers the host passes through, when present. */
+  batchHeaders?: Record<string, string>;
+  body?: unknown;
+}
+
+/** Header names lowercased; a repeated name's values joined with `, `, as the host does. */
+function lowercaseHeaders(headers: Record<string, string> | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(headers ?? {})) {
+    const key = name.toLowerCase();
+    out[key] = key in out ? `${out[key]}, ${value}` : value;
+  }
+  return out;
+}
+
 function tb(): ToolBoxAPI.API {
   if (!EMBEDDED || typeof window === 'undefined' || !window.toolboxAPI) {
     throw new HostNotAvailableError('window.toolboxAPI');
@@ -400,6 +440,29 @@ export const dvHost = {
     headers && Object.keys(headers).length > 0
       ? dv().executeTransaction(requests, undefined, headers)
       : dv().executeTransaction(requests),
+
+  // One request as a one-part `$batch` (#225): for the shapes the typed
+  // calls can't send, with the operation's real status and headers. No
+  // outer headers: they don't reach the part, and would prompt for nothing.
+  // Throws `BatchPathError` (from `toBatchUrl`) without calling the host.
+  rawRequest: async (req: RawRequest): Promise<RawResponse> => {
+    const part: DataverseAPI.BatchRequest = {
+      method: req.method,
+      url: toBatchUrl(req.path),
+      contentId: '1',
+      ...(req.headers && Object.keys(req.headers).length > 0 ? { headers: req.headers } : {}),
+      ...(req.body !== undefined ? { body: req.body } : {}),
+    };
+    const [r] = await dv().executeBatch([part], req.connectionTarget);
+    if (!r) throw new Error('Malformed Dataverse batch response: no operation result');
+    return {
+      status: r.status,
+      ...(r.statusText !== undefined ? { statusText: r.statusText } : {}),
+      headers: lowercaseHeaders(r.headers),
+      ...(r.batchHeaders !== undefined ? { batchHeaders: lowercaseHeaders(r.batchHeaders) } : {}),
+      ...(r.body !== undefined ? { body: r.body } : {}),
+    };
+  },
 
   // Queries. Headers carry the read's `Prefer` page size (#219).
   queryData: (odata: string, headers?: DataverseAPI.AdditionalHeaders) => {

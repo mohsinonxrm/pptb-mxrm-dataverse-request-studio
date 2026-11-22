@@ -50,6 +50,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now reads **Impersonated user not found**, names the header, and says to
   check the id in HTTP headers. A missing record still gets the usual 404.
 
+### 🔧 Internal
+
+- **Groundwork for sending requests ToolBox's typed calls can't** ([#225]).
+  The host bridge can now send one request as a one-part `$batch` and return
+  Dataverse's real status, the operation's response headers and its body.
+  The request path is made relative to `/api/data/v9.2/` (a second literal
+  `?` is encoded, since ToolBox would drop what follows it), the part carries
+  only the headers Dataverse doesn't assume (no credentials, no default
+  `Accept` / `OData-*`, no JSON `Content-Type`), and a response too large for
+  the `$batch` path (16 MB) or one ToolBox can't read gets its own message.
+  No mode uses it yet, so nothing changes in the app.
+
+[#225]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/225
 [#232]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/232
 [#233]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/233
 [#429]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/429

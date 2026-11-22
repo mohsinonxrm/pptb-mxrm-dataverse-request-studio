@@ -31,7 +31,7 @@
 //      so `ResultsView` rendering doesn't need to know which executor
 //      ran.
 
-import { dvHost, HostNotAvailableError } from '../host/pptbBridge';
+import { dvHost, HostNotAvailableError, type RawResponse } from '../host/pptbBridge';
 import { metadata } from '../host/metadataProvider';
 import { cleanHostMessage } from './hostErrorText';
 import { jsonBytes } from './byteSize';
@@ -108,10 +108,19 @@ export interface ExecResult {
   ok: boolean;
   outcome: ExecOutcome;
   body: unknown;
-  /** Response headers. The PPTB host doesn't expose them, so this is `{}`
-   *  for every live result; the Headers tab says so instead of showing
-   *  made-up values. */
+  /** Response headers. The typed PPTB calls don't expose them, so this is
+   *  `{}` for their results and the Headers tab says so instead of showing
+   *  made-up values. A request sent as a one-part `$batch` (`transport:
+   *  'batch'`, #225) carries the part's real response headers, names
+   *  lowercased. */
   headers: Record<string, string>;
+  /** `'batch'` when the request went as a one-part `$batch` through
+   *  `dvHost.rawRequest` (#225), so `headers` are the part's own. Absent for
+   *  the typed calls. */
+  transport?: 'batch';
+  /** The outer `$batch` response's `x-ms-*` headers ToolBox passes through
+   *  (dop hint, rate-limit burst / time remaining), when present (#225). */
+  batchHeaders?: Record<string, string>;
   /** Associate / Disassociate on a collection-valued nav property: one
    *  entry per target, in request order (#99). Absent for every other op. */
   targets?: RelateTargetResult[];
@@ -228,6 +237,24 @@ const CONSENT_DECLINED_RE = /additional headers were rejected|header consent/i;
 const HEADER_INVALID_RE =
   /invalid dataverse header|conflicting duplicate dataverse header|additional dataverse headers/i;
 
+/** `error.code` on the ExecResult when ToolBox stopped reading a response
+ *  larger than its limit (16 MB on the `$batch` path, 128 MB for the typed
+ *  calls; #225). */
+export const RESPONSE_TOO_LARGE_CODE = 'DRS.ResponseTooLarge';
+/** `error.code` on the ExecResult when ToolBox couldn't parse the `$batch`
+ *  response, so whether the request ran is unknown (#225). */
+export const BATCH_RESPONSE_UNREADABLE_CODE = 'DRS.BatchResponseUnreadable';
+
+// ToolBox's size check while reading a response: "Dataverse response exceeds
+// the maximum size (16 MB)" (desktop-app dataverseManager.ts). Its parser's
+// "Malformed Dataverse batch response: …" means it couldn't read the
+// multipart answer (dataverseBatch.ts).
+const RESPONSE_TOO_LARGE_RE = /exceeds the maximum size/i;
+const SIZE_LIMIT_RE = /exceeds the maximum size \((\d+(?:\.\d+)?\s*[KMG]B)\)/i;
+const BATCH_UNREADABLE_RE = /malformed dataverse batch response/i;
+// The `$batch` host calls name themselves in the error ("Dataverse executeBatch failed: …").
+const BATCH_CALL_RE = /\bexecute(?:Batch|Transaction)\b|\$batch/i;
+
 // PPTB rejects failed Dataverse calls with a plain `Error` whose message is
 // `<code>: <message>` (or `HTTP <status>: <body>` when the response has no
 // error envelope), so `statusCode` / `status` are usually absent. Recover
@@ -343,6 +370,34 @@ export function mapError(
       ms,
     );
   }
+  if (RESPONSE_TOO_LARGE_RE.test(message)) {
+    const limit = SIZE_LIMIT_RE.exec(message)?.[1];
+    const what = BATCH_CALL_RE.test(rawMessage)
+      ? `The response is too large for the $batch path (${limit ?? '16 MB'}), so ` +
+        `Power Platform ToolBox stopped reading it. The request may have run in Dataverse.`
+      : `The response is too large for Power Platform ToolBox${limit ? ` (${limit})` : ''}, ` +
+        `so it stopped reading it. Ask for less: fewer columns in $select, or a smaller page size.`;
+    return failure(
+      0,
+      { code: RESPONSE_TOO_LARGE_CODE, message: `${what} Host message: ${message}`, ...raw },
+      ms,
+      'Response too large',
+    );
+  }
+  if (BATCH_UNREADABLE_RE.test(message)) {
+    return failure(
+      0,
+      {
+        code: BATCH_RESPONSE_UNREADABLE_CODE,
+        message:
+          `Power Platform ToolBox couldn't read Dataverse's answer; the request may have run. ` +
+          `Check the record before you Execute again. Host message: ${message}`,
+        ...raw,
+      },
+      ms,
+      'Response unreadable',
+    );
+  }
   // 0 = the host didn't say. Better than a made-up 500 for what is usually
   // a 400-class rejection.
   const status = e.statusCode ?? e.status ?? statusFromMessage(message) ?? 0;
@@ -401,6 +456,49 @@ function ok(status: number, body: unknown, ms: number): ExecResult {
     // The host returns parsed bodies only — no response headers to show.
     headers: {},
   };
+}
+
+/** The Dataverse error in a part's body (`{ error: { code, message } }`), or null. */
+function dataverseErrorIn(
+  body: unknown,
+): ({ code?: string; message: string } & Record<string, unknown>) | null {
+  if (!body || typeof body !== 'object') return null;
+  const error = (body as { error?: unknown }).error;
+  if (!error || typeof error !== 'object') return null;
+  const e = error as Record<string, unknown>;
+  if (typeof e.message !== 'string') return null;
+  return { ...e, code: typeof e.code === 'string' ? e.code : undefined, message: e.message };
+}
+
+/**
+ * Map what Dataverse answered to a one-part `$batch` (`dvHost.rawRequest`,
+ * #225) onto an ExecResult. The status is the operation's real one: 2xx and
+ * 304 (a conditional GET whose row hasn't changed) are successes, anything
+ * else a failure carrying the Dataverse error from the body. `headers` are
+ * the part's response headers, so a part-level 429 keeps `retry-after`.
+ */
+export function fromRaw(r: RawResponse, ms: number): ExecResult {
+  const extra = {
+    headers: r.headers ?? {},
+    transport: 'batch' as const,
+    ...(r.batchHeaders ? { batchHeaders: r.batchHeaders } : {}),
+  };
+  if ((r.status >= 200 && r.status < 300) || r.status === 304) {
+    return {
+      ...ok(r.status, r.body ?? null, ms),
+      statusText: r.statusText || STATUS_TEXT[r.status] || 'OK',
+      ok: true,
+      outcome: 'ok',
+      ...extra,
+    };
+  }
+  const reported = dataverseErrorIn(r.body);
+  const text = typeof r.body === 'string' ? r.body.trim() : '';
+  const error = reported ?? {
+    code: text ? dataverseCodeIn(text) : undefined,
+    message: text || r.statusText || `HTTP ${r.status}`,
+  };
+  return { ...failure(r.status, error, ms, r.statusText || undefined), ...extra };
 }
 
 /** Returned by the binary modes — host doesn't expose chunked upload. */
@@ -614,6 +712,7 @@ export async function executeAbsoluteUrl(
   const dropped = refuseHeaderProblems(composed);
   if (dropped) return dropped;
   const headers = readHeaders(composed, maxpagesize, trackChanges);
+  // TODO(#225 PR 2): reuse toBatchUrl in executeAbsoluteUrl
   let path = url;
   const apiIdx = path.indexOf('/api/data/');
   if (apiIdx >= 0) {
