@@ -46,8 +46,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so an alternate-key Upsert with `return=representation` says whether it
   created (201) or updated (200) the row and shows it, and a stale ETag is a
   412. ToolBox's own impersonation setting doesn't reach a `$batch` request;
-  the `MSCRMCallerID` / `CallerObjectId` headers do, and the modes say so where
-  you pick these shapes.
+  the `MSCRMCallerID` / `CallerObjectId` headers do (DRS sends them on the
+  `$batch` itself, since Dataverse ignores them inside it), and the modes say
+  so where you pick these shapes. Dataverse refuses `If-Match` on a single
+  column's URL, so the Precondition pane says it doesn't apply to a
+  single-column PUT or clear, and nothing is sent. ToolBox refuses a URL with
+  some `%` characters in it, so an alternate-key value with `%` is stopped
+  before sending, with a message saying to use the GUID.
 
 ### 🐛 Fixed
 

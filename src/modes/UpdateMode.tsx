@@ -477,8 +477,9 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   const methodBadge = isPut
     ? `PUT /${state.putColumn ?? '?'}`
     : `PATCH · ${fieldCount} field${fieldCount === 1 ? '' : 's'}`;
-  const ifMatchBadge =
-    state.concurrency.kind === 'update-only'
+  const ifMatchBadge = isPut
+    ? 'n/a for single column'
+    : state.concurrency.kind === 'update-only'
       ? '* (any)'
       : state.concurrency.kind === 'etag' &&
           currentEtag &&
@@ -760,6 +761,11 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
           available={['none', 'update-only', 'etag']}
           currentEtag={currentEtag}
           group="write"
+          notApplicable={
+            state.method === 'PUT'
+              ? "Not sent with a single-column PUT: Dataverse doesn't support If-Match on a column's URL and rejects the request. Switch back to PATCH to use optimistic concurrency."
+              : null
+          }
         />
       );
       break;

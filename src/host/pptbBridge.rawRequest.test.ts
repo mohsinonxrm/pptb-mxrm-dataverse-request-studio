@@ -44,7 +44,7 @@ describe('dvHost.rawRequest', () => {
       { method: 'PUT', url: `accounts(${ID})/name`, contentId: '1', body: { value: 'Contoso' } },
     ]);
     expect(parts[0]).not.toHaveProperty('headers');
-    // Never outer headers: they don't reach the part.
+    // No outer headers unless there's impersonation to send.
     expect(target).toBeUndefined();
     expect(outer).toBeUndefined();
     expect(executeBatch.mock.calls[0]).toHaveLength(2);
@@ -66,6 +66,44 @@ describe('dvHost.rawRequest', () => {
       headers: { 'If-Match': '*' },
     });
     expect(parts[0]).not.toHaveProperty('body');
+  });
+
+  it('sends impersonation on the outer $batch, the other headers in the part', async () => {
+    // Dataverse ignores MSCRMCallerID / CallerObjectId inside a part (live check, #225).
+    const executeBatch = vi.fn(async (..._args: unknown[]) => [{ status: 204, headers: {} }]);
+    const { dvHost } = await loadBridge(executeBatch);
+    await dvHost.rawRequest({
+      method: 'PUT',
+      path: `accounts(${ID})/name`,
+      headers: { callerobjectid: 'caller-oid', MSCRMCallerID: 'caller-id', Prefer: 'x' },
+      body: { value: 'Contoso' },
+      connectionTarget: 'secondary',
+    });
+    const [parts, target, outer] = executeBatch.mock.calls[0] as unknown as [
+      Record<string, unknown>[],
+      unknown,
+      unknown,
+    ];
+    expect(parts[0]?.headers).toEqual({ Prefer: 'x' });
+    expect(target).toBe('secondary');
+    expect(outer).toEqual({ callerobjectid: 'caller-oid', MSCRMCallerID: 'caller-id' });
+  });
+
+  it('leaves the part without headers when impersonation is all there is', async () => {
+    const executeBatch = vi.fn(async (..._args: unknown[]) => [{ status: 204, headers: {} }]);
+    const { dvHost } = await loadBridge(executeBatch);
+    await dvHost.rawRequest({
+      method: 'DELETE',
+      path: `accounts(${ID})/description`,
+      headers: { CallerObjectId: 'caller-oid' },
+    });
+    const [parts, , outer] = executeBatch.mock.calls[0] as unknown as [
+      Record<string, unknown>[],
+      unknown,
+      unknown,
+    ];
+    expect(parts[0]).not.toHaveProperty('headers');
+    expect(outer).toEqual({ CallerObjectId: 'caller-oid' });
   });
 
   it('passes connectionTarget through', async () => {

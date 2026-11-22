@@ -60,13 +60,17 @@ interface Part {
   body?: unknown;
 }
 
-/** The one part of the one `executeBatch` call, and its other arguments. */
-function sentPart(): Part {
+/**
+ * The one part of the one `executeBatch` call. No connection target, and
+ * outer headers only when `outer` is given: impersonation, which Dataverse
+ * ignores inside a part (live check, #225).
+ */
+function sentPart(outer?: Record<string, string>): Part {
   expect(host.executeBatch).toHaveBeenCalledTimes(1);
   const args = host.executeBatch.mock.calls[0];
-  // No connection target and no outer headers: one part, nothing else.
-  expect(args).toHaveLength(2);
+  expect(args).toHaveLength(outer ? 3 : 2);
   expect(args[1]).toBeUndefined();
+  if (outer) expect(args[2]).toEqual(outer);
   const parts = args[0] as Part[];
   expect(parts).toHaveLength(1);
   return parts[0];
@@ -186,16 +190,16 @@ describe('Update: PUT of one column', () => {
     });
   });
 
-  it('sends the precondition, bypass and impersonation rows on the part', async () => {
+  it('sends bypass in the part, impersonation on the outer $batch, and no If-Match', async () => {
+    // Live (#225): Dataverse refuses any If-Match on a column's URL (405,
+    // 0x80060888), so the Precondition pane's choice isn't sent.
     const s = put({
       concurrency: { kind: 'update-only' },
       headers: pane({ MSCRMCallerID: CALLER }),
       bypass: { ...defaultBypassOptions(), businessLogic: 'sync' },
     });
     await executeUpdate(s, composed(s));
-    expect(sentPart().headers).toEqual({
-      MSCRMCallerID: CALLER,
-      'If-Match': '*',
+    expect(sentPart({ MSCRMCallerID: CALLER }).headers).toEqual({
       'MSCRM.BypassBusinessLogicExecution': 'CustomSync',
     });
   });
@@ -215,26 +219,10 @@ describe('Update: PUT of one column', () => {
     });
   });
 
-  it('a stale If-Match ETag is a real 412, with the Dataverse error, nothing thrown', async () => {
-    answer({
-      status: 412,
-      statusText: 'Precondition Failed',
-      headers: {},
-      body: {
-        error: { code: '0x80060882', message: "The version of the existing record doesn't match." },
-      },
-    });
+  it("doesn't send an ETag either: there's no versioning at column level", async () => {
     const s = put({ concurrency: { kind: 'etag', etag: 'W/"1"' } });
-    const r = await executeUpdate(s, composed(s));
-    expect(sentPart().headers).toEqual({ 'If-Match': 'W/"1"' });
-    expect(r).toMatchObject({
-      status: 412,
-      statusText: 'Precondition Failed',
-      ok: false,
-      outcome: 'error',
-      transport: 'batch',
-      body: { error: { code: '0x80060882' } },
-    });
+    await executeUpdate(s, composed(s));
+    expect(sentPart()).not.toHaveProperty('headers');
   });
 
   it('a column name that would change the URL is refused before anything is sent', async () => {
@@ -286,7 +274,7 @@ describe('Delete: clear one column', () => {
     });
     const s = clear({ headers: pane({ MSCRMCallerID: CALLER }) });
     const r = await executeDelete(s, composed(s));
-    expect(sentPart().headers).toEqual({ MSCRMCallerID: CALLER });
+    expect(sentPart({ MSCRMCallerID: CALLER })).not.toHaveProperty('headers');
     expect(r.impersonatedUserNotFound).toBe('MSCRMCallerID');
   });
 
@@ -298,13 +286,19 @@ describe('Delete: clear one column', () => {
           "Error invoking remote method 'dataverse.executeBatch': Error: Dataverse additional headers were rejected",
         ),
       );
-    const s = clear({ concurrency: { kind: 'etag', etag: 'W/"7"' } });
+    const s = clear({ bypass: { ...defaultBypassOptions(), businessLogic: 'sync' } });
     const r = await executeDelete(s, composed(s));
     expect(r.status).toBe(403);
     expect((r.body as { error: { code: string; message: string } }).error).toMatchObject({
       code: HEADER_CONSENT_DECLINED_CODE,
-      message: expect.stringContaining('(If-Match)'),
+      message: expect.stringContaining('(MSCRM.BypassBusinessLogicExecution)'),
     });
+  });
+
+  it("doesn't send an ETag: Dataverse refuses one on a column's URL", async () => {
+    const s = clear({ concurrency: { kind: 'etag', etag: 'W/"7"' } });
+    await executeDelete(s, composed(s));
+    expect(sentPart()).not.toHaveProperty('headers');
   });
 
   it('the whole-row delete still goes through the typed call', async () => {
@@ -399,6 +393,28 @@ describe('Upsert by alternate key', () => {
     const s = byKey({ prefer: { ...emptyPrefer(), returnRepresentation: true } });
     const r = await executeUpsert(s, composed(s));
     expect(r).toMatchObject({ status: 200, ok: true, body: { accountid: ACCOUNT_ID } });
+  });
+
+  it('a stale If-Match ETag is a real 412, with the Dataverse error, nothing thrown', async () => {
+    answer({
+      status: 412,
+      statusText: 'Precondition Failed',
+      headers: {},
+      body: {
+        error: { code: '0x80060882', message: "The version of the existing record doesn't match." },
+      },
+    });
+    const s = byKey({ concurrency: { kind: 'etag', etag: 'W/"1"' } });
+    const r = await executeUpsert(s, composed(s));
+    expect(sentPart().headers).toEqual({ 'If-Match': 'W/"1"' });
+    expect(r).toMatchObject({
+      status: 412,
+      statusText: 'Precondition Failed',
+      ok: false,
+      outcome: 'error',
+      transport: 'batch',
+      body: { error: { code: '0x80060882' } },
+    });
   });
 
   it('create-only on an existing row is a 412', async () => {

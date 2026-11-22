@@ -30,6 +30,8 @@ import {
   Input,
   Button,
   Caption1,
+  MessageBar,
+  MessageBarBody,
   Radio,
   RadioGroup,
   tokens,
@@ -62,6 +64,12 @@ export interface PreconditionEditorProps {
   currentEtag?: string | null;
   /** Theming hook for the pane header — same convention other editors use. */
   group?: RequestGroup;
+  /**
+   * Why no precondition can be sent with this request. When set, the pane
+   * shows the reason instead of the choices, and the request goes without
+   * one (see `addressesOneColumn` in requestHeaders).
+   */
+  notApplicable?: string | null;
 }
 
 /** Static label + description for each kind. Stays the same across modes; the
@@ -97,6 +105,7 @@ export function PreconditionEditor({
   available = ALL_KINDS,
   currentEtag,
   group = 'write',
+  notApplicable,
 }: PreconditionEditorProps) {
   const s = useStudioStyles();
   const selected = mode.kind;
@@ -114,14 +123,29 @@ export function PreconditionEditor({
     }
   };
 
+  const head = (
+    <PaneHead
+      icon={ShieldLock20Filled}
+      title="Precondition"
+      sub="Optimistic concurrency & existence checks — controls the If-Match / If-None-Match header."
+      group={group}
+    />
+  );
+
+  if (notApplicable) {
+    return (
+      <div>
+        {head}
+        <MessageBar intent="info" layout="multiline" style={{ maxWidth: 720 }}>
+          <MessageBarBody>{notApplicable}</MessageBarBody>
+        </MessageBar>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <PaneHead
-        icon={ShieldLock20Filled}
-        title="Precondition"
-        sub="Optimistic concurrency & existence checks — controls the If-Match / If-None-Match header."
-        group={group}
-      />
+      {head}
 
       {mode.kind !== 'none' && (
         <HostHeaderNotice

@@ -225,11 +225,19 @@ function toWire({ op, args }: HostCall): Wire {
   const headers = (last && typeof last === 'object' ? last : {}) as Headers;
   switch (op) {
     case 'executeBatch': {
-      // One request as a one-part $batch (#225): the part is the request.
+      // One request as a one-part $batch (#225): the part is the request,
+      // run as the outer request's caller (its impersonation headers).
       const parts = args[0] as { method: string; url: string; headers?: Headers; body?: unknown }[];
-      if (parts.length !== 1 || args.length !== 2) throw new Error('not a one-part $batch');
+      if (parts.length !== 1 || args.length < 2 || args.length > 3)
+        throw new Error('not a one-part $batch');
       const [part] = parts;
-      return { method: part.method, path: part.url, body: part.body, headers: part.headers ?? {} };
+      const outer = (args.length === 3 ? args[2] : {}) as Headers;
+      return {
+        method: part.method,
+        path: part.url,
+        body: part.body,
+        headers: { ...outer, ...(part.headers ?? {}) },
+      };
     }
     case 'queryData':
       return { method: 'GET', path: args[0] as string, headers: args.length > 1 ? headers : {} };
@@ -592,7 +600,7 @@ describe('PUT one column, clear one column, Upsert by alternate key', () => {
     'X-Custom': 'sent as typed',
   };
 
-  it('Update by PUT of one column, with If-Match: *', async () => {
+  it("Update by PUT of one column: the precondition isn't sent, by either", async () => {
     const s = {
       table: 'account',
       recordId: ACCOUNT_ID,
@@ -624,9 +632,11 @@ describe('PUT one column, clear one column, Upsert by alternate key', () => {
     expect(code.path).toBe(`accounts(${ACCOUNT_ID})/sample_tags`);
     expect(code.body).toEqual({ value: '100,200' });
     expect(code.headers).not.toHaveProperty('Prefer');
+    // Dataverse refuses any If-Match on a column's URL (#225, live).
+    expect(code.headers).not.toHaveProperty('If-Match');
   });
 
-  it('Delete of one column, with an ETag', async () => {
+  it("Delete of one column: an ETag isn't sent, by either", async () => {
     const s = {
       table: 'account',
       recordId: ACCOUNT_ID,
@@ -650,6 +660,7 @@ describe('PUT one column, clear one column, Upsert by alternate key', () => {
     expect(host.calls.map((c) => c.op)).toEqual(['executeBatch']);
     expectSame(code, toWire(host.calls[0]), sentHeaders.raw(code.headers));
     expect(code.path).toBe(`accounts(${ACCOUNT_ID})/accountnumber`);
+    expect(code.headers).not.toHaveProperty('If-Match');
   });
 
   it('Upsert by a composite alternate key: create-only, return=representation, $select', async () => {

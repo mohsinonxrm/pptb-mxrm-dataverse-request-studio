@@ -40,6 +40,27 @@ function decodedForms(segment: string): string[] {
 }
 
 /**
+ * The host percent-decodes the whole path up to three times to look for
+ * traversal, and refuses the request ("Dataverse batch request URL contains
+ * invalid encoding") when a round throws. A literal `%` in a value (written
+ * `%25`) does that when what follows it, once decoded, isn't a valid escape:
+ * `50%é` → `50%25%C3%A9` → `50%é` → throws. Checked live in #225.
+ */
+function hostRejectsEncoding(path: string): boolean {
+  let s = path;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const next = decodeURIComponent(s);
+      if (next === s) return false;
+      s = next;
+    } catch {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * `url` without its `https://<org>/api/data/v9.x/` (or `/api/data/v9.x/`)
  * prefix, so what's left is relative to the Web API base; unchanged when it
  * has neither. Shared by `toBatchUrl` and the typed calls that follow an
@@ -57,8 +78,8 @@ export function stripApiPrefix(url: string): string {
  *   - every literal `?` after the first is written `%3F`: the host splits the
  *     URL with `split("?", 2)`, which drops everything after a second `?`.
  * Throws `BatchPathError` for an empty path, an absolute URL that isn't a
- * Dataverse Web API URL, a `..` segment or a nested `$batch`, all of which
- * the host would reject.
+ * Dataverse Web API URL, a `..` segment, a nested `$batch`, or a `%` the
+ * host can't decode, all of which the host would reject.
  */
 export function toBatchUrl(path: string): string {
   const trimmed = path.trim();
@@ -84,5 +105,10 @@ export function toBatchUrl(path: string): string {
     }
   }
   if (!resource) throw new BatchPathError('the request path is empty.');
+  if (hostRejectsEncoding(resource)) {
+    throw new BatchPathError(
+      'Power Platform ToolBox refuses this URL: it decodes a "%" in the path as a broken escape. A value in the URL, such as an alternate-key value, contains "%". Address the row by its GUID instead.',
+    );
+  }
   return query === undefined ? resource : `${resource}?${query.replace(/\?/g, '%3F')}`;
 }

@@ -79,7 +79,9 @@ has C# / HTTP / Python / PPTB.
 > through ToolBox's `$batch` as one request each, since ToolBox's typed calls
 > can't express them. ToolBox's own impersonation setting doesn't reach them:
 > to run them as another user, turn on `MSCRMCallerID` or `CallerObjectId` in
-> HTTP headers.
+> HTTP headers. Dataverse doesn't support `If-Match` on a single column, so the
+> Precondition pane doesn't apply to the first two. ToolBox can't send an
+> alternate-key value containing `%`; address that row by its GUID.
 
 ### 📦 Bulk group
 

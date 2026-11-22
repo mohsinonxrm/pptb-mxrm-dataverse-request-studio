@@ -215,3 +215,67 @@ describe('the three $batch shapes can be executed (#225)', () => {
     expect(text()).not.toContain(BATCH_TRANSPORT_NOTE);
   });
 });
+
+describe("one column: the Precondition pane says why there's none (#225)", () => {
+  // Live: Dataverse refuses any If-Match on a column's URL (405, 0x80060888).
+  it("Update, PUT: the reason instead of the choices, and an ETag problem doesn't block", () => {
+    const s: UpdateState = {
+      table: 'account',
+      recordId: ACCOUNT_ID,
+      method: 'PUT',
+      putColumn: 'name',
+      fieldValues: { name: 'Contoso' },
+      nullFields: [],
+      rawBody: null,
+      prefer: emptyPrefer(),
+      headers: defaultWriteHeaders(),
+      returnSelect: [],
+      concurrency: { kind: 'etag', etag: 'not an etag' },
+      bypass: defaultBypassOptions(),
+      dirty: new Set(),
+    };
+    open(Update, 'update', serializeUpdate(s), 'precondition');
+    expect(text()).toContain('Not sent with a single-column PUT');
+    expect(hostEl!.querySelector('input[type=radio]')).toBeNull();
+    expect(host.urlBar?.disabledReason ?? null).toBeNull();
+  });
+
+  it('Update, PATCH: the choices as before', () => {
+    const s: UpdateState = {
+      table: 'account',
+      recordId: ACCOUNT_ID,
+      method: 'PATCH',
+      putColumn: null,
+      fieldValues: { name: 'Contoso' },
+      nullFields: [],
+      rawBody: null,
+      prefer: emptyPrefer(),
+      headers: defaultWriteHeaders(),
+      returnSelect: [],
+      concurrency: { kind: 'update-only' },
+      bypass: defaultBypassOptions(),
+      dirty: new Set(),
+    };
+    open(Update, 'update', serializeUpdate(s), 'precondition');
+    expect(text()).not.toContain('Not sent with a single-column PUT');
+    expect(hostEl!.querySelectorAll('input[type=radio]').length).toBe(3);
+  });
+
+  it('Delete, clear one column: the reason instead of the choices', () => {
+    const s: DeleteState = {
+      table: 'account',
+      recordId: ACCOUNT_ID,
+      scope: { kind: 'single-property', column: 'accountnumber' },
+      concurrency: { kind: 'etag', etag: 'W/"1"' },
+      headers: defaultWriteHeaders(),
+      bypassCustomPlugins: false,
+      bypass: defaultBypassOptions(),
+      confirmText: '',
+      acknowledged: false,
+      dirty: new Set(),
+    };
+    open(Delete, 'delete', serializeDelete(s), 'precondition');
+    expect(text()).toContain('Not sent when clearing one column');
+    expect(hostEl!.querySelector('input[type=radio]')).toBeNull();
+  });
+});

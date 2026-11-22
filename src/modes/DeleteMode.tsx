@@ -389,7 +389,9 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
         ? 'Record id is not a valid GUID.'
         : state.scope.kind === 'single-property' && !state.scope.column
           ? 'Pick a column to clear.'
-          : state.concurrency.kind === 'etag' && etagProblem(state.concurrency.etag)
+          : state.scope.kind === 'whole-row' &&
+              state.concurrency.kind === 'etag' &&
+              etagProblem(state.concurrency.etag)
             ? etagProblem(state.concurrency.etag)
             : state.headers.some((h) => h.enabled && !h.name)
               ? 'Fix empty header name.'
@@ -432,7 +434,12 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     state.scope.kind === 'whole-row' ? 'row' : `clear ${state.scope.column ?? '?'}`;
   // DELETE only supports `If-Match: "<etag>"` per docs — no `*` form,
   // no `If-None-Match`. Two badge states only.
-  const concurrencyBadge = state.concurrency.kind === 'etag' ? 'If-Match: etag' : 'none';
+  const concurrencyBadge =
+    state.scope.kind === 'single-property'
+      ? 'n/a for single property'
+      : state.concurrency.kind === 'etag'
+        ? 'If-Match: etag'
+        : 'none';
 
   const isWholeRow = state.scope.kind === 'whole-row';
   const confirmOk =
@@ -511,7 +518,7 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     {
       id: 'headers',
       label: 'Headers',
-      meta: `${state.headers.filter((h) => h.enabled).length + (state.concurrency.kind !== 'none' ? 1 : 0)} active`,
+      meta: `${state.headers.filter((h) => h.enabled).length + (state.scope.kind === 'whole-row' && state.concurrency.kind !== 'none' ? 1 : 0)} active`,
       items: [
         {
           id: 'headers',
@@ -617,6 +624,11 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
           // "require existing" adds no value. Restrict to None + ETag.
           available={['none', 'etag']}
           group="write"
+          notApplicable={
+            state.scope.kind === 'single-property'
+              ? "Not sent when clearing one column: Dataverse doesn't support If-Match on a column's URL and rejects the request. Switch the scope back to the whole row to use optimistic concurrency."
+              : null
+          }
         />
       );
       break;

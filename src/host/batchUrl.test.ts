@@ -61,6 +61,24 @@ describe('toBatchUrl', () => {
     );
   });
 
+  it('rejects a % that ToolBox would decode into a broken escape', () => {
+    // Live in #225: msfp_emailaddress='z%é…' came back "URL contains invalid encoding".
+    const path = "msfp_unsubscribedrecipients(msfp_emailaddress='z%25%C3%A9%40example.invalid')";
+    expect(() => toBatchUrl(path)).toThrow(BatchPathError);
+    expect(() => toBatchUrl(path)).toThrow(/decodes a "%" in the path/);
+    // A trailing % too: `100%25` decodes to `100%`, which isn't an escape.
+    expect(() => toBatchUrl("accounts(accountnumber='100%25')")).toThrow(BatchPathError);
+  });
+
+  it('keeps a % that decodes cleanly, and any % in the query', () => {
+    expect(toBatchUrl("accounts(accountnumber='50%2541')")).toBe(
+      "accounts(accountnumber='50%2541')",
+    );
+    expect(toBatchUrl("accounts?$filter=contains(name,'%25%C3%A9')")).toBe(
+      "accounts?$filter=contains(name,'%25%C3%A9')",
+    );
+  });
+
   it('rejects a nested $batch', () => {
     expect(() => toBatchUrl('$batch')).toThrow(/inside another \$batch/);
     expect(() => toBatchUrl('/api/data/v9.2/$batch')).toThrow(BatchPathError);
