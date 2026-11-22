@@ -119,7 +119,7 @@ describe('write-badges.mjs', () => {
       '/refs/tags/v1.5.0/assets/badges/version.svg',
     );
     expect(JSON.parse(readFileSync(pkgPath, 'utf8')).configurations.readmeUrl).toBe(
-      'https://raw.githubusercontent.com/o/r/refs/tags/v1.5.0/README.md',
+      'https://raw.githubusercontent.com/o/r/refs/heads/main/README.md',
     );
   });
 });
