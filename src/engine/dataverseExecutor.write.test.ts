@@ -325,6 +325,8 @@ describe('host calls', () => {
       upsert({ fieldValues: { primarycontactid: { id: CONTACT_ID, targetEntity: 'contact' } } }),
     );
     expect(r.status).toBe(204);
+    // The host passes no row back; no stand-in body either (#224).
+    expect(r.body).toBeNull();
     expect(host.update).toHaveBeenCalledWith(
       'account',
       ACCOUNT_ID,

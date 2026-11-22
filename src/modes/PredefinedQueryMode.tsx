@@ -67,7 +67,7 @@ import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { topLevelRowCount } from '../views/results/flattenExpansions';
 import { findRequestType } from '../registry/requestTypes';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { buildPredefinedQuery } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
 import type { PredefinedQueryState, PredefinedRelatedTarget, RecentRun } from '../state/readState';
@@ -87,6 +87,8 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
+import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
+import { addRun, useRecentRuns } from '../state/runHistory';
 
 // Empty initial state — the studio is a request *builder*. Pre-seeding a
 // table or a query confused users in PPTB ("why is this random view
@@ -253,8 +255,11 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
   const [activeNode, setActiveNode] = useState<ClauseId>('target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
+  // The URL the shown result came from: the builder may have changed since (#291).
+  const [runUrl, setRunUrl] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('predefined-query');
 
   // Save / Load
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
@@ -457,25 +462,21 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
 
   const onExecute = async () => {
     setLoading(true);
+    setRunUrl(built.relativeUrl);
     const res = await runtime.predefined(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'predefined-query',
-          url: built.relativeUrl,
-          method: 'GET',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: topLevelRowCount(res.body) ?? 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'predefined-query',
+        url: built.relativeUrl,
+        method: 'GET',
+        status: res.status,
+        ms: res.ms,
+        rowCount: topLevelRowCount(res.body) ?? 0,
+      }),
     );
     setState((ss) => ({ ...ss, dirty: new Set() }));
   };
@@ -488,13 +489,25 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
     ],
     [['Relationship', state.related?.navProperty]],
   );
-  const disabledReason = !state.table
-    ? 'Pick a table first.'
-    : !state.queryId
-      ? 'Pick a saved query or user view.'
-      : state.related && !(state.related.navProperty && state.related.recordId)
-        ? 'Pick the relationship and the row whose related records to query.'
-        : urlPartProblem;
+  // Execute blockers, as advisories with a way to the fix (#294). The table,
+  // query and related row are all picked in the Target pane.
+  const advisories = firstBlocker([
+    { when: !state.table, id: 'pq-table', title: 'Pick a table first.', focusNode: 'target' },
+    {
+      when: !state.queryId,
+      id: 'pq-query',
+      title: 'Pick a saved query or user view.',
+      focusNode: 'target',
+    },
+    {
+      when: state.related && !(state.related.navProperty && state.related.recordId),
+      id: 'pq-related',
+      title: 'Pick the relationship and the row whose related records to query.',
+      focusNode: 'target',
+    },
+    { when: urlPartProblem, id: 'pq-url-part', title: urlPartProblem ?? '', focusNode: 'target' },
+  ]);
+  const disabledReason = disabledReasonFromAdvisories(advisories);
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializePredefinedQuery(state), [state]);
@@ -890,7 +903,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
                         {selectedQuery.layoutColumns.map((c) => (
                           <Tooltip
                             key={c.fullName}
-                            relationship="label"
+                            relationship="description"
                             content={
                               c.isLink
                                 ? `${c.fullName} — joined column via link alias \`${c.linkAlias}\` · width ${c.width}px`
@@ -1059,6 +1072,8 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
+          advisories={advisories}
+          onAdvisoryFocus={(id) => setActiveNode(id as ClauseId)}
         />
       }
     >
@@ -1074,6 +1089,7 @@ export function PredefinedQueryMode({ themeMode }: { themeMode: ThemeMode }) {
             result={result}
             mode="multi"
             table={state.table}
+            requestUrl={runUrl}
             // Pass the layoutxml column order so the results grid columns
             // match what Dynamics 365 / Sales Hub shows for the same view.
             // Without this the grid falls back to JSON-key order, which on

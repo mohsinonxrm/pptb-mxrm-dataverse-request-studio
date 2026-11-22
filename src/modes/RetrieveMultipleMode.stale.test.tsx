@@ -41,7 +41,7 @@ vi.mock('../shell/dialogs', async (importOriginal) => ({
 import { RetrieveMultipleMode } from './RetrieveMultipleMode';
 import { SaveContextRoot, type SaveContextValue } from '../state/SaveContext';
 import { serializeRetrieveMultiple, type SavedRequest } from '../state/savedRequests';
-import { __clearLiveTables, findTable } from '../mock/metadata';
+import { __clearLiveTables, findTable } from '../metadata/metadata';
 import { group, registerFixtureTables, retrieveMultipleState } from '../test/fixtures';
 import type { FilterNode } from '../editors/filter/filterTree';
 

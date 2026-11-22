@@ -46,6 +46,7 @@ import {
 } from '../engine/odataParser';
 import { useScopedEntities } from '../host/useScopedEntities';
 import { metadata } from '../host/metadataProvider';
+import { useUrlSuggest } from '../primitives/useUrlSuggest';
 
 export interface PasteODataDialogProps {
   /** Optional trigger element to replace the default button. Must be a single
@@ -58,6 +59,13 @@ export interface PasteODataDialogProps {
 export function PasteODataDialog({ children, onApply }: PasteODataDialogProps) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
+  // Completion when the URL is typed rather than pasted (#268)
+  const urlSuggest = useUrlSuggest({
+    value: text,
+    onChange: setText,
+    mode: 'url',
+    multiline: true,
+  });
   const [result, setResult] = useState<ParseResult | null>(null);
   const [parsing, setParsing] = useState(false);
   // A pasted URL may name any table, in scope or not (#44).
@@ -140,7 +148,7 @@ export function PasteODataDialog({ children, onApply }: PasteODataDialogProps) {
 
             <Textarea
               value={text}
-              onChange={(_, d) => setText(d.value)}
+              {...urlSuggest.fieldProps}
               placeholder="accounts?$select=name&$filter=revenue gt 1000000&$top=10"
               style={{
                 width: '100%',
@@ -151,6 +159,7 @@ export function PasteODataDialog({ children, onApply }: PasteODataDialogProps) {
               resize="vertical"
               disabled={parsing}
             />
+            {urlSuggest.list}
 
             <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
               <Button

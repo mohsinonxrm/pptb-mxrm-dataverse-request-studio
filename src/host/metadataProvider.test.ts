@@ -31,7 +31,7 @@ vi.mock('./pptbClient', async (importOriginal) => ({
 
 import { metadata, subscribeMetadataReset } from './metadataProvider';
 import { loadEntityAttributes } from './dataverseMetadata';
-import { __subscribeLiveTables } from '../mock/metadata';
+import { __subscribeLiveTables } from '../metadata/metadata';
 
 type Rels = {
   oneToMany: RelationshipMetadata[];

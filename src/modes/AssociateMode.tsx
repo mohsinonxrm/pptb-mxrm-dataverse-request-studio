@@ -45,11 +45,12 @@ import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from '../editors/PaneHead';
 import { NavPropertyPicker } from '../editors/NavPropertyPicker';
 import { AssociateTargetsEditor, targetsTitle } from '../editors/AssociateTargetsEditor';
+import { AllOrNothingOption } from '../editors/AllOrNothingOption';
 import { TargetEditor } from '../editors/TargetEditor';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import {
   buildAssociate,
@@ -58,7 +59,7 @@ import {
   relateRequestHeaders,
 } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
-import { relateDoneCount } from '../engine/dataverseExecutor';
+import { MAX_CHANGE_SET, relateAsChangeSet, relateDoneCount } from '../engine/dataverseExecutor';
 import type { AssociateState } from '../state/relateState';
 import { isSingleValuedNav } from '../state/relateState';
 import type { RecentRun } from '../state/readState';
@@ -77,6 +78,8 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
+import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
+import { addRun, useRecentRuns } from '../state/runHistory';
 
 // Empty initial state. The user picks a table → record → nav property →
 // target(s) before the request can fire. Seeding with a mock account id
@@ -109,7 +112,8 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('associate');
 
   // Save / Load tracking
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
@@ -138,6 +142,8 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
   // PPTB constraint: PUT $ref isn't exposed on dataverseAPI, so PATCH is
   // also the only path that actually works in PPTB for single-valued.
   const method: 'POST' | 'PATCH' = singleValued ? 'PATCH' : 'POST';
+  // All or nothing (#224): the targets go as one change set, as Execute sends them.
+  const changeSet = !singleValued && relateAsChangeSet(state.allOrNothing, requests.length);
 
   const markDirty = (id: string) =>
     setState((s) => {
@@ -158,17 +164,51 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
     ],
     [['Navigation property', state.navProperty]],
   );
-  const disabledReason = !tbl
-    ? 'Pick a source table first.'
-    : !state.sourceId
-      ? 'Pick a source record.'
-      : !state.navProperty
-        ? 'Pick a navigation property.'
-        : state.targets.length === 0
-          ? 'Pick at least one target record.'
-          : state.headers.some((h) => h.enabled && !h.name)
-            ? 'Fix empty header name.'
-            : urlPartProblem;
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const advisories = firstBlocker([
+    { when: !tbl, id: 'assoc-table', title: 'Pick a source table first.', focusNode: 'source' },
+    {
+      when: !state.sourceId,
+      id: 'assoc-source',
+      title: 'Pick a source record.',
+      focusNode: 'source',
+    },
+    {
+      when: !state.navProperty,
+      id: 'assoc-nav',
+      title: 'Pick a navigation property.',
+      focusNode: 'nav',
+    },
+    {
+      when: state.targets.length === 0,
+      id: 'assoc-targets',
+      title: 'Pick at least one target record.',
+      focusNode: 'targets',
+    },
+    {
+      when: changeSet && requests.length > MAX_CHANGE_SET,
+      id: 'assoc-change-set-cap',
+      title: `All or nothing sends at most ${MAX_CHANGE_SET} requests in one change set; this has ${requests.length}. Remove targets or turn it off.`,
+      focusNode: 'targets',
+    },
+    {
+      when: state.headers.some((h) => h.enabled && !h.name),
+      id: 'assoc-header-name',
+      title: 'Fix empty header name.',
+      focusNode: 'headers',
+    },
+    {
+      when: urlPartProblem,
+      id: 'assoc-url-part',
+      title: urlPartProblem ?? '',
+      focusNode: urlPartProblem?.startsWith('Target')
+        ? 'targets'
+        : urlPartProblem?.startsWith('Navigation')
+          ? 'nav'
+          : 'source',
+    },
+  ]);
+  const disabledReason = disabledReasonFromAdvisories(advisories);
 
   const onExecute = async () => {
     setLoading(true);
@@ -176,23 +216,18 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'associate',
-          url: built.relativeUrl,
-          method,
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: relateDoneCount(res, requests.length) ?? 0,
-          // Recent runs shows no row count for writes (#309); say how many links were done.
-          summary: `${relateDoneCount(res, requests.length) ?? 0} of ${requests.length} linked`,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'associate',
+        url: built.relativeUrl,
+        method,
+        status: res.status,
+        ms: res.ms,
+        rowCount: relateDoneCount(res, requests.length) ?? 0,
+        // Recent runs shows no row count for writes (#309); say how many links were done.
+        summary: `${relateDoneCount(res, requests.length) ?? 0} of ${requests.length} linked`,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
@@ -319,7 +354,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
                 id: 'preview',
                 icon: Code20Filled,
                 iconFilled: Code20Filled,
-                label: `${requests.length} request${requests.length === 1 ? '' : 's'}`,
+                label: `${requests.length} request${requests.length === 1 ? '' : 's'}${changeSet ? ' · all or nothing' : ''}`,
                 badge: requests.length,
                 badgeAppearance: 'ghost' as const,
               },
@@ -433,11 +468,22 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
           setTargetNames={(n) => set('targetNames', n)}
           group="relate"
           resolvedMethod={nav ? method : null}
+          changeSet={changeSet}
+          footer={
+            nav && !singleValued ? (
+              <AllOrNothingOption
+                checked={!!state.allOrNothing}
+                onChange={(v) => set('allOrNothing', v || undefined, 'targets')}
+                targets={state.targets.length}
+                verb="POST"
+              />
+            ) : undefined
+          }
         />
       );
       break;
     case 'preview':
-      pane = <RequestsPreview requests={requests} />;
+      pane = <RequestsPreview requests={requests} changeSet={changeSet} />;
       break;
     case 'headers':
       pane = (
@@ -469,6 +515,7 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
             description: `target ${r.targetId}`,
           }))
         : undefined,
+    changeSet,
   };
 
   return (
@@ -502,6 +549,8 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
+          advisories={advisories}
+          onAdvisoryFocus={setActivePath}
         />
       }
     >
@@ -541,8 +590,10 @@ export function AssociateMode({ themeMode }: { themeMode: ThemeMode }) {
 // ──────────────────────────────────────────────────────────────
 function RequestsPreview({
   requests,
+  changeSet,
 }: {
   requests: import('../engine/urlBuilder').AssociateRequest[];
+  changeSet: boolean;
 }) {
   const s = useStudioStyles();
   return (
@@ -550,7 +601,11 @@ function RequestsPreview({
       <PaneHead
         icon={Code20Filled}
         title={`Generated requests (${requests.length})`}
-        sub="Each target queues a separate HTTP request. For large counts, prefer a $batch request."
+        sub={
+          changeSet
+            ? 'All or nothing: these requests go together as one $batch change set, so all succeed or none do.'
+            : 'Each target queues a separate HTTP request. For large counts, prefer a $batch request.'
+        }
         group="relate"
       />
       <div
@@ -602,7 +657,7 @@ function RequestsPreview({
   );
 }
 
-function cardinalityShort(c: import('../mock/metadata').NavProperty['cardinality']): string {
+function cardinalityShort(c: import('../metadata/metadata').NavProperty['cardinality']): string {
   switch (c) {
     case 'OneToMany':
       return '1:N';

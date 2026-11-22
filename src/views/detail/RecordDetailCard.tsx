@@ -40,7 +40,7 @@ import {
   BranchFork16Regular,
   BranchFork20Regular,
 } from '@fluentui/react-icons';
-import { findTable } from '../../mock/metadata';
+import { findTable } from '../../metadata/metadata';
 import {
   partitionRecord,
   prettifyKey,

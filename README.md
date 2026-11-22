@@ -9,7 +9,7 @@ file / image / attachment operations.
 Built for [Power Platform ToolBox](https://www.powerplatformtoolbox.com/) with
 React 18, Fluent UI v9, TypeScript, and live Dataverse metadata integration.
 
-[![Version](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/version.svg)](https://www.npmjs.com/package/@mohsinonxrm/pptb-dataverse-request-studio)
+![Version](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/version.svg)
 ![Power Platform ToolBox 1.2.0 or later](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/pptb.svg)
 ![@pptb/types 1.2.7](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/pptb-types.svg)
 ![React 18](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/react.svg)
@@ -23,10 +23,11 @@ React 18, Fluent UI v9, TypeScript, and live Dataverse metadata integration.
 
 DRS ships with **23 request modes** in 7 groups. Every mode is
 metadata-driven and generates the correct OData / Web API shape. The
-single-request modes emit ready-to-copy code in ten formats: `fetch`, `Xrm.WebApi`,
-`Xrm.WebApi.executeMultiple`, `XMLHttpRequest`, Power Automate, C#, PowerShell,
-cURL, JSON, and an OpenAPI 3 document; the `$batch` and ExecuteMultiple
-modes have their own HTTP / fetch / C# / PPTB outputs.
+single-request modes emit ready-to-copy code in eleven formats: `fetch`,
+`Xrm.WebApi`, `Xrm.WebApi.executeMultiple`, `XMLHttpRequest`, Power Automate,
+C#, Python (`requests`), PowerShell, cURL, JSON, and an OpenAPI 3 document.
+`$batch` has its own HTTP / fetch / Python / PPTB outputs, and ExecuteMultiple
+has C# / HTTP / Python / PPTB.
 
 ### 📖 Read group
 
@@ -161,6 +162,11 @@ modes have their own HTTP / fetch / C# / PPTB outputs.
   precondition, bypass or impersonation header are blocked with an
   explanation. `Authorization` / `Cookie` headers are never sent, saved or
   exported.
+- **Import a cURL command** — More actions → **Import cURL command…** opens a
+  pasted `curl` command (a browser's Copy as cURL, or DRS's own cURL code) in
+  the mode that sends it: Retrieve Multiple / Single, Create, Update, Upsert,
+  Delete, Execute Action / Custom API / Custom Action, or `$batch`. It's
+  filled in, not run, and credentials and browser headers are left out.
 - **Antipattern advisories** — Surfaces real-time guidance per the
   [Microsoft query-antipatterns doc](https://learn.microsoft.com/en-us/power-apps/developer/data-platform/query-antipatterns):
   `FilteringOnCalculatedColumns`, `LargeAmountOfLogicalAttributes`, large-text
@@ -180,8 +186,11 @@ modes have their own HTTP / fetch / C# / PPTB outputs.
   dirty-state detection. Export / import as JSON, export as a Postman /
   Insomnia / Bruno collection, and copy or move requests from other
   connections. A library that can't be read is never overwritten.
-- **Recent runs** — click a run to restore it into its mode. Each mode keeps
-  its unsaved request when you switch modes.
+- **Recent runs** — click a run to restore it into its mode. Runs are kept
+  across restarts, per environment (the last 200, without response bodies or
+  credential / impersonation headers), and **Show all** searches them. Turn
+  the history off or clear it in Settings. Each mode keeps its unsaved request
+  when you switch modes.
 - **Results** — CSV export (formulas neutralised for spreadsheets), JSON
   export, Copy as TSV, and response-size hints.
 - **Accessibility** — labelled inputs, readable badges and live-region
@@ -240,7 +249,7 @@ modes have their own HTTP / fetch / C# / PPTB outputs.
 Dataverse Request Studio is available as a tool in Power Platform ToolBox.
 Install it from the tool gallery or load it as a custom tool. Stable releases
 are published to npm under the `latest` tag. Prereleases of the next version
-are published under the `beta` tag (for example `1.6.0-beta.1`) and use the
+are published under the `beta` tag (for example `1.7.0-beta.1`) and use the
 gold Insider icon.
 
 ### Choose the entity scope
@@ -423,7 +432,7 @@ src/
     executeBuilders.ts       — action / function / workflow body builders
     binaryBuilders.ts        — file / image / attachment pipelines
     codeGenerators.ts        — fetch, Xrm.WebApi (+ executeMultiple), XHR,
-                               Power Automate, C#, PowerShell, cURL, JSON
+                               Power Automate, C#, Python, PowerShell, cURL, JSON
     openApiGenerator.ts      — OpenAPI 3 document for the current request
     collectionFormats.ts, savedToCollection.ts
                              — Postman / Insomnia / Bruno collection export
@@ -442,6 +451,15 @@ src/
     csdlProvider.ts          — $metadata XML parsing + action / function index
     cache.ts                 — per-org metadata caches (TTL + in-flight dedup)
     useLiveMetadata.ts, useColumnDetail.ts, useScopedEntities.ts, …
+
+  metadata/                  — Dataverse metadata model
+    metadata.ts              — table / column types + live table registry
+                               (findTable, findTableBySet)
+    actionsCsdl.ts           — CSDL action / function types
+
+  env/                       — target environment
+    environment.ts           — connected environment (getEnv, ENV) +
+                               API_VERSION / API_BASE
 
   primitives/                — small reusable UI bits
     ClauseTreeItem.tsx, SectionHeader.tsx, ModeCard.tsx, RequestTypePicker.tsx
@@ -534,9 +552,9 @@ Ideas under consideration include:
 - FetchXML and Dataverse Search API modes
 - A metadata browser mode
 - Comparing responses across runs or environments
-- Importing Postman / Insomnia collections and cURL commands
-- More code-generation targets (C# ServiceClient / IOrganizationService,
-  Python, the PowerShell Dataverse module)
+- Importing Postman / Insomnia collections
+- More code-generation targets (C# ServiceClient / IOrganizationService, the
+  PowerShell Dataverse module)
 
 ---
 

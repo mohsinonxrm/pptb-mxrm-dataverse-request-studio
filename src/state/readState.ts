@@ -13,6 +13,12 @@ export interface RetrieveMultipleState {
   orderby: OrderbySpec[];
   top: number | null;
   countOn: boolean;
+  /**
+   * Count only (#272): just the number of rows matching $filter (up to
+   * 5,000), read from `@odata.count` on a one-row request. The other clauses
+   * aren't sent. Optional, so saved requests from before it read as off.
+   */
+  countOnly?: boolean;
   expand: ExpandSpec[];
   apply: ApplySpec;
   prefer: PreferSpec;
@@ -86,4 +92,9 @@ export interface RecentRun {
    * modes without a serializer (e.g. Retrieve NextLink).
    */
   snapshot?: unknown;
+  /**
+   * The kept copy of this run had its impersonation caller id removed
+   * (#226), so restoring it runs as the signed-in user unless it's set again.
+   */
+  impersonationCleared?: boolean;
 }

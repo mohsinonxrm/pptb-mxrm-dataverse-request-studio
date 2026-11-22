@@ -12,8 +12,8 @@
 //   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/attachment-annotation-files?tabs=webapi
 //   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/getfilesasurl?tabs=webapi
 
-import { ENV } from '../mock/environment';
-import { findTable } from '../mock/metadata';
+import { ENV } from '../env/environment';
+import { findTable } from '../metadata/metadata';
 import type { BuiltRequest } from './urlBuilder';
 import type { CodegenInputs } from './codeGenerators';
 import {

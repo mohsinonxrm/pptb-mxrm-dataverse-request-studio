@@ -16,7 +16,7 @@ import {
 } from '@fluentui/react-components';
 import { Document20Filled, Image20Filled } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
-import { findTable, type FileColumnMeta, type ImageColumnMeta } from '../mock/metadata';
+import { findTable, type FileColumnMeta, type ImageColumnMeta } from '../metadata/metadata';
 import { formatSize } from '../engine/binaryBuilders';
 import { fileNameColumnFor, imageCompanionsFor } from '../state/binaryState';
 import type { RequestGroup } from '../registry/requestTypes';

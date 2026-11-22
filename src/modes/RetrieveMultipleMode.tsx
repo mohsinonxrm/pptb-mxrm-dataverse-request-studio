@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Table20Regular,
   Table20Filled,
@@ -22,13 +22,19 @@ import {
   ChartMultiple20Filled,
   Link20Regular,
 } from '@fluentui/react-icons';
-import { tokens } from '@fluentui/react-components';
+import {
+  Button,
+  MessageBar,
+  MessageBarActions,
+  MessageBarBody,
+  tokens,
+} from '@fluentui/react-components';
 import { Sidebar, type SidebarClauseItem } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
 import { UrlBar } from '../shell/UrlBar';
 import { detectRetrieveMultipleAntipatterns } from '../engine/antipatterns';
 import { collectStrippedWildcards } from '../editors/filter/filterTree';
-import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
+import { adv, disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { validateRequest } from '../state/validateRequest';
 import { ModeShell } from '../shell/ModeShell';
 import { notify } from '../shell/dialogs';
@@ -45,10 +51,10 @@ import {
   hasCollectionExpandWithNestedExpand,
   hasCollectionInvolvedNestedExpand,
 } from '../editors/expand/expandTree';
-import { CodeView } from '../views/CodeView';
+import { CodeView } from '../views/LazyCodeView';
 import { ResultsView } from '../views/ResultsView';
 import { countRules, newId } from '../editors/filter/filterTree';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildRetrieveMultiple } from '../engine/urlBuilder';
 import { relatedMetadataAdvisories } from '../engine/navPath';
@@ -76,6 +82,7 @@ import type { ThemeMode } from '../theme/theme';
 import { useLiveTable, useWarmReferencedTables } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
 import { pageSizeIsSent } from '../host/pptbBridge';
+import { serviceProtectionLimit } from '../engine/serviceProtection';
 import { topLevelRowCount } from '../views/results/flattenExpansions';
 import {
   mergePage,
@@ -84,6 +91,13 @@ import {
   type PageBatch,
   type PagingStatus,
 } from '../views/results/pagedResults';
+import { addRun, useRecentRuns } from '../state/runHistory';
+import { useImportedRequest } from '../state/modeHandoff';
+import { importRetrieveMultiple } from '../engine/curlImport/applyImport';
+import { composeHeaders } from '../engine/requestHeaders';
+
+/** Sidebar nodes whose clauses Count only (#272) doesn't send. */
+const COUNT_ONLY_DROPPED = /^(select|orderby|top|expand|apply|prefer)(\/|$)/;
 
 // Empty initial state — the studio is a request *builder*; seeding it with
 // mock data confused users in PPTB ("why are there pre-filled rules against
@@ -179,7 +193,14 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('retrieve-multiple');
+  // The $filter "Run without $filter" cleared, until Restore or the next run (#291).
+  const [removedFilter, setRemovedFilter] = useState<RetrieveMultipleState['filter'] | null>(null);
+  const runWithoutFilterRef = useRef(false);
+  // The URL the shown result came from, for Copy request URL and the error
+  // report: the builder may have changed since (#291).
+  const [runUrl, setRunUrl] = useState<string | undefined>(undefined);
 
   // ── Saved-request persistence (localStorage) ──
   // Track the last-saved id + the hash of state at that save so we can
@@ -291,6 +312,15 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // The header holds on to these; the stable wrappers always run this
   // render's handlers, not the ones from when the context was published.
   const onSavedLatest = useLatestCallback(onSaved);
+  // cURL import (#271): a command pasted anywhere opens here. Like a recent
+  // run, it isn't a saved entry, so the save baseline stays as it was.
+  useImportedRequest('retrieve-multiple', (request) => {
+    if (request.modeId !== 'retrieve-multiple') return;
+    setState(importRetrieveMultiple(initialState(), request));
+    clearResult();
+    setTab('builder');
+    setActivePath(request.parsed.filter.rules.length > 0 ? 'filter' : 'target');
+  });
   const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(
@@ -328,6 +358,9 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   const [pageError, setPageError] = useState<string | null>(null);
   // Why the last Retrieve all paused with pages left (#223).
   const [pagingNotice, setPagingNotice] = useState<string | null>(null);
+  // Retrieve all paused on throttling (#269): scrolling mustn't page on its
+  // own until Continue, a new run, or Retrieve all asks again.
+  const [throttledPause, setThrottledPause] = useState(false);
   // Rows in the current result, and the run's Recent runs entry, so paging
   // keeps that entry's row count in step with the grid (#211).
   const rowCountRef = useRef(0);
@@ -338,6 +371,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     setIsLoadingMore(false);
     setPageError(null);
     setPagingNotice(null);
+    setThrottledPause(false);
     rowCountRef.current = 0;
     runRecentIdRef.current = null;
     return runIdRef.current;
@@ -348,11 +382,16 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     startRun();
     setLoading(false);
     setResult(null);
+    setRemovedFilter(null);
   };
 
-  const onExecute = async () => {
+  // `keepRemovedFilter` is only `true` for the run that "Run without
+  // $filter" starts; a click handler passes its event here instead.
+  const onExecute = async (keepRemovedFilter?: unknown) => {
+    if (keepRemovedFilter !== true) setRemovedFilter(null);
     const run = startRun();
     setLoading(true);
+    setRunUrl(built.relativeUrl);
     runPageSizeRef.current = state.prefer.maxpagesize;
     runHeadersRef.current = headerItemsToObject(state.headers, null);
     const res = await runtime.retrieveMultiple(state, runHeadersRef.current);
@@ -364,24 +403,51 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     const recentId = `r-${Date.now()}`;
     runRecentIdRef.current = recentId;
     rowCountRef.current = topLevelRowCount(res.body) ?? 0;
-    setRecents((rs) =>
-      [
-        {
-          id: recentId,
-          snapshot: currentSerialized,
-          modeId: 'retrieve-multiple',
-          url: built.relativeUrl,
-          method: 'GET',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: topLevelRowCount(res.body),
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        id: recentId,
+        snapshot: currentSerialized,
+        modeId: 'retrieve-multiple',
+        url: built.relativeUrl,
+        method: 'GET',
+        status: res.status,
+        ms: res.ms,
+        rowCount: topLevelRowCount(res.body),
+        // Count only (#272): the body is the count.
+        ...(typeof res.body === 'number'
+          ? { summary: `${res.body.toLocaleString()} matching row${res.body === 1 ? '' : 's'}` }
+          : {}),
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
+
+  // ── 0 rows: next steps (#291) ──
+  // "Run without $filter" clears the builder's $filter, so the builder, the
+  // URL and Recent runs all show what ran, and runs once that state has
+  // rendered. The results then offer Restore, which puts the $filter back,
+  // until the next run, a reset, or a new $filter in the builder.
+  const filterActionsOn = filterCount > 0 && !state.apply.enabled;
+  const runWithoutFilter = () => {
+    setRemovedFilter(state.filter);
+    runWithoutFilterRef.current = true;
+    setState((s) => ({ ...s, filter: emptyFilter() }));
+  };
+  const restoreFilter = () => {
+    const f = removedFilter;
+    setRemovedFilter(null);
+    if (f) setState((s) => ({ ...s, filter: f }));
+  };
+  useEffect(() => {
+    if (runWithoutFilterRef.current) {
+      runWithoutFilterRef.current = false;
+      void onExecute(true);
+    } else if (countRules(state.filter) > 0) {
+      setRemovedFilter(null);
+    }
+    // Runs on the render that has the cleared $filter; onExecute reads it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.filter]);
 
   // ── Infinite scroll + Retrieve-All ──
   // Dataverse paginates large result sets via `@odata.nextLink` (the URL
@@ -419,6 +485,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     setIsLoadingMore(true);
     setPageError(null);
     setPagingNotice(null);
+    setThrottledPause(false);
     return (): PagingStatus =>
       runIdRef.current !== run
         ? 'superseded'
@@ -439,7 +506,12 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
       );
       if (status() !== 'current') return;
       if (!more.ok) {
-        setPageError(`Couldn't load the next page: ${describePageError(more)}`);
+        const throttled = serviceProtectionLimit(more);
+        setPageError(
+          throttled
+            ? `Couldn't load the next page: Dataverse is throttling requests (${throttled.limit}). ${throttled.advice}`
+            : `Couldn't load the next page: ${describePageError(more)}`,
+        );
         return;
       }
       commitPages(pageOf(more));
@@ -462,7 +534,17 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
         commit: commitPages,
         status,
       });
-      if (outcome.kind === 'failed') {
+      const throttled = outcome.kind === 'failed' ? serviceProtectionLimit(outcome.error) : null;
+      if (throttled) {
+        // Throttling passes (#269): a pause with Continue, from the page
+        // that was refused, rather than an error. Rows so far are kept.
+        setThrottledPause(true);
+        setPagingNotice(
+          `Retrieve all paused: Dataverse is throttling requests (${throttled.limit}). ` +
+            `${rowCountRef.current.toLocaleString()} rows are loaded. ${throttled.advice} ` +
+            'Continue picks up from the next page.',
+        );
+      } else if (outcome.kind === 'failed') {
         setPageError(`Retrieve all stopped at a failed page: ${describePageError(outcome.error)}`);
       } else if (outcome.kind === 'paused') {
         setPagingNotice(
@@ -496,8 +578,10 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   const advisories = useMemo(() => {
     // When $apply is on, the top-level $filter is silently ignored by Dataverse
     // and the active filter is the apply.prefilter (filter() stage). Feed the
-    // correct one to the wildcard / antipattern detectors.
-    const activeFilter = state.apply.enabled ? state.apply.prefilter : state.filter;
+    // correct one to the wildcard / antipattern detectors. Count only (#272)
+    // never sends $apply, so its $filter is the one that counts.
+    const activeFilter =
+      state.apply.enabled && !state.countOnly ? state.apply.prefilter : state.filter;
     const stripped = collectStrippedWildcards(activeFilter).map((w) => ({
       col: w.col,
       raw: w.raw,
@@ -604,14 +688,50 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
       });
     }
 
-    return [
+    const all = [
       ...antipatterns,
       ...validations,
       ...nestingAdvisories,
       ...relatedMetadataAdvisories(related.pending, related.failed),
     ];
+    if (!state.countOnly) return all;
+    // Count only (#272) sends $filter and nothing else, so advice about the
+    // other clauses doesn't apply, and can't block Execute.
+    return [
+      ...all.filter((a) => !a.focusNode || !COUNT_ONLY_DROPPED.test(a.focusNode)),
+      adv.info(
+        'count-only',
+        'validation',
+        'Count only: just $filter is sent',
+        <>
+          The request asks for one row with <code>$count=true</code> and shows{' '}
+          <code>@odata.count</code>: the number of rows matching $filter, up to 5,000 (500 for
+          elastic tables). $select, $orderby, $expand, $top, $apply and the page size aren&apos;t
+          sent. (Dataverse doesn&apos;t accept $filter on <code>/$count</code>.)
+        </>,
+        'count',
+      ),
+      ...(state.apply.enabled
+        ? [
+            adv.warn(
+              'count-only-apply',
+              'validation',
+              "$apply isn't sent with Count only",
+              <>
+                The count is of the rows matching $filter
+                {state.apply.prefilter.rules.length > 0
+                  ? "; the $apply filter() stage doesn't narrow it. Put those conditions in $filter"
+                  : ''}
+                . Turn $apply off, or Count only off for the aggregate.
+              </>,
+              'filter',
+            ),
+          ]
+        : []),
+    ];
     // eslint-disable-next-line react-hooks/exhaustive-deps -- related.pending / failed are new arrays every render, so keyed on their joined contents; liveTable re-runs it when the table's metadata lands
   }, [
+    state.countOnly,
     state.table,
     state.select,
     state.filter,
@@ -637,8 +757,9 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
       : (blockerReason ?? null);
 
   // Per the aggregate-data docs, $apply overrides $select / $filter / $orderby / $expand / $count.
-  // Hoisted here so the sidebar + right-pane router both reference the same flag.
-  const applyActive = state.apply.enabled;
+  // Hoisted here so the sidebar + right-pane router both reference the same flag. Count only
+  // (#272) doesn't send $apply, so nothing is overridden then.
+  const applyActive = state.apply.enabled && !state.countOnly;
 
   // ── Sidebar tree for $expand (recursive) ────────────────────
   // Sub-clause visibility per the join-tables.md rules:
@@ -815,7 +936,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
           label: '$count',
           code: true,
           dirty: state.dirty.has('count'),
-          ...overrideBadge(state.countOn ? 'on' : null),
+          ...overrideBadge(state.countOnly ? 'only' : state.countOn ? 'on' : null),
         },
         {
           id: 'expand',
@@ -907,6 +1028,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
                 orderby: [],
                 top: 50,
                 countOn: false,
+                countOnly: undefined,
                 expand: [],
                 apply: emptyApply(),
                 dirty: new Set(['target']),
@@ -929,6 +1051,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
                 orderby: [],
                 top: 50,
                 countOn: false,
+                countOnly: undefined,
                 expand: [],
                 apply: emptyApply(),
                 dirty: new Set(['target']),
@@ -947,6 +1070,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
                 orderby: parsed.orderby,
                 top: parsed.top,
                 countOn: parsed.countOn,
+                countOnly: parsed.countOnly ? true : undefined,
                 expand: parsed.expand,
                 apply: parsed.apply ?? emptyApply(),
                 dirty: new Set(['target']),
@@ -1005,6 +1129,8 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
           <CountEditor
             countOn={state.countOn}
             setCountOn={(b) => set('countOn', b, 'count')}
+            countOnly={!!state.countOnly}
+            setCountOnly={(b) => set('countOnly', b ? true : undefined, 'count')}
             applyActive={applyActive}
           />
         );
@@ -1039,11 +1165,19 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     }
   }
 
-  const headersMap = headerItemsToObject(state.headers, preferToHeaderString(state.prefer));
+  // Count only asks for just the count-limit annotation, never a page size (#272).
+  const headersMap = composeHeaders(state);
   const codeInputs = { method: 'GET', built, headers: headersMap };
 
   const rows = (result?.body as { value?: unknown[] } | null)?.value;
-  const resultCount = Array.isArray(rows) ? rows.length : result?.outcome === 'ok' ? 1 : null;
+  const resultCount =
+    typeof result?.body === 'number'
+      ? result.body
+      : Array.isArray(rows)
+        ? rows.length
+        : result?.outcome === 'ok'
+          ? 1
+          : null;
 
   return (
     <ModeShell
@@ -1085,10 +1219,11 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
             select={state.select}
             expand={state.expand}
             orderby={state.orderby}
-            requestUrl={built.relativeUrl}
+            requestUrl={runUrl}
             isLoadingMore={isLoadingMore}
+            loading={loading}
             onRefresh={onExecute}
-            onLoadMore={pageError ? undefined : fetchOneMorePage}
+            onLoadMore={pageError || throttledPause ? undefined : fetchOneMorePage}
             onRetrieveAll={retrieveAllPages}
             onStopLoadingMore={stopLoadingMore}
             loadMoreError={pageError}
@@ -1097,6 +1232,31 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
             loadMoreNotice={pagingNotice}
             onContinueLoadMore={retrieveAllPages}
             onDismissLoadMoreNotice={() => setPagingNotice(null)}
+            onEditFilter={
+              filterActionsOn
+                ? () => {
+                    setActivePath('filter');
+                    setTab('builder');
+                  }
+                : undefined
+            }
+            // Same gate as Execute: nothing runs while a run is in flight
+            // or the request has a blocker.
+            onRunWithoutFilter={
+              filterActionsOn && !loading && !disabledReason ? runWithoutFilter : undefined
+            }
+            notice={
+              removedFilter && filterCount === 0 ? (
+                <MessageBar intent="info" layout="multiline">
+                  <MessageBarBody>
+                    Ran without $filter. Your $filter was removed from the builder.
+                  </MessageBarBody>
+                  <MessageBarActions>
+                    <Button onClick={restoreFilter}>Restore $filter</Button>
+                  </MessageBarActions>
+                </MessageBar>
+              ) : undefined
+            }
           />
         )}
       </MainTabs>

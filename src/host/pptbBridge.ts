@@ -305,23 +305,6 @@ export function subscribe(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
-/**
- * Run an OData query against the active connection. Resolves to the
- * Dataverse response envelope (`{ value, '@odata...': … }`). Throws when
- * PPTB isn't embedded — callers must check `isEmbedded()` first OR fall
- * back to the mock executor.
- */
-// Return type from @pptb/types' queryData. We name it locally so callers can
-// use it without importing the namespace.
-export type DataverseQueryResponse = { value: Record<string, unknown>[] };
-
-export async function dataverseQuery(odataQuery: string): Promise<DataverseQueryResponse> {
-  if (!EMBEDDED || typeof window === 'undefined' || !window.dataverseAPI) {
-    throw new Error('PPTB Dataverse API not available — running standalone.');
-  }
-  return window.dataverseAPI.queryData(odataQuery);
-}
-
 // ════════════════════════════════════════════════════════════════════════
 // Full host surface — typed wrappers over window.dataverseAPI / window.toolboxAPI
 // ════════════════════════════════════════════════════════════════════════

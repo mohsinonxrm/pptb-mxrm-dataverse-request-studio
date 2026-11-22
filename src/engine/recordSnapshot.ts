@@ -13,7 +13,7 @@
 // entity a polymorphic lookup (customer / owner / regarding) points at —
 // `targets[0]` is just the first allowed type.
 
-import { isLookupLike, type ColumnMeta } from '../mock/metadata';
+import { isLookupLike, type ColumnMeta } from '../metadata/metadata';
 import { attrRef } from './odataAttr';
 import type { LookupFieldValue } from '../state/writeState';
 

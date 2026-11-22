@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { CsdlAction } from '../mock/actionsCsdl';
+import type { CsdlAction } from '../metadata/actionsCsdl';
 
 const getCSDLDocument = vi.hoisted(() => vi.fn<() => Promise<string>>());
 // Partial mock: keep the bridge's real exports (e.g. `subscribe`, which other
@@ -85,7 +85,38 @@ const CSDL = `<?xml version="1.0" encoding="utf-8"?>
         <Parameter Name="EntityName" Type="Edm.String" Nullable="false" />
         <ReturnType Type="Edm.Int64" Nullable="false" />
       </Function>
-      <Function Name="Last7Days" IsBound="true" IsComposable="true">
+      <Function Name="Last7Days">
+        <Parameter Name="PropertyName" Type="Edm.String" Nullable="false" Unicode="false" />
+        <ReturnType Type="Edm.Boolean" Nullable="false" />
+      </Function>
+      <Function Name="Contains">
+        <Parameter Name="PropertyName" Type="Edm.String" Nullable="false" Unicode="false" />
+        <Parameter Name="PropertyValue" Type="Edm.String" Nullable="false" Unicode="false" />
+        <ReturnType Type="Edm.Boolean" Nullable="false" />
+      </Function>
+      <Function Name="IsActiveFor" IsBound="true">
+        <Parameter Name="entity" Type="mscrm.account" Nullable="false" />
+        <Parameter Name="PropertyName" Type="Edm.String" Nullable="false" />
+        <ReturnType Type="Edm.Boolean" Nullable="false" />
+      </Function>
+      <Function Name="IsEnabled">
+        <Parameter Name="FeatureName" Type="Edm.String" Nullable="false" />
+        <ReturnType Type="Edm.Boolean" Nullable="false" />
+      </Function>
+      <Action Name="ActionLike">
+        <Parameter Name="PropertyName" Type="Edm.String" Nullable="false" />
+        <ReturnType Type="Edm.Boolean" Nullable="false" />
+      </Action>
+      <Function Name="CountLike">
+        <Parameter Name="PropertyName" Type="Edm.String" Nullable="false" />
+        <ReturnType Type="Edm.Int32" Nullable="false" />
+      </Function>
+      <Function Name="IntProperty">
+        <Parameter Name="PropertyName" Type="Edm.Int32" Nullable="false" />
+        <ReturnType Type="Edm.Boolean" Nullable="false" />
+      </Function>
+      <Function Name="SecondPropertyName">
+        <Parameter Name="Other" Type="Edm.String" Nullable="false" />
         <Parameter Name="PropertyName" Type="Edm.String" Nullable="false" />
         <ReturnType Type="Edm.Boolean" Nullable="false" />
       </Function>
@@ -111,9 +142,16 @@ describe('parseCsdl', () => {
       ['GrantAccess', 'Action'],
       ['Echo', 'Action'],
       ['new_DoThing', 'Action'],
+      ['ActionLike', 'Action'],
       ['WhoAmI', 'Function'],
       ['RetrieveCount', 'Function'],
       ['Last7Days', 'Function'],
+      ['Contains', 'Function'],
+      ['IsActiveFor', 'Function'],
+      ['IsEnabled', 'Function'],
+      ['CountLike', 'Function'],
+      ['IntProperty', 'Function'],
+      ['SecondPropertyName', 'Function'],
     ]);
     expect(new Set(actions.map((a) => a.namespace))).toEqual(new Set(['Microsoft.Dynamics.CRM']));
   });
@@ -214,8 +252,33 @@ describe('parseCsdl', () => {
     expect(count.isComposable).toBe(true);
     expect(count.returnType).toEqual({ kind: 'primitive', typeName: 'Edm.Int64' });
     expect(count.isQueryFunction).toBeUndefined();
-    expect(byName(actions, 'Last7Days').isQueryFunction).toBe(true);
     expect(byName(actions, 'WinOpportunity').isComposable).toBeUndefined();
+  });
+
+  it('recognises query functions, which Dataverse declares unbound (#384)', () => {
+    expect(byName(actions, 'Last7Days')).toMatchObject({
+      isQueryFunction: true,
+      binding: { kind: 'unbound' },
+    });
+    expect(byName(actions, 'Contains').isQueryFunction).toBe(true);
+    // Hypothetical: Dataverse emits none bound, but if one were, its first
+    // parameter would be the binding and PropertyName would come after it
+    expect(byName(actions, 'IsActiveFor')).toMatchObject({
+      isQueryFunction: true,
+      binding: { kind: 'entity', entityType: 'account' },
+    });
+  });
+
+  it('leaves operations that only partly match the query-function signature alone', () => {
+    for (const name of [
+      'IsEnabled', // no PropertyName
+      'ActionLike', // an Action
+      'CountLike', // doesn't return Edm.Boolean
+      'IntProperty', // PropertyName isn't Edm.String
+      'SecondPropertyName', // PropertyName isn't first
+    ]) {
+      expect([name, byName(actions, name).isQueryFunction]).toEqual([name, undefined]);
+    }
   });
 
   it('classifies publisher-prefixed messages as custom and the rest as OOB', () => {

@@ -147,7 +147,7 @@ export function BinarySourceCard(props: BinarySourceCardProps) {
                   {formatSize(props.fileSize)} · {props.mimeType || 'application/octet-stream'}
                 </Caption1>
               </div>
-              <Tooltip content="Pick a different file" relationship="label">
+              <Tooltip content="Pick a different file" relationship="description">
                 <Button size="small" appearance="subtle" onClick={() => inputRef.current?.click()}>
                   Change
                 </Button>

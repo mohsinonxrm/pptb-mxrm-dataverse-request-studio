@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import {
   Breadcrumb,
   BreadcrumbButton,
@@ -22,6 +22,7 @@ import {
   MoreHorizontal20Regular,
   Database20Regular,
   Settings20Regular,
+  ArrowImport20Regular,
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import { RequestTypePicker } from '../primitives/RequestTypePicker';
@@ -30,12 +31,39 @@ import { usePersistedSettings } from '../host/usePersistedSettings';
 import { ScopeChip } from './ScopeChip';
 import { useAccessMode } from '../host/useAccessMode';
 import type { ThemeMode } from '../theme/theme';
-import { getEnv } from '../mock/environment';
+import { getEnv } from '../env/environment';
 import { useHostSession } from '../host/HostContext';
 import { useSaveContext } from '../state/SaveContext';
 import { useRegisterModeNavigator } from '../state/modeHandoff';
 import { SaveButton, SavedLibraryButton } from '../editors/SavedRequestsDialog';
 import { EnvironmentBadge } from './confirmWrite';
+import { notify } from './dialogs';
+import { isChunkLoadError, STALE_BUILD_MESSAGE } from './chunkLoadError';
+
+// The cURL import (#271) loads when it's first opened (#236). The header has
+// no error boundary around it, so a chunk that fails to load (DRS updated
+// while open, #187) says so and closes, instead of taking the app down.
+const ImportCurlDialog = lazy(() =>
+  import('./ImportCurlDialog').then(
+    (m) => ({ default: m.ImportCurlDialog }),
+    (error: unknown) => {
+      const message = isChunkLoadError(error)
+        ? STALE_BUILD_MESSAGE
+        : `The cURL import couldn't load: ${error instanceof Error ? error.message : String(error)}`;
+      return {
+        default: (p: { onClose: () => void }) => <ImportUnavailable {...p} message={message} />,
+      };
+    },
+  ),
+);
+
+function ImportUnavailable({ onClose, message }: { onClose: () => void; message: string }) {
+  useEffect(() => {
+    notify(message, { intent: 'error' });
+    onClose();
+  }, [message, onClose]);
+  return null;
+}
 
 export function FrameHeader({
   themeMode,
@@ -59,6 +87,7 @@ export function FrameHeader({
     host.connectionName || host.environmentUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   const env = getEnv();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [settings, updateSettings] = usePersistedSettings();
   const { accessSummary } = useAccessMode();
   // The mode picker lives here, so this is also where result cards switch
@@ -205,12 +234,20 @@ export function FrameHeader({
         </MenuTrigger>
         <MenuPopover>
           <MenuList>
+            <MenuItem icon={<ArrowImport20Regular />} onClick={() => setImportOpen(true)}>
+              Import cURL command…
+            </MenuItem>
             <MenuItem icon={<Settings20Regular />} onClick={() => setSettingsOpen(true)}>
               Settings
             </MenuItem>
           </MenuList>
         </MenuPopover>
       </Menu>
+      {importOpen && (
+        <Suspense fallback={null}>
+          <ImportCurlDialog open onClose={() => setImportOpen(false)} />
+        </Suspense>
+      )}
       <SettingsDrawer
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}

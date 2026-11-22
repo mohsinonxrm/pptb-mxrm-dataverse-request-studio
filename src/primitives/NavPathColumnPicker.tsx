@@ -51,7 +51,7 @@ import {
   type ColumnMeta,
   type NavProperty,
   type TableMeta,
-} from '../mock/metadata';
+} from '../metadata/metadata';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { scopedColumns, scopedNavs, useAdvancedFindOnly } from '../state/metadataScope';
 

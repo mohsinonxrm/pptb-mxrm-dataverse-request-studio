@@ -15,6 +15,8 @@
 // overwritten by the next one for the same mode.
 
 import { useEffect } from 'react';
+import type { ImportedRequest } from '../engine/curlImport/curlImport';
+import { useLatestCallback } from '../primitives/useLatestCallback';
 
 /** Payload each receiving mode understands. Add a key per mode that accepts handoffs. */
 export interface ModeHandoffs {
@@ -63,4 +65,40 @@ export function takeModeHandoff<K extends keyof ModeHandoffs>(
   const payload = pending.get(modeId) as ModeHandoffs[K] | undefined;
   pending.delete(modeId);
   return payload;
+}
+
+// ── Imported requests (cURL import, #271) ──────────────────────────────
+//
+// Same idea, for any mode an import can open: `openImport` leaves the request
+// for its mode and switches to it; the mode takes it on mount, or straight
+// away when it's already the active mode.
+
+const pendingImports = new Map<string, ImportedRequest>();
+const importListeners = new Set<() => void>();
+
+/** Open `request` in its mode. Returns false when there's no mode picker to switch with. */
+export function openImport(request: ImportedRequest): boolean {
+  if (!modeNavigator) return false;
+  pendingImports.set(request.modeId, request);
+  importListeners.forEach((fn) => fn());
+  modeNavigator(request.modeId);
+  return true;
+}
+
+/** Receiving mode: called with each request imported into `modeId`. */
+export function useImportedRequest(modeId: string, onImport: (request: ImportedRequest) => void) {
+  const handle = useLatestCallback(onImport);
+  useEffect(() => {
+    const take = () => {
+      const request = pendingImports.get(modeId);
+      if (!request) return;
+      pendingImports.delete(modeId);
+      handle(request);
+    };
+    take();
+    importListeners.add(take);
+    return () => {
+      importListeners.delete(take);
+    };
+  }, [modeId, handle]);
 }

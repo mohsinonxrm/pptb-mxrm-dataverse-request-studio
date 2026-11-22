@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import type { EditorProps } from '@monaco-editor/react';
+import type { SchemaEditorProps } from './SchemaEditor';
 import { Spinner } from '@fluentui/react-components';
 
 // Drop-in replacement for `@monaco-editor/react`'s default `Editor` export.
@@ -9,7 +9,7 @@ import { Spinner } from '@fluentui/react-components';
 // startup (#22). Later editors render immediately from the cached chunk.
 const LazyEditor = lazy(() => import('./monacoSetup'));
 
-export default function MonacoEditor(props: EditorProps) {
+export default function MonacoEditor(props: SchemaEditorProps) {
   return (
     <Suspense
       fallback={

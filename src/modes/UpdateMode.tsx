@@ -59,19 +59,14 @@ import { FieldSetEditor } from '../editors/FieldSetEditor';
 import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/PreferEditor';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
-import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
 import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
-import {
-  PreconditionEditor,
-  etagProblem,
-  preconditionToHeader,
-} from '../editors/PreconditionEditor';
+import { PreconditionEditor, etagProblem } from '../editors/PreconditionEditor';
 import { UpdateDiffPane } from '../editors/UpdateDiffPane';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { findTable, findColumn } from '../mock/metadata';
+import { findTable, findColumn } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildUpdate, buildUpdateBody } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
@@ -99,6 +94,10 @@ import { useLatestCallback } from '../primitives/useLatestCallback';
 import { rawBodyBlocker, sentFieldValues } from '../engine/fieldBody';
 import { isRecordGuid } from '../primitives/guid';
 import { isColumnInScope, useAdvancedFindOnly } from '../state/metadataScope';
+import { addRun, useRecentRuns } from '../state/runHistory';
+import { useImportedRequest } from '../state/modeHandoff';
+import { importUpdate } from '../engine/curlImport/applyImport';
+import { composeHeaderItems } from '../engine/requestHeaders';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -155,8 +154,11 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
+  // Whether the request that produced `result` asked for return=representation.
+  const [sentReturnRep, setSentReturnRep] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('update');
 
   // Last-saved tracking → Save button dirty/clean state, library checkmark.
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
@@ -367,6 +369,15 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   // The header holds on to these; the stable wrappers always run this
   // render's handlers, not the ones from when the context was published.
   const onSavedLatest = useLatestCallback(onSaved);
+  // cURL import (#271): a command pasted anywhere opens here. Like a recent
+  // run, it isn't a saved entry, so the save baseline stays as it was.
+  useImportedRequest('update', (request) => {
+    if (request.modeId !== 'update') return;
+    setState(importUpdate(initialState(), request));
+    setResult(null);
+    setTab('builder');
+    setActivePath('target');
+  });
   const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
@@ -418,46 +429,25 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
     setLoading(true);
     const res = await runtime.update(state, headerItemsToObject(effectiveHeaders, null));
     setResult(res);
+    setSentReturnRep(state.prefer.returnRepresentation);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'update',
-          url: built.relativeUrl,
-          method: state.method,
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: res.ok ? 1 : 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'update',
+        url: built.relativeUrl,
+        method: state.method,
+        status: res.status,
+        ms: res.ms,
+        rowCount: res.ok ? 1 : 0,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
 
   // ── Compose effective headers ──
-  const effectiveHeaders = useMemo(() => {
-    let h = [...state.headers];
-    // Mirror the IfMatch card editor's choice onto a header for execute time
-    // (preconditionToHeader sends the ETag trimmed, #264.)
-    const cc = preconditionToHeader(state.concurrency);
-    if (cc) {
-      h.push({
-        id: `__cc__${cc.name}`,
-        name: cc.name,
-        value: cc.value,
-        enabled: true,
-        builtin: true,
-        hint: 'Auto-composed from the If-Match pane.',
-      });
-    }
-    h = applyBypassToHeaders(h, state.bypass);
-    return h;
-  }, [state.headers, state.concurrency, state.bypass]);
+  const effectiveHeaders = useMemo(() => composeHeaderItems(state), [state]);
 
   // ── Advisories — bypass family + PUT-method unsupported + GUID shape ──
   //
@@ -908,6 +898,7 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
               operation: 'update',
               table: state.table,
               recordId: state.recordId,
+              returnRepresentation: sentReturnRep,
               recordName:
                 pickedPrimaryFromPicker ||
                 (originalRow && tbl ? String(originalRow[tbl.primaryName] ?? '') : null),

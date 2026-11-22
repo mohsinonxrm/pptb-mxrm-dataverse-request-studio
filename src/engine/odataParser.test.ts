@@ -8,7 +8,7 @@ import type {
   FilterLambdaNode,
   FilterRule,
 } from '../editors/filter/filterTree';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import {
   account,
   contact,

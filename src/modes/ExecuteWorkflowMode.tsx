@@ -47,7 +47,7 @@ import { WorkflowArgumentsCard } from '../editors/WorkflowArgumentsCard';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildExecuteWorkflow, buildExecuteWorkflowBody } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
@@ -68,6 +68,8 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
+import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
+import { addRun, useRecentRuns } from '../state/runHistory';
 
 // Workflow shape used by the picker — the wire response fields are
 // camelCased differently per the OData convention (workflowid not Id, etc).
@@ -98,7 +100,8 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('exec-workflow');
 
   const built = useMemo(() => buildExecuteWorkflow(state), [state]);
   const body = useMemo(() => buildExecuteWorkflowBody(state), [state]);
@@ -198,13 +201,29 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
     ['Workflow id', state.workflowId],
     ['Record id', state.entityId],
   ]);
-  const disabledReason = !wf
-    ? 'Pick a workflow.'
-    : !state.entityId
-      ? `Pick a ${wf.primaryEntity} record to run the workflow on.`
-      : state.headers.some((h) => h.enabled && !h.name)
-        ? 'Fix empty header name.'
-        : urlPartProblem;
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const advisories = firstBlocker([
+    { when: !wf, id: 'workflow-pick', title: 'Pick a workflow.', focusNode: 'pick' },
+    {
+      when: !state.entityId,
+      id: 'workflow-record',
+      title: `Pick a ${wf?.primaryEntity} record to run the workflow on.`,
+      focusNode: 'target',
+    },
+    {
+      when: state.headers.some((h) => h.enabled && !h.name),
+      id: 'workflow-header-name',
+      title: 'Fix empty header name.',
+      focusNode: 'headers',
+    },
+    {
+      when: urlPartProblem,
+      id: 'workflow-url-part',
+      title: urlPartProblem ?? '',
+      focusNode: urlPartProblem?.startsWith('Workflow') ? 'pick' : 'target',
+    },
+  ]);
+  const disabledReason = disabledReasonFromAdvisories(advisories);
 
   const onExecute = async () => {
     setLoading(true);
@@ -212,21 +231,16 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'exec-workflow',
-          url: built.relativeUrl,
-          method: 'POST',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: res.ok ? 1 : 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'exec-workflow',
+        url: built.relativeUrl,
+        method: 'POST',
+        status: res.status,
+        ms: res.ms,
+        rowCount: res.ok ? 1 : 0,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
@@ -472,6 +486,8 @@ export function ExecuteWorkflowMode({ themeMode }: { themeMode: ThemeMode }) {
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
+          advisories={advisories}
+          onAdvisoryFocus={setActivePath}
         />
       }
     >

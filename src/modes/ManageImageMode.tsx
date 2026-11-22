@@ -2,6 +2,7 @@
 //
 // Layout:
 //   Sidebar:
+//     • Preview       — the main pane below (where the mode opens)
 //     • Operation     — Upload | Retrieve | Delete (radio cards)
 //     • Target        — table + record picker
 //     • Image column  — entityimage (primary) vs custom image column,
@@ -32,6 +33,8 @@ import {
   ArrowUpload20Filled,
   ArrowDownload20Filled,
   Delete20Filled,
+  Eye20Regular,
+  Eye20Filled,
 } from '@fluentui/react-icons';
 import {
   RadioGroup,
@@ -59,7 +62,7 @@ import { BinaryPipelineCard } from '../editors/BinaryPipelineCard';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { findTable, type ImageColumnMeta } from '../mock/metadata';
+import { findTable, type ImageColumnMeta } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildManageImage, manageImagePipeline } from '../engine/urlBuilder';
 import { pipelineCodegen } from '../engine/binaryBuilders';
@@ -84,7 +87,12 @@ import type { ThemeMode } from '../theme/theme';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
 import { isEmbedded } from '../host/pptbBridge';
-import { adv, type Advisory } from '../primitives/advisories';
+import {
+  adv,
+  disabledReasonFromAdvisories,
+  firstBlocker,
+  type Advisory,
+} from '../primitives/advisories';
 import {
   serializeManageImage,
   deserializeManageImage,
@@ -97,6 +105,8 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
+import { addRun, useRecentRuns } from '../state/runHistory';
+import { recordInitials } from '../primitives/recordInitials';
 
 const initialState = (): ManageImageState => ({
   // Empty initial state — user picks everything from live metadata.
@@ -161,7 +171,8 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('manage-image');
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- liveTable rebuilds the request once its metadata lands (#78)
   const built = useMemo(() => buildManageImage(state), [state, liveTable]);
@@ -199,21 +210,50 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
     [['Record id', state.recordId]],
     [['Image column', state.imageColumn]],
   );
-  const disabledReason = !tbl
-    ? 'Pick a target table first.'
-    : !state.recordId
-      ? 'Pick a source record.'
-      : !state.imageColumn
-        ? 'Pick an image column.'
-        : state.operation === 'upload' && state.source.kind === 'file' && !state.fileName
-          ? 'Pick an image file.'
-          : state.operation === 'download' &&
-              state.downloadSize === 'full' &&
-              !imageCol?.canStoreFullImage
-            ? `${state.imageColumn} doesn't store full-size images (canStoreFullImage = false).`
-            : state.headers.some((h) => h.enabled && !h.name)
-              ? 'Fix empty header name.'
-              : urlPartProblem;
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const blockers = firstBlocker([
+    { when: !tbl, id: 'image-table', title: 'Pick a target table first.', focusNode: 'target' },
+    {
+      when: !state.recordId,
+      id: 'image-record',
+      title: 'Pick a source record.',
+      focusNode: 'target',
+    },
+    {
+      when: !state.imageColumn,
+      id: 'image-column',
+      title: 'Pick an image column.',
+      focusNode: 'column',
+    },
+    {
+      when: state.operation === 'upload' && state.source.kind === 'file' && !state.fileName,
+      id: 'image-upload-source',
+      title: 'Pick an image file.',
+      focusNode: 'source',
+    },
+    {
+      when:
+        state.operation === 'download' &&
+        state.downloadSize === 'full' &&
+        !imageCol?.canStoreFullImage,
+      id: 'image-full-size',
+      title: `${state.imageColumn} doesn't store full-size images (canStoreFullImage = false).`,
+      focusNode: 'options',
+    },
+    {
+      when: state.headers.some((h) => h.enabled && !h.name),
+      id: 'image-header-name',
+      title: 'Fix empty header name.',
+      focusNode: 'headers',
+    },
+    {
+      when: urlPartProblem,
+      id: 'image-url-part',
+      title: urlPartProblem ?? '',
+      focusNode: urlPartProblem?.startsWith('Image column') ? 'column' : 'target',
+    },
+  ]);
+  const disabledReason = disabledReasonFromAdvisories(blockers);
 
   // Bound-record name capture for the WriteResultCard narrative.
   const [recordName, setRecordName] = useState<string>('');
@@ -224,21 +264,16 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'manage-image',
-          url: built.relativeUrl,
-          method: firstStepMethod,
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: res.ok ? 1 : 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'manage-image',
+        url: built.relativeUrl,
+        method: firstStepMethod,
+        status: res.status,
+        ms: res.ms,
+        rowCount: res.ok ? 1 : 0,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
@@ -339,13 +374,28 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
         : 'DELETE';
   const opBadgeColor = state.operation === 'delete' ? ('danger' as const) : ('brand' as const);
 
-  // Initials placeholder for the avatar preview tile. The richer "fetch the
-  // primary name to derive initials" path lived against the mock records
-  // catalog; with that gone we just render a question mark until the user
-  // wires up a live record-name lookup (TODO if/when this mode lands).
-  const initials = '?';
+  // Initials for the avatar preview tile, from the picked record's primary
+  // name; '?' until a record with a name is picked (#224).
+  const initials = recordInitials(recordName);
 
   const sections = [
+    // The pane the mode opens on: the operation banner, the preview tile
+    // with the record's initials, and the pipeline (#224).
+    {
+      id: 'preview',
+      label: 'Preview',
+      items: [
+        {
+          id: 'preview',
+          icon: Eye20Regular,
+          iconFilled: Eye20Filled,
+          // The item label ellipsizes a long name; a section's meta doesn't.
+          label: recordName.trim() || 'Image preview',
+          badge: initials === '?' ? null : initials,
+          badgeAppearance: 'ghost' as const,
+        },
+      ],
+    },
     {
       id: 'operation',
       label: 'Operation',
@@ -529,6 +579,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
               imageColumn: null,
               dirty: new Set(['target', 'column']),
             }));
+            setRecordName('');
             setResult(null);
             // New table → fresh draft. Forget the last save so Save can't
             // overwrite an entry that belongs to the old table (#58).
@@ -690,7 +741,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
-          advisories={advisories}
+          advisories={[...blockers, ...advisories]}
           onAdvisoryFocus={setActivePath}
         />
       }

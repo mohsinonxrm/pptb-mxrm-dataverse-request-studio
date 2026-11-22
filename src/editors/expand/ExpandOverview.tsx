@@ -33,7 +33,7 @@ import {
 } from '@fluentui/react-icons';
 import { useStudioStyles } from '../../primitives/styles';
 import { PaneHead } from '../PaneHead';
-import { findTable, type NavProperty } from '../../mock/metadata';
+import { findTable, type NavProperty } from '../../metadata/metadata';
 import {
   availableNavsAt,
   isCollectionExpand,

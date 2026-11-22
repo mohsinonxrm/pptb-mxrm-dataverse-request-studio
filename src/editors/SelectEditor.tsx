@@ -32,7 +32,7 @@ import {
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from './PaneHead';
 import { ApplyOverridesBanner } from './ApplyOverridesBanner';
-import { findTable, isCompanionLogicalReadOnly, type ColumnMeta } from '../mock/metadata';
+import { findTable, isCompanionLogicalReadOnly, type ColumnMeta } from '../metadata/metadata';
 import { groupColorVar } from '../theme/theme';
 import type { RequestGroup } from '../registry/requestTypes';
 import { SortableList, SortableItem } from '../primitives/Sortable';

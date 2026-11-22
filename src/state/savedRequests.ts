@@ -46,7 +46,7 @@ import type {
   ExecuteWorkflowState,
 } from './executeState';
 import type { ManageFileState, ManageImageState, ManageAttachmentState } from './binaryState';
-import { getEnv } from '../mock/environment';
+import { getEnv } from '../env/environment';
 import { stripCredentialRows } from '../engine/sensitiveHeaders';
 import { invalidUrlPartReason } from '../primitives/urlParts';
 import {
@@ -108,14 +108,6 @@ export function getOrgScope(): string {
     return 'default';
   }
 }
-
-/**
- * Back-compat alias used by the singleton store's cross-tab `storage`
- * event listener. We compare event.key against `getSavedRequestsKey()`
- * directly, so this constant is kept only so existing imports compile.
- * Prefer `getSavedRequestsKey()` for new code.
- */
-export const SAVED_REQUESTS_KEY = SAVED_REQUESTS_KEY_PREFIX;
 
 /** Union of every mode id that participates in the saved-request library. Add new modes here. */
 export type SavedModeId =

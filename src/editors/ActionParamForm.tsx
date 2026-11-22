@@ -58,10 +58,10 @@ import { FieldSetEditor } from './FieldSetEditor';
 import type { CreateFieldValue } from '../state/writeState';
 import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from './PaneHead';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { RecordPicker } from '../primitives/RecordPicker';
 import { useScopedEntities } from '../host/useScopedEntities';
-import type { ActionParam, CsdlAction } from '../mock/actionsCsdl';
+import type { ActionParam, CsdlAction } from '../metadata/actionsCsdl';
 import type { ExecParamValue } from '../state/executeState';
 import { defaultEntitySpecificMode, isEntitySpecificRef } from '../engine/executeBuilders';
 import type { RequestGroup } from '../registry/requestTypes';
@@ -428,6 +428,8 @@ function ParamRow({
   const missing = param.required && isEmpty(value);
   return (
     <div
+      // The sidebar node of a required param; an advisory's Open focuses here (#294).
+      data-focus-node={`param:${param.name}`}
       className={mergeClasses(styles.inlineCard)}
       style={{
         padding: 12,

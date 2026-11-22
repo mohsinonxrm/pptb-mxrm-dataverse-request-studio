@@ -13,7 +13,7 @@
 import { Field, Combobox, Option, Badge, Caption1, tokens } from '@fluentui/react-components';
 import { Link20Filled } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
-import { findTable, type NavProperty } from '../mock/metadata';
+import { findTable, type NavProperty } from '../metadata/metadata';
 import { useLiveTable } from '../host/useLiveMetadata';
 import type { RequestGroup } from '../registry/requestTypes';
 import { isNavInScope, useAdvancedFindOnly } from '../state/metadataScope';

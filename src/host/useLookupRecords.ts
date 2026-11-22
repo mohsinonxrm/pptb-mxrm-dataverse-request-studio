@@ -14,7 +14,7 @@
 //     a renamed record doesn't keep its old name in the options (#81).
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { findTable, type TableMeta } from '../mock/metadata';
+import { findTable, type TableMeta } from '../metadata/metadata';
 import { metadata } from './metadataProvider';
 import { activeOrg, onActiveOrgChange, useActiveOrg } from './activeOrg';
 

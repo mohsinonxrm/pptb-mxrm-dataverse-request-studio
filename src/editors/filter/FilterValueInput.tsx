@@ -48,7 +48,7 @@ import {
   type StringColumnMeta,
   type MemoColumnMeta,
   type IntegerColumnMeta,
-} from '../../mock/metadata';
+} from '../../metadata/metadata';
 import { useLookupRecords } from '../../host/useLookupRecords';
 import { useColumnDetail } from '../../host/useColumnDetail';
 import { parseDateTimeValue } from '../dateTimeValue';
@@ -650,7 +650,7 @@ function BooleanInput({
   val,
   onChange,
 }: {
-  col: import('../../mock/metadata').BooleanColumnMeta;
+  col: import('../../metadata/metadata').BooleanColumnMeta;
   val?: string;
   onChange: (v: string) => void;
 }) {
@@ -710,9 +710,9 @@ function LookupTypeaheadCtl({
   onChange,
 }: {
   col:
-    | import('../../mock/metadata').LookupColumnMeta
-    | import('../../mock/metadata').CustomerColumnMeta
-    | import('../../mock/metadata').OwnerColumnMeta;
+    | import('../../metadata/metadata').LookupColumnMeta
+    | import('../../metadata/metadata').CustomerColumnMeta
+    | import('../../metadata/metadata').OwnerColumnMeta;
   val: string;
   onChange: (v: string) => void;
 }) {

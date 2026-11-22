@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { __registerLiveTables, findTable, type TableMeta } from '../mock/metadata';
+import { __registerLiveTables, findTable, type TableMeta } from '../metadata/metadata';
 import { _setTableLookup, type FilterGroup } from '../editors/filter/filterTree';
 import {
   buildBulkDelete,

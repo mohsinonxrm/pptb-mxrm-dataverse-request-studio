@@ -3,7 +3,7 @@
 // Literal-value and name checks (#221) are covered in filterTree.test.ts.
 import { beforeAll, describe, expect, it } from 'vitest';
 import { validateRequest, type ValidateRequestInput } from './validateRequest';
-import { __registerLiveTables, type TableMeta } from '../mock/metadata';
+import { __registerLiveTables, type TableMeta } from '../metadata/metadata';
 import type { FilterGroup, FilterNode } from '../editors/filter/filterTree';
 import type { ExpandSpec } from '../editors/ExpandEditor';
 import type { ApplyAgg, ApplySpec } from '../editors/ApplyEditor';

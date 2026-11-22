@@ -2,14 +2,17 @@
 // on hosts with and without header pass-through (#219).
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  COUNT_UNREADABLE_CODE,
   HEADER_CONSENT_DECLINED_CODE,
   executeAbsoluteUrl,
   executeNextLink,
   executePredefined,
   executeRetrieveMultiple,
   executeRetrieveSingle,
+  readCount,
   readPreferHeaders,
 } from './dataverseExecutor';
+import { COUNT_ONLY_PREFER } from './urlBuilder';
 import { makeExpandSpec } from '../editors/ExpandEditor';
 import { emptyPrefer } from '../editors/PreferEditor';
 import type {
@@ -262,5 +265,75 @@ describe('Retrieve Single headers (#109)', () => {
     expect(host.queryData).not.toHaveBeenCalled();
     expect(JSON.stringify(r1.body)).toMatch(/needs the id of the user to run as/);
     expect(JSON.stringify(r2.body)).toMatch(/Turn on one impersonation header, not both/);
+  });
+});
+
+describe('count only (#272)', () => {
+  const COUNT_URL = '/accounts?$select=accountid&$top=1&$count=true';
+  const counted = (maxpagesize: number | null = 50) =>
+    retrieveMultipleState({ countOnly: true, top: 5, prefer: { ...emptyPrefer(), maxpagesize } });
+  const page = (count: unknown, exceeded?: unknown) => ({
+    '@odata.count': count,
+    ...(exceeded !== undefined
+      ? { '@Microsoft.Dynamics.CRM.totalrecordcountlimitexceeded': exceeded }
+      : {}),
+    value: [{ accountid: 'x' }],
+  });
+
+  it('readCount takes @odata.count and the limit flag', () => {
+    expect(readCount(page(42))).toEqual({ count: 42 });
+    expect(readCount(page(0, false))).toEqual({ count: 0, limitExceeded: false });
+    expect(readCount(page(5000, true))).toEqual({ count: 5000, limitExceeded: true });
+    expect(readCount(page(7, 'yes'))).toEqual({ count: 7 });
+    for (const bad of [{}, null, 42, '42', page(-1), page(1.5), page('42')])
+      expect(readCount(bad)).toBeNull();
+  });
+
+  it('asks the host for one row with no page size, and returns the count', async () => {
+    host.queryData.mockResolvedValue(page(230, false));
+    const res = await executeRetrieveMultiple(counted());
+    expect(host.queryData).toHaveBeenCalledWith(COUNT_URL, undefined);
+    expect(res.outcome).toBe('ok');
+    expect(res.status).toBe(200);
+    expect(res.body).toBe(230);
+    expect(res.countLimitExceeded).toBe(false);
+  });
+
+  it('passes on the limit flag, and leaves it out when Dataverse did not say', async () => {
+    host.queryData.mockResolvedValue(page(5000, true));
+    expect((await executeRetrieveMultiple(counted())).countLimitExceeded).toBe(true);
+    host.queryData.mockResolvedValue(page(12));
+    const res = await executeRetrieveMultiple(counted());
+    expect(res.body).toBe(12);
+    expect('countLimitExceeded' in res).toBe(false);
+  });
+
+  it('with headers to send, asks again for the limit annotation, never a page size', async () => {
+    host.queryData.mockResolvedValue(page(3));
+    await executeRetrieveMultiple(counted(), { Consistency: 'Strong' });
+    expect(host.queryData).toHaveBeenCalledWith(COUNT_URL, {
+      Consistency: 'Strong',
+      Prefer: COUNT_ONLY_PREFER,
+    });
+  });
+
+  it('fails clearly when the response has no @odata.count', async () => {
+    host.queryData.mockResolvedValue({ value: [] });
+    const res = await executeRetrieveMultiple(counted());
+    expect(res.outcome).toBe('error');
+    // Dataverse did answer: the pill says 200, not "no status".
+    expect(res.status).toBe(200);
+    const err = (res.body as { error: { code: string; message: string } }).error;
+    expect(err.code).toBe(COUNT_UNREADABLE_CODE);
+    expect(err.message).toMatch(/@odata\.count/);
+  });
+
+  it('still refuses impersonation the host would drop', async () => {
+    host.additionalHeaders = false;
+    const res = await executeRetrieveMultiple(counted(), {
+      CallerObjectId: '00000000-0000-0000-0000-0000000000c1',
+    });
+    expect(res.outcome).toBe('error');
+    expect(host.queryData).not.toHaveBeenCalled();
   });
 });

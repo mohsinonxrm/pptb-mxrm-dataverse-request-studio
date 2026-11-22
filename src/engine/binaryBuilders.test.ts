@@ -7,7 +7,7 @@ import {
   buildFileSingleUpload,
   isHeaderSafeFileName,
 } from './binaryBuilders';
-import { __registerLiveTables, type TableMeta } from '../mock/metadata';
+import { __registerLiveTables, type TableMeta } from '../metadata/metadata';
 import type { ManageFileState } from '../state/binaryState';
 
 const ID = '00000000-0000-0000-0000-0000000000a1';

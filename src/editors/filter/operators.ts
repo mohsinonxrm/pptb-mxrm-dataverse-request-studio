@@ -14,7 +14,7 @@
 //  - requiresTable : optional per-entity gate (e.g. hierarchy)
 //  - supportsColumnRhs : true when this operator can take a bare property name on RHS
 
-import type { AttributeTypeCode } from '../../mock/metadata';
+import type { AttributeTypeCode } from '../../metadata/metadata';
 
 export type OpKind =
   | 'comparison' // eq/ne/gt/ge/lt/le — `<col> <op> <val>`

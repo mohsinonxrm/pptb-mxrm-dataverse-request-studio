@@ -138,12 +138,12 @@ function splitParts(body: string, boundary: string): string[] {
   const delimiter = `--${boundary}`;
   const parts: string[] = [];
   let cursor = body.indexOf(delimiter);
-  if (cursor < 0) throw new Error(`Response boundary "${boundary}" not found.`);
+  if (cursor < 0) throw new Error(`Boundary "${boundary}" not found.`);
   while (cursor >= 0) {
     cursor += delimiter.length;
     if (body.startsWith('--', cursor)) return parts;
     const next = body.indexOf(delimiter, cursor);
-    if (next < 0) throw new Error('Response is missing its closing boundary.');
+    if (next < 0) throw new Error('The body is missing its closing boundary.');
     parts.push(
       body
         .slice(cursor, next)
@@ -159,6 +159,65 @@ function splitHead(text: string): [string, string] {
   const m = /\r?\n\r?\n/.exec(text);
   if (!m) return [text, ''];
   return [text.slice(0, m.index), text.slice(m.index + m[0].length)];
+}
+
+// ── Request reader (cURL import, #271) ─────────────────────────────────
+
+export interface ParsedBatchRequest {
+  method: string;
+  /** As written on the request line: absolute, `/api/data/…`, relative or `$n`. */
+  url: string;
+  /** Lower-cased names. */
+  headers: Record<string, string>;
+  body: string;
+  contentId?: string;
+}
+
+export interface ParsedBatchRequestGroup {
+  /** True for a change set. */
+  atomic: boolean;
+  requests: ParsedBatchRequest[];
+}
+
+const BATCH_METHODS = new Set(['GET', 'POST', 'PATCH', 'PUT', 'DELETE']);
+
+/**
+ * Parse a multipart/mixed $batch request body into its requests, grouped as
+ * sent: each change set is one atomic group, each request outside one is a
+ * group of its own.
+ */
+export function parseBatchRequest(body: string, contentType = ''): ParsedBatchRequestGroup[] {
+  const boundary = findBoundary(contentType, body);
+  if (!boundary) throw new Error('No multipart boundary in the Content-Type or the body.');
+  const readRequest = (part: string): ParsedBatchRequest => {
+    const [mimeHead, payload] = splitHead(part);
+    const mime = parseHeaderBlock(mimeHead);
+    const [httpHead, rawBody] = splitHead(payload.replace(/^\s+/, ''));
+    const [requestLine, ...headerLines] = httpHead.split(/\r?\n/);
+    const m = /^([A-Z]+)\s+(\S+)(?:\s+HTTP\/1\.[01])?$/i.exec(requestLine.trim());
+    if (!m) throw new Error(`Malformed request line: ${requestLine.trim().slice(0, 80)}`);
+    const method = m[1].toUpperCase();
+    if (!BATCH_METHODS.has(method)) throw new Error(`${method} isn't allowed in a $batch.`);
+    const req: ParsedBatchRequest = {
+      method,
+      url: m[2],
+      headers: parseHeaderBlock(headerLines.join('\n')),
+      body: rawBody.trim(),
+    };
+    if (mime['content-id']) req.contentId = mime['content-id'];
+    return req;
+  };
+  return splitParts(body, boundary).map((part) => {
+    const [mimeHead, payload] = splitHead(part);
+    const nested = BOUNDARY_RE.exec(parseHeaderBlock(mimeHead)['content-type'] ?? '');
+    if (nested) {
+      return {
+        atomic: true,
+        requests: splitParts(payload, nested[1] || nested[2]).map(readRequest),
+      };
+    }
+    return { atomic: false, requests: [readRequest(part)] };
+  });
 }
 
 /**

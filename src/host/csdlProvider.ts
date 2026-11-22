@@ -1,5 +1,5 @@
 // CSDL provider — fetches the Dataverse `$metadata` document and parses it
-// into the studio's `CsdlAction[]` shape (same type as `mock/actionsCsdl.ts`).
+// into the studio's `CsdlAction[]` shape (same type as `metadata/actionsCsdl.ts`).
 //
 // Why this exists:
 //   The studio's Execute group (ExecuteAction, ExecuteFunction, ExecuteCustomApi,
@@ -8,7 +8,7 @@
 //   typed inputs (Edm.Int32 → SpinButton, EntityReference → record picker,
 //   OptionSetValue → Combobox, etc).
 //
-//   `src/mock/actionsCsdl.ts` holds only the types; there's no sample
+//   `src/metadata/actionsCsdl.ts` holds only the types; there's no sample
 //   catalog. Standalone, the load fails and the pickers say so, so no
 //   operation (or its response card) shows outside PPTB (#317).
 //   In PPTB the source of truth is the live `$metadata` EDMX document —
@@ -53,7 +53,7 @@ import type {
   ActionBinding,
   ActionReturnType,
   EdmType,
-} from '../mock/actionsCsdl';
+} from '../metadata/actionsCsdl';
 
 // Tiny inline memoizer — CSDL is fetched at most twice per org (raw XML
 // + parsed actions). A small cache is enough; we don't need the full
@@ -510,24 +510,21 @@ function parseActionOrFunction(
   const isComposable = kind === 'Function' && el.getAttribute('IsComposable') === 'true';
 
   // Detect Dataverse query functions — they share a recognizable CSDL
-  // signature: IsBound="true", first parameter named "PropertyName" of
-  // type Edm.String, return type Edm.Boolean. These ~70 functions
-  // (Last7Days, Between, EqualUserId, Contains, etc.) are designed to
-  // be inlined inside `$filter` expressions, NOT invoked standalone via
-  // Execute Function. Tagged so ExecuteFunctionMode's picker can filter
-  // them out. Reference:
+  // signature: first parameter named "PropertyName" of type Edm.String,
+  // return type Edm.Boolean. These ~70 functions (Last7Days, Between,
+  // EqualUserId, Contains, etc.) are designed to be inlined inside
+  // `$filter` expressions, NOT invoked standalone via Execute Function.
+  // Tagged so ExecuteFunctionMode's picker can filter them out. Dataverse
+  // declares them unbound (no IsBound), so the binding isn't part of the
+  // signature; were one bound, its first parameter would be the binding, so
+  // the check reads the first regular parameter (#384). Reference:
   //   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/reference/queryfunctions
-  let isQueryFunction = false;
-  if (kind === 'Function' && isBound && returnType.typeName === 'Edm.Boolean') {
-    const first = paramEls[0];
-    if (
-      first &&
-      first.getAttribute('Name') === 'PropertyName' &&
-      first.getAttribute('Type') === 'Edm.String'
-    ) {
-      isQueryFunction = true;
-    }
-  }
+  const firstParam = paramEls[isBound ? 1 : 0];
+  const isQueryFunction =
+    kind === 'Function' &&
+    returnType.typeName === 'Edm.Boolean' &&
+    firstParam?.getAttribute('Name') === 'PropertyName' &&
+    firstParam.getAttribute('Type') === 'Edm.String';
 
   return {
     name,

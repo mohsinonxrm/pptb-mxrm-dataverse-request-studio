@@ -29,7 +29,7 @@
 // keeps the stored time (`withPickedDate`). Fluent's time picker only takes
 // a local Date, so it still shows such a time an hour on.
 
-import type { DateTimeBehavior, DateTimeFormat } from '../mock/metadata';
+import type { DateTimeBehavior, DateTimeFormat } from '../metadata/metadata';
 
 interface DateTimeColumnLike {
   format?: DateTimeFormat;

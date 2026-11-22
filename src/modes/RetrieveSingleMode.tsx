@@ -52,7 +52,7 @@ import { ExpandRouter } from '../editors/expand/ExpandRouter';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { countRules } from '../editors/filter/filterTree';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildRetrieveSingle } from '../engine/urlBuilder';
 import { relatedMetadataAdvisories } from '../engine/navPath';
@@ -73,9 +73,11 @@ import {
 import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
-import { takeModeHandoff } from '../state/modeHandoff';
+import { takeModeHandoff, useImportedRequest } from '../state/modeHandoff';
 import type { Advisory } from '../primitives/advisories';
 import { isRecordGuid } from '../primitives/guid';
+import { addRun, useRecentRuns } from '../state/runHistory';
+import { importRetrieveSingle } from '../engine/curlImport/applyImport';
 
 const initialState = (): RetrieveSingleState => ({
   table: '',
@@ -115,8 +117,11 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   const [activePath, setActivePath] = useState<string>('target');
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
+  // The URL the shown result came from: the builder may have changed since (#291).
+  const [runUrl, setRunUrl] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('retrieve-single');
 
   // Last-saved tracking — drives the Save button's primary/subtle state
   // and lights up the checkmark next to the current entry in the library.
@@ -209,6 +214,15 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   // The header holds on to these; the stable wrappers always run this
   // render's handlers, not the ones from when the context was published.
   const onSavedLatest = useLatestCallback(onSaved);
+  // cURL import (#271): a command pasted anywhere opens here. Like a recent
+  // run, it isn't a saved entry, so the save baseline stays as it was.
+  useImportedRequest('retrieve-single', (request) => {
+    if (request.modeId !== 'retrieve-single') return;
+    setState(importRetrieveSingle(initialState(), request));
+    setResult(null);
+    setTab('builder');
+    setActivePath('target');
+  });
   const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
@@ -260,25 +274,21 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
   // ── Execute ───────────────────────────────────────────────────────
   const onExecute = async () => {
     setLoading(true);
+    setRunUrl(built.relativeUrl);
     const res = await runtime.retrieveSingle(state, headerItemsToObject(state.headers, null));
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'retrieve-single',
-          url: built.relativeUrl,
-          method: 'GET',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: res.outcome === 'ok' ? 1 : 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'retrieve-single',
+        url: built.relativeUrl,
+        method: 'GET',
+        status: res.status,
+        ms: res.ms,
+        rowCount: res.outcome === 'ok' ? 1 : 0,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
@@ -592,7 +602,9 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
       <MainTabs tab={tab} onTabChange={setTab} resultCount={result?.outcome === 'ok' ? 1 : null}>
         {tab === 'builder' && pane}
         {tab === 'code' && <CodeView themeMode={themeMode} inputs={codeInputs} />}
-        {tab === 'results' && <ResultsView result={result} mode="single" table={state.table} />}
+        {tab === 'results' && (
+          <ResultsView result={result} mode="single" table={state.table} requestUrl={runUrl} />
+        )}
       </MainTabs>
     </ModeShell>
   );

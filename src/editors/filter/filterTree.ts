@@ -10,14 +10,14 @@
 // Operators in 'function' nodes are the same registry filtered to dv-fn-* kinds.
 // Lambda nodes own their own nested FilterGroup.
 
-import type { ColumnMeta, TableMeta } from '../../mock/metadata';
-import { resolveNavPath } from '../../mock/metadata';
+import type { ColumnMeta, TableMeta } from '../../metadata/metadata';
+import { resolveNavPath } from '../../metadata/metadata';
 import { findOperator, type OperatorDef } from './operators';
 import { attrRef } from '../../engine/odataAttr';
 import { ISO_DATE_RE, invalidNameReason, isPropertyPath } from '../../primitives/urlParts';
 import { isColumnInScope } from '../../state/metadataScope';
 // `Pick<>` here keeps the literal type narrow but allows ColumnMeta arity to widen
-export type { ColumnMeta } from '../../mock/metadata';
+export type { ColumnMeta } from '../../metadata/metadata';
 
 export type Combinator = 'and' | 'or';
 

@@ -49,7 +49,6 @@ import {
   Option,
   Badge,
   Persona,
-  Button,
 } from '@fluentui/react-components';
 import { Sidebar } from '../shell/Sidebar';
 import { MainTabs, type MainTab } from '../shell/MainTabs';
@@ -61,14 +60,13 @@ import { PaneHead } from '../editors/PaneHead';
 import { MergeFieldDiff } from '../editors/MergeFieldDiff';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
-import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
 import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { RecordPicker } from '../primitives/RecordPicker';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildMerge, buildMergeBody } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
@@ -96,6 +94,8 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { isRecordGuid } from '../primitives/guid';
+import { addRun, useRecentRuns } from '../state/runHistory';
+import { composeHeaderItems } from '../engine/requestHeaders';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -147,7 +147,8 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('merge');
 
   // Save / Load tracking
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
@@ -347,41 +348,22 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'merge',
-          url: built.relativeUrl,
-          method: 'POST',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: res.ok ? 1 : 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'merge',
+        url: built.relativeUrl,
+        method: 'POST',
+        status: res.status,
+        ms: res.ms,
+        rowCount: res.ok ? 1 : 0,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
 
   // ── Compose effective headers (auto-toggle MSCRM.SuppressDuplicateDetection + bypass family) ──
-  const effectiveHeaders = useMemo(() => {
-    let h = [...state.headers];
-    if (state.suppressDuplicateDetection) {
-      h.push({
-        id: '__sup-dupe',
-        name: 'MSCRM.SuppressDuplicateDetection',
-        value: 'true',
-        enabled: true,
-        builtin: true,
-        hint: 'Skips duplicate detection rules when applying UpdateContent overrides.',
-      });
-    }
-    h = applyBypassToHeaders(h, state.bypass);
-    return h;
-  }, [state.headers, state.suppressDuplicateDetection, state.bypass]);
+  const effectiveHeaders = useMemo(() => composeHeaderItems(state), [state]);
 
   // ── Advisories — bypass family + GUID validation + same-record guard ──
   const advisories = useMemo<Advisory[]>(() => {
@@ -872,7 +854,7 @@ function RecordCard({
   chip: string;
   chipDescription: string;
   row: Record<string, unknown> | undefined;
-  tbl: import('../mock/metadata').TableMeta;
+  tbl: import('../metadata/metadata').TableMeta;
   emptyHint: string;
 }) {
   // Uses Fluent palette tokens (not hand-mixed rgba) so the accent shifts
@@ -1235,13 +1217,10 @@ function OptionsPane({
 // Helpers
 // ──────────────────────────────────────────────────────────────
 function primaryNameOf(
-  tbl: import('../mock/metadata').TableMeta | undefined,
+  tbl: import('../metadata/metadata').TableMeta | undefined,
   row: Record<string, unknown> | undefined,
 ): string | null {
   if (!tbl || !row) return null;
   const v = row[tbl.primaryName];
   return v != null ? String(v) : null;
 }
-
-// Suppress unused-import warning
-void Button;

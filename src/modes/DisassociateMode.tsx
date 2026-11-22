@@ -46,11 +46,12 @@ import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from '../editors/PaneHead';
 import { NavPropertyPicker } from '../editors/NavPropertyPicker';
 import { AssociateTargetsEditor, targetsTitle } from '../editors/AssociateTargetsEditor';
+import { AllOrNothingOption } from '../editors/AllOrNothingOption';
 import { TargetEditor } from '../editors/TargetEditor';
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import {
   buildDisassociate,
@@ -58,7 +59,7 @@ import {
   relateRequestHeaders,
 } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
-import { relateDoneCount } from '../engine/dataverseExecutor';
+import { MAX_CHANGE_SET, relateAsChangeSet, relateDoneCount } from '../engine/dataverseExecutor';
 import type { DisassociateState } from '../state/relateState';
 import { isCollectionValuedNav, isSingleValuedNav } from '../state/relateState';
 import type { RecentRun } from '../state/readState';
@@ -77,6 +78,8 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
+import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
+import { addRun, useRecentRuns } from '../state/runHistory';
 
 // Empty initial state — same pattern as MergeMode/AssociateMode. User picks
 // the table → source record → nav property → targets (if collection-valued).
@@ -116,7 +119,8 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('disassociate');
 
   // Save / Load tracking
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
@@ -147,6 +151,8 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // Docs-preferred verb per cardinality (see file header).
   const method: 'DELETE' | 'PATCH' = isSingle ? 'PATCH' : 'DELETE';
+  // All or nothing (#224): the targets go as one change set, as Execute sends them.
+  const changeSet = isCollection && relateAsChangeSet(state.allOrNothing, requests.length);
 
   // ── Live source-lookup fetch (single-valued only) ──
   //
@@ -244,19 +250,57 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
     ],
     [['Navigation property', state.navProperty]],
   );
-  const disabledReason = !tbl
-    ? 'Pick a source table first.'
-    : !state.sourceId
-      ? 'Pick a source record.'
-      : !state.navProperty
-        ? 'Pick a navigation property.'
-        : isCollection && state.targetIds.length === 0
-          ? 'Pick at least one target record to disassociate.'
-          : isSingle && currentLookup === null && !currentLookupLoading && !currentLookupError
-            ? "Source's lookup is already empty — nothing to disassociate."
-            : state.headers.some((h) => h.enabled && !h.name)
-              ? 'Fix empty header name.'
-              : urlPartProblem;
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const advisories = firstBlocker([
+    { when: !tbl, id: 'disassoc-table', title: 'Pick a source table first.', focusNode: 'source' },
+    {
+      when: !state.sourceId,
+      id: 'disassoc-source',
+      title: 'Pick a source record.',
+      focusNode: 'source',
+    },
+    {
+      when: !state.navProperty,
+      id: 'disassoc-nav',
+      title: 'Pick a navigation property.',
+      focusNode: 'nav',
+    },
+    {
+      when: isCollection && state.targetIds.length === 0,
+      id: 'disassoc-targets',
+      title: 'Pick at least one target record to disassociate.',
+      focusNode: 'target',
+    },
+    {
+      when: isSingle && currentLookup === null && !currentLookupLoading && !currentLookupError,
+      id: 'disassoc-lookup-empty',
+      title: "Source's lookup is already empty — nothing to disassociate.",
+      focusNode: 'target',
+    },
+    {
+      when: changeSet && requests.length > MAX_CHANGE_SET,
+      id: 'disassoc-change-set-cap',
+      title: `All or nothing sends at most ${MAX_CHANGE_SET} requests in one change set; this has ${requests.length}. Remove targets or turn it off.`,
+      focusNode: 'target',
+    },
+    {
+      when: state.headers.some((h) => h.enabled && !h.name),
+      id: 'disassoc-header-name',
+      title: 'Fix empty header name.',
+      focusNode: 'headers',
+    },
+    {
+      when: urlPartProblem,
+      id: 'disassoc-url-part',
+      title: urlPartProblem ?? '',
+      focusNode: urlPartProblem?.startsWith('Target')
+        ? 'target'
+        : urlPartProblem?.startsWith('Navigation')
+          ? 'nav'
+          : 'source',
+    },
+  ]);
+  const disabledReason = disabledReasonFromAdvisories(advisories);
 
   const onExecute = async () => {
     setLoading(true);
@@ -264,23 +308,18 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'disassociate',
-          url: built.relativeUrl,
-          method,
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: relateDoneCount(res, requests.length) ?? 0,
-          // Recent runs shows no row count for writes (#309); say how many links were done.
-          summary: `${relateDoneCount(res, requests.length) ?? 0} of ${requests.length} unlinked`,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'disassociate',
+        url: built.relativeUrl,
+        method,
+        status: res.status,
+        ms: res.ms,
+        rowCount: relateDoneCount(res, requests.length) ?? 0,
+        // Recent runs shows no row count for writes (#309); say how many links were done.
+        summary: `${relateDoneCount(res, requests.length) ?? 0} of ${requests.length} unlinked`,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
@@ -488,6 +527,8 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
           setTargetIds={(ids) => set('targetIds', ids, 'target')}
           targetNames={state.targetNames}
           setTargetNames={(n) => set('targetNames', n)}
+          setAllOrNothing={(v) => set('allOrNothing', v || undefined, 'target')}
+          changeSet={changeSet}
           currentLookup={currentLookup}
           currentLookupLoading={currentLookupLoading}
           currentLookupError={currentLookupError}
@@ -527,6 +568,7 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
             description: r.targetId ? `target ${r.targetId}` : 'clear lookup (null)',
           }))
         : undefined,
+    changeSet,
   };
 
   // ── Build the WriteResultCard context. For single-valued, the "targets"
@@ -570,6 +612,8 @@ export function DisassociateMode({ themeMode }: { themeMode: ThemeMode }) {
           disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
+          advisories={advisories}
+          onAdvisoryFocus={setActivePath}
         />
       }
     >
@@ -610,6 +654,8 @@ function TargetPane({
   setTargetIds,
   targetNames,
   setTargetNames,
+  setAllOrNothing,
+  changeSet,
   currentLookup,
   currentLookupLoading,
   currentLookupError,
@@ -618,6 +664,8 @@ function TargetPane({
   setTargetIds: (ids: string[]) => void;
   targetNames: Record<string, string>;
   setTargetNames: (next: Record<string, string>) => void;
+  setAllOrNothing: (next: boolean) => void;
+  changeSet: boolean;
   currentLookup: CurrentLookup | null;
   currentLookupLoading: boolean;
   currentLookupError: string | null;
@@ -761,11 +809,22 @@ function TargetPane({
       group="relate"
       resolvedMethod={null}
       verb="DELETE"
+      changeSet={changeSet}
+      footer={
+        <AllOrNothingOption
+          checked={!!state.allOrNothing}
+          onChange={setAllOrNothing}
+          targets={state.targetIds.length}
+          verb="DELETE"
+        />
+      }
       sub={
         <>
           Pick one or more <code>{targetTbl?.logicalName}</code> rows to remove from the collection.
-          Each fires a separate DELETE request per docs — the target rows are <strong>not</strong>{' '}
-          deleted, only the links.
+          {changeSet
+            ? 'The DELETE requests go together as one change set'
+            : 'Each fires a separate DELETE request per docs'}{' '}
+          — the target rows are <strong>not</strong> deleted, only the links.
         </>
       }
     />
@@ -775,7 +834,7 @@ function TargetPane({
 // ──────────────────────────────────────────────────────────────
 // URL shape comparison card — surfaces both wire shapes per cardinality
 // ──────────────────────────────────────────────────────────────
-function UrlShapeComparison({ nav }: { nav: import('../mock/metadata').NavProperty }) {
+function UrlShapeComparison({ nav }: { nav: import('../metadata/metadata').NavProperty }) {
   const s = useStudioStyles();
   const isSingle = isSingleValuedNav(nav);
   return (
@@ -853,7 +912,7 @@ function UrlShapeCard({
   );
 }
 
-function cardinalityShort(c: import('../mock/metadata').NavProperty['cardinality']): string {
+function cardinalityShort(c: import('../metadata/metadata').NavProperty['cardinality']): string {
   switch (c) {
     case 'OneToMany':
       return '1:N';

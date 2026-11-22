@@ -6,7 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FluentProvider, webLightTheme } from '@fluentui/react-components';
 import { ApplyEditor, emptyApply } from './ApplyEditor';
-import { __clearLiveTables } from '../mock/metadata';
+import { __clearLiveTables } from '../metadata/metadata';
 import { registerFixtureTables } from '../test/fixtures';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

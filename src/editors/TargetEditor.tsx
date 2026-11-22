@@ -21,7 +21,7 @@ import {
   Filter20Regular,
 } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { useLiveTable } from '../host/useLiveMetadata';
 import { useScopedEntities } from '../host/useScopedEntities';
 import { useOpenScope } from '../host/useOpenScope';

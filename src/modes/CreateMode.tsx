@@ -39,22 +39,16 @@ import { TargetEditor } from '../editors/TargetEditor';
 import { SelectEditor } from '../editors/SelectEditor';
 import { FieldSetEditor, seedRequiredFieldValues } from '../editors/FieldSetEditor';
 import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/PreferEditor';
-import {
-  HeadersEditor,
-  defaultWriteHeaders,
-  headerItemsToObject,
-  type HeaderItem,
-} from '../editors/HeadersEditor';
+import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
-import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
 import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
-import { disabledReasonFromAdvisories } from '../primitives/advisories';
+import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
 import { Warning20Filled } from '@fluentui/react-icons';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
 import { writeResultName } from '../views/results/writeResultName';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildCreate, buildCreateBody } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
@@ -75,6 +69,10 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { missingRequiredColumns, rawBodyBlocker } from '../engine/fieldBody';
+import { addRun, useRecentRuns } from '../state/runHistory';
+import { useImportedRequest } from '../state/modeHandoff';
+import { importCreate } from '../engine/curlImport/applyImport';
+import { composeHeaderItems } from '../engine/requestHeaders';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -115,7 +113,8 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('create');
 
   // ── Save / Load tracking ──
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
@@ -182,17 +181,29 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   }, [tbl, state.rawBody, state.fieldValues, state.nullFields]);
 
   const jsonBlocker = rawBodyBlocker(state.rawBody);
-  const disabledReason = !tbl
-    ? 'Pick a target table first.'
-    : jsonBlocker
-      ? jsonBlocker
-      : missingRequired.length > 0
-        ? `${missingRequired.length} required field${missingRequired.length === 1 ? '' : 's'} unset: ${missingRequired.slice(0, 3).join(', ')}${missingRequired.length > 3 ? '…' : ''}`
-        : state.headers.some((h) => h.enabled && !h.name)
-          ? 'Fix empty header name.'
-          : Object.keys(body).length === 0
-            ? 'Body is empty — set at least one field.'
-            : null;
+  // Execute blockers, as advisories with a way to the fix (#294).
+  const blockers = firstBlocker([
+    { when: !tbl, id: 'create-table', title: 'Pick a target table first.', focusNode: 'target' },
+    { when: jsonBlocker, id: 'create-json', title: jsonBlocker ?? '', focusNode: 'fieldset' },
+    {
+      when: missingRequired.length > 0,
+      id: 'create-required',
+      title: `${missingRequired.length} required field${missingRequired.length === 1 ? '' : 's'} unset: ${missingRequired.slice(0, 3).join(', ')}${missingRequired.length > 3 ? '…' : ''}`,
+      focusNode: 'fieldset',
+    },
+    {
+      when: state.headers.some((h) => h.enabled && !h.name),
+      id: 'create-header-name',
+      title: 'Fix empty header name.',
+      focusNode: 'headers',
+    },
+    {
+      when: Object.keys(body).length === 0,
+      id: 'create-empty-body',
+      title: 'Body is empty — set at least one field.',
+      focusNode: 'fieldset',
+    },
+  ]);
 
   // ── Execute ──
   const onExecute = async () => {
@@ -201,45 +212,35 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'create',
-          url: built.relativeUrl,
-          method: 'POST',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: res.ok ? 1 : 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'create',
+        url: built.relativeUrl,
+        method: 'POST',
+        status: res.status,
+        ms: res.ms,
+        rowCount: res.ok ? 1 : 0,
+      }),
     );
     setState((s) => ({ ...s, dirty: new Set() }));
   };
 
   // ── Headers (auto-toggle MSCRM.SuppressDuplicateDetection + bypass composer) ──
-  const headers = useMemo<HeaderItem[]>(() => {
-    const baseHeaders = state.headers.map((h) => {
-      if (h.name === 'MSCRM.SuppressDuplicateDetection') {
-        return { ...h, enabled: state.duplicateDetection, value: 'false' };
-      }
-      return h;
-    });
-    return applyBypassToHeaders(baseHeaders, state.bypass);
-  }, [state.headers, state.duplicateDetection, state.bypass]);
+  const headers = useMemo(() => composeHeaderItems(state), [state]);
 
   // ── Advisories — bypass family ──
-  const advisories = useMemo(
+  const bypassAdvisories = useMemo(
     () => [
       ...detectBypassAdvisories(state.bypass, 'bypass'),
       ...detectUnsentHeaderAdvisories({ op: 'create', bypass: state.bypass }),
     ],
     [state.bypass],
   );
-  const bypassBlocker = disabledReasonFromAdvisories(advisories);
+  const advisories = [...blockers, ...bypassAdvisories];
+  // The tooltip names the checklist blocker first, as before; bypass errors
+  // only when nothing else blocks (#294).
+  const disabledReason = blockers[0]?.title ?? disabledReasonFromAdvisories(bypassAdvisories);
 
   // ── Save / Load ──
   const currentSerialized = useMemo(() => serializeCreate(state), [state]);
@@ -287,6 +288,15 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
   // The header holds on to these; the stable wrappers always run this
   // render's handlers, not the ones from when the context was published.
   const onSavedLatest = useLatestCallback(onSaved);
+  // cURL import (#271): a command pasted anywhere opens here. Like a recent
+  // run, it isn't a saved entry, so the save baseline stays as it was.
+  useImportedRequest('create', (request) => {
+    if (request.modeId !== 'create') return;
+    setState(importCreate(initialState(), request));
+    setResult(null);
+    setTab('builder');
+    setActivePath('fieldset');
+  });
   const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
@@ -536,7 +546,7 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
             scope: { kind: 'records', count: 1 },
             highImpact: false,
           }}
-          disabledReason={disabledReason ?? bypassBlocker}
+          disabledReason={disabledReason}
           loading={loading}
           onExecute={onExecute}
           advisories={advisories}

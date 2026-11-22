@@ -7,8 +7,8 @@ import {
 } from './codeGenerators';
 import type { BuiltRequest } from './urlBuilder';
 
-vi.mock('../mock/environment', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../mock/environment')>()),
+vi.mock('../env/environment', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../env/environment')>()),
   ENV: {
     name: 'Test',
     host: 'contoso.crm.dynamics.com',
@@ -119,6 +119,7 @@ describe('generateCode — every format', () => {
     'xhr',
     'powerautomate',
     'csharp',
+    'python',
     'powershell',
     'curl',
     'json',

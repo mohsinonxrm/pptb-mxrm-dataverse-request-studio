@@ -4,7 +4,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FluentProvider, webLightTheme } from '@fluentui/react-components';
-import type { CsdlAction } from '../mock/actionsCsdl';
+import type { CsdlAction } from '../metadata/actionsCsdl';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

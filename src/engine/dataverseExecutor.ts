@@ -2,10 +2,9 @@
 // host's `window.dataverseAPI` surface (via the `dvHost` wrapper in
 // `pptbBridge.ts`).
 //
-// This module implements the SAME function signatures as the mock
-// `executor.ts` — `(state, sim?) => Promise<ExecResult>`. The `sim` arg is
-// ignored in live mode (it's a mock-only affordance for synthesizing 4xx
-// responses without round-trips); the host returns real status codes.
+// Each `execute*` takes a mode's state (plus the headers it composed) and
+// resolves to an `ExecResult` with the host's real status, never a thrown
+// error; `runtime.ts` dispatches to them.
 //
 // Request headers: the write group (Create / Update / Upsert / Delete /
 // Merge), Execute Action and Execute Workflow (#266) pass the headers their
@@ -38,6 +37,7 @@ import {
   dvHost,
   HostNotAvailableError,
   hostSupportsAdditionalHeaders,
+  hostSupportsBatch,
   isEmbedded,
 } from '../host/pptbBridge';
 import { metadata } from '../host/metadataProvider';
@@ -46,12 +46,11 @@ import { jsonBytes } from './byteSize';
 import { hasCollectionInvolvedNestedExpand } from '../editors/expand/expandTree';
 import {
   buildRetrieveMultiple,
+  COUNT_ONLY_PREFER,
   buildRetrieveSingle,
   buildCreateBody,
-  buildUpdate,
   buildUpdateBody,
   buildUpsertBody,
-  buildDelete,
   buildMergeBody,
   buildAssociateRequests,
   buildDisassociateRequests,
@@ -126,6 +125,11 @@ export interface ExecResult {
   /** Associate / Disassociate on a collection-valued nav property: one
    *  entry per target, in request order (#99). Absent for every other op. */
   targets?: RelateTargetResult[];
+  /** Those targets went as one change set, all or nothing (#224). */
+  changeSet?: boolean;
+  /** Count only (#272): Dataverse stopped counting at its limit (5,000, or
+   *  500 for elastic tables). Absent when the response didn't say. */
+  countLimitExceeded?: boolean;
 }
 
 /**
@@ -135,10 +139,12 @@ export interface ExecResult {
  *                 Disassociate never skips (see executeDisassociate).
  *   • `failed`  — the request failed; `status` / `error` come from the same
  *                 mapping as every other failure.
+ *   • `rolled-back` — All or nothing only (#224): sent in a change set that
+ *                 failed, so this target's change wasn't applied.
  */
 export interface RelateTargetResult {
   targetId: string;
-  state: 'done' | 'skipped' | 'failed';
+  state: 'done' | 'skipped' | 'failed' | 'rolled-back';
   status?: number;
   statusText?: string;
   error?: { code?: string; message: string };
@@ -149,8 +155,9 @@ export function relateTargetCounts(r: ExecResult | null | undefined): {
   done: number;
   skipped: number;
   failed: number;
+  'rolled-back': number;
 } {
-  const c = { done: 0, skipped: 0, failed: 0 };
+  const c = { done: 0, skipped: 0, failed: 0, 'rolled-back': 0 };
   for (const t of r?.targets ?? []) c[t.state]++;
   return c;
 }
@@ -177,6 +184,7 @@ const STATUS_TEXT: Record<number, string> = {
   404: 'Not Found',
   409: 'Conflict',
   412: 'Precondition Failed',
+  429: 'Too Many Requests',
   500: 'Internal Server Error',
   501: 'Not Implemented',
 };
@@ -237,6 +245,10 @@ const STATUS_BY_DATAVERSE_CODE: Record<string, number> = {
   '0x80040237': 412, // DuplicateRecord (also If-None-Match: * on an existing row)
   '0x80060882': 412, // ConcurrencyVersionMismatch: stale If-Match ETag
   '0x80060888': 400, // OData: could not find a property
+  // Service protection limits (#269): Dataverse answers these with 429.
+  '0x80072322': 429, // Number of requests
+  '0x80072321': 429, // Combined execution time
+  '0x80072326': 429, // Concurrent requests
 };
 
 /** The first Dataverse error code (`0x8xxxxxxx`) in a host message, as written. */
@@ -464,6 +476,7 @@ export async function executeRetrieveMultiple(
 ): Promise<ExecResult> {
   const dropped = refuseHeaderProblems(composed);
   if (dropped) return dropped;
+  if (s.countOnly) return executeCount(s, composed);
   const headers = readHeaders(composed, s.prefer.maxpagesize);
   // Without the page size on the wire, dropping `$top` (as the Code tab
   // does) would leave the query uncapped: up to 5,000 rows (#219). Except
@@ -474,6 +487,56 @@ export async function executeRetrieveMultiple(
   const res = await timed(() => dvHost.queryData(built.relativeNoBase, headers), headers);
   if (isExecResult(res)) return res;
   return ok(200, res.value, res.ms);
+}
+
+/** Code on a count-only response that carried no `@odata.count`. */
+export const COUNT_UNREADABLE_CODE = 'DRS.CountUnreadable';
+
+/** `@odata.count` and whether Dataverse stopped counting at its limit. */
+export function readCount(body: unknown): { count: number; limitExceeded?: boolean } | null {
+  if (!body || typeof body !== 'object') return null;
+  const b = body as Record<string, unknown>;
+  const count = b['@odata.count'];
+  if (typeof count !== 'number' || !Number.isInteger(count) || count < 0) return null;
+  const exceeded = b['@Microsoft.Dynamics.CRM.totalrecordcountlimitexceeded'];
+  return typeof exceeded === 'boolean' ? { count, limitExceeded: exceeded } : { count };
+}
+
+/**
+ * Count only (#272): one row with `$count=true` (see buildRetrieveMultiple).
+ * The request's own headers go with it (impersonation, say), but never a
+ * page size. The result's body is the count itself.
+ */
+async function executeCount(
+  s: RetrieveMultipleState,
+  composed?: Record<string, string>,
+): Promise<ExecResult> {
+  const sent = readHeaders(composed, null);
+  // Sent headers replace the host's own Prefer, which asks for every
+  // annotation; ask again for the one that says the count is capped.
+  const headers = sent ? { ...sent, Prefer: COUNT_ONLY_PREFER } : undefined;
+  const built = buildRetrieveMultiple(s);
+  const res = await timed(() => dvHost.queryData(built.relativeNoBase, headers), headers);
+  if (isExecResult(res)) return res;
+  const read = readCount(res.value);
+  if (!read) {
+    // Dataverse answered 200, so say that, but there's no count to show.
+    return {
+      ...failure(
+        200,
+        {
+          code: COUNT_UNREADABLE_CODE,
+          message: "Dataverse answered without @odata.count, so there's no count to show.",
+        },
+        res.ms,
+      ),
+      outcome: 'error',
+    };
+  }
+  return {
+    ...ok(200, read.count, res.ms),
+    ...(read.limitExceeded !== undefined ? { countLimitExceeded: read.limitExceeded } : {}),
+  };
 }
 
 /**
@@ -732,11 +795,9 @@ export async function executeUpdate(
   const wire = sendable(headers);
   const res = await timed(() => dvHost.update(s.table, s.recordId!, body, wire), wire);
   if (isExecResult(res)) return res;
-  // dvHost.update resolves to void on 204 No Content. Best-effort GET to
-  // hydrate the updated row for the Results pane, then fall back to a
-  // minimal envelope.
-  void buildUpdate; // keep import used
-  return ok(204, { '@odata.context': 'update' }, res.ms);
+  // dvHost.update resolves to void: the host returns no row, even when the
+  // request asked for return=representation (#224). Report the 204 as is.
+  return ok(204, null, res.ms);
 }
 
 export async function executeUpsert(
@@ -780,7 +841,8 @@ export async function executeUpsert(
   const wire = sendable(headers);
   const res = await timed(() => dvHost.update(s.table, recordId, body, wire), wire);
   if (isExecResult(res)) return res;
-  return ok(204, { '@odata.context': 'upsert' }, res.ms);
+  // Same as Update: no row from the host, and no way to tell 201 from 204.
+  return ok(204, null, res.ms);
 }
 
 export async function executeDelete(
@@ -811,7 +873,6 @@ export async function executeDelete(
       0,
     );
   }
-  void buildDelete;
   const wire = sendable(headers);
   const res = await timed(() => dvHost.delete(s.table, s.recordId!, wire), wire);
   if (isExecResult(res)) return res;
@@ -852,7 +913,18 @@ export async function executeMerge(
 
 // Collection-valued Associate / Disassociate is one host call per target
 // (no batch), so a run can partly succeed. Each target gets its own result
-// and a failure doesn't stop the rest (#99).
+// and a failure doesn't stop the rest (#99). With All or nothing on (#224),
+// on PPTB 1.2.7+, the targets' requests go as one change set instead
+// (`executeTransaction`): Dataverse applies all of them or none.
+
+/**
+ * True when a relate run sends its targets as one change set: All or
+ * nothing is on, there are 2+ targets, and the host can send a change set.
+ * Standalone counts as able, so the Code tab shows the change set.
+ */
+export function relateAsChangeSet(allOrNothing: boolean | undefined, targets: number): boolean {
+  return !!allOrNothing && targets > 1 && (!isEmbedded() || hostSupportsBatch());
+}
 
 /** Max target GUIDs per "which are linked?" query, to keep the URL short. */
 const LINK_CHECK_CHUNK = 25;
@@ -962,6 +1034,113 @@ async function runPerTarget(
   };
 }
 
+/**
+ * All or nothing (#224): send the targets `skip` doesn't skip as one change
+ * set and map the host's results back per target:
+ *   • every request succeeded → 204, each sent target `done`.
+ *   • a request failed        → that request's status and error; the
+ *                               target it belongs to is `failed`, every
+ *                               other sent target `rolled-back`. When the
+ *                               host can't tie the failure to a request (no
+ *                               Content-ID), they're all `rolled-back`.
+ *   • the host call threw     → its error; the sent targets `rolled-back`
+ *                               (a change set applies whole or not at all).
+ *   • a request has no result → treated like a failure nobody can tie to a
+ *                               request: nothing is reported as done.
+ * Never `partial`: nothing is applied unless everything is. More than
+ * MAX_CHANGE_SET requests aren't sent: Dataverse and PPTB refuse them.
+ */
+async function runChangeSet(
+  targetIds: string[],
+  skip: (id: string) => boolean,
+  request: (id: string) => DataverseAPI.BatchRequest,
+  t0: number,
+  /** The headers each request carries, to report a declined consent prompt. */
+  sentHeaders?: Record<string, string>,
+): Promise<ExecResult> {
+  const sent = new Map<string, number>(); // contentId → index in targetIds
+  const requests: DataverseAPI.BatchRequest[] = [];
+  targetIds.forEach((id, i) => {
+    if (skip(id)) return;
+    const contentId = String(requests.length + 1);
+    sent.set(contentId, i);
+    requests.push({ ...request(id), contentId });
+  });
+  const sentAt = new Set(sent.values());
+  const results = (failedAt: number | null, state: 'done' | 'rolled-back') =>
+    targetIds.map(
+      (targetId, i): RelateTargetResult =>
+        !sentAt.has(i)
+          ? { targetId, state: 'skipped' }
+          : { targetId, state: i === failedAt ? 'failed' : state },
+    );
+  const elapsed = () => Math.round(performance.now() - t0);
+  if (requests.length === 0) {
+    const targets = results(null, 'done');
+    return { ...ok(204, { targets }, elapsed()), targets };
+  }
+  if (requests.length > MAX_CHANGE_SET) {
+    return mapError(
+      {
+        statusCode: 400,
+        message: `Not sent: a change set holds at most ${MAX_CHANGE_SET} requests, and this one has ${requests.length}. Remove targets or turn off All or nothing.`,
+      },
+      elapsed(),
+    );
+  }
+  const failed = (f: ExecResult, failedAt: number | null): ExecResult => {
+    const fError = (f.body as { error: { code?: string; message: string } }).error;
+    const targets = results(failedAt, 'rolled-back');
+    const t = failedAt === null ? undefined : targets[failedAt];
+    if (t) Object.assign(t, { status: f.status, statusText: f.statusText, error: fError });
+    const body = { error: fError, targets };
+    return { ...f, body, bytes: jsonBytes(body), targets, changeSet: true };
+  };
+
+  let answer: DataverseAPI.BatchResult[];
+  try {
+    answer = await dvHost.executeTransaction(requests);
+  } catch (e) {
+    const f = mapError(e, elapsed(), sentHeaders);
+    const code = (f.body as { error?: { code?: string } } | null)?.error?.code;
+    if (e instanceof HostNotAvailableError || code === HEADER_CONSENT_DECLINED_CODE) return f;
+    return failed(f, null);
+  }
+
+  const ms = elapsed();
+  const bad = answer.find((r) => r.status >= 400);
+  if (!bad) {
+    // Every request needs its own success, or nothing is claimed as done.
+    const answered = new Set(answer.map((r) => r.contentId));
+    const missing =
+      answer.length < requests.length || requests.some((r) => !answered.has(r.contentId));
+    if (missing) {
+      return failed(
+        failure(
+          0,
+          {
+            message: `Power Platform ToolBox returned ${answer.length} result(s) for the ${requests.length} requests in the change set, so DRS can't tell whether it was applied. Check the links before you Execute again.`,
+          },
+          ms,
+        ),
+        null,
+      );
+    }
+    const targets = results(null, 'done');
+    return { ...ok(204, { targets }, ms), targets, changeSet: true };
+  }
+  const reported = (bad.body as { error?: { code?: string; message?: string } } | null)?.error;
+  const error = {
+    code: reported?.code,
+    message: reported?.message || bad.statusText || `HTTP ${bad.status}`,
+  };
+  const failedAt = bad.contentId !== undefined ? (sent.get(bad.contentId) ?? null) : null;
+  return failed(failure(bad.status, error, ms, bad.statusText || undefined), failedAt);
+}
+
+/** Dataverse (and PPTB) take at most this many requests in one `$batch`. */
+export const MAX_CHANGE_SET = 1000;
+
 export async function executeAssociate(
   s: AssociateState,
   composed?: Record<string, string>,
@@ -1016,13 +1195,34 @@ export async function executeAssociate(
     return mapError(e, Math.round(performance.now() - t0));
   }
   const wire = sendable(relate);
+  const skip = (id: string) => !!linked?.has(id.toLowerCase());
+  if (relateAsChangeSet(s.allOrNothing, ids.length)) {
+    // The same POST $ref the Code tab shows, absolute @odata.id included;
+    // the headers go on each request in the change set.
+    const byId = new Map(reqs.map((r) => [r.targetId, r]));
+    return runChangeSet(ids, skip, (id) => changeSetRequest(byId.get(id)!, wire), t0, wire);
+  }
   return runPerTarget(
     ids,
-    (id) => !!linked?.has(id.toLowerCase()),
+    skip,
     (id) => dvHost.associate(s.table, sourceId, navProperty, relatedEntity, id, wire),
     t0,
     wire,
   );
+}
+
+/** One relate request as a change-set request: URL relative to the API base. */
+function changeSetRequest(
+  r: { method: string; relativeNoBase: string; body?: Record<string, unknown> },
+  headers?: Record<string, string>,
+): DataverseAPI.BatchRequest {
+  const req: DataverseAPI.BatchRequest = {
+    method: r.method as DataverseAPI.BatchRequest['method'],
+    url: r.relativeNoBase.replace(/^\//, ''),
+  };
+  if (headers && Object.keys(headers).length > 0) req.headers = { ...headers };
+  if (r.body !== undefined) req.body = r.body;
+  return req;
 }
 
 export async function executeDisassociate(
@@ -1070,6 +1270,16 @@ export async function executeDisassociate(
   // DELETE is reported as the failure Dataverse returned.
   const ids = reqs.map((r) => r.targetId).filter((id): id is string => !!id);
   const wire = sendable(relate);
+  if (relateAsChangeSet(s.allOrNothing, ids.length)) {
+    const byId = new Map(reqs.map((r) => [r.targetId, r]));
+    return runChangeSet(
+      ids,
+      () => false,
+      (id) => changeSetRequest(byId.get(id)!, wire),
+      t0,
+      wire,
+    );
+  }
   return runPerTarget(
     ids,
     () => false,
@@ -1248,18 +1458,4 @@ export async function executeManageAttachment(_s: ManageAttachmentState): Promis
  */
 export function execFailure(err: unknown, ms: number): ExecResult {
   return mapError(err, ms);
-}
-
-// ── Bridge connectivity check (used by an "are we online" indicator) ─────
-export async function pingHost(): Promise<boolean> {
-  try {
-    await dvHost.execute({ operationName: 'WhoAmI', operationType: 'function' });
-    return true;
-  } catch (e) {
-    if (e instanceof HostNotAvailableError) return false;
-    // Other errors (network blip, 401) still mean "the host is here, just
-    // can't reach Dataverse right now". Treat as "online" so we don't
-    // hide the live executor.
-    return true;
-  }
 }

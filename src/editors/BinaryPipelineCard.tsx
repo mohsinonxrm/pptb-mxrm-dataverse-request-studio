@@ -24,7 +24,7 @@ import {
 import { Code20Regular, Copy20Regular } from '@fluentui/react-icons';
 import { useStudioStyles } from '../primitives/styles';
 import { MethodPill } from '../primitives/MethodPill';
-import { ENV } from '../mock/environment';
+import { ENV } from '../env/environment';
 import type { BinaryPipelineStep } from '../engine/binaryBuilders';
 import type { HttpMethod } from '../registry/requestTypes';
 import type { SizeAdvisory } from '../state/binaryState';

@@ -73,25 +73,15 @@ import { notify } from '../shell/dialogs';
 import { useStudioStyles } from '../primitives/styles';
 import { TargetEditor } from '../editors/TargetEditor';
 import { PaneHead } from '../editors/PaneHead';
-import {
-  HeadersEditor,
-  defaultWriteHeaders,
-  headerItemsToObject,
-  type HeaderItem,
-} from '../editors/HeadersEditor';
-import {
-  PreconditionEditor,
-  etagProblem,
-  preconditionToHeader,
-} from '../editors/PreconditionEditor';
+import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
+import { PreconditionEditor, etagProblem } from '../editors/PreconditionEditor';
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
-import { applyBypassToHeaders } from '../engine/bypassHeaders';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
 import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
-import { findTable } from '../mock/metadata';
+import { findTable } from '../metadata/metadata';
 import { findRequestType } from '../registry/requestTypes';
 import { buildDelete } from '../engine/urlBuilder';
 import { runtime, type ExecResult } from '../engine/runtime';
@@ -119,6 +109,10 @@ import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { isRecordGuid } from '../primitives/guid';
 import { isColumnInScope, useAdvancedFindOnly } from '../state/metadataScope';
+import { addRun, useRecentRuns } from '../state/runHistory';
+import { useImportedRequest } from '../state/modeHandoff';
+import { importDelete } from '../engine/curlImport/applyImport';
+import { composeHeaderItems } from '../engine/requestHeaders';
 
 const initialState = (): DeleteState => ({
   table: '',
@@ -156,7 +150,8 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [recents, setRecents] = useState<RecentRun[]>([]);
+  // Kept across reloads, per environment (#226).
+  const [recents, setRecents] = useRecentRuns('delete');
 
   // Last-saved tracking (Save button dirty/clean + library checkmark).
   const [lastSavedId, setLastSavedId] = useState<string | undefined>(draft.lastSavedId);
@@ -336,6 +331,15 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
   // The header holds on to these; the stable wrappers always run this
   // render's handlers, not the ones from when the context was published.
   const onSavedLatest = useLatestCallback(onSaved);
+  // cURL import (#271): a command pasted anywhere opens here. Like a recent
+  // run, it isn't a saved entry, so the save baseline stays as it was.
+  useImportedRequest('delete', (request) => {
+    if (request.modeId !== 'delete') return;
+    setState(importDelete(initialState(), request));
+    setResult(null);
+    setTab('builder');
+    setActivePath('target');
+  });
   const onLoadSavedLatest = useLatestCallback(onLoadSaved);
   usePublishSaveContext(
     useMemo(() => {
@@ -448,21 +452,16 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     setResult(res);
     setLoading(false);
     setTab('results');
-    setRecents((rs) =>
-      [
-        {
-          id: `r-${Date.now()}`,
-          snapshot: currentSerialized,
-          modeId: 'delete',
-          url: built.relativeUrl,
-          method: 'DELETE',
-          ts: Date.now(),
-          status: res.status,
-          ms: res.ms,
-          rowCount: res.ok ? 1 : 0,
-        },
-        ...rs,
-      ].slice(0, 8),
+    setRecents(
+      addRun({
+        snapshot: currentSerialized,
+        modeId: 'delete',
+        url: built.relativeUrl,
+        method: 'DELETE',
+        status: res.status,
+        ms: res.ms,
+        rowCount: res.ok ? 1 : 0,
+      }),
     );
     // Reset typed confirmation so a follow-up delete requires a fresh ack.
     // Also clear `dirty` (Save button settles to clean if the user wants
@@ -470,30 +469,7 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     setState((s) => ({ ...s, dirty: new Set(), confirmText: '', acknowledged: false }));
   };
 
-  const effectiveHeaders = useMemo<HeaderItem[]>(() => {
-    // Order: user headers → concurrency → bypass family (composed centrally).
-    let h: HeaderItem[] = [...state.headers];
-    const cc = preconditionToHeader(state.concurrency);
-    if (cc) {
-      h.push({
-        id: `__cc__${cc.name}`,
-        name: cc.name,
-        value: cc.value,
-        enabled: true,
-        builtin: true,
-        hint: 'Auto-composed from the Concurrency pane.',
-      });
-    }
-    // Legacy field — kept in state for backward-compat. When true and the new
-    // bypass UI is at 'none', we mirror it forward to bypass.businessLogic='sync'
-    // + bypass.useLegacyHeader=true at compose time.
-    const effectiveBypass =
-      state.bypassCustomPlugins && state.bypass.businessLogic === 'none'
-        ? { ...state.bypass, businessLogic: 'sync' as const, useLegacyHeader: true }
-        : state.bypass;
-    h = applyBypassToHeaders(h, effectiveBypass);
-    return h;
-  }, [state.headers, state.concurrency, state.bypassCustomPlugins, state.bypass]);
+  const effectiveHeaders = useMemo(() => composeHeaderItems(state), [state]);
 
   const scopeBadge =
     state.scope.kind === 'whole-row' ? 'row' : `clear ${state.scope.column ?? '?'}`;
@@ -811,7 +787,7 @@ function DeleteTargetPane({
   rowLoading: boolean;
   rowError: string | null;
   primaryName: string;
-  tbl: import('../mock/metadata').TableMeta | undefined;
+  tbl: import('../metadata/metadata').TableMeta | undefined;
   onTableChange: (t: string) => void;
   onRecordChange: (id: string | null, primary?: string) => void;
   onProceedToConfirmation: () => void;
@@ -1009,7 +985,7 @@ function DeleteConfirmationPane({
   state: DeleteState;
   row: Record<string, unknown> | null;
   primaryName: string;
-  tbl: import('../mock/metadata').TableMeta | undefined;
+  tbl: import('../metadata/metadata').TableMeta | undefined;
   onConfirmText: (v: string) => void;
   onAck: (v: boolean) => void;
   onBackToTarget: () => void;

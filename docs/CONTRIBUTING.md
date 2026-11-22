@@ -152,8 +152,10 @@ src/
   main.tsx            — Vite entry point
   editors/            — composition pieces shared across modes
   engine/             — URL builders, code generators, runtime dispatch
+  env/                — target environment (getEnv, ENV, API_VERSION)
   host/               — PPTB bridge + live metadata loaders + cache
-  mock/               — type definitions + live registry (no fixtures)
+  metadata/           — table / column / CSDL action types + live table
+                        registry (findTable, findTableBySet)
   modes/              — request-mode components (23 modes; Execute Action /
                         Custom API / Custom Action share one component)
   primitives/         — small UI building blocks (pickers, pills, advisories)
