@@ -1,8 +1,7 @@
 // #224: All or nothing — collection-valued Associate / Disassociate send
 // their targets as one change set (`executeTransaction`) when the option is
-// on and the host has it, map the host's results back per target, and keep
-// the one-request-per-target path otherwise (option off, one target, or a
-// ToolBox older than 1.2.7).
+// on, map the host's results back per target, and keep the
+// one-request-per-target path otherwise (option off, or one target).
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   HEADER_CONSENT_DECLINED_CODE,
@@ -15,7 +14,6 @@ import type { AssociateState, DisassociateState } from '../state/relateState';
 
 const host = vi.hoisted(() => ({
   embedded: true,
-  batch: true,
   linked: [] as string[],
   queryData: vi.fn(),
   associate: vi.fn(),
@@ -25,8 +23,6 @@ const host = vi.hoisted(() => ({
 vi.mock('../host/pptbBridge', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../host/pptbBridge')>()),
   isEmbedded: () => host.embedded,
-  hostSupportsAdditionalHeaders: () => host.batch,
-  hostSupportsBatch: () => host.batch,
   dvHost: {
     queryData: host.queryData,
     associate: host.associate,
@@ -98,7 +94,6 @@ const ok204 = (contentId: string) => ({
 
 beforeEach(() => {
   host.embedded = true;
-  host.batch = true;
   host.linked = [];
   host.queryData
     .mockReset()
@@ -113,12 +108,10 @@ beforeEach(() => {
 });
 
 describe('relateAsChangeSet', () => {
-  it('needs the option, two or more targets, and a host that can send a change set', () => {
+  it('needs the option and two or more targets', () => {
     expect(relateAsChangeSet(true, 2)).toBe(true);
     expect(relateAsChangeSet(undefined, 2)).toBe(false);
     expect(relateAsChangeSet(true, 1)).toBe(false);
-    host.batch = false;
-    expect(relateAsChangeSet(true, 2)).toBe(false);
     // Standalone: the Code tab shows the change set (Execute reports 501).
     host.embedded = false;
     expect(relateAsChangeSet(true, 2)).toBe(true);
@@ -219,7 +212,6 @@ describe('Associate, all or nothing', () => {
 
   it('standalone, reports 501 like every other mode', async () => {
     host.embedded = false;
-    host.batch = false;
     host.executeTransaction.mockImplementation(async () => {
       const { HostNotAvailableError } = await import('../host/pptbBridge');
       throw new HostNotAvailableError('window.dataverseAPI');
@@ -277,13 +269,12 @@ describe('Associate, one request per target', () => {
     expect(host.associate).toHaveBeenCalledTimes(1);
   });
 
-  it('is the fallback on a ToolBox without executeTransaction', async () => {
-    host.batch = false;
+  it('leaves the run partial when a later target fails', async () => {
     host.associate.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('HTTP 404: x'));
-    const r = await executeAssociate(assoc([T1, T2]));
+    const r = await executeAssociate(assoc([T1, T2], false));
     expect(host.executeTransaction).not.toHaveBeenCalled();
     expect(host.associate).toHaveBeenCalledTimes(2);
-    // The old behaviour: the first stays linked, the run is partial.
+    // Without a change set the first stays linked, the run is partial.
     expect(r.outcome).toBe('partial');
     expect(r.targets!.map((t) => t.state)).toEqual(['done', 'failed']);
   });
@@ -316,9 +307,8 @@ describe('Disassociate, all or nothing', () => {
     expect(r.targets![0].error).toEqual({ message: 'Not Found' });
   });
 
-  it('falls back to one DELETE per target on an older ToolBox', async () => {
-    host.batch = false;
-    await executeDisassociate(disassoc([T1, T2]));
+  it('sends one DELETE per target when the option is off', async () => {
+    await executeDisassociate(disassoc([T1, T2], false));
     expect(host.executeTransaction).not.toHaveBeenCalled();
     expect(host.disassociate).toHaveBeenCalledTimes(2);
   });

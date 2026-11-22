@@ -123,14 +123,10 @@ function selectToOData(table: TableMeta | undefined, cols: string[]): string {
 }
 
 /**
- * `keepTop`: emit `$top` even when a page size is set. Dataverse ignores
- * `$top` next to `Prefer: odata.maxpagesize`, so the Code tab drops it; the
- * executor keeps it when the host can't send that Prefer (#219).
+ * Dataverse ignores `$top` next to `Prefer: odata.maxpagesize`, so a
+ * page-sized request leaves `$top` out (#219).
  */
-export function buildRetrieveMultiple(
-  s: RetrieveMultipleState,
-  opts: { keepTop?: boolean } = {},
-): BuiltRequest {
+export function buildRetrieveMultiple(s: RetrieveMultipleState): BuiltRequest {
   const tbl = findTable(s.table);
   if (!tbl) {
     return {
@@ -173,7 +169,7 @@ export function buildRetrieveMultiple(
       parts.push({ key: '$orderby', value: enc(orderbyToOData(s.orderby, tbl)) });
   }
   const pageSized = s.prefer.maxpagesize != null && s.prefer.maxpagesize > 0;
-  if (s.top != null && s.top > 0 && (!pageSized || opts.keepTop)) {
+  if (s.top != null && s.top > 0 && !pageSized) {
     parts.push({ key: '$top', value: String(s.top) });
   }
   if (s.countOn) parts.push({ key: '$count', value: 'true' });

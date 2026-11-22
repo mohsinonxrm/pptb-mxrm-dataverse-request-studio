@@ -1,4 +1,4 @@
-// $batch executor (#9) — sends a compiled batch through PPTB 1.2.7's
+// $batch executor (#9) — sends a compiled batch through PPTB's
 // `executeBatch` / `executeTransaction` and maps the host's per-operation
 // results back onto the composer's items.
 //
@@ -16,7 +16,7 @@
 //     additional-headers consent prompt; a decline rejects the call before
 //     anything is sent
 
-import { dvHost, hostSupportsBatch, isEmbedded } from '../../host/pptbBridge';
+import { dvHost, isEmbedded } from '../../host/pptbBridge';
 import type { CompiledItem, DispatchSegment } from './batchModel';
 
 export interface HostBatchResult {
@@ -306,7 +306,5 @@ export function toHostRequest(c: CompiledItem): DataverseAPI.BatchRequest {
 export function batchUnavailableReason(): string | null {
   if (!isEmbedded())
     return 'Run Dataverse Request Studio inside Power Platform ToolBox to send a batch.';
-  if (!hostSupportsBatch())
-    return 'Sending a $batch requires Power Platform ToolBox 1.2.7 or later.';
   return null;
 }
