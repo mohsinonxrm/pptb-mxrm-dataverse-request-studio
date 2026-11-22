@@ -1,8 +1,7 @@
 // The write executors' refusals and host calls (#235): requests the PPTB host
 // can't send as authored are refused before any host call (PUT one column,
 // alternate-key Upsert, single-property Delete), ids that would change the
-// URL aren't sent (#221), bound operations need their record, and an older
-// ToolBox that would drop impersonation doesn't run the write as you (#109).
+// URL aren't sent (#221), and bound operations need their record.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   executeAction,
@@ -36,10 +35,8 @@ import type {
   ExecuteWorkflowState,
 } from '../state/executeState';
 
-// The bridge decides host capabilities once at module load; mock it so each
-// test picks the host it runs against and sees every host call.
+// Mock the bridge so each test sees every host call.
 const host = vi.hoisted(() => ({
-  additionalHeaders: true,
   create: vi.fn(),
   update: vi.fn(),
   delete: vi.fn(),
@@ -50,7 +47,6 @@ const host = vi.hoisted(() => ({
 vi.mock('../host/pptbBridge', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../host/pptbBridge')>()),
   isEmbedded: () => true,
-  hostSupportsAdditionalHeaders: () => host.additionalHeaders,
   dvHost: {
     create: host.create,
     update: host.update,
@@ -169,7 +165,6 @@ const merge = (over: Partial<MergeState> = {}) =>
 beforeEach(() => {
   registerFixtureTables();
   for (const t of [account, contact]) tables.set(t.logicalName, t);
-  host.additionalHeaders = true;
   for (const f of [host.create, host.update, host.delete, host.execute, host.queryData]) {
     f.mockReset().mockResolvedValue(undefined);
   }
@@ -353,34 +348,4 @@ describe('host calls', () => {
     expect(r.ok).toBe(false);
     expect(r.status).toBe(412);
   });
-});
-
-describe('an older ToolBox that drops headers (before 1.2.7)', () => {
-  beforeEach(() => {
-    host.additionalHeaders = false;
-  });
-
-  it('sends the write without headers', async () => {
-    const r = await executeCreate(createState({ fieldValues: { name: 'x' } }), PANE);
-    expect(r.status).toBe(201);
-    expect(host.create).toHaveBeenCalledWith('account', { name: 'x' }, undefined);
-  });
-
-  it.each([
-    [
-      'Create',
-      () => executeCreate(createState({ fieldValues: { name: 'x' } }), { MSCRMCallerID: CALLER }),
-    ],
-    ['Update', () => executeUpdate(update(), { MSCRMCallerID: CALLER })],
-    ['Delete', () => executeDelete(del(), { MSCRMCallerID: CALLER })],
-    ['Merge', () => executeMerge(merge(), { MSCRMCallerID: CALLER })],
-  ])(
-    "%s doesn't run as you when the impersonation header would be dropped (#109)",
-    async (_n, exec) => {
-      const r = await exec();
-      expect(r.ok).toBe(false);
-      expect(JSON.stringify(r.body)).toMatch(/can't send MSCRMCallerID/);
-      expect(anyHostCall()).toBe(false);
-    },
-  );
 });

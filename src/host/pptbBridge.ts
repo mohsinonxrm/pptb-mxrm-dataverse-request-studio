@@ -313,10 +313,8 @@ export function subscribe(listener: Listener): () => void {
 //   - throw `HostNotAvailableError` when called outside PPTB
 //   - preserve the exact dataverseAPI argument order
 //   - take an optional `headers` map on the write methods, `execute` and
-//     `queryData`. PPTB 1.2.7+ forwards it as `additionalHeaders` (after the
-//     user approves it in the host); older hosts have no header parameter, so
-//     the map is dropped there. For writes, `hostHeaderAdvisories` blocks the
-//     requests whose meaning depends on a precondition or bypass header.
+//     `queryData`. PPTB forwards it as `additionalHeaders` (after the user
+//     approves it in the host).
 
 export class HostNotAvailableError extends Error {
   constructor(method: string) {
@@ -332,46 +330,17 @@ function dv(): DataverseAPI.API {
   return window.dataverseAPI;
 }
 
-// PPTB 1.2.7 added the trailing `additionalHeaders` parameter to every
-// dataverseAPI method in the same release as `executeBatch`. Extra arguments
-// can't be feature-detected on a function, and an older host silently ignores
-// them, so `executeBatch` is the probe. The preload bridge is fixed for the
-// life of the page, so we check once.
-const HEADER_PASS_THROUGH =
-  EMBEDDED &&
-  typeof window !== 'undefined' &&
-  typeof window.dataverseAPI?.executeBatch === 'function';
-
 /**
- * True when the host sends `additionalHeaders` on Dataverse requests
- * (PPTB 1.2.7+). The user approves the headers in a host prompt the first
- * time; if they decline, the host rejects the call without sending it.
- */
-export const hostSupportsAdditionalHeaders = (): boolean => HEADER_PASS_THROUGH;
-
-/**
- * True when the host can send a Dataverse `$batch` (`executeBatch` /
- * `executeTransaction`, PPTB 1.2.7+). Same probe as the header pass-through.
- */
-export const hostSupportsBatch = (): boolean => HEADER_PASS_THROUGH;
-
-/**
- * True when a read's `Prefer: odata.maxpagesize` takes effect: on PPTB
- * 1.2.7+, where Execute sends it (#219), and standalone, where the Code tab
- * request carries it. On an older host Execute gets Dataverse's 5,000-row
- * pages and keeps `$top` instead.
- */
-export const pageSizeIsSent = (): boolean => !EMBEDDED || HEADER_PASS_THROUGH;
-
-/**
- * The headers a dvHost call should pass as `additionalHeaders`. `undefined`
- * when there's nothing to send or the host can't send it — the call then
- * keeps the pre-1.2.7 shape and never triggers the consent prompt.
+ * The headers a dvHost call should pass as `additionalHeaders`. The user
+ * approves them in a host prompt the first time; if they decline, the host
+ * rejects the call without sending it. `undefined` when there's nothing to
+ * send — the call then leaves the parameter off and never triggers the
+ * consent prompt.
  */
 function sendHeaders(
   headers?: DataverseAPI.AdditionalHeaders,
 ): DataverseAPI.AdditionalHeaders | undefined {
-  if (!HEADER_PASS_THROUGH || !headers || Object.keys(headers).length === 0) return undefined;
+  if (!headers || Object.keys(headers).length === 0) return undefined;
   return headers;
 }
 
@@ -414,10 +383,9 @@ export const dvHost = {
   updateMultiple: (entity: string, records: Record<string, unknown>[]) =>
     dv().updateMultiple(entity, records),
 
-  // $batch (#9) — PPTB 1.2.7+. `executeBatch` sends independent requests,
-  // `executeTransaction` sends them as one change set. Check
-  // `hostSupportsBatch()` first; per-request headers and the outer
-  // `headers` go through the host's header consent prompt.
+  // $batch (#9). `executeBatch` sends independent requests,
+  // `executeTransaction` sends them as one change set. Per-request headers
+  // and the outer `headers` go through the host's header consent prompt.
   executeBatch: (
     requests: DataverseAPI.BatchRequest[],
     headers?: DataverseAPI.AdditionalHeaders,
@@ -433,7 +401,7 @@ export const dvHost = {
       ? dv().executeTransaction(requests, undefined, headers)
       : dv().executeTransaction(requests),
 
-  // Queries. Headers (1.2.7+) carry the read's `Prefer` page size (#219).
+  // Queries. Headers carry the read's `Prefer` page size (#219).
   queryData: (odata: string, headers?: DataverseAPI.AdditionalHeaders) => {
     const h = sendHeaders(headers);
     return h ? dv().queryData(odata, undefined, h) : dv().queryData(odata);
@@ -455,7 +423,7 @@ export const dvHost = {
     return h ? dv().execute(req, undefined, h) : dv().execute(req);
   },
 
-  // Relationships. Headers (1.2.7+): impersonation and bypass (#109).
+  // Relationships. Headers: impersonation and bypass (#109).
   associate: (
     primary: string,
     id: string,

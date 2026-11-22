@@ -139,7 +139,7 @@ export function generateBatchCode(fmt: BatchCodeFormat, input: BatchCodeInput): 
     case 'pptb': {
       if (input.plan.length === 0) return '// Add a request to see the host calls.';
       const out: string[] = [
-        '// What Dataverse Request Studio sends through Power Platform ToolBox (1.2.7+).',
+        '// What Dataverse Request Studio sends through Power Platform ToolBox.',
         '// The host writes the multipart body; each change set is its own call.',
       ];
       if (input.plan.length > 1) {

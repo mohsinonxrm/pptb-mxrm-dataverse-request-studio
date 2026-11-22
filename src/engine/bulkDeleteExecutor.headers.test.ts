@@ -3,11 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { executeBulkDelete } from './bulkDeleteExecutor';
 import type { BulkDeleteState } from './bulkDelete';
 
-const host = vi.hoisted(() => ({ additionalHeaders: true, execute: vi.fn() }));
+const host = vi.hoisted(() => ({ execute: vi.fn() }));
 vi.mock('../host/pptbBridge', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../host/pptbBridge')>()),
   isEmbedded: () => true,
-  hostSupportsAdditionalHeaders: () => host.additionalHeaders,
   dvHost: { execute: host.execute },
 }));
 vi.mock('./bulkDelete', async (importOriginal) => ({
@@ -19,7 +18,6 @@ const CALLER = '00000000-0000-0000-0000-0000000000c1';
 const state = {} as BulkDeleteState;
 
 beforeEach(() => {
-  host.additionalHeaders = true;
   host.execute.mockReset().mockResolvedValue({ JobId: 'j' });
 });
 
@@ -37,12 +35,5 @@ describe('executeBulkDelete', () => {
   it('sends nothing extra without one', async () => {
     await executeBulkDelete(state, { Accept: 'application/json' });
     expect(host.execute).toHaveBeenCalledWith(expect.any(Object), undefined);
-  });
-
-  it("isn't sent on a ToolBox that would drop the impersonation header", async () => {
-    host.additionalHeaders = false;
-    const r = await executeBulkDelete(state, { MSCRMCallerID: CALLER });
-    expect(host.execute).not.toHaveBeenCalled();
-    expect(r.ok).toBe(false);
   });
 });

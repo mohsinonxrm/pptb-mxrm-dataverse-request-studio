@@ -77,7 +77,6 @@ import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../edit
 import { PreconditionEditor, etagProblem } from '../editors/PreconditionEditor';
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
-import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
@@ -364,14 +363,6 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     // Bypass-pane signals (legacy detector — composes business-logic +
     // step-id + flow-suppress advisories into the same Advisory shape).
     out.push(...detectBypassAdvisories(state.bypass, 'bypass'));
-    out.push(
-      ...detectUnsentHeaderAdvisories({
-        op: 'delete',
-        concurrency: state.concurrency,
-        bypass: state.bypass,
-        bypassCustomPlugins: state.bypassCustomPlugins,
-      }),
-    );
 
     if (state.table && state.recordId && !isValidGuid(state.recordId)) {
       out.push({
@@ -414,14 +405,7 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     }
 
     return out;
-  }, [
-    state.bypass,
-    state.bypassCustomPlugins,
-    state.concurrency,
-    state.table,
-    state.recordId,
-    state.scope,
-  ]);
+  }, [state.bypass, state.table, state.recordId, state.scope]);
 
   const bypassBlocker = disabledReasonFromAdvisories(advisories);
 
