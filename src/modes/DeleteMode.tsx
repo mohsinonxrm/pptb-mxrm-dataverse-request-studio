@@ -113,6 +113,7 @@ import { addRun, useRecentRuns } from '../state/runHistory';
 import { useImportedRequest } from '../state/modeHandoff';
 import { importDelete } from '../engine/curlImport/applyImport';
 import { composeHeaderItems } from '../engine/requestHeaders';
+import { BatchTransportNote } from '../primitives/BatchTransportNote';
 
 const initialState = (): DeleteState => ({
   table: '',
@@ -375,37 +376,8 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
       });
     }
 
-    // Single-property delete + embedded-in-PPTB = unsupported by the host
-    // (see executeDelete for the full reasoning). We still let the user
-    // author the request and copy the URL / Code snippet, but block
-    // Execute so we don't silently whole-row-delete instead. In standalone
-    // mode there's no host at all — Execute is already disabled by the
-    // missing dataverseAPI — but we surface the advisory anyway so the
-    // limitation is documented.
-    if (state.scope.kind === 'single-property') {
-      out.push({
-        id: 'del-single-property-unsupported',
-        severity: 'error',
-        source: 'validation',
-        focusNode: 'scope',
-        title: "Single-property DELETE isn't supported by the PPTB host",
-        body: (
-          <>
-            DRS authors the correct URL{' '}
-            <code>DELETE /{state.table ? `&lt;set&gt;` : ''}(&lt;id&gt;)/&lt;column&gt;</code>, but
-            PPTB&apos;s <code>dataverseAPI</code> only exposes whole-row delete — there&apos;s no
-            raw-request hook for property-path URLs. To clear one column from inside PPTB, switch to{' '}
-            <strong>Update mode</strong> and set the column to <code>null</code>. To use the
-            property-DELETE pattern, copy the URL from the URL bar (or the Code-tab{' '}
-            <code>fetch</code> snippet) and run it from Postman / curl / the JS SDK / Power
-            Automate.
-          </>
-        ),
-      });
-    }
-
     return out;
-  }, [state.bypass, state.table, state.recordId, state.scope]);
+  }, [state.bypass, state.table, state.recordId]);
 
   const bypassBlocker = disabledReasonFromAdvisories(advisories);
 
@@ -1458,15 +1430,7 @@ function ScopeEditor({
         group="write"
       />
       {scope.kind === 'single-property' && (
-        <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 14, maxWidth: 720 }}>
-          <MessageBarBody>
-            <MessageBarTitle>Author-only inside PPTB</MessageBarTitle>
-            PPTB&apos;s <code>dataverseAPI</code> doesn&apos;t expose property-path DELETE — only
-            whole-row. DRS shows the correct URL + code so you can copy it for use outside (Postman,
-            curl, SDK, Flow). To clear one column from inside PPTB, use <strong>Update mode</strong>{' '}
-            and set the column to <code>null</code>.
-          </MessageBarBody>
-        </MessageBar>
+        <BatchTransportNote style={{ marginBottom: 14, maxWidth: 720 }} />
       )}
       <div style={{ maxWidth: 720 }}>
         <Field label="Scope">

@@ -25,6 +25,7 @@ import {
 } from '@fluentui/react-components';
 import { Key20Filled } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
+import { BatchTransportNote } from '../primitives/BatchTransportNote';
 import { RecordPicker } from '../primitives/RecordPicker';
 import { altKeyColumnType, findTable, findColumn } from '../metadata/metadata';
 import type { UpsertKeyMode } from '../state/writeState';
@@ -239,6 +240,8 @@ export function AlternateKeyEditor({
                 ignored in the body.
               </MessageBarBody>
             </MessageBar>
+            {/* Execute sends an alternate-key Upsert as a one-part $batch (#225). */}
+            <BatchTransportNote />
           </div>
         )}
       </div>

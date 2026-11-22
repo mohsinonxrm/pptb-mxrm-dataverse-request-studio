@@ -16,7 +16,11 @@
 //     host's annotations and carries the page size (#109, #219);
 //   • Execute Function sends only impersonation (#109);
 //   • Associate / Disassociate send impersonation and bypass only, plus
-//     If-Match: * on the single-valued PATCH (#109, #254).
+//     If-Match: * on the single-valued PATCH (#109, #254);
+//   • PUT of one column, clearing one column and Upsert by alternate key go
+//     as a one-part $batch (#225): the part is the Code tab's request, minus
+//     the headers Dataverse assumes anyway (`sentHeaders.raw`), and an
+//     Upsert's Prefer only when it asks for return=representation.
 // Covered: bound and collection-bound routing (#55), function parameters
 // (#61), the page size and $top (#219). Credential headers (#217) are
 // covered in `requestHeaderPolicy.test.ts`.
@@ -50,7 +54,10 @@ const host = vi.hoisted(() => {
     execute: record('execute', {}),
     associate: record('associate'),
     disassociate: record('disassociate'),
-    executeBatch: record('executeBatch', []),
+    // A one-part $batch (#225): one 204 per part.
+    executeBatch: record('executeBatch', (reqs: { contentId: string }[]) =>
+      reqs.map((r) => ({ contentId: r.contentId, status: 204, headers: {} })),
+    ),
     // A change set that succeeds: one 204 per request (#224).
     executeTransaction: record('executeTransaction', (reqs: { contentId: string }[]) =>
       reqs.map((r) => ({ contentId: r.contentId, status: 204, headers: {} })),
@@ -163,6 +170,7 @@ import {
   rule,
 } from '../test/fixtures';
 import { defaultBypassOptions } from '../state/writeState';
+import { composeHeaderItems } from './requestHeaders';
 import type { DeleteState, UpdateState, UpsertState } from '../state/writeState';
 import type { RetrieveSingleState } from '../state/readState';
 import type { AssociateState, DisassociateState } from '../state/relateState';
@@ -216,6 +224,13 @@ function toWire({ op, args }: HostCall): Wire {
   const last = args[args.length - 1];
   const headers = (last && typeof last === 'object' ? last : {}) as Headers;
   switch (op) {
+    case 'executeBatch': {
+      // One request as a one-part $batch (#225): the part is the request.
+      const parts = args[0] as { method: string; url: string; headers?: Headers; body?: unknown }[];
+      if (parts.length !== 1 || args.length !== 2) throw new Error('not a one-part $batch');
+      const [part] = parts;
+      return { method: part.method, path: part.url, body: part.body, headers: part.headers ?? {} };
+    }
     case 'queryData':
       return { method: 'GET', path: args[0] as string, headers: args.length > 1 ? headers : {} };
     case 'create':
@@ -323,6 +338,9 @@ const sentHeaders = {
   relate: (code: Headers) => pick(code, [...IMPERSONATION, ...BYPASS]),
   /** Single-valued Associate / Disassociate: a PATCH that must not create the source (#254). */
   relatePatch: (code: Headers) => pick(code, [...IMPERSONATION, ...BYPASS, 'if-match']),
+  /** A $batch part (#225): every row but the defaults Dataverse assumes and a JSON Content-Type. */
+  raw: (code: Headers) =>
+    without(code, ['accept', 'odata-version', 'odata-maxversion', 'content-type']),
 };
 
 function expectSame(code: Wire, sent: Wire, expectedHeaders: Headers) {
@@ -562,6 +580,149 @@ describe('writes', () => {
     });
     await run(() => runtime.delete(s, headerItemsToObject(s.headers, null)));
     expectSame(code, toWire(host.calls[0]), sentHeaders.write(code.headers));
+  });
+});
+
+// ── Sent as a one-part $batch (#225) ─────────────────────────────────────
+
+describe('PUT one column, clear one column, Upsert by alternate key', () => {
+  const extra = {
+    MSCRMCallerID: CALLER,
+    'MSCRM.BypassBusinessLogicExecution': 'CustomSync',
+    'X-Custom': 'sent as typed',
+  };
+
+  it('Update by PUT of one column, with If-Match: *', async () => {
+    const s = {
+      table: 'account',
+      recordId: ACCOUNT_ID,
+      method: 'PUT',
+      putColumn: 'sample_tags',
+      fieldValues: { sample_tags: [100, 200] },
+      nullFields: [],
+      rawBody: null,
+      // PUT has no Prefer pane: neither side sends this.
+      prefer: { ...emptyPrefer(), returnRepresentation: true },
+      headers: writePane(extra),
+      returnSelect: [],
+      concurrency: { kind: 'update-only' },
+      bypass: defaultBypassOptions(),
+      dirty: new Set(),
+    } as unknown as UpdateState;
+    const composed = composeHeaderItems(s);
+    // UpdateMode's Code tab: no Prefer for PUT.
+    const [code] = codeTab({
+      method: 'PUT',
+      built: buildUpdate(s),
+      headers: headerItemsToObject(composed, null),
+      body: buildUpdateBody(s),
+      entityLogical: 'account',
+    });
+    await run(() => runtime.update(s, headerItemsToObject(composed, null)));
+    expect(host.calls.map((c) => c.op)).toEqual(['executeBatch']);
+    expectSame(code, toWire(host.calls[0]), sentHeaders.raw(code.headers));
+    expect(code.path).toBe(`accounts(${ACCOUNT_ID})/sample_tags`);
+    expect(code.body).toEqual({ value: '100,200' });
+    expect(code.headers).not.toHaveProperty('Prefer');
+  });
+
+  it('Delete of one column, with an ETag', async () => {
+    const s = {
+      table: 'account',
+      recordId: ACCOUNT_ID,
+      scope: { kind: 'single-property', column: 'accountnumber' },
+      concurrency: { kind: 'etag', etag: 'W/"777"' },
+      headers: pane(extra),
+      bypassCustomPlugins: false,
+      bypass: defaultBypassOptions(),
+      confirmText: '',
+      acknowledged: false,
+      dirty: new Set(),
+    } as unknown as DeleteState;
+    const composed = headerItemsToObject(composeHeaderItems(s), null);
+    const [code] = codeTab({
+      method: 'DELETE',
+      built: buildDelete(s),
+      headers: composed,
+      entityLogical: 'account',
+    });
+    await run(() => runtime.delete(s, composed));
+    expect(host.calls.map((c) => c.op)).toEqual(['executeBatch']);
+    expectSame(code, toWire(host.calls[0]), sentHeaders.raw(code.headers));
+    expect(code.path).toBe(`accounts(${ACCOUNT_ID})/accountnumber`);
+  });
+
+  it('Upsert by a composite alternate key: create-only, return=representation, $select', async () => {
+    const s = {
+      table: 'account',
+      key: {
+        kind: 'alternate',
+        keyName: 'akey_composite',
+        keyValues: { name: "O'Brien & Co? #1 é", numberofemployees: '12' },
+      },
+      fieldValues: { revenue: 1500.5, sample_tags: [100] },
+      nullFields: [],
+      rawBody: null,
+      prefer: { ...emptyPrefer(), returnRepresentation: true },
+      headers: writePane(extra),
+      returnSelect: ['name'],
+      concurrency: { kind: 'create-only' },
+      bypass: defaultBypassOptions(),
+      dirty: new Set(),
+    } as unknown as UpsertState;
+    const composed = composeHeaderItems(s);
+    // UpsertMode's Code tab: the Prefer its pane composes.
+    const [code] = codeTab({
+      method: 'PATCH',
+      built: buildUpsert(s),
+      headers: headerItemsToObject(composed, preferToHeaderString(s.prefer)),
+      body: buildUpsertBody(s),
+      entityLogical: 'account',
+    });
+    await run(() => runtime.upsert(s, headerItemsToObject(composed, null)));
+    expect(host.calls.map((c) => c.op)).toEqual(['executeBatch']);
+    expectSame(code, toWire(host.calls[0]), sentHeaders.raw(code.headers));
+    expect(code.headers).toMatchObject({
+      Prefer: expect.stringContaining('return=representation'),
+      'If-None-Match': '*',
+    });
+    expect(code.path).toBe(
+      "accounts(name='O''Brien%20%26%20Co%3F%20%231%20%C3%A9',numberofemployees=12)?$select=name",
+    );
+  });
+});
+
+describe('Upsert by alternate key without return=representation', () => {
+  it("sends the Code tab's request without its Prefer: annotations alone change nothing on a 204", async () => {
+    const s = {
+      table: 'account',
+      key: {
+        kind: 'alternate',
+        keyName: 'akey_accountnumber',
+        keyValues: { accountnumber: 'A-1' },
+      },
+      fieldValues: { name: 'Fabrikam' },
+      nullFields: [],
+      rawBody: null,
+      prefer: emptyPrefer(),
+      headers: writePane(),
+      returnSelect: [],
+      concurrency: { kind: 'none' },
+      bypass: defaultBypassOptions(),
+      dirty: new Set(),
+    } as unknown as UpsertState;
+    const composed = composeHeaderItems(s);
+    const [code] = codeTab({
+      method: 'PATCH',
+      built: buildUpsert(s),
+      headers: headerItemsToObject(composed, preferToHeaderString(s.prefer)),
+      body: buildUpsertBody(s),
+      entityLogical: 'account',
+    });
+    await run(() => runtime.upsert(s, headerItemsToObject(composed, null)));
+    expect(code.headers.Prefer).toContain('FormattedValue');
+    expectSame(code, toWire(host.calls[0]), without(sentHeaders.raw(code.headers), ['prefer']));
+    expect(toWire(host.calls[0]).headers).toEqual({});
   });
 });
 

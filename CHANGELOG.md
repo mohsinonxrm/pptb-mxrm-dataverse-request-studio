@@ -36,6 +36,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one blocks Execute with an advisory instead of being dropped. Every Code tab
   format sends the header; Xrm.WebApi can't, so that tab shows fetch, and
   Power Automate uses "Invoke an HTTP request".
+- **Update one column, clear a column, and Upsert by alternate key now run**
+  ([#225]). Execute used to refuse these three requests because ToolBox's
+  typed calls can't send them; now each goes through ToolBox's `$batch` as a
+  one-request batch, exactly as the Code tab shows it:
+  `PUT <set>(<id>)/<column>` with `{ "value": … }`,
+  `DELETE <set>(<id>)/<column>`, and `PATCH <set>(<key>='value',…)` with the
+  Prefer and precondition you set. The result carries Dataverse's real status,
+  so an alternate-key Upsert with `return=representation` says whether it
+  created (201) or updated (200) the row and shows it, and a stale ETag is a
+  412. ToolBox's own impersonation setting doesn't reach a `$batch` request;
+  the `MSCRMCallerID` / `CallerObjectId` headers do, and the modes say so where
+  you pick these shapes.
 
 ### 🐛 Fixed
 

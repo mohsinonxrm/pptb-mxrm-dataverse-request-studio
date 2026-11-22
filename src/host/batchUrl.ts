@@ -40,6 +40,17 @@ function decodedForms(segment: string): string[] {
 }
 
 /**
+ * `url` without its `https://<org>/api/data/v9.x/` (or `/api/data/v9.x/`)
+ * prefix, so what's left is relative to the Web API base; unchanged when it
+ * has neither. Shared by `toBatchUrl` and the typed calls that follow an
+ * absolute `@odata.nextLink` / `@odata.deltaLink` (#233).
+ */
+export function stripApiPrefix(url: string): string {
+  if (ABSOLUTE_API_PREFIX_RE.test(url)) return url.replace(ABSOLUTE_API_PREFIX_RE, '');
+  return url.replace(RELATIVE_API_PREFIX_RE, '');
+}
+
+/**
  * The URL to put on a `$batch` part for `path`:
  *   - a leading `/`, and an `https://<org>/api/data/v9.x/` (or `api/data/v9.x/`)
  *     prefix, are removed; the host adds `api/data/v9.2/` back;
@@ -50,10 +61,9 @@ function decodedForms(segment: string): string[] {
  * the host would reject.
  */
 export function toBatchUrl(path: string): string {
-  let p = path.trim();
-  if (ABSOLUTE_API_PREFIX_RE.test(p)) p = p.replace(ABSOLUTE_API_PREFIX_RE, '');
-  else if (RELATIVE_API_PREFIX_RE.test(p)) p = p.replace(RELATIVE_API_PREFIX_RE, '');
-  else if (p.startsWith('/')) p = p.slice(1);
+  const trimmed = path.trim();
+  let p = stripApiPrefix(trimmed);
+  if (p === trimmed && p.startsWith('/')) p = p.slice(1);
   if (!p) throw new BatchPathError('the request path is empty.');
   if (NOT_RELATIVE_RE.test(p)) {
     throw new BatchPathError(

@@ -1,7 +1,9 @@
-// The write executors' refusals and host calls (#235): requests the PPTB host
-// can't send as authored are refused before any host call (PUT one column,
-// alternate-key Upsert, single-property Delete), ids that would change the
-// URL aren't sent (#221), and bound operations need their record.
+// The write executors' refusals and host calls (#235): requests the typed
+// host calls can't send as authored (PUT one column, alternate-key Upsert,
+// single-property Delete) go as a one-part $batch instead of being reshaped
+// (#225; their parts are covered in dataverseExecutor.rawShapes.test.ts),
+// ids that would change the URL aren't sent (#221), and bound operations
+// need their record.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   executeAction,
@@ -43,6 +45,7 @@ const host = vi.hoisted(() => ({
   retrieve: vi.fn(),
   execute: vi.fn(),
   queryData: vi.fn(),
+  rawRequest: vi.fn(),
 }));
 vi.mock('../host/pptbBridge', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../host/pptbBridge')>()),
@@ -54,6 +57,7 @@ vi.mock('../host/pptbBridge', async (importOriginal) => ({
     retrieve: host.retrieve,
     execute: host.execute,
     queryData: host.queryData,
+    rawRequest: host.rawRequest,
   },
 }));
 const tables = vi.hoisted(() => new Map<string, unknown>());
@@ -95,7 +99,7 @@ const PANE = {
 };
 
 const anyHostCall = () =>
-  [host.create, host.update, host.delete, host.execute, host.queryData].some(
+  [host.create, host.update, host.delete, host.execute, host.queryData, host.rawRequest].some(
     (f) => f.mock.calls.length > 0,
   );
 
@@ -169,20 +173,27 @@ beforeEach(() => {
     f.mockReset().mockResolvedValue(undefined);
   }
   host.retrieve.mockReset().mockResolvedValue({ accountid: ACCOUNT_ID });
+  host.rawRequest.mockReset().mockResolvedValue({ status: 204, headers: {} });
 });
 
-describe('requests the host can only send in another shape are refused, not reshaped', () => {
-  it('Update with PUT (one column) sends nothing: the host only PATCHes the row', async () => {
+describe('requests the typed calls can only send in another shape go as a $batch, not reshaped', () => {
+  /** The typed calls these shapes must never fall back to. */
+  const typedWrite = () => [host.update, host.delete].some((f) => f.mock.calls.length > 0);
+
+  it('Update with PUT (one column) is a PUT of the column, not a PATCH of the row', async () => {
     const r = await executeUpdate(
       update({ method: 'PUT', putColumn: 'name' } as Partial<UpdateState>),
     );
-    expect(r.ok).toBe(false);
-    expect(r.status).toBe(400);
-    expect(JSON.stringify(r.body)).toMatch(/PUT single-column .* isn't supported/);
-    expect(anyHostCall()).toBe(false);
+    expect(r).toMatchObject({ ok: true, status: 204, transport: 'batch' });
+    expect(host.rawRequest).toHaveBeenCalledWith({
+      method: 'PUT',
+      path: `/accounts(${ACCOUNT_ID})/name`,
+      body: { value: 'Fabrikam' },
+    });
+    expect(typedWrite()).toBe(false);
   });
 
-  it('Upsert by alternate key sends nothing: the host only addresses rows by GUID', async () => {
+  it('Upsert by alternate key is a PATCH of the key, not of a GUID', async () => {
     const r = await executeUpsert(
       upsert({
         key: {
@@ -192,17 +203,23 @@ describe('requests the host can only send in another shape are refused, not resh
         },
       }),
     );
-    expect(r.status).toBe(400);
-    expect(JSON.stringify(r.body)).toMatch(/Alternate-key Upsert/);
-    expect(anyHostCall()).toBe(false);
+    expect(r).toMatchObject({ ok: true, status: 204, transport: 'batch' });
+    expect(host.rawRequest).toHaveBeenCalledWith({
+      method: 'PATCH',
+      path: "/accounts(accountnumber='A-1')",
+      body: { name: 'Fabrikam' },
+    });
+    expect(typedWrite()).toBe(false);
   });
 
-  it('Delete of one column sends nothing, rather than deleting the whole row', async () => {
+  it('Delete of one column clears the column, never deletes the whole row', async () => {
     const r = await executeDelete(del({ scope: { kind: 'single-property', column: 'name' } }));
-    expect(r.status).toBe(400);
-    expect(JSON.stringify(r.body)).toMatch(/Single-property DELETE/);
+    expect(r).toMatchObject({ ok: true, status: 204, transport: 'batch' });
+    expect(host.rawRequest).toHaveBeenCalledWith({
+      method: 'DELETE',
+      path: `/accounts(${ACCOUNT_ID})/name`,
+    });
     expect(host.delete).not.toHaveBeenCalled();
-    expect(anyHostCall()).toBe(false);
   });
 
   it('a whole-row Delete deletes the row', async () => {

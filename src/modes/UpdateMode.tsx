@@ -61,6 +61,7 @@ import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../edit
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
+import { BatchTransportNote } from '../primitives/BatchTransportNote';
 import { PreconditionEditor, etagProblem } from '../editors/PreconditionEditor';
 import { UpdateDiffPane } from '../editors/UpdateDiffPane';
 import { CodeView } from '../views/CodeView';
@@ -429,7 +430,8 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
     setLoading(true);
     const res = await runtime.update(state, headerItemsToObject(effectiveHeaders, null));
     setResult(res);
-    setSentReturnRep(state.prefer.returnRepresentation);
+    // PUT has no Prefer pane and sends no Prefer (#225).
+    setSentReturnRep(state.method !== 'PUT' && state.prefer.returnRepresentation);
     setLoading(false);
     setTab('results');
     setRecents(
@@ -449,12 +451,8 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   // ── Compose effective headers ──
   const effectiveHeaders = useMemo(() => composeHeaderItems(state), [state]);
 
-  // ── Advisories — bypass family + PUT-method unsupported + GUID shape ──
-  //
-  // Same family as Delete's single-property case: PPTB's dataverseAPI.update
-  // is PATCH-only. There's no method to issue `PUT /<entityset>(<id>)/<col>`.
-  // We still let the user author the request (correct URL + body in the Code
-  // tab) but block Execute and explain why.
+  // ── Advisories — bypass family + GUID shape ──
+  // PUT of one column runs too: Execute sends it as a one-part $batch (#225).
   const advisories = useMemo<Advisory[]>(() => {
     const out: Advisory[] = [...detectBypassAdvisories(state.bypass, 'bypass')];
 
@@ -469,33 +467,8 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
       });
     }
 
-    if (state.method === 'PUT') {
-      out.push({
-        id: 'upd-put-unsupported',
-        severity: 'error',
-        source: 'validation',
-        focusNode: 'method',
-        title: "PUT single-column isn't supported by the PPTB host",
-        body: (
-          <>
-            DRS authors the correct request{' '}
-            <code>
-              PUT /{tbl?.entitySetName ?? '&lt;set&gt;'}(&lt;id&gt;)/
-              {state.putColumn ?? '&lt;column&gt;'}
-            </code>{' '}
-            with body <code>{'{ "value": <scalar> }'}</code>, but PPTB&apos;s{' '}
-            <code>dataverseAPI.update</code> is PATCH-only — there&apos;s no raw-request hook for
-            property-path URLs. To set one column from inside PPTB, switch back to{' '}
-            <strong>PATCH</strong> with a single field in the body — it&apos;s functionally
-            equivalent. To use the PUT pattern, copy the URL + body from the Code tab and run it
-            from Postman / curl / the JS SDK / Power Automate.
-          </>
-        ),
-      });
-    }
-
     return out;
-  }, [state.bypass, state.table, state.recordId, state.method, state.putColumn, tbl]);
+  }, [state.bypass, state.table, state.recordId]);
   const bypassBlocker = disabledReasonFromAdvisories(advisories);
 
   // ── Sidebar ──
@@ -829,7 +802,11 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
       break;
   }
 
-  const headersMap = headerItemsToObject(effectiveHeaders, preferToHeaderString(state.prefer));
+  // PUT hides the Prefer pane, and Execute sends no Prefer with it (#225).
+  const headersMap = headerItemsToObject(
+    effectiveHeaders,
+    isPut ? null : preferToHeaderString(state.prefer),
+  );
   const codeInputs = {
     method: state.method,
     built,
@@ -1076,6 +1053,7 @@ function MethodPane({
               . Switch to <strong>Field set</strong> in the sidebar to edit the value.
             </MessageBarBody>
           </MessageBar>
+          <BatchTransportNote style={{ marginTop: 8 }} />
         </div>
       )}
     </div>
