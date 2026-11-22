@@ -24,6 +24,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parameters, and an ETag a `RowVersion`. A request with no faithful SDK form
   (an `$expand`, a lambda, deep insert, a file's bytes, …) says why in the
   snippet, and the C# one sends the Web API request through `ExecuteWebRequest`.
+- **Change tracking in Retrieve Multiple** ([#233]). The Prefer pane has a
+  **Track changes** switch for tables with change tracking enabled (for any
+  other table it's off and says why). Execute then sends
+  `Prefer: odata.track-changes` with the annotations and the page size, and
+  the results offer **Get changes**, which runs the response's
+  `@odata.deltaLink` and shows the rows created, updated or deleted since. Each
+  run's delta link replaces the last one, and **Copy delta link** copies it.
+  Deleted rows show a **Deleted** badge with their id. Dataverse rejects
+  `$filter`, `$orderby`, `$expand` and `$top` with change tracking, so each
+  one blocks Execute with an advisory instead of being dropped. Every Code tab
+  format sends the header; Xrm.WebApi can't, so that tab shows fetch, and
+  Power Automate uses "Invoke an HTTP request".
 
 ### 🐛 Fixed
 
@@ -39,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   check the id in HTTP headers. A missing record still gets the usual 404.
 
 [#232]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/232
+[#233]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/233
 [#429]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/429
 [#431]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/431
 

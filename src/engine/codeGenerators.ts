@@ -727,15 +727,19 @@ ${genFetchMulti(i)}`;
 
   // Xrm.WebApi has no helper for these — the CRUD helpers address rows by
   // GUID only and send JSON. Emit the fetch equivalent with the reason (#60).
+  // retrieveMultipleRecords takes a page size but no other Prefer, so change
+  // tracking (#233) has no delta link there either.
   const xrmUnsupported = i.rawBody
     ? 'Xrm.WebApi sends JSON only — binary file content needs a raw request.'
-    : fn?.binding === 'collection'
-      ? "Xrm.WebApi.online.execute only binds functions to a single record ('entity'), not to an entity set."
-      : isWrite && isAltKeyAddressed(i)
-        ? 'Xrm.WebApi.updateRecord / deleteRecord take a GUID, not an alternate key.'
-        : i.method === 'PUT' && !putColumn(i)
-          ? 'Xrm.WebApi has no single-property PUT helper.'
-          : null;
+    : isRetrieveMultiple && tracksChanges(i)
+      ? "Xrm.WebApi.retrieveMultipleRecords can't send Prefer: odata.track-changes, so it returns no delta link."
+      : fn?.binding === 'collection'
+        ? "Xrm.WebApi.online.execute only binds functions to a single record ('entity'), not to an entity set."
+        : isWrite && isAltKeyAddressed(i)
+          ? 'Xrm.WebApi.updateRecord / deleteRecord take a GUID, not an alternate key.'
+          : i.method === 'PUT' && !putColumn(i)
+            ? 'Xrm.WebApi has no single-property PUT helper.'
+            : null;
   if (xrmUnsupported) {
     return `// ${xrmUnsupported}
 // Use fetch from the form script instead:
@@ -1320,7 +1324,11 @@ function classifyPowerAutomate(i: CodegenInputs): PowerAutomateClass {
   const isList = i.method === 'GET' && isCollection;
 
   let httpReason: string | null = null;
-  if (
+  if (isList && tracksChanges(i)) {
+    // "List rows" has no Prefer field, so it can't ask for a delta link (#233).
+    httpReason =
+      'Change tracking needs the Prefer: odata.track-changes header, which "List rows" can\'t send. Send this request with "Invoke an HTTP request" and add Prefer: odata.track-changes in its Headers field; the response\'s @odata.deltaLink is the next request\'s URI.';
+  } else if (
     !isRetrieveSingle &&
     !isCreate &&
     !isUpdate &&
@@ -1354,6 +1362,12 @@ function classifyPowerAutomate(i: CodegenInputs): PowerAutomateClass {
     isList,
     httpReason,
   };
+}
+
+/** The request asks for change tracking (#233): `Prefer: odata.track-changes`. */
+function tracksChanges(i: CodegenInputs): boolean {
+  const prefer = Object.entries(i.headers).find(([k]) => k.toLowerCase() === 'prefer')?.[1];
+  return !!prefer && /(^|,)\s*odata\.track-changes\s*(,|$)/i.test(prefer);
 }
 
 function relativeToApi(i: CodegenInputs): string {

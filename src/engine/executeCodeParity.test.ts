@@ -406,6 +406,26 @@ describe('reads', () => {
     expect(code.headers.Prefer).toContain('odata.maxpagesize=50');
   });
 
+  it('Retrieve Multiple with Track changes: both send odata.track-changes in the Prefer (#233)', async () => {
+    const s = retrieveMultipleState({
+      select: ['name'],
+      prefer: { ...emptyPrefer(), maxpagesize: 50, trackChanges: true },
+      headers: pane({ MSCRMCallerID: CALLER }),
+    });
+    const [code] = codeTab({
+      method: 'GET',
+      built: buildRetrieveMultiple(s),
+      headers: headerItemsToObject(s.headers, preferToHeaderString(s.prefer)),
+    });
+    await run(() => runtime.retrieveMultiple(s, headerItemsToObject(s.headers, null)));
+    // Execute keeps the host's annotations; the change tracking and page size are the Code tab's.
+    expectSame(code, toWire(host.calls[0]), {
+      ...sentHeaders.read(code.headers, null),
+      prefer: 'odata.include-annotations="*",odata.track-changes,odata.maxpagesize=50',
+    });
+    expect(code.headers.Prefer).toContain('odata.track-changes, odata.maxpagesize=50');
+  });
+
   it('Retrieve Single: select, expand, If-None-Match', async () => {
     const s = {
       table: 'account',

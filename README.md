@@ -39,6 +39,10 @@ has C# / HTTP / Python / PPTB.
   grid with infinite scroll via `@odata.nextLink`, **Retrieve all** (pauses
   every 50,000 rows with **Continue**), CSV / JSON export, per-column filters,
   row search, density and persisted column widths.
+  **Track changes** (`Prefer: odata.track-changes`, on tables with change
+  tracking enabled) returns an `@odata.deltaLink`: **Get changes** runs it
+  and shows the rows created, updated or deleted since, with deleted rows
+  marked **Deleted**, and **Copy delta link** copies it.
   Address shortcut chips in the `$filter` builder; paste any OData URL to load
   it into the builder.
 - **Retrieve Single** — one record by primary key (GUID), with `$select` /
@@ -516,6 +520,7 @@ Dataverse API)
 | Retrieve Single (by GUID) | ✅ |
 | `@odata.nextLink` paging, Retrieve all | ✅ |
 | `Prefer: odata.maxpagesize` (page size) | ✅ |
+| Change tracking (`Prefer: odata.track-changes`, `@odata.deltaLink`) | ✅ |
 | Predefined / user queries (incl. over related records) | ✅ |
 | `$apply` (groupby / aggregate) | ✅ |
 | Lambda filter (`any` / `all`) | ✅ |

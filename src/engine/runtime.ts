@@ -89,8 +89,12 @@ export const runtime = neverThrow({
     liveRetrieveSingle(s, headers),
   nextLink: (s: RetrieveNextLinkState, headers?: Record<string, string>) =>
     liveNextLink(s, headers),
-  absoluteUrl: (url: string, maxpagesize?: number | null, headers?: Record<string, string>) =>
-    liveAbsoluteUrl(url, maxpagesize, headers),
+  absoluteUrl: (
+    url: string,
+    maxpagesize?: number | null,
+    headers?: Record<string, string>,
+    trackChanges?: boolean,
+  ) => liveAbsoluteUrl(url, maxpagesize, headers, trackChanges),
   predefined: (s: PredefinedQueryState, headers?: Record<string, string>) =>
     livePredefined(s, headers),
   create: afterWrite(

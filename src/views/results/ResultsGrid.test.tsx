@@ -266,3 +266,39 @@ describe('ResultsGrid row search with hidden columns (#422)', () => {
     expect(footer()).toContain('hidden columns not searched');
   });
 });
+
+describe('ResultsGrid: deleted rows of a change-tracking delta (#233)', () => {
+  const deleted = (id: string) => ({
+    '@odata.context':
+      'https://org.crm.dynamics.com/api/data/v9.2/$metadata#accounts/$deletedEntity',
+    id,
+    reason: 'deleted',
+  });
+
+  it('shows a Deleted badge with the id in a Change column, not blank id / reason columns', () => {
+    render({ body: page(account(A, 'Alpha'), deleted(C)) });
+    expect(view().columns.map((c) => c.id)).toEqual(['__change', 'accountid', 'name', 'statecode']);
+    expect(view().choices!.map((c) => c.key)).not.toContain('id');
+    expect(view().choices!.map((c) => c.key)).not.toContain('reason');
+    const badges = [...el!.querySelectorAll('.fui-Badge')].map((b) => b.textContent);
+    expect(badges).toEqual(['Deleted']);
+    expect(el!.textContent).toContain(C);
+    // The changed row shows as usual.
+    expect(el!.textContent).toContain('Alpha');
+    // CSV: the Change column says what happened to the row.
+    const csv = toCsv(view().rows, view().columns, 'shown').slice(1).split('\r\n');
+    expect(csv[0].split(',')[0]).toBe('Change');
+    expect(csv[2]).toBe(`Deleted ${C},,,`);
+  });
+
+  it("a deleted row can't be opened in Dataverse", () => {
+    render({ body: page(account(A, 'Alpha'), deleted(C)) });
+    tick('Alpha');
+    expect(view().selectedRecordIds).toEqual([A]);
+  });
+
+  it('has no Change column without deleted rows', () => {
+    render({ body: page(account(A, 'Alpha'), account(B, 'Beta')) });
+    expect(view().columns.map((c) => c.id)).not.toContain('__change');
+  });
+});

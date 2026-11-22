@@ -32,6 +32,8 @@ export interface EntityMetadata {
   IsValidForAdvancedFind?: boolean;
   /** An N:N intersect table: it has no form in the model-driven app. */
   IsIntersect?: boolean;
+  /** The table's "Track changes" setting: reads can ask for a delta link (#233). */
+  ChangeTrackingEnabled?: boolean;
   MetadataId: string;
   ObjectTypeCode: number;
 }

@@ -15,6 +15,7 @@ import { Settings20Filled } from '@fluentui/react-icons';
 import { PaneHead } from './PaneHead';
 import { useHostSession } from '../host/HostContext';
 import type { RequestGroup } from '../registry/requestTypes';
+import type { ChangeTrackingAvailability } from '../engine/changeTracking';
 
 export interface PreferSpec {
   /** odata.maxpagesize=N (mutually exclusive with $top) */
@@ -28,6 +29,11 @@ export interface PreferSpec {
   allAnnotations: boolean;
   /** return=representation — only relevant on writes; included for completeness */
   returnRepresentation: boolean;
+  /**
+   * `odata.track-changes` (#233): Retrieve Multiple asks for an
+   * `@odata.deltaLink`. Optional, so saved requests from before it read as off.
+   */
+  trackChanges?: boolean;
   /** include-strict-validation, etc. could go here later */
 }
 
@@ -46,12 +52,15 @@ export function PreferEditor({
   setSpec,
   group = 'read',
   sendsPageSize = false,
+  changeTracking,
 }: {
   spec: PreferSpec;
   setSpec: (s: PreferSpec) => void;
   group?: RequestGroup;
   /** The mode's Execute sends `odata.maxpagesize` (#219). */
   sendsPageSize?: boolean;
+  /** Offers Track changes (#233); only Retrieve Multiple passes it. */
+  changeTracking?: ChangeTrackingAvailability;
 }) {
   const set = <K extends keyof PreferSpec>(k: K, v: PreferSpec[K]) => setSpec({ ...spec, [k]: v });
   const host = useHostSession();
@@ -79,10 +88,21 @@ export function PreferEditor({
       {host.embedded && sendsPageSize && (
         <MessageBar layout="multiline" intent="info" style={{ marginBottom: 14, maxWidth: 720 }}>
           <MessageBarBody>
-            <MessageBarTitle>Execute sends the page size, not the annotations</MessageBarTitle>
-            When you set <code>odata.maxpagesize</code>, Execute sends it, and ToolBox asks you to
-            approve the <code>Prefer</code> header the first time. Execute always asks for all
-            annotations, whatever you pick here, so the grid renders correctly.{' '}
+            <MessageBarTitle>
+              {changeTracking
+                ? 'Execute sends the page size and change tracking, not the annotations'
+                : 'Execute sends the page size, not the annotations'}
+            </MessageBarTitle>
+            When you set <code>odata.maxpagesize</code>
+            {changeTracking ? (
+              <>
+                {' '}
+                or turn on <strong>Track changes</strong>
+              </>
+            ) : null}
+            , Execute sends it, and ToolBox asks you to approve the <code>Prefer</code> header the
+            first time. Execute always asks for all annotations, whatever you pick here, so the grid
+            renders correctly.{' '}
             <strong>The values you set here are emitted into the Code tab</strong> — export to
             Postman / curl / fetch to test the full request shape.
           </MessageBarBody>
@@ -135,6 +155,14 @@ export function PreferEditor({
             />
           </Field>
         </section>
+
+        {changeTracking && (
+          <ChangeTrackingSection
+            on={!!spec.trackChanges}
+            setOn={(on) => set('trackChanges', on ? true : undefined)}
+            availability={changeTracking}
+          />
+        )}
 
         <section>
           <Caption1
@@ -250,6 +278,66 @@ export function PreferEditor({
   );
 }
 
+/** The Track changes switch (#233): off, with the reason, when the table isn't tracked. */
+function ChangeTrackingSection({
+  on,
+  setOn,
+  availability,
+}: {
+  on: boolean;
+  setOn: (on: boolean) => void;
+  availability: ChangeTrackingAvailability;
+}) {
+  // Left on for a table that isn't tracked (the table changed, or a saved
+  // request), it can still be turned off; the advisory blocks Execute.
+  const disabled = !availability.available && !on;
+  return (
+    <section>
+      <Caption1
+        style={{
+          display: 'block',
+          marginBottom: 6,
+          fontWeight: 600,
+          color: tokens.colorNeutralForeground2,
+        }}
+      >
+        Change tracking{' '}
+        <span
+          style={{
+            fontWeight: 400,
+            color: tokens.colorNeutralForeground3,
+            fontFamily: tokens.fontFamilyMonospace,
+            fontSize: 10,
+          }}
+        >
+          · odata.track-changes
+        </span>
+      </Caption1>
+      <Field
+        validationState={availability.available ? 'none' : 'warning'}
+        validationMessage={availability.available ? undefined : availability.reason}
+        hint={
+          availability.available ? (
+            <>
+              Dataverse returns an <code>@odata.deltaLink</code> with the rows. In the results,{' '}
+              <strong>Get changes</strong> then returns only the rows created, updated or deleted
+              since. <code>$select</code> works with it; <code>$filter</code>, <code>$orderby</code>
+              , <code>$expand</code> and <code>$top</code> don&apos;t.
+            </>
+          ) : undefined
+        }
+      >
+        <Switch
+          checked={on}
+          disabled={disabled}
+          onChange={(_, d) => setOn(d.checked)}
+          label="Track changes"
+        />
+      </Field>
+    </section>
+  );
+}
+
 /**
  * The Prefer preferences, page size last: Dataverse rejects
  * `odata.maxpagesize=N, odata.include-annotations="…"` with 0x80060888
@@ -271,6 +359,8 @@ export function preferToHeaderValues(spec: PreferSpec): string[] {
       );
     if (annos.length) out.push(`odata.include-annotations="${annos.join(',')}"`);
   }
+  // Like Execute's (readPrefer): after the annotations, before the page size.
+  if (spec.trackChanges) out.push('odata.track-changes');
   if (spec.returnRepresentation) out.push('return=representation');
   if (spec.maxpagesize != null && spec.maxpagesize > 0) {
     out.push(`odata.maxpagesize=${spec.maxpagesize}`);

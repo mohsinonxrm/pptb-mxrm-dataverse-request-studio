@@ -592,3 +592,17 @@ describe('one registry per org (#52)', () => {
     expect(metadata.peekTable('account')).toBeDefined();
   });
 });
+
+describe('getTable: change tracking (#233)', () => {
+  it("reads the table's ChangeTrackingEnabled", async () => {
+    serveTable('account');
+    client.getEntityMetadata.mockImplementation(async (l: string) => ({
+      ...entity(l, `${l} label`),
+      ChangeTrackingEnabled: l === 'account',
+    }));
+    expect((await metadata.getTable('account'))?.changeTrackingEnabled).toBe(true);
+    const contact = await metadata.getTable('contact');
+    expect(contact).toBeDefined();
+    expect(contact?.changeTrackingEnabled).toBeUndefined();
+  });
+});
