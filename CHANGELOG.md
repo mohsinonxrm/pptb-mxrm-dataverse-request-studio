@@ -22,9 +22,11 @@ It needs **Power Platform ToolBox 1.2.8 or later**.
   the README ToolBox's details page reads (`readmeUrl`) came from `main`, the
   latest stable release. So npm's 1.7.0-beta.1 page showed "version 1.6.0",
   "Power Platform ToolBox ≥ 1.2.0" and "@pptb/types 1.2.7", although 1.7 needs
-  ToolBox 1.2.8. They now point at the version's own git tag.
-  `npm run badges` updates the README's badge lines and `readmeUrl` for each
-  release, and the release check fails when they're stale.
+  ToolBox 1.2.8. The badges now point at the version's own git tag, and
+  `readmeUrl` at the release branch for a beta (`main` for a stable release),
+  because ToolBox's validator fetches it before the tag exists. `npm run badges`
+  updates both for each release, and the release check fails when they're
+  stale.
 
 [#435]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/435
 

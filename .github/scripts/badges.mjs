@@ -66,9 +66,22 @@ export const versionRef = (pkg) => `refs/tags/v${pkg.version}`;
 export const badgeUrl = (pkg, file) =>
   `https://raw.githubusercontent.com/${repositoryOf(pkg)}/${versionRef(pkg)}/assets/badges/${file}`;
 
-/** package.json `configurations.readmeUrl`: the README at the version's tag (#435) */
+/**
+ * package.json `configurations.readmeUrl`, the README PPTB's details page shows (#435). It must
+ * already exist when the release is built, because `pptb-validate` fetches it, and the version's
+ * tag doesn't exist yet then. So a prerelease reads its release branch (`release/X.Y`, which holds
+ * the beta's README while it's tested), and a stable release reads `main`, which holds exactly that
+ * release's README.
+ */
+export const readmeRef = (pkg) => {
+  const [major, minor] = String(pkg.version).split('.');
+  return String(pkg.version).includes('-')
+    ? `refs/heads/release/${major}.${minor}`
+    : 'refs/heads/main';
+};
+
 export const readmeUrlFor = (pkg) =>
-  `https://raw.githubusercontent.com/${repositoryOf(pkg)}/${versionRef(pkg)}/README.md`;
+  `https://raw.githubusercontent.com/${repositoryOf(pkg)}/${readmeRef(pkg)}/README.md`;
 
 /**
  * Every README badge, from package.json: the file name, its alt text and the SVG. The order is

@@ -343,14 +343,14 @@ linked by absolute `https://raw.githubusercontent.com/<owner>/<repo>/...` URLs, 
 `npm run badges` (`.github/scripts/badges.mjs`), in shields.io's flat style, as Command Bar
 Studio and FetchXML Studio do. `assets/` isn't in the npm package.
 
-**Each version reads its own badges and README (#435).** The badge lines and
-`configurations.readmeUrl` (the README PPTB's details page shows) point at the version's tag,
-`refs/tags/v<version>/...`, not `main`. So npm's page for a beta, and ToolBox's details page,
-show that version's version number and minimum ToolBox, not the stable release's.
-`npm run badges` rewrites the README's badge lines and `readmeUrl` for the version in
-`package.json`, and `check-release.mjs` fails when either is stale. Until the tag is pushed the
-images are broken on GitHub (only the release-prep PR's preview); the tag exists before npm or
-ToolBox show the package.
+**Each version reads its own badges and README (#435).** The badge lines point at the
+version's tag, `refs/tags/v<version>/...`, not `main`, so npm's page for a beta shows that
+version's version number and minimum ToolBox. `configurations.readmeUrl` (the README PPTB's
+details page shows) can't use the tag: `pptb-validate` fetches it in CI and in the release build,
+before the tag exists. So a prerelease points it at its release branch (`release/X.Y`) and a
+stable release at `main`. `npm run badges` rewrites the README's badge lines and `readmeUrl` for
+the version in `package.json`, and `check-release.mjs` fails when either is stale. Until the tag
+is pushed the badge images are broken on GitHub (only the release-prep PR's preview).
 
 ## One-time setup
 
