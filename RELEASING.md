@@ -338,12 +338,19 @@ use the regular icon (`vite.config.ts`).
 
 PPTB shows the README in its main window, whose CSP only allows images from GitHub and
 `*.githubusercontent.com`, and escapes raw HTML. So README images are files in the repo,
-linked by absolute `https://raw.githubusercontent.com/<owner>/<repo>/refs/heads/main/...`
-URLs, never `img.shields.io` or HTML tags. The badges are generated into `assets/badges/` by
+linked by absolute `https://raw.githubusercontent.com/<owner>/<repo>/...` URLs, never
+`img.shields.io` or HTML tags. The badges are generated into `assets/badges/` by
 `npm run badges` (`.github/scripts/badges.mjs`), in shields.io's flat style, as Command Bar
-Studio and FetchXML Studio do. They're read from `main`, so they show the current stable
-release, and new or renamed badges appear once they reach `main`. `assets/` isn't in the npm
-package.
+Studio and FetchXML Studio do. `assets/` isn't in the npm package.
+
+**Each version reads its own badges and README (#435).** The badge lines and
+`configurations.readmeUrl` (the README PPTB's details page shows) point at the version's tag,
+`refs/tags/v<version>/...`, not `main`. So npm's page for a beta, and ToolBox's details page,
+show that version's version number and minimum ToolBox, not the stable release's.
+`npm run badges` rewrites the README's badge lines and `readmeUrl` for the version in
+`package.json`, and `check-release.mjs` fails when either is stale. Until the tag is pushed the
+images are broken on GitHub (only the release-prep PR's preview); the tag exists before npm or
+ToolBox show the package.
 
 ## One-time setup
 
