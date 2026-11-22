@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-beta.2] - 2026-11-21
+
+The second 1.7.0 beta. The app is the same as 1.7.0-beta.1; the README on npm
+and on ToolBox's details page now shows this version's own badges and
+requirements ([#435]).
+
+Still a **prerelease** on the npm `beta` tag, with the gold Insider icon.
+It needs **Power Platform ToolBox 1.2.8 or later**.
+
 ### 🐛 Fixed
 
 - **Each version's README shows its own badges** ([#435]). The badge images and

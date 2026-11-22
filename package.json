@@ -1,6 +1,6 @@
 {
   "name": "@mohsinonxrm/pptb-dataverse-request-studio",
-  "version": "1.7.0-beta.1",
+  "version": "1.7.0-beta.2",
   "publishConfig": {
     "access": "public"
   },
@@ -53,7 +53,7 @@
   "configurations": {
     "repository": "https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio",
     "website": "https://dataverserequest.studio",
-    "readmeUrl": "https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/tags/v1.7.0-beta.1/README.md"
+    "readmeUrl": "https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/tags/v1.7.0-beta.2/README.md"
   },
   "files": [
     "dist",
