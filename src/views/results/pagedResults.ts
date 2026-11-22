@@ -12,6 +12,11 @@ export interface PageBatch {
   bytes: number;
   /** Absent once the last page is in. */
   nextLink?: string;
+  /**
+   * The `@odata.deltaLink` of a change-tracked read (#233). Dataverse puts it
+   * on the last page, so it's set once the pages run out.
+   */
+  deltaLink?: string;
 }
 
 /** A Retrieve all pauses after this many rows, so it can't fill memory unasked. */
@@ -22,14 +27,25 @@ export const RETRIEVE_ALL_PAGE_BUDGET = 1_000;
 export const RETRIEVE_ALL_COMMIT_MS = 500;
 
 export function pageOf(res: ExecResult): PageBatch {
-  const body = res.body as { value?: Row[]; '@odata.nextLink'?: string } | null;
-  return { rows: body?.value ?? [], bytes: res.bytes, nextLink: body?.['@odata.nextLink'] };
+  const body = res.body as {
+    value?: Row[];
+    '@odata.nextLink'?: string;
+    '@odata.deltaLink'?: string;
+  } | null;
+  const deltaLink = body?.['@odata.deltaLink'];
+  return {
+    rows: body?.value ?? [],
+    bytes: res.bytes,
+    nextLink: body?.['@odata.nextLink'],
+    ...(deltaLink ? { deltaLink } : {}),
+  };
 }
 
 /**
  * Appends a batch to the result: the envelope is kept, `value` grows and
- * the nextLink is replaced (or dropped once exhausted). The size adds the
- * batch's bytes rather than re-serializing everything loaded so far.
+ * the nextLink is replaced (or dropped once exhausted). A batch's deltaLink
+ * (#233) is added to the envelope. The size adds the batch's bytes rather
+ * than re-serializing everything loaded so far.
  */
 export function mergePage(r: ExecResult, batch: PageBatch): ExecResult {
   const prevBody = (r.body as Record<string, unknown> | null) ?? {};
@@ -37,6 +53,7 @@ export function mergePage(r: ExecResult, batch: PageBatch): ExecResult {
   const body: Record<string, unknown> = { ...prevBody, value: prevRows.concat(batch.rows) };
   if (batch.nextLink) body['@odata.nextLink'] = batch.nextLink;
   else delete body['@odata.nextLink'];
+  if (batch.deltaLink) body['@odata.deltaLink'] = batch.deltaLink;
   return { ...r, body, bytes: r.bytes + batch.bytes };
 }
 
@@ -83,6 +100,7 @@ export async function retrieveAll(opts: {
     now = () => performance.now(),
   } = opts;
   let next: string | undefined = opts.nextLink;
+  let delta: string | undefined;
   let pending: Row[] = [];
   let pendingBytes = 0;
   let pendingPages = 0;
@@ -92,7 +110,12 @@ export async function retrieveAll(opts: {
 
   const flush = () => {
     if (pendingPages === 0) return;
-    commit({ rows: pending, bytes: pendingBytes, nextLink: next });
+    commit({
+      rows: pending,
+      bytes: pendingBytes,
+      nextLink: next,
+      ...(delta ? { deltaLink: delta } : {}),
+    });
     pending = [];
     pendingBytes = 0;
     pendingPages = 0;
@@ -118,6 +141,7 @@ export async function retrieveAll(opts: {
     loaded += page.rows.length;
     pages += 1;
     next = page.nextLink;
+    if (page.deltaLink) delta = page.deltaLink;
     if (!next) break;
     if (loaded >= rowBudget || pages >= pageBudget) {
       flush();

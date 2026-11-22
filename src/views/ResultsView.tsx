@@ -44,6 +44,8 @@ import {
 import { noStatusAdvice } from './results/noStatusAdvice';
 import { ResultsGrid } from './results/ResultsGrid';
 import { ResultsCommandBar } from './results/ResultsCommandBar';
+import { ChangeTrackingBar } from './results/ChangeTrackingBar';
+import { deletedRowCount } from '../engine/changeTracking';
 import type { GridExportView } from './results/exportResults';
 import { usePersistedSettings } from '../host/usePersistedSettings';
 import { RecordDetailCard } from './detail/RecordDetailCard';
@@ -102,6 +104,7 @@ export function ResultsView({
   onUseEntitySet,
   notice,
   loading = false,
+  changeTracking,
 }: {
   result: ExecResult | null;
   table?: string;
@@ -162,6 +165,17 @@ export function ResultsView({
   notice?: ReactNode;
   /** A run is in flight: Try again waits for it (#269). */
   loading?: boolean;
+  /**
+   * Change tracking (#233): the newest `@odata.deltaLink`, with Get changes.
+   * Kept when Get changes fails, so it can be tried again.
+   */
+  changeTracking?: {
+    deltaLink: string;
+    onGetChanges?: () => void;
+    gettingChanges?: boolean;
+    /** The results are a delta link's: the changes since the previous one. */
+    isDelta?: boolean;
+  };
 }) {
   const [tab, setTab] = useState<ResultsTab>('data');
   // Grid-local UI state. We hoist it here (not inside ResultsGrid) so the
@@ -195,12 +209,16 @@ export function ResultsView({
   // modes (`writeContext` present) have operation-specific failure copy
   // baked into WriteResultCard (412 = "ETag stale" / "precondition failed",
   // 409 = duplicate-detect, etc.), so we fall through and let it render.
+  const changeBar = changeTracking && <ChangeTrackingBar {...changeTracking} />;
+
   if (!result.ok && !writeContext) {
     // The notice stays above an error too: after a failed "Run without
-    // $filter" it's the only way to get the $filter back.
+    // $filter" it's the only way to get the $filter back. So does Get
+    // changes, with the delta link that failed, to try again.
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {notice}
+        {changeBar}
         <ErrorState
           result={result}
           method={method}
@@ -250,6 +268,8 @@ export function ResultsView({
   const nextLink = env?.['@odata.nextLink'];
   const hasMore = !!nextLink;
   const serverCount = readCount(result.body);
+  // A delta response's deleted rows (#233).
+  const deleted = deletedRowCount(result.body);
 
   const isGrid = tab === 'data' && mode !== 'single';
   // The summary at the top of every results view (#290)
@@ -264,6 +284,7 @@ export function ResultsView({
       total={serverCount?.count}
       totalCapped={serverCount?.limitExceeded === true}
       more={hasMore}
+      deleted={deleted || undefined}
     />
   );
 
@@ -273,6 +294,7 @@ export function ResultsView({
         style={{ display: 'flex', flexDirection: 'column', gap: 8, height: '100%', minHeight: 0 }}
       >
         {summary}
+        {changeBar}
         <TabList
           selectedValue={tab}
           onTabSelect={(_, d) => setTab(d.value as ResultsTab)}
@@ -311,6 +333,7 @@ export function ResultsView({
       }}
     >
       {summary}
+      {changeBar}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <TabList
           selectedValue={tab}
@@ -422,6 +445,14 @@ export function ResultsView({
               preferredColumnOrder={preferredColumnOrder}
               onViewChange={setGridView}
               emptyActions={emptyActions}
+              emptyText={
+                changeTracking?.isDelta
+                  ? {
+                      title: 'No changes',
+                      body: 'Nothing was created, updated or deleted since the previous delta link.',
+                    }
+                  : undefined
+              }
             />
           ))}
         {tab === 'json' && <JsonPane body={result.body} />}

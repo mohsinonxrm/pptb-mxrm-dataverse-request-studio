@@ -422,8 +422,9 @@ function isExecResult(x: unknown): x is ExecResult {
 export function readHeaders(
   headers: Record<string, string> | undefined,
   maxpagesize: number | null | undefined,
+  trackChanges = false,
 ): Record<string, string> | undefined {
-  return readRequestHeaders(headers, maxpagesize);
+  return readRequestHeaders(headers, maxpagesize, trackChanges);
 }
 
 /** `readHeaders` with only a page size — kept for the paging callers and tests (#219). */
@@ -441,7 +442,8 @@ export async function executeRetrieveMultiple(
   const dropped = refuseHeaderProblems(composed);
   if (dropped) return dropped;
   if (s.countOnly) return executeCount(s, composed);
-  const headers = readHeaders(composed, s.prefer.maxpagesize);
+  // Change tracking (#233) asks for a delta link with `odata.track-changes`.
+  const headers = readHeaders(composed, s.prefer.maxpagesize, !!s.prefer.trackChanges);
   // The page size goes on the wire, so `$top` is left out, as in the Code tab (#219).
   const built = buildRetrieveMultiple(s);
   const res = await timed(() => dvHost.queryData(built.relativeNoBase, headers), headers);
@@ -553,18 +555,21 @@ export async function executeNextLink(
  * pulled out of a previous response). The host's `queryData` takes a path
  * relative to `/api/data/v9.2/`, so we strip the scheme/host/api/version
  * prefix before calling. Used by ResultsGrid's infinite scroll +
- * Retrieve-All command. `maxpagesize` and `composed` are the page size and
- * headers the first page was requested with; every later page sends them
- * too (#219, #109).
+ * Retrieve-All command, and Get changes with an `@odata.deltaLink` (#233).
+ * `maxpagesize`, `composed` and `trackChanges` are the page size, headers
+ * and change tracking the first page was requested with; every later page
+ * sends them too (#219, #109). A delta link is sent without
+ * `odata.track-changes`, as in Dataverse's own example.
  */
 export async function executeAbsoluteUrl(
   url: string,
   maxpagesize?: number | null,
   composed?: Record<string, string>,
+  trackChanges = false,
 ): Promise<ExecResult> {
   const dropped = refuseHeaderProblems(composed);
   if (dropped) return dropped;
-  const headers = readHeaders(composed, maxpagesize);
+  const headers = readHeaders(composed, maxpagesize, trackChanges);
   let path = url;
   const apiIdx = path.indexOf('/api/data/');
   if (apiIdx >= 0) {

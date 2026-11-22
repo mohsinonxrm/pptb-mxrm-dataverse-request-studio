@@ -94,6 +94,11 @@ import { addRun, useRecentRuns } from '../state/runHistory';
 import { useImportedRequest } from '../state/modeHandoff';
 import { importRetrieveMultiple } from '../engine/curlImport/applyImport';
 import { composeHeaders } from '../engine/requestHeaders';
+import {
+  changeTrackingAdvisories,
+  changeTrackingAvailability,
+  deltaLinkOf,
+} from '../engine/changeTracking';
 
 /** Sidebar nodes whose clauses Count only (#272) doesn't send. */
 const COUNT_ONLY_DROPPED = /^(select|orderby|top|expand|apply|prefer)(\/|$)/;
@@ -349,6 +354,15 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // The headers the run was sent with: later pages send the same ones, or a
   // page after the first would run as the signed-in user (#109).
   const runHeadersRef = useRef<Record<string, string> | undefined>(undefined);
+  // Whether the run's pages ask for change tracking (#233): the first
+  // request's pages do; a delta link's (Get changes) don't.
+  const runTrackChangesRef = useRef(false);
+  // Change tracking (#233): the newest @odata.deltaLink, kept when Get
+  // changes fails so it can be tried again; whether the shown result is a
+  // delta link's; and Get changes in flight.
+  const [deltaLink, setDeltaLink] = useState<string | null>(null);
+  const [isDeltaResult, setIsDeltaResult] = useState(false);
+  const [gettingChanges, setGettingChanges] = useState(false);
   // Bumped by Stop to end a Retrieve All, keeping the rows already merged.
   const pagingIdRef = useRef(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -371,6 +385,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     setPageError(null);
     setPagingNotice(null);
     setThrottledPause(false);
+    setGettingChanges(false);
     rowCountRef.current = 0;
     runRecentIdRef.current = null;
     return runIdRef.current;
@@ -382,6 +397,8 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     setLoading(false);
     setResult(null);
     setRemovedFilter(null);
+    setDeltaLink(null);
+    setIsDeltaResult(false);
   };
 
   // `keepRemovedFilter` is only `true` for the run that "Run without
@@ -393,10 +410,14 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     setRunUrl(built.relativeUrl);
     runPageSizeRef.current = state.prefer.maxpagesize;
     runHeadersRef.current = headerItemsToObject(state.headers, null);
+    runTrackChangesRef.current = !!state.prefer.trackChanges && !state.countOnly;
+    setDeltaLink(null);
+    setIsDeltaResult(false);
     const res = await runtime.retrieveMultiple(state, runHeadersRef.current);
     // A newer Execute (e.g. Refresh clicked mid-flight) owns the results now.
     if (runIdRef.current !== run) return;
     setResult(res);
+    setDeltaLink((res.ok && deltaLinkOf(res.body)) || null);
     setLoading(false);
     setTab('results');
     const recentId = `r-${Date.now()}`;
@@ -459,6 +480,8 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   // keeps the rows + nextLink already loaded, so the user can retry.
   const commitPages = (batch: PageBatch) => {
     setResult((r) => (r ? mergePage(r, batch) : r));
+    // A change-tracked read's delta link comes with its last page (#233).
+    if (batch.deltaLink) setDeltaLink(batch.deltaLink);
     rowCountRef.current += batch.rows.length;
     // The Recent runs entry follows the grid (#211).
     const id = runRecentIdRef.current;
@@ -502,6 +525,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
         nextLink,
         runPageSizeRef.current,
         runHeadersRef.current,
+        runTrackChangesRef.current,
       );
       if (status() !== 'current') return;
       if (!more.ok) {
@@ -529,7 +553,13 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     try {
       const outcome = await retrieveAll({
         nextLink,
-        fetchPage: (url) => runtime.absoluteUrl(url, runPageSizeRef.current, runHeadersRef.current),
+        fetchPage: (url) =>
+          runtime.absoluteUrl(
+            url,
+            runPageSizeRef.current,
+            runHeadersRef.current,
+            runTrackChangesRef.current,
+          ),
         commit: commitPages,
         status,
       });
@@ -567,6 +597,30 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
   const retryLoadMore = () => {
     setPageError(null);
     void fetchOneMorePage();
+  };
+
+  // ── Change tracking: Get changes (#233) ──
+  // Runs the newest delta link through the same path as the next page
+  // (a relative queryData call), with the run's page size and headers but
+  // without odata.track-changes, as in Dataverse's example. The changes
+  // replace the grid; their delta link becomes the newest. A failure shows
+  // as the result and keeps the delta link, so Get changes can try again.
+  const getChanges = async () => {
+    const link = deltaLink;
+    if (!link || loading || gettingChanges) return;
+    const run = startRun();
+    setGettingChanges(true);
+    runTrackChangesRef.current = false;
+    const res = await runtime.absoluteUrl(link, runPageSizeRef.current, runHeadersRef.current);
+    // A newer Execute or a reset owns the results now.
+    if (runIdRef.current !== run) return;
+    setGettingChanges(false);
+    setResult(res);
+    setRunUrl(link);
+    setIsDeltaResult(true);
+    rowCountRef.current = topLevelRowCount(res.body) ?? 0;
+    const next = res.ok ? deltaLinkOf(res.body) : undefined;
+    if (next) setDeltaLink(next);
   };
 
   // ── Advisories — query antipatterns + stripped wildcards ────────────
@@ -684,6 +738,14 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
       ...validations,
       ...nestingAdvisories,
       ...relatedMetadataAdvisories(related.pending, related.failed),
+      // Change tracking (#233): the options Dataverse rejects with it, from
+      // what the URL sends.
+      ...changeTrackingAdvisories({
+        trackChanges: state.prefer.trackChanges,
+        countOnly: state.countOnly,
+        tableMeta: findTable(state.table),
+        queryParts: built.queryParts,
+      }),
     ];
     if (!state.countOnly) return all;
     // Count only (#272) sends $filter and nothing else, so advice about the
@@ -699,6 +761,7 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
           <code>@odata.count</code>: the number of rows matching $filter, up to 5,000 (500 for
           elastic tables). $select, $orderby, $expand, $top, $apply and the page size aren&apos;t
           sent. (Dataverse doesn&apos;t accept $filter on <code>/$count</code>.)
+          {state.prefer.trackChanges ? " Change tracking isn't sent either." : null}
         </>,
         'count',
       ),
@@ -730,6 +793,8 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
     state.expand,
     state.apply,
     state.top,
+    state.prefer.trackChanges,
+    built.queryParts,
     relatedPendingKey,
     relatedFailedKey,
     // The detectors and validateRequest read the table through findTable().
@@ -1141,6 +1206,11 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
             spec={state.prefer}
             setSpec={(p) => set('prefer', p, 'prefer')}
             sendsPageSize
+            changeTracking={changeTrackingAvailability({
+              table: state.table,
+              tableMeta: tbl,
+              countOnly: state.countOnly,
+            })}
           />
         );
         break;
@@ -1213,6 +1283,16 @@ export function RetrieveMultipleMode({ themeMode }: { themeMode: ThemeMode }) {
             requestUrl={runUrl}
             isLoadingMore={isLoadingMore}
             loading={loading}
+            changeTracking={
+              deltaLink
+                ? {
+                    deltaLink,
+                    onGetChanges: loading ? undefined : () => void getChanges(),
+                    gettingChanges,
+                    isDelta: isDeltaResult,
+                  }
+                : undefined
+            }
             onRefresh={onExecute}
             onLoadMore={pageError || throttledPause ? undefined : fetchOneMorePage}
             onRetrieveAll={retrieveAllPages}

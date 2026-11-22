@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ExecResult } from '../../engine/dataverseExecutor';
-import { mergePage, retrieveAll, type PageBatch, type PagingStatus } from './pagedResults';
+import { mergePage, pageOf, retrieveAll, type PageBatch, type PagingStatus } from './pagedResults';
 
 type Row = Record<string, unknown>;
 
@@ -203,5 +203,34 @@ describe('retrieveAll', () => {
     const out = await retrieveAll({ nextLink: 'p1', fetchPage, commit, status: () => status });
     expect(out).toEqual({ kind: 'superseded' });
     expect(batches).toHaveLength(0);
+  });
+});
+
+describe('change tracking delta links (#233)', () => {
+  const DELTA = 'https://x/api/data/v9.2/accounts?$deltatoken=2';
+  const lastPage = (value: Row[]): ExecResult => {
+    const r = page(value);
+    return { ...r, body: { ...(r.body as object), '@odata.deltaLink': DELTA } };
+  };
+
+  it('pageOf and mergePage carry the last page’s delta link to the envelope', () => {
+    const batch = pageOf(lastPage(rows(2, 1)));
+    expect(batch.deltaLink).toBe(DELTA);
+    const merged = mergePage(page(rows(0, 2), 'p2'), batch);
+    const body = merged.body as Record<string, unknown>;
+    expect(body['@odata.deltaLink']).toBe(DELTA);
+    expect(body['@odata.nextLink']).toBeUndefined();
+    expect(pageOf(page(rows(0, 1), 'p2')).deltaLink).toBeUndefined();
+  });
+
+  it('Retrieve all hands the delta link on with the last batch', async () => {
+    const fetchPage = vi.fn(async (url: string) =>
+      url === 'p2' ? page(rows(2, 2), 'p3') : lastPage(rows(4, 1)),
+    );
+    const { batches, commit } = collect();
+    const out = await retrieveAll({ nextLink: 'p2', fetchPage, commit, status: () => 'current' });
+    expect(out).toEqual({ kind: 'done', rows: 3 });
+    expect(last(batches).deltaLink).toBe(DELTA);
+    expect(last(batches).nextLink).toBeUndefined();
   });
 });

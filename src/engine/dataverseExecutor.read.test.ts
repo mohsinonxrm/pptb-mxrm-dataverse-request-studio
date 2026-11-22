@@ -87,6 +87,29 @@ describe('executeRetrieveMultiple', () => {
     expect(host.queryData).toHaveBeenCalledWith(expect.not.stringContaining('$top'), PAGE_50);
   });
 
+  it('change tracking (#233): one Prefer with the annotations, track-changes and the page size', async () => {
+    const s = retrieveMultipleState({
+      select: ['name'],
+      prefer: { ...emptyPrefer(), maxpagesize: 50, trackChanges: true },
+    });
+    await executeRetrieveMultiple(s);
+    expect(host.queryData).toHaveBeenCalledWith('/accounts?$select=name', {
+      Prefer: 'odata.include-annotations="*",odata.track-changes,odata.maxpagesize=50',
+    });
+    host.queryData.mockClear();
+    await executeRetrieveMultiple({ ...s, prefer: { ...emptyPrefer(), trackChanges: true } });
+    expect(host.queryData).toHaveBeenCalledWith('/accounts?$select=name', {
+      Prefer: 'odata.include-annotations="*",odata.track-changes',
+    });
+  });
+
+  it("count only doesn't send change tracking", async () => {
+    await executeRetrieveMultiple(
+      retrieveMultipleState({ countOnly: true, prefer: { ...emptyPrefer(), trackChanges: true } }),
+    );
+    expect(host.queryData).toHaveBeenCalledWith(expect.any(String), undefined);
+  });
+
   it('stays header-free without a page size', async () => {
     await executeRetrieveMultiple(paged(10, null));
     expect(host.queryData).toHaveBeenCalledWith('/accounts?$top=10', undefined);
@@ -112,6 +135,23 @@ describe('next pages', () => {
     expect(host.queryData).toHaveBeenCalledWith(
       'accounts?$skiptoken=%3Ccookie%20pagenumber=%222%22%20/%3E',
       PAGE_50,
+    );
+  });
+
+  it('a change-tracked run asks for change tracking on its later pages too (#233)', async () => {
+    await executeAbsoluteUrl(NEXT, 50, undefined, true);
+    expect(host.queryData).toHaveBeenCalledWith(expect.any(String), {
+      Prefer: 'odata.include-annotations="*",odata.track-changes,odata.maxpagesize=50',
+    });
+  });
+
+  it('Get changes runs a delta link as a relative call, without track-changes (#233)', async () => {
+    const DELTA =
+      'https://contoso.crm.dynamics.com/api/data/v9.2/accounts?$select=name&$deltatoken=919042%2108%2f22%2f2017%2008%3a10%3a44';
+    await executeAbsoluteUrl(DELTA, null);
+    expect(host.queryData).toHaveBeenCalledWith(
+      'accounts?$select=name&$deltatoken=919042%2108%2f22%2f2017%2008%3a10%3a44',
+      undefined,
     );
   });
 
