@@ -110,14 +110,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Retrieve Single now marks the record as **required** once a table is picked.
 ### 🐛 Fixed
 
-- **The README renders correctly on the Power Platform ToolBox details page**
-  ([#412]). The Version badge was a link around an image, which ToolBox's
-  README renderer shows as raw Markdown. It is now a plain image, and the
-  release check flags any badge that isn't on a line of its own and any link
-  around an image or code. Same fix as FetchXML Studio 1.5.1.
-
-### 🐛 Fixed
-
 - **Open in Dataverse opens the row you can see ticked** ([#413]). A row
   search or column filter that hides a selected row now drops it from the
   selection, so the footer count and Open in Dataverse agree with the rows
@@ -167,13 +159,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🔧 Internal
 
-- **Every tag is checked in PPTB first** ([#385]). Each PR was checked in PPTB
-  on its own build, but the build a tag publishes (every merged change plus the
-  version bump, built by `release.yml`) wasn't run in PPTB until it was on npm.
-  RELEASING.md's new *Before every tag* step loads the rehearsal's `package`
-  tarball in PPTB, with a short smoke list, before any beta, stable or hotfix
-  tag. The smoke test of the published beta before `latest` stays. Same step as
-  FetchXML Studio.
 - **Tests for the Results features** ([#419]). Component tests now render
   the grid (with a `ResizeObserver` stub that reports a size), the Columns
   menu, the toolbar's Open in Dataverse and Copy as TSV, the Open in
@@ -189,7 +174,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#296]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/296
 [#297]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/297
 [#298]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/298
-[#385]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/385
 [#301]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/301
 [#397]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/397
 [#413]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/413
@@ -203,8 +187,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#421]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/421
 [#422]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/422
 [#408]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/408
-[#412]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/412
 [#232]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/232
+
+## [1.6.0] - 2026-11-21
+
+Productivity. Recent runs survive a reload or restart ([#226]). Throttled
+requests are explained ([#269]). Retrieve Multiple can count only ([#272]).
+The Code tab writes Python ([#270]), and a cURL command can be imported
+([#271]). The JSON body editor and hand-typed URLs get suggestions from the
+table's metadata ([#268]). Results suggest the next step ([#291]), and every
+mode lists what blocks Execute ([#294]). The package is about half the size
+and loads less at startup ([#236]).
+
+It was iterated through `1.6.0-beta.1` (detailed below), which was checked in
+Power Platform ToolBox 1.2.8 against a live environment. Since that beta, the
+README renders on ToolBox's details page, and every tag is checked in ToolBox
+first (listed here).
+
+Request headers need **Power Platform ToolBox 1.2.7 or later**. On older hosts
+a request with an impersonation header isn't sent, and DRS explains why.
+
+### ✨ Added
+
+- **Recent runs survive a reload or restart** ([#226]), with a searchable
+  history per mode and environment.
+- **Count only** in Retrieve Multiple ([#272]), **Python** code ([#270]) and
+  **Import a cURL command** ([#271]).
+- **Suggestions from the table's metadata** in the JSON body editor and in
+  hand-typed URLs ([#268]).
+- **Results suggest the next step** after 0 rows and errors, and **Copy
+  error report** ([#291]).
+- **Every mode lists what blocks Execute in Advisories** ([#294]).
+- **Throttling is explained** ([#269]), and Retrieve all pauses instead of
+  failing.
+- **All or nothing for Associate and Disassociate** ([#224]).
+
+### 🔄 Changed
+
+- **A smaller, faster-loading package** ([#236]).
+
+### 🐛 Fixed since 1.5.0
+
+Listed under the beta below, plus the fix since it:
+
+- **The README renders correctly on the Power Platform ToolBox details page**
+  ([#412]). The Version badge was a link around an image, which ToolBox's
+  README renderer shows as raw Markdown. It is now a plain image, and the
+  release check flags any badge that isn't on a line of its own and any link
+  around an image or code. Same fix as FetchXML Studio 1.5.1.
+
+### 🔧 Internal
+
+- **Every tag is checked in PPTB first** ([#385]). Each PR was checked in PPTB
+  on its own build, but the build a tag publishes (every merged change plus the
+  version bump, built by `release.yml`) wasn't run in PPTB until it was on npm.
+  RELEASING.md's new *Before every tag* step loads the rehearsal's `package`
+  tarball in PPTB, with a short smoke list, before any beta, stable or hotfix
+  tag. The smoke test of the published beta before `latest` stays. Same step as
+  FetchXML Studio.
+
+### ⚠️ Known issues
+
+- **`$batch` continue-on-error:** ToolBox's `$batch` response parser fails when
+  a failed request is followed by more requests. DRS explains it and suggests
+  putting requests that might fail last ([#198]).
+- **Execute modes on very large environments:** a `$metadata` document over
+  16 MB can't load on ToolBox versions without
+  [PowerPlatformToolBox/desktop-app#737](https://github.com/PowerPlatformToolBox/desktop-app/pull/737);
+  DRS explains the limit ([#79]).
+- **Binary modes** (file / image / attachment) compose the request and its
+  code, but Execute returns 501 because ToolBox doesn't expose those
+  operations.
+
+[#79]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/79
+[#198]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/198
+[#224]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/224
+[#226]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/226
+[#236]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/236
+[#268]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/268
+[#269]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/269
+[#270]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/270
+[#271]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/271
+[#272]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/272
+[#291]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/291
+[#294]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/294
+[#385]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/385
+[#412]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/412
 
 ## [1.6.0-beta.1] - 2026-11-07
 
