@@ -54,6 +54,47 @@ export function toWireHeaders(
   return byName.size > 0 ? Object.fromEntries(byName.values()) : undefined;
 }
 
+// The values Dataverse assumes when these headers are absent. Inside a
+// `$batch` part they're the defaults anyway, so they're left off the part
+// rather than raise a consent prompt for nothing (#225).
+const PART_DEFAULTS: Record<string, string> = {
+  accept: 'application/json',
+  'odata-version': '4.0',
+  'odata-maxversion': '4.0',
+};
+
+/** `application/json`, with or without parameters (`; charset=utf-8`, `; type=entry`). */
+const isJsonContentType = (value: string) => /^application\/json\s*(?:;|$)/i.test(value.trim());
+
+/**
+ * The headers to put on a `$batch` part (#225). Inside a part nothing is
+ * host-owned, so this is what the Code tab shows, minus:
+ *   - `Authorization`, credential headers (#217) and `Content-Length`;
+ *   - `Accept`, `OData-Version` and `OData-MaxVersion` at their defaults;
+ *   - a JSON `Content-Type` (the host gives a part with a body its own).
+ * Everything else goes: `Prefer`, `If-Match` / `If-None-Match`, `MSCRM.*`,
+ * impersonation, a non-JSON `Content-Type`. Names are de-duplicated
+ * case-insensitively (the later row wins, as in `toWireHeaders`). `{}` when
+ * nothing is left, so the part carries no headers and never prompts.
+ */
+export function toRawPartHeaders(composed?: Record<string, string>): Record<string, string> {
+  const byName = new Map<string, [string, string]>();
+  for (const [rawName, value] of Object.entries(composed ?? {})) {
+    const name = rawName.trim();
+    const key = name.toLowerCase();
+    byName.delete(key);
+    if (!key || key === 'authorization' || key === 'content-length' || isCredentialHeader(key)) {
+      continue;
+    }
+    if (PART_DEFAULTS[key] !== undefined && value.trim().toLowerCase() === PART_DEFAULTS[key]) {
+      continue;
+    }
+    if (key === 'content-type' && isJsonContentType(value)) continue;
+    byName.set(key, [name, value]);
+  }
+  return Object.fromEntries(byName.values());
+}
+
 /**
  * The modes that send an allow-list rather than every header: the reads,
  * Associate / Disassociate, and `impersonation` for Execute Function and
