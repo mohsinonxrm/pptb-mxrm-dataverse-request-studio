@@ -81,6 +81,7 @@ import { actions } from '../host/csdlProvider';
 import {
   allowedHeaders,
   impersonationProblem,
+  isImpersonationHeader,
   readRequestHeaders,
   toWireHeaders,
 } from './requestHeaderPolicy';
@@ -119,6 +120,11 @@ export interface ExecResult {
   /** Count only (#272): Dataverse stopped counting at its limit (5,000, or
    *  500 for elastic tables). Absent when the response didn't say. */
   countLimitExceeded?: boolean;
+  /** The impersonation header the request sent (`MSCRMCallerID` or
+   *  `CallerObjectId`) when Dataverse answered that the user it names
+   *  doesn't exist (#431). Only the header's name: the id stays out of
+   *  results. Absent for every other result. */
+  impersonatedUserNotFound?: string;
 }
 
 /**
@@ -341,7 +347,45 @@ export function mapError(
   // a 400-class rejection.
   const status = e.statusCode ?? e.status ?? statusFromMessage(message) ?? 0;
   const code = e.code ?? dataverseCodeIn(message);
-  return failure(status, { code, message, ...raw }, ms);
+  const result = failure(status, { code, message, ...raw }, ms);
+  const caller = impersonatedUserNotFound(sentHeaders, status, code, message);
+  return caller ? { ...result, impersonatedUserNotFound: caller } : result;
+}
+
+const OBJECT_DOES_NOT_EXIST = '0x80040217';
+const GUID_IN_TEXT_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+/**
+ * The impersonation header whose user Dataverse couldn't find (#431), or
+ * null. Dataverse answers 404 / 0x80040217 both for a missing record and for
+ * a caller that isn't a user ("systemuser With Id = … Does Not Exist"), so
+ * it's only the caller when the request sent an impersonation header and
+ * the message names the caller's id, or names `systemuser` with no id at
+ * all (a missing systemuser *record* names the record's id, not the caller's).
+ */
+export function impersonatedUserNotFound(
+  sentHeaders: Record<string, string> | undefined,
+  status: number,
+  code: string | undefined,
+  message: string,
+): string | null {
+  const objectMissing = code?.toLowerCase() === OBJECT_DOES_NOT_EXIST;
+  if (!sentHeaders || !(status === 404 || objectMissing)) return null;
+  const row = Object.entries(sentHeaders).find(([name]) => isImpersonationHeader(name));
+  if (!row) return null;
+  const [name, value] = row;
+  const callerId = value.trim().toLowerCase();
+  const ids = (message.match(GUID_IN_TEXT_RE) ?? []).map((id) => id.toLowerCase());
+  const namesCaller = callerId !== '' && ids.includes(callerId);
+  const namesSystemUser = objectMissing && /\bsystemuser\b/i.test(message) && ids.length === 0;
+  // What PPTB 1.2.8 reports for a caller that isn't a user: a bare "HTTP 404"
+  // with no Dataverse error body. A missing record always carries Dataverse's
+  // code (0x80040217), so a 404 without a code is the caller (#431, verified
+  // live 2026-11-22).
+  const bare404 = status === 404 && !code && ids.length === 0;
+  if (!namesCaller && !namesSystemUser && !bare404) return null;
+  // The header as the docs spell it, whatever case it was typed in.
+  return /^callerobjectid$/i.test(name.trim()) ? 'CallerObjectId' : 'MSCRMCallerID';
 }
 
 function ok(status: number, body: unknown, ms: number): ExecResult {

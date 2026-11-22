@@ -41,11 +41,11 @@ globalThis.ResizeObserver ??= class {
 let root: Root | null = null;
 let el: HTMLDivElement | null = null;
 
-function render(table = '') {
+function render(table = '', openTableList?: boolean) {
   act(() =>
     root!.render(
       <FluentProvider theme={webLightTheme}>
-        <TargetEditor table={table} onTableChange={() => {}} />
+        <TargetEditor table={table} onTableChange={() => {}} openTableList={openTableList} />
       </FluentProvider>,
     ),
   );
@@ -101,5 +101,36 @@ describe('TargetEditor without a scope', () => {
     expect(el!.textContent).not.toContain('Choose a scope');
     expect(picker().disabled).toBe(false);
     expect(el!.textContent).toContain('2 entities in scope');
+  });
+});
+
+// #429: another pane's Step 1 (Manage Image's preview) leads here with the
+// table list open; this pane doesn't ask for the same step again.
+describe('TargetEditor opened from another pane’s Step 1', () => {
+  const scoped = () => {
+    host.needsSetup = false;
+    host.entities = [{ logicalName: 'account', displayName: 'Account', entitySetName: 'accounts' }];
+  };
+
+  it('opens the table list and shows no second Step 1 card', () => {
+    scoped();
+    render('', true);
+    expect(el!.textContent).not.toContain('Step 1');
+    expect(picker().getAttribute('aria-expanded')).toBe('true');
+    expect(document.activeElement).toBe(picker());
+  });
+
+  it('without it, shows Step 1 · Choose a table with the list closed', () => {
+    scoped();
+    render('');
+    expect(el!.textContent).toContain('Step 1 · Choose a table');
+    expect(picker().getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('asks for a scope instead when there is none, with the list closed', () => {
+    render('', true);
+    expect(el!.textContent).toContain('Step 1 · Choose a scope');
+    expect(picker().disabled).toBe(true);
+    expect(picker().getAttribute('aria-expanded')).not.toBe('true');
   });
 });

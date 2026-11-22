@@ -26,6 +26,7 @@ const host = vi.hoisted(() => ({
   target: null as null | {
     onTableChange: (t: string) => void;
     onRecordChange?: (id: string | null, primary?: string) => void;
+    openTableList?: boolean;
   },
 }));
 vi.mock('../shell/UrlBar', () => ({
@@ -178,5 +179,39 @@ describe('Manage Image preview pane (#224)', () => {
     act(() => host.urlBar!.onAdvisoryFocus!(advisory!.focusNode!));
     expect(host.sidebar!.activeNode).toBe('preview');
     expect(tileText()).toBe('CL');
+  });
+});
+
+describe("Manage Image preview's Step 1 (#429)", () => {
+  const stepButton = () =>
+    [...body()!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Choose a table');
+
+  it('goes to Target with the table list open, so Target asks only once', () => {
+    mount();
+    expect(body()!.textContent).toContain('Step 1 · Choose a table');
+    act(() => stepButton()!.click());
+    expect(host.sidebar!.activeNode).toBe('target');
+    expect(body()!.textContent).toContain('target pane');
+    expect(host.target!.openTableList).toBe(true);
+  });
+
+  it('opens the list only on that arrival, not when Target is picked in the sidebar', () => {
+    mount();
+    select('target');
+    expect(host.target!.openTableList).toBe(false);
+    select('preview');
+    act(() => stepButton()!.click());
+    expect(host.target!.openTableList).toBe(true);
+    // Leaving Target forgets it: coming back shows Target's own Step 1.
+    select('preview');
+    select('target');
+    expect(host.target!.openTableList).toBe(false);
+  });
+
+  it('shows no Step 1 once a table is picked', () => {
+    mount();
+    pickRecord('Contoso Ltd');
+    select('preview');
+    expect(stepButton()).toBeUndefined();
   });
 });

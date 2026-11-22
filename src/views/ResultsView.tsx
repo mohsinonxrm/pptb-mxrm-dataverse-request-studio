@@ -704,6 +704,14 @@ function ErrorState({
               : result.status === 0
                 ? noStatusAdvice(err)
                 : 'Inspect the error message below for details.';
+  // #431: the 404 is for the impersonated user, not the record.
+  const caller = notSent || throttled ? undefined : result.impersonatedUserNotFound;
+  const impersonation = caller
+    ? {
+        title: 'Impersonated user not found',
+        advice: `The user you're impersonating (${caller}) wasn't found. Check the id in HTTP headers.`,
+      }
+    : null;
   // Any failure is 'danger', including a status the host didn't report (0).
   const kind: 'success' | 'danger' | 'warning' = !result.ok
     ? 'danger'
@@ -735,10 +743,10 @@ function ErrorState({
       >
         <Icon style={{ width: 48, height: 48, color: tokens.colorPaletteRedForeground1 }} />
         <Text size={500} weight="semibold">
-          {title}
+          {impersonation?.title ?? title}
         </Text>
         <Caption1 style={{ color: tokens.colorNeutralForeground2, maxWidth: 420 }}>
-          {advice}
+          {impersonation?.advice ?? advice}
         </Caption1>
         {sizeHint && (
           <Caption1 style={{ color: tokens.colorNeutralForeground1, maxWidth: 420 }}>
