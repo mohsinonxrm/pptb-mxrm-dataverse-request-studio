@@ -213,8 +213,9 @@ export function ScopeChip({ accessSummary }: { accessSummary?: AccessSummary | n
               ref={setChip}
               className={styles.chip}
               // Outline whether or not a scope is set (#397): one primary per
-              // surface, and that's the request's Send / Execute. The first-run
-              // tip still points here, and the label reads "Choose scope".
+              // surface, and that's the request's Send / Execute. Without a
+              // scope the label reads "Choose scope", and the Target pane's
+              // "Step 1 · Choose a scope" card opens this popover.
               appearance="outline"
               size="small"
               icon={<Filter20Regular />}

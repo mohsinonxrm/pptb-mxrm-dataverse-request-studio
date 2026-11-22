@@ -8,6 +8,7 @@ import {
   Dropdown,
   Field,
   Input,
+  Link,
   MessageBar,
   MessageBarBody,
   Option,
@@ -25,6 +26,7 @@ import {
 } from '@fluentui/react-icons';
 import { PaneHead } from '../../editors/PaneHead';
 import { useScopedEntities } from '../../host/useScopedEntities';
+import { useOpenScope } from '../../host/useOpenScope';
 import { useLiveTable } from '../../host/useLiveMetadata';
 import { isCollectionValuedNav } from '../../state/relateState';
 import {
@@ -81,7 +83,8 @@ export function BatchItemEditor({
   onMove: (delta: -1 | 1) => void;
   onMoveToGroup: (groupId: string) => void;
 }) {
-  const { entities, allEntities } = useScopedEntities();
+  const { entities, allEntities, needsSetup, loading: entitiesLoading } = useScopedEntities();
+  const openScope = useOpenScope();
   // Completion in the free-text URL and query options (#268)
   const urlSuggest = useUrlSuggest({
     value: item.url,
@@ -198,6 +201,20 @@ export function BatchItemEditor({
           <Input value={item.label} onChange={(_, d) => onChange({ label: d.value })} />
         </Field>
       </div>
+
+      {/* Table and URL suggestions list the scope's tables (#420): one line
+          says why there are none yet, and the link opens the scope picker. */}
+      {needsSetup && !entitiesLoading && (
+        <Caption1
+          style={{ display: 'block', marginTop: 12, color: tokens.colorNeutralForeground3 }}
+        >
+          Tables are suggested once you{' '}
+          <Link inline onClick={openScope}>
+            choose a scope
+          </Link>
+          .
+        </Caption1>
+      )}
 
       <div
         style={{

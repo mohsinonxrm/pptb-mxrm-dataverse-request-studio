@@ -5,6 +5,7 @@ import {
   spreadsheetSafe,
   tsvCell,
   toCsv,
+  toTsv,
   type ExportColumn,
 } from './exportResults';
 
@@ -147,6 +148,28 @@ describe('tsvCell (#239 review)', () => {
     expect(tsvCell('a\tb\nc')).toBe('a b c');
     expect(tsvCell('-$5.00', -5)).toBe('-$5.00');
     expect(tsvCell('say "hi"')).toBe('say "hi"');
+  });
+});
+
+describe('toTsv (#415)', () => {
+  it('writes the grid columns as shown, like the CSV export', () => {
+    expect(toTsv(rows, columns).split('\n')).toEqual([
+      'Account Name\tStatus Reason\tStatus Reason (Raw)\tOwner',
+      'Contoso, Ltd.\tActive\t1\tJane "JD" Doe',
+      // Line breaks flatten; empty cells stay empty.
+      'Line break\t\t\t',
+    ]);
+  });
+
+  it('only has the columns it is given (hidden ones are left out)', () => {
+    expect(toTsv(rows.slice(0, 1), [columns[0], columns[3]])).toBe(
+      'Account Name\tOwner\nContoso, Ltd.\tJane "JD" Doe',
+    );
+  });
+
+  it('neutralises formulas in headers and cells', () => {
+    const cols: ExportColumn[] = [{ id: 'n', header: '=H', sourceCol: 'n', showsRaw: false }];
+    expect(toTsv([{ n: '"=HYPERLINK(1)"' }], cols)).toBe(`'=H\n'"=HYPERLINK(1)"`);
   });
 });
 

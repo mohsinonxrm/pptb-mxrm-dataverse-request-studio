@@ -38,6 +38,7 @@ import { useAnnounceResult } from '../primitives/announce';
 import {
   HEADER_CONSENT_DECLINED_CODE,
   HEADER_REJECTED_CODE,
+  readCount,
   type ExecResult,
 } from '../engine/dataverseExecutor';
 import { pageSizeIsSent } from '../host/pptbBridge';
@@ -241,18 +242,15 @@ export function ResultsView({
   );
 
   // Detect more-pages from the envelope's @odata.nextLink annotation,
-  // and the server-emitted @odata.count (when $count=true was set).
+  // and the server-emitted @odata.count (when $count=true was set), with
+  // whether Dataverse stopped counting at its limit (#414).
   const env = result.body as {
     '@odata.nextLink'?: string;
-    '@odata.count'?: number;
     value?: unknown[];
   } | null;
   const nextLink = env?.['@odata.nextLink'];
   const hasMore = !!nextLink;
-  const serverTotal =
-    typeof env?.['@odata.count'] === 'number' && env['@odata.count'] >= 0
-      ? env['@odata.count']
-      : undefined;
+  const serverCount = readCount(result.body);
 
   const isGrid = tab === 'data' && mode !== 'single';
   // The summary at the top of every results view (#290)
@@ -264,7 +262,8 @@ export function ResultsView({
       ms={result.ms}
       bytes={result.bytes}
       rows={Array.isArray(env?.value) ? env.value.length : undefined}
-      total={serverTotal}
+      total={serverCount?.count}
+      totalCapped={serverCount?.limitExceeded === true}
       more={hasMore}
     />
   );

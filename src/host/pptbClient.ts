@@ -30,6 +30,8 @@ export interface EntityMetadata {
   /** Logical name of the table's primary image column (`entityimage`), or null. */
   PrimaryImageAttribute?: string | null;
   IsValidForAdvancedFind?: boolean;
+  /** An N:N intersect table: it has no form in the model-driven app. */
+  IsIntersect?: boolean;
   MetadataId: string;
   ObjectTypeCode: number;
 }

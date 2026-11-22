@@ -73,6 +73,7 @@ import { addRun, useRecentRuns } from '../state/runHistory';
 import { useImportedRequest } from '../state/modeHandoff';
 import { importCreate } from '../engine/curlImport/applyImport';
 import { composeHeaderItems } from '../engine/requestHeaders';
+import { requiredStatus } from '../primitives/clauseStatus';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -346,12 +347,11 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
           icon: FormNew20Regular,
           iconFilled: FormNew20Filled,
           label: 'Field set',
-          badge:
-            missingRequired.length > 0
-              ? `${missingRequired.length} req unset`
-              : `${populatedCount} populated`,
+          // The one badge rule (#296, #417): required while a required field is unset.
+          status: requiredStatus(missingRequired.length),
+          badge: `${populatedCount} populated`,
           badgeAppearance: 'tint' as const,
-          badgeColor: missingRequired.length > 0 ? ('danger' as const) : ('success' as const),
+          badgeColor: 'success' as const,
           dirty: state.dirty.has('fieldset'),
         },
       ],

@@ -109,6 +109,7 @@ export function RecordDetailCard({
             <OpenInDataverseButton
               table={entityLogical}
               id={record[tbl?.primaryKey ?? `${entityLogical}id`]}
+              record={record}
             />
           )}
           <CheckmarkCircle20Filled style={{ color: tokens.colorPaletteGreenForeground1 }} />

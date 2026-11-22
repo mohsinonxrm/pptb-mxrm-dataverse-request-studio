@@ -76,6 +76,7 @@ import { useLatestCallback } from '../primitives/useLatestCallback';
 import { takeModeHandoff, useImportedRequest } from '../state/modeHandoff';
 import type { Advisory } from '../primitives/advisories';
 import { isRecordGuid } from '../primitives/guid';
+import { recordStatus } from '../primitives/clauseStatus';
 import { addRun, useRecentRuns } from '../state/runHistory';
 import { importRetrieveSingle } from '../engine/curlImport/applyImport';
 
@@ -429,13 +430,7 @@ export function RetrieveSingleMode({ themeMode }: { themeMode: ThemeMode }) {
           iconFilled: Table20Filled,
           label: state.recordId ? `${tbl?.displayName ?? ''} (selected)` : 'Pick a record',
           // Same states as the drawer's "No record selected" / "Invalid record id".
-          status: state.recordId
-            ? isValidGuid(state.recordId)
-              ? ('set' as const)
-              : ('invalid' as const)
-            : state.table
-              ? ('required' as const)
-              : undefined,
+          status: recordStatus(state.recordId, !!state.table),
           dirty: state.dirty.has('target'),
         },
       ],

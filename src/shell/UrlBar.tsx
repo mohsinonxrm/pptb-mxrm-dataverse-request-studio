@@ -91,7 +91,13 @@ export function UrlBar({
   const blockers = advisories?.filter((a) => a.severity === 'error').length ?? 0;
   // With blockers listed in the drawer, Execute stays focusable and opens it.
   const blockedByAdvisories = !!disabledReason && !loading && blockers > 0;
+  // Opened from Execute, focus goes into the drawer and Escape brings it
+  // back to Execute (#421). Opened from the chip, nothing moves.
+  const [openedFromExecute, setOpenedFromExecute] = useState(false);
+  if (!advisoriesOpen && openedFromExecute) setOpenedFromExecute(false);
+  const executeWrapRef = useRef<HTMLSpanElement>(null);
   const showBlockers = () => {
+    setOpenedFromExecute(true);
     setAdvisoriesOpen(true);
     announce(toFixTitle(blockers));
   };
@@ -237,12 +243,19 @@ export function UrlBar({
           onFocusNode={openAdvisoryNode}
           open={advisoriesOpen}
           onOpenChange={setAdvisoriesOpen}
+          focusOnOpen={openedFromExecute}
+          onEscape={
+            openedFromExecute
+              ? () => executeWrapRef.current?.querySelector('button')?.focus()
+              : undefined
+          }
         />
       )}
       {/* A blocked Execute stays focusable (`disabledFocusable`) and a click,
           Enter or Space opens the drawer (#295). Fluent swallows events on a
           disabled-focusable button, so they're caught on the way down. */}
       <span
+        ref={executeWrapRef}
         className={s.executeWrap}
         onClickCapture={blockedByAdvisories ? showBlockers : undefined}
         onKeyDownCapture={

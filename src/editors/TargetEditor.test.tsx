@@ -82,9 +82,12 @@ describe('TargetEditor without a scope', () => {
     expect(host.openScope).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps a table already picked clearable', () => {
+  it('keeps a table already picked clearable, without asking for a scope (#420)', () => {
+    // A restored request, or the table a bound action or function fixes:
+    // the record can be picked and sent without a scope.
     render('account');
-    expect(el!.textContent).toContain('Step 1 · Choose a scope');
+    expect(el!.textContent).not.toContain('Choose a scope');
+    expect(el!.textContent).not.toContain('Step 1');
     expect(picker().disabled).toBe(false);
   });
 

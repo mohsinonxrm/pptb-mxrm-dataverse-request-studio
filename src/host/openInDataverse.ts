@@ -22,6 +22,26 @@ export function recordFormUrl(
   return `https://${host}/main.aspx?pagetype=entityrecord&etn=${encodeURIComponent(etn)}&id=${guid.toLowerCase()}`;
 }
 
+/**
+ * The table whose form opens a row of `table`, or undefined when there's no
+ * form to open (#422). Intersect (N:N) tables have no form. Activity
+ * (`activitypointer`) rows open as their own activity type, read from the
+ * row's `activitytypecode` (`email`, `task`…); without it there's no form.
+ */
+export function formTableFor(
+  table: string | undefined,
+  row?: Record<string, unknown>,
+  isIntersect?: boolean,
+): string | undefined {
+  const etn = table?.trim().toLowerCase();
+  if (!etn || isIntersect) return undefined;
+  if (etn !== 'activitypointer') return etn;
+  const code = row?.activitytypecode;
+  return typeof code === 'string' && /^[a-z_]\w*$/i.test(code.trim())
+    ? code.trim().toLowerCase()
+    : undefined;
+}
+
 /** Open `url` in the connection's browser, or a new window outside ToolBox. */
 export async function openInBrowser(url: string): Promise<void> {
   const open =

@@ -19,7 +19,7 @@
 // AND propagate to <UrlBar disabledReason> via disabledReasonFromAdvisories().
 // This drawer is the *aggregate* view, not the *only* view.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Popover,
   PopoverTrigger,
@@ -54,6 +54,14 @@ export interface AdvisoryDrawerProps {
   /** Controlled open state — the URL bar opens it from a blocked Execute (#295). */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /**
+   * Move focus into the drawer when it opens: to its first action (an
+   * **Open** button), or the drawer itself (#421). The URL bar sets it when
+   * a blocked Execute opens the drawer, so Tab and Escape work from there.
+   */
+  focusOnOpen?: boolean;
+  /** Escape closed the drawer: the URL bar returns focus to Execute (#421). */
+  onEscape?: () => void;
 }
 
 // Icon + color per severity — kept tiny and consistent with v2.2 chrome.
@@ -77,6 +85,8 @@ export function AdvisoryDrawer({
   onFocusNode,
   open: openProp,
   onOpenChange,
+  focusOnOpen = false,
+  onEscape,
 }: AdvisoryDrawerProps) {
   const s = useStudioStyles();
   const [openState, setOpenState] = useState(false);
@@ -87,6 +97,15 @@ export function AdvisoryDrawer({
     onOpenChange?.(value);
   };
   const { errors, warnings, infos, total } = bucketAdvisories(advisories);
+
+  // The surface is portaled and mounts after `open` flips, so focus follows
+  // the node rather than the flag (#421).
+  const [surface, setSurface] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open || !focusOnOpen || !surface) return;
+    const first = surface.querySelector<HTMLElement>('button:not([disabled]), a[href]');
+    (first ?? surface).focus({ preventScroll: true });
+  }, [open, focusOnOpen, surface]);
 
   if (total === 0) return null;
 
@@ -103,7 +122,14 @@ export function AdvisoryDrawer({
   const tooltip = tipParts.join(' · ');
 
   return (
-    <Popover open={open} onOpenChange={(_, d) => setOpen(d.open)} positioning="above-end">
+    <Popover
+      open={open}
+      onOpenChange={(e, d) => {
+        if (!d.open && 'key' in e && e.key === 'Escape') onEscape?.();
+        setOpen(d.open);
+      }}
+      positioning="above-end"
+    >
       <PopoverTrigger disableButtonEnhancement>
         <Tooltip content={`Advisories — ${tooltip}`} relationship="label">
           {/* The chip itself: severity icon + count badge + tiny chevron.
@@ -123,7 +149,13 @@ export function AdvisoryDrawer({
           </button>
         </Tooltip>
       </PopoverTrigger>
-      <PopoverSurface className={s.advisorySurface}>
+      {/* Focusable from script when there's no action to focus (#421). Only
+          then: Fluent focuses a surface that has a tabIndex when it opens. */}
+      <PopoverSurface
+        ref={setSurface}
+        tabIndex={focusOnOpen ? -1 : undefined}
+        className={s.advisorySurface}
+      >
         <div className={s.advisoryHeader}>
           <strong style={{ fontSize: 13 }}>
             {errors.length > 0 ? toFixTitle(errors.length) : 'Advisories'}

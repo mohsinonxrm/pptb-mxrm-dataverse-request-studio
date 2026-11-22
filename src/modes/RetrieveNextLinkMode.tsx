@@ -173,6 +173,13 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
     [state, allEntities],
   );
   const analysis = useMemo(() => analyzeNextLink(state.url, env.host), [state.url, env.host]);
+  // The table the shown result came from, by the entity set in the URL that
+  // ran: the grid keeps its hidden columns and widths per table, and offers
+  // Open in Dataverse only when it knows the table (#416).
+  const runTable = useMemo(() => {
+    const set = runUrl ? analyzeNextLink(runUrl, '').entitySet : null;
+    return set ? allEntities.find((e) => e.entitySetName === set)?.logicalName : undefined;
+  }, [runUrl, allEntities]);
   // Completion when the link is typed or edited rather than pasted (#268)
   const urlSuggest = useUrlSuggest({
     value: state.url,
@@ -513,6 +520,7 @@ export function RetrieveNextLinkMode({ themeMode }: { themeMode: ThemeMode }) {
           <ResultsView
             result={result}
             mode="next"
+            table={runTable}
             requestUrl={runUrl || undefined}
             onUseEntitySet={(segment, entitySet) => {
               // Fix the URL in the builder; if it was edited since the run and no
