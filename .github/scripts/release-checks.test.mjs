@@ -131,6 +131,18 @@ describe('checkReleaseFiles', () => {
     ).toMatch(/out of date \(react\.svg\)/);
   });
 
+  it('flags a badge wrapped in a link, and links around code (#412)', () => {
+    const [version, ...rest] = badgeMarkdown(pkg);
+    const linked = `# Tool\n\n[${version}](https://www.npmjs.com/package/@scope/tool)\n${rest.join('\n')}\n`;
+    expect(checkReleaseFiles({ ...files, readme: linked }).join(' ')).toMatch(
+      /each on a line of its own.*links around an image or code/,
+    );
+    const code = `${readme}See [\`@scope/tool\`](https://www.npmjs.com/package/@scope/tool).\n`;
+    expect(checkReleaseFiles({ ...files, readme: code }).join(' ')).toMatch(
+      /links around an image or code/,
+    );
+  });
+
   it('flags a README without the badges, or with img.shields.io', () => {
     expect(checkReleaseFiles({ ...files, readme: '# Tool\n' }).join(' ')).toMatch(
       /README\.md doesn't show these badges/,
@@ -172,10 +184,10 @@ describe('badges', () => {
     expect(badgeUrl(pkg, 'react.svg')).toBe(
       'https://raw.githubusercontent.com/owner/tool/refs/heads/main/assets/badges/react.svg',
     );
-    // The version badge links to npm and has no version in its alt text, so a release
-    // changes only the SVG
+    // The version badge has no version in its alt text, so a release changes only the SVG; and
+    // it isn't a link, which ToolBox's README renderer would show as raw Markdown (#412)
     expect(badgeMarkdown(pkg)[0]).toBe(
-      '[![Version](https://raw.githubusercontent.com/owner/tool/refs/heads/main/assets/badges/version.svg)](https://www.npmjs.com/package/@scope/tool)',
+      '![Version](https://raw.githubusercontent.com/owner/tool/refs/heads/main/assets/badges/version.svg)',
     );
   });
 

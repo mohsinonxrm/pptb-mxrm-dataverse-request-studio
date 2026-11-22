@@ -85,9 +85,20 @@ export function checkReleaseFiles({ pkg, lock, changelog, readme, badgeFiles }) 
   if (stale.length > 0) {
     problems.push(`assets/badges/ is out of date (${stale.join(', ')}): run \`npm run badges\`.`);
   }
-  const missing = badgeMarkdown(pkg).filter((line) => !readme.includes(line));
+  // Each badge on a line of its own: an image inside a link shows as raw Markdown in PPTB (#412)
+  const readmeLines = new Set(readme.split(/\r?\n/).map((l) => l.trim()));
+  const missing = badgeMarkdown(pkg).filter((line) => !readmeLines.has(line));
   if (missing.length > 0) {
-    problems.push(`README.md doesn't show these badges: ${missing.join(' ')}`);
+    problems.push(
+      `README.md doesn't show these badges, each on a line of its own: ${missing.join(' ')}`,
+    );
+  }
+  // A link whose text is an image or code: PPTB's README viewer shows it as raw Markdown (#412)
+  const formattedLinks = readme.match(/\[(!\[[^\]]*\]\([^)]*\)|`[^`\]]*`)\]\([^)]*\)/g) ?? [];
+  if (formattedLinks.length > 0) {
+    problems.push(
+      `README.md has links around an image or code, which PPTB's README viewer shows as raw Markdown: ${formattedLinks.join(' ')}`,
+    );
   }
   // Any img.shields.io URL (an inline or reference-style image, or an <img>), outside code;
   // a mention in the text without the URL is fine

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🐛 Fixed
+
+- **The README renders correctly on the Power Platform ToolBox details page**
+  ([#412]). The Version badge was a link around an image, which ToolBox's
+  README renderer shows as raw Markdown. It is now a plain image, and the
+  release check flags any badge that isn't on a line of its own and any link
+  around an image or code. Same fix as FetchXML Studio 1.5.1.
+
 ### 🔧 Internal
 
 - **Every tag is checked in PPTB first** ([#385]). Each PR was checked in PPTB
@@ -18,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FetchXML Studio.
 
 [#385]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/385
+[#412]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/412
 
 ## [1.6.0-beta.1] - 2026-11-07
 
