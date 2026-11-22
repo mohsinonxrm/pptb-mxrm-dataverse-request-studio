@@ -11,13 +11,19 @@ export function ModeCard({ type, urlPreview }: { type: RequestType; urlPreview: 
       <div className={s.modeCardType} style={{ color: groupColor }}>
         {type.group} · {type.altMethod ? `${type.method}/${type.altMethod}` : type.method}
       </div>
-      {/* What the request does, for people new to the Web API (#289). */}
-      <Tooltip content={type.description} relationship="description" positioning="below">
-        <div className={s.modeCardName}>{type.name}</div>
+      {/* What the request does, for people new to the Web API (#289). The
+          card isn't focusable, so a tooltip alone would be mouse-only: the
+          sentence is also in the card's text for screen readers (#422), and
+          the tooltip, shown on hover, isn't announced a second time. */}
+      <Tooltip content={type.description} relationship="inaccessible" positioning="below">
+        <div className={s.modeCardName}>
+          {type.name}
+          <span className={s.srOnly}>. {type.description}</span>
+        </div>
       </Tooltip>
-      {/* Use v9 Tooltip instead of the native title attribute so the chrome
-          matches every other hover surface in the app, and we get
-          keyboard-focus tooltips for free. */}
+      {/* A v9 Tooltip rather than the native title attribute, so the chrome
+          matches every other hover surface in the app. Hover only: the URL
+          is the card's own text. */}
       <Tooltip content={urlPreview} relationship="description" positioning="below">
         <div className={s.modeCardUrl}>{urlPreview}</div>
       </Tooltip>

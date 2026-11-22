@@ -42,8 +42,8 @@ export async function checkBulkSupport(table: string, op: BulkOperation): Promis
  * posts to the entity set when given entityName without entityId (#55).
  *
  * `headers` is the mode's composed header map (user rows + bypass), the same
- * one the Code tab shows. PPTB 1.2.7+ sends it as `additionalHeaders` after
- * the user approves it (#257); older hosts block bypass via the advisory.
+ * one the Code tab shows. PPTB sends it as `additionalHeaders` after the user
+ * approves it (#257).
  */
 export async function executeBulkWrite(
   s: BulkWriteState,

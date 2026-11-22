@@ -67,6 +67,7 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
+import { recordStatus, requiredStatus } from '../primitives/clauseStatus';
 import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
 import { invalidFunctionParamReason } from '../engine/executeBuilders';
 import { addRun, useRecentRuns } from '../state/runHistory';
@@ -329,7 +330,8 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
                 icon: Table20Regular,
                 iconFilled: Table20Filled,
                 label: 'Source record',
-                status: state.boundRecordId ? ('set' as const) : undefined,
+                // The one badge rule (#296, #417): the binding needs a record.
+                status: recordStatus(state.boundRecordId, true),
                 badgeAppearance: 'ghost' as const,
                 dirty: state.dirty.has('target'),
               },
@@ -349,9 +351,10 @@ export function ExecuteFunctionMode({ themeMode }: { themeMode: ThemeMode }) {
                 icon: DocumentSettings20Regular,
                 iconFilled: DocumentSettings20Filled,
                 label: 'Function parameters',
-                badge: missingRequired.length > 0 ? `${missingRequired.length} req unset` : null,
+                // Like its required children (#296, #417).
+                status: requiredStatus(missingRequired.length),
                 badgeAppearance: 'tint' as const,
-                badgeColor: missingRequired.length > 0 ? ('danger' as const) : ('subtle' as const),
+                badgeColor: 'subtle' as const,
                 dirty: state.dirty.has('params'),
                 // Sidebar surfaces ONLY REQUIRED params; optional live in the
                 // accordion in the main Parameters pane.

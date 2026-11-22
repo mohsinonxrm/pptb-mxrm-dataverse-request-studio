@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { badgeMarkdown, badges, badgeSvg, badgeUrl } from './badges.mjs';
+import { badgeMarkdown, badges, badgeSvg, badgeUrl, readmeUrlFor } from './badges.mjs';
 import {
   changelogSections,
   checkReleaseFiles,
@@ -7,7 +7,9 @@ import {
   releaseNotes,
 } from './release-checks.mjs';
 
-const pkg = {
+/** package.json as `npm run badges` leaves it: readmeUrl at the version's tag (#435) */
+const withReadme = (p) => ({ ...p, configurations: { readmeUrl: readmeUrlFor(p) } });
+const pkg = withReadme({
   name: '@scope/tool',
   displayName: 'Tool Studio',
   version: '1.5.0-beta.2',
@@ -16,7 +18,7 @@ const pkg = {
   features: { minAPI: '1.2.0' },
   dependencies: { react: '^18.3.1', '@fluentui/react-components': '^9.73.8' },
   devDependencies: { typescript: '~5.9.3', '@pptb/types': '^1.2.7' },
-};
+});
 /** The README and assets/badges/ files as `npm run badges` leaves them for a package.json */
 const readmeFor = (p) => `# Tool\n\n${badgeMarkdown(p).join('\n')}\n`;
 const badgeFilesFor = (p) => Object.fromEntries(badges(p).map((b) => [b.file, b.svg]));
@@ -106,7 +108,7 @@ describe('checkReleaseFiles', () => {
 
   it('passes a release candidate and a stable release', () => {
     for (const version of ['1.5.0-rc.1', '1.5.0']) {
-      const p = { ...pkg, version };
+      const p = withReadme({ ...pkg, version });
       expect(
         checkReleaseFiles({
           pkg: p,
@@ -129,6 +131,32 @@ describe('checkReleaseFiles', () => {
         ' ',
       ),
     ).toMatch(/out of date \(react\.svg\)/);
+  });
+
+  it('flags a badge wrapped in a link, and links around code (#412)', () => {
+    const [version, ...rest] = badgeMarkdown(pkg);
+    const linked = `# Tool\n\n[${version}](https://www.npmjs.com/package/@scope/tool)\n${rest.join('\n')}\n`;
+    expect(checkReleaseFiles({ ...files, readme: linked }).join(' ')).toMatch(
+      /each on a line of its own.*links around an image or code/,
+    );
+    const code = `${readme}See [\`@scope/tool\`](https://www.npmjs.com/package/@scope/tool).\n`;
+    expect(checkReleaseFiles({ ...files, readme: code }).join(' ')).toMatch(
+      /links around an image or code/,
+    );
+  });
+
+  it("flags a readmeUrl or badge lines that aren't at the version's tag (#435)", () => {
+    const onMain = (url) => url.replace('refs/tags/v1.5.0-beta.2', 'refs/heads/main');
+    const stale = {
+      ...pkg,
+      configurations: { readmeUrl: readmeUrlFor({ ...pkg, version: '1.5.0' }) },
+    };
+    expect(checkReleaseFiles({ ...files, pkg: stale }).join(' ')).toMatch(
+      /configurations\.readmeUrl isn't .*refs\/heads\/release\/1\.5\/README\.md/,
+    );
+    expect(checkReleaseFiles({ ...files, readme: onMain(readme) }).join(' ')).toMatch(
+      /doesn't show these badges/,
+    );
   });
 
   it('flags a README without the badges, or with img.shields.io', () => {
@@ -159,7 +187,7 @@ describe('checkReleaseFiles', () => {
 });
 
 describe('badges', () => {
-  it('generates every badge from package.json, linked from main on raw.githubusercontent.com', () => {
+  it('generates every badge from package.json, linked from the version tag on raw.githubusercontent.com', () => {
     expect(badges(pkg).map((b) => [b.file, b.alt])).toEqual([
       ['version.svg', 'Version'],
       ['pptb.svg', 'Power Platform ToolBox 1.2.0 or later'],
@@ -169,13 +197,22 @@ describe('badges', () => {
       ['fluent-ui.svg', 'Fluent UI v9'],
       ['license.svg', 'License AGPL-3.0-only'],
     ]);
+    // Badges and the README read from the version's tag, not main (#435)
     expect(badgeUrl(pkg, 'react.svg')).toBe(
-      'https://raw.githubusercontent.com/owner/tool/refs/heads/main/assets/badges/react.svg',
+      'https://raw.githubusercontent.com/owner/tool/refs/tags/v1.5.0-beta.2/assets/badges/react.svg',
     );
-    // The version badge links to npm and has no version in its alt text, so a release
-    // changes only the SVG
+    // readmeUrl must exist before the tag (pptb-validate fetches it): a beta reads its release
+    // branch, a stable release main (#435)
+    expect(readmeUrlFor(pkg)).toBe(
+      'https://raw.githubusercontent.com/owner/tool/refs/heads/release/1.5/README.md',
+    );
+    expect(readmeUrlFor({ ...pkg, version: '1.5.0' })).toBe(
+      'https://raw.githubusercontent.com/owner/tool/refs/heads/main/README.md',
+    );
+    // The version badge has no version in its alt text, so a release changes only the SVG; and
+    // it isn't a link, which ToolBox's README renderer would show as raw Markdown (#412)
     expect(badgeMarkdown(pkg)[0]).toBe(
-      '[![Version](https://raw.githubusercontent.com/owner/tool/refs/heads/main/assets/badges/version.svg)](https://www.npmjs.com/package/@scope/tool)',
+      '![Version](https://raw.githubusercontent.com/owner/tool/refs/tags/v1.5.0-beta.2/assets/badges/version.svg)',
     );
   });
 

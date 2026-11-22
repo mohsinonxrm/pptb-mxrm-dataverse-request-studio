@@ -14,6 +14,8 @@ import { isCredentialHeader, withoutCredentialHeaders } from './sensitiveHeaders
 import { encodeSpaces } from '../primitives/urlParts';
 import { CRLF, encodeBatch } from './batch/multipart';
 import type { BatchMethod } from './batch/batchModel';
+import { csharpString, csharpVerbatimEscape, psQuote } from './codegenStrings';
+import { genCsharpSdk, genPowershellXrm } from './sdkCodegen';
 
 export type CodeFormat =
   | 'fetch'
@@ -22,8 +24,10 @@ export type CodeFormat =
   | 'xhr'
   | 'powerautomate'
   | 'csharp'
+  | 'csharp-sdk'
   | 'python'
   | 'powershell'
+  | 'powershell-xrm'
   | 'curl'
   | 'json'
   | 'openapi';
@@ -35,8 +39,10 @@ export const FORMAT_LABELS: Record<CodeFormat, string> = {
   xhr: 'XMLHttpRequest',
   powerautomate: 'Power Automate',
   csharp: 'C#',
+  'csharp-sdk': 'C# SDK',
   python: 'Python',
   powershell: 'PowerShell',
+  'powershell-xrm': 'PowerShell (Xrm)',
   curl: 'cURL',
   json: 'JSON',
   openapi: 'OpenAPI',
@@ -51,8 +57,10 @@ export const FORMAT_LANG: Record<CodeFormat, string> = {
   // into the Dataverse "List rows" / "Get a row by ID" action — not JSON.
   powerautomate: 'plaintext',
   csharp: 'csharp',
+  'csharp-sdk': 'csharp',
   python: 'python',
   powershell: 'powershell',
+  'powershell-xrm': 'powershell',
   curl: 'shell',
   json: 'json',
   openapi: 'json',
@@ -174,10 +182,14 @@ export function generateCode(fmt: CodeFormat, i: CodegenInputs): string {
       return genPowerAutomate(i);
     case 'csharp':
       return genCsharp(i);
+    case 'csharp-sdk':
+      return genCsharpSdk(i);
     case 'python':
       return genPython(i);
     case 'powershell':
       return genPowershell(i);
+    case 'powershell-xrm':
+      return genPowershellXrm(i);
     case 'curl':
       return genCurl(i);
     case 'json':
@@ -2168,31 +2180,6 @@ Console.WriteLine(json);
 `;
 }
 
-/**
- * Escape text for a regular C# string literal ("…"): backslash first, then
- * the quote and control characters, so a header value like `C:\\x"y` can't
- * end the literal or change its meaning (#244).
- */
-function csharpString(s: string): string {
-  return (
-    s
-      .replace(/\\/g, '\\\\')
-      .replace(/"/g, '\\"')
-      .replace(/\r/g, '\\r')
-      .replace(/\n/g, '\\n')
-      .replace(/\t/g, '\\t')
-      // Other control characters, as \uXXXX like JSON.
-      // eslint-disable-next-line no-control-regex
-      .replace(/[\u0000-\u001f]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`)
-  );
-}
-
-/** Escape a JSON string for inclusion inside a C# verbatim string literal (@"…"). */
-function csharpVerbatimEscape(s: string): string {
-  // In an @"…" verbatim literal, the only character that needs escaping is `"` → `""`.
-  return s.replace(/"/g, '""');
-}
-
 function methodCsharp(m: string): string {
   switch (m.toUpperCase()) {
     case 'GET':
@@ -2416,10 +2403,6 @@ function formatPyValue(v: unknown, indent: string): string {
 /** POSIX shell single-quoted literal: `it's` → `'it'\''s'`. */
 function shQuote(v: string): string {
   return `'${v.replace(/'/g, "'\\''")}'`;
-}
-/** PowerShell verbatim (single-quoted) string: `it's` → `'it''s'`. */
-function psQuote(v: string): string {
-  return `'${v.replace(/'/g, "''")}'`;
 }
 
 // ────────────────────────────────────────────────────────────

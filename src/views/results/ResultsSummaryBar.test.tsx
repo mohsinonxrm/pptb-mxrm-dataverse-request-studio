@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FluentProvider, webLightTheme } from '@fluentui/react-components';
-import { formatBytes, ResultsSummaryBar, statusKindOf } from './ResultsSummaryBar';
+import { COUNT_LIMIT_TIP, formatBytes, ResultsSummaryBar, statusKindOf } from './ResultsSummaryBar';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -46,9 +46,10 @@ describe('ResultsSummaryBar', () => {
   });
 
   it('leaves out what a response doesn’t have', () => {
+    // An empty body (a 204) has no size to show (#422).
     const got = text(<ResultsSummaryBar code={204} ms={50} bytes={0} />);
-    inOrder(got, ['204 No Content', '50 ms', '0.0 KB']);
-    expect(got).not.toMatch(/row|total|more/);
+    inOrder(got, ['204 No Content', '50 ms']);
+    expect(got).not.toMatch(/row|total|more|KB|\bB\b/);
     expect(text(<ResultsSummaryBar code={200} rows={1} />)).toMatch(/1 row$/);
   });
 
@@ -60,5 +61,19 @@ describe('ResultsSummaryBar', () => {
       'danger',
     ]);
     expect(formatBytes(2.5 * 1024 * 1024)).toBe('2.5 MB');
+    // Below 1 KB, bytes: not "0.0 KB" (#422).
+    expect([formatBytes(51), formatBytes(1023), formatBytes(1024)]).toEqual([
+      '51 B',
+      '1023 B',
+      '1.0 KB',
+    ]);
+  });
+
+  it('says "5,000+" when Dataverse stopped counting (#414)', () => {
+    const got = text(<ResultsSummaryBar code={200} rows={5000} total={5000} totalCapped more />);
+    inOrder(got, [`total ${(5000).toLocaleString()}+`, 'more pages']);
+    // The Count only view's wording, read out after the number.
+    expect(got).toContain(COUNT_LIMIT_TIP);
+    expect(text(<ResultsSummaryBar code={200} rows={12} total={5000} />)).not.toContain('+');
   });
 });

@@ -80,6 +80,7 @@ import { getCellRenderer } from './DataGridCellRenderers';
 import type { ExportColumn, GridExportView } from './exportResults';
 import { widthsForTable, withColumnWidths, withoutTableWidths } from './columnWidths';
 import { hiddenForTable, visibleColumnKeys } from './hiddenColumns';
+import { formTableFor } from '../../host/openInDataverse';
 import { buildSearchIndex, filterRows, isFiltering, type ColumnFilters } from './gridFilter';
 
 // Row heights per density — Fluent's table row heights for each `size` (#16).
@@ -317,10 +318,15 @@ export function ResultsGrid({
     return () => obs.disconnect();
   }, [noRows]);
 
-  // ── Clear selection when results change ──
+  // ── A new run clears the selection; another page doesn't (#418) ──
+  // Merging a page appends rows and keeps the loaded ones (pagedResults), so
+  // the first row is still the same object; a new run brings new rows. Row
+  // ids are positional (`r0`, `r1`…), so a selection kept across runs would
+  // tick different records.
+  const firstRow = (body as { value?: unknown[] } | null)?.value?.[0];
   useEffect(() => {
     setSelectedItems(new Set());
-  }, [body]);
+  }, [firstRow]);
 
   // ── Column key list (root keys after annotation filtering + flatten) ──
   //
@@ -452,6 +458,7 @@ export function ResultsGrid({
     );
   }, [debouncedFilters, shownKeys]);
   const filtering = isFiltering(debouncedQuery, shownFilters);
+  const searchSkipsHidden = debouncedQuery.trim() !== '' && shownKeys.length < columnKeys.length;
   const rows = useMemo(
     () => filterRows(allRows, searchIndex, debouncedQuery, shownFilters),
     [allRows, searchIndex, debouncedQuery, shownFilters],
@@ -768,6 +775,19 @@ export function ResultsGrid({
     [rootTable?.primaryKey],
   );
 
+  // ── Only listed rows stay selected (#413) ──
+  // A search or column filter that hides a selected row drops it from the
+  // selection, so the footer count, Open in Dataverse and any later bulk
+  // action all mean the rows that are ticked on screen.
+  useEffect(() => {
+    setSelectedItems((prev) => {
+      if (prev.size === 0) return prev;
+      const listed = new Set<string | number>(rows.map(getRowId));
+      const kept = new Set([...prev].filter((id) => listed.has(id)));
+      return kept.size === prev.size ? prev : kept;
+    });
+  }, [rows, getRowId]);
+
   // ── Export view: the grid's columns + rows, so export matches the grid ──
   useEffect(() => {
     if (!onViewChange) return;
@@ -784,21 +804,25 @@ export function ResultsGrid({
         showsRaw: isTwin || valueMode === 'raw',
       };
     });
-    // The selected rows' primary IDs, for "Open in Dataverse" (#293).
+    // The selected listed rows' primary IDs, for "Open in Dataverse" (#293,
+    // #413), with the table whose form opens each one (#422).
     const pk = rootTable?.primaryKey;
-    // De-duplicated: a collection $expand fans one record out over several rows.
-    const selectedRecordIds =
-      pk && selectedItems.size > 0
-        ? [
-            ...new Set(
-              allRows
-                .filter((r) => selectedItems.has(getRowId(r)))
-                .map((r) => r[pk])
-                .filter((id): id is string => typeof id === 'string'),
-            ),
-          ]
-        : [];
-    const canOpenRecords = !!pk && allRows.some((r) => typeof r[pk] === 'string');
+    const intersect = rootTable?.isIntersect;
+    const selectedRecords: { id: string; table?: string }[] = [];
+    if (pk && selectedItems.size > 0) {
+      // De-duplicated: a collection $expand fans one record out over several rows.
+      const seen = new Set<string>();
+      for (const r of rows) {
+        const id = r[pk];
+        if (typeof id !== 'string' || seen.has(id) || !selectedItems.has(getRowId(r))) continue;
+        seen.add(id);
+        selectedRecords.push({ id, table: formTableFor(table, r, intersect) });
+      }
+    }
+    const selectedRecordIds = selectedRecords.map((r) => r.id);
+    // Rows without a primary ID ($apply, aggregates) or without a form don't offer it.
+    const canOpenRecords =
+      !!pk && allRows.some((r) => typeof r[pk] === 'string' && !!formTableFor(table, r, intersect));
     const shown = new Set(shownKeys);
     const choices = columnKeys.map((key) => {
       const info = columnDisplay.get(key);
@@ -808,7 +832,14 @@ export function ResultsGrid({
         shown: shown.has(key),
       };
     });
-    onViewChange({ columns: exportColumns, rows, choices, selectedRecordIds, canOpenRecords });
+    onViewChange({
+      columns: exportColumns,
+      rows,
+      choices,
+      selectedRecordIds,
+      selectedRecords,
+      canOpenRecords,
+    });
   }, [
     onViewChange,
     columns,
@@ -821,7 +852,9 @@ export function ResultsGrid({
     allRows,
     selectedItems,
     getRowId,
+    table,
     rootTable?.primaryKey,
+    rootTable?.isIntersect,
   ]);
 
   // ── Selection ──
@@ -1022,7 +1055,9 @@ export function ResultsGrid({
                     Filtered: {rows.length.toLocaleString()} of {allRows.length.toLocaleString()}{' '}
                     loaded {allRows.length === recordCount ? 'rows' : 'grid lines'}
                     {hasMore ? ' (more pages not loaded)' : ''}
-                  </span>{' '}
+                  </span>
+                  {/* Row search only reads the columns the grid shows (#292, #422). */}
+                  {searchSkipsHidden && <span> · hidden columns not searched</span>}{' '}
                   <Link onClick={clearFilters}>Clear filters</Link>
                 </span>
               )}

@@ -8,7 +8,8 @@
 //   • Retrieve all — keep fetching @odata.nextLink until exhausted
 //   • Copy URL     — copy the resolved request URL
 //   • Open in Dataverse — the selected row's form in the model-driven app (#293)
-//   • Copy TSV     — copy current rows as tab-separated (paste-friendly)
+//   • Copy TSV     — copy the listed rows and shown columns as
+//                    tab-separated text, like the CSV export (#415)
 //   • Copy JSON    — copy the OData envelope
 //   • Export       — save CSV (as shown / raw) or the JSON envelope to a
 //                    file via toolboxAPI.fileSystem.saveFile (#15)
@@ -58,11 +59,11 @@ import {
 } from '@fluentui/react-icons';
 import type { GridDensity } from '../../state/displaySettings';
 import { useState } from 'react';
-import { pageSizeIsSent, saveFileSafe } from '../../host/pptbBridge';
+import { saveFileSafe } from '../../host/pptbBridge';
 import {
   exportFileName,
   toCsv,
-  tsvCell,
+  toTsv,
   type ExportValueMode,
   type GridExportView,
 } from './exportResults';
@@ -103,7 +104,7 @@ export interface ResultsCommandBarProps {
   isLoadingMore: boolean;
   /** Current request URL (e.g. `/incidents?$select=…`) for "Copy URL". */
   requestUrl?: string;
-  /** Raw OData envelope — used for "Copy JSON" / "Copy TSV". */
+  /** Raw OData envelope — used for "Copy JSON" and the JSON export. */
   body: unknown;
   /** Re-execute the current query. */
   onRefresh: () => void;
@@ -119,7 +120,7 @@ export interface ResultsCommandBarProps {
   onDensityChange: (d: GridDensity) => void;
   /** Root table logical name — names the exported file. */
   table?: string;
-  /** The columns + rows the grid lists; CSV export writes exactly these. */
+  /** The columns + rows the grid lists; CSV export and Copy as TSV write exactly these. */
   exportView?: GridExportView | null;
   /** Per-column filter row under the grid header (#17). */
   showFilterRow: boolean;
@@ -147,21 +148,17 @@ export function ResultsCommandBar({
   const s = useStyles();
   const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState<{ intent: 'success' | 'error'; text: string } | null>(null);
-  // A ToolBox older than 1.2.7 can't send Prefer, so `odata.maxpagesize`
-  // doesn't apply on Execute there (#219). When the response has no nextLink
-  // on such a host, explain WHY pagination is unavailable rather than just
-  // greying out the button.
+  // When the response has no nextLink, explain WHY pagination is
+  // unavailable rather than just greying out the button.
   const retrieveAllTooltip = hasMore
     ? 'Keep fetching @odata.nextLink pages until everything is loaded'
-    : !pageSizeIsSent()
-      ? "No more pages to fetch. This ToolBox version can't send Prefer: odata.maxpagesize, " +
-        "so the response uses Dataverse's default 5,000-row page size. To test paging at " +
-        'smaller sizes, use ToolBox 1.2.7+ or export the request via the Code tab.'
-      : 'No more pages to fetch — the response did not include @odata.nextLink. ' +
-        'Set Prefer: odata.maxpagesize to enable server-side pagination.';
+    : 'No more pages to fetch — the response did not include @odata.nextLink. ' +
+      'Set Prefer: odata.maxpagesize to enable server-side pagination.';
 
-  const selectedIds = exportView?.selectedRecordIds ?? [];
-  const openUrl = selectedIds.length === 1 ? recordFormUrl(ENV.host, table, selectedIds[0]) : null;
+  // One selected record; an activity opens as its own type (#422).
+  const selected = exportView?.selectedRecords ?? [];
+  const openUrl =
+    selected.length === 1 ? recordFormUrl(ENV.host, selected[0].table, selected[0].id) : null;
 
   const copyUrl = () => {
     if (requestUrl) void copyText(requestUrl, 'the request URL');
@@ -171,32 +168,15 @@ export function ResultsCommandBar({
     void copyText(JSON.stringify(body, null, 2), 'the response JSON', { shown: false });
   };
 
+  // The grid's columns and listed rows, like "CSV — values as shown" (#415).
+  // Same formula neutralising as the CSV export (#239): pasted into a
+  // spreadsheet, the text is parsed like a CSV cell.
   const copyTsv = () => {
-    const rows = (body as { value?: Record<string, unknown>[] } | null)?.value ?? [];
-    if (rows.length === 0) return;
-    const keys = Array.from(new Set(rows.flatMap((r) => Object.keys(r)))).filter(
-      (k) => !k.includes('@'),
-    );
-    // Same formula neutralising as the CSV export (#239): pasted into a
-    // spreadsheet, the text is parsed like a CSV cell.
-    const header = keys.map((k) => tsvCell(k)).join('\t');
-    const lines = rows.map((r) =>
-      keys
-        .map((k) => {
-          const f =
-            (r as Record<string, unknown>)[`${k}@OData.Community.Display.V1.FormattedValue`] ??
-            (r as Record<string, unknown>)[`_${k}_value@OData.Community.Display.V1.FormattedValue`];
-          const v = f ?? r[k];
-          if (v == null) return '';
-          return tsvCell(String(v), r[k]);
-        })
-        .join('\t'),
-    );
-    void copyText(
-      [header, ...lines].join('\n'),
-      `${rows.length} ${rows.length === 1 ? 'row' : 'rows'}`,
-      { shown: false },
-    );
+    if (!exportView || exportView.rows.length === 0) return;
+    const n = exportView.rows.length;
+    void copyText(toTsv(exportView.rows, exportView.columns), `${n} ${n === 1 ? 'row' : 'rows'}`, {
+      shown: false,
+    });
   };
 
   const save = async (fileName: string, content: string, filter: { name: string; ext: string }) => {
@@ -320,7 +300,11 @@ export function ResultsCommandBar({
           </MenuTrigger>
           <MenuPopover>
             <MenuList>
-              <MenuItem icon={<DocumentBulletList20Regular />} onClick={copyTsv}>
+              <MenuItem
+                icon={<DocumentBulletList20Regular />}
+                disabled={!exportView || exportView.rows.length === 0}
+                onClick={copyTsv}
+              >
                 Copy as TSV (Excel-friendly)
               </MenuItem>
               <MenuItem icon={<Copy20Regular />} onClick={copyJson}>

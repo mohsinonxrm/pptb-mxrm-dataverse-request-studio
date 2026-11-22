@@ -9,13 +9,13 @@ file / image / attachment operations.
 Built for [Power Platform ToolBox](https://www.powerplatformtoolbox.com/) with
 React 18, Fluent UI v9, TypeScript, and live Dataverse metadata integration.
 
-[![Version](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/version.svg)](https://www.npmjs.com/package/@mohsinonxrm/pptb-dataverse-request-studio)
-![Power Platform ToolBox 1.2.0 or later](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/pptb.svg)
-![@pptb/types 1.2.7](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/pptb-types.svg)
-![React 18](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/react.svg)
-![TypeScript 5.9](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/typescript.svg)
-![Fluent UI v9](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/fluent-ui.svg)
-![License AGPL-3.0-only](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/license.svg)
+![Version](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/tags/v1.7.0-beta.2/assets/badges/version.svg)
+![Power Platform ToolBox 1.2.8 or later](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/tags/v1.7.0-beta.2/assets/badges/pptb.svg)
+![@pptb/types 1.2.8](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/tags/v1.7.0-beta.2/assets/badges/pptb-types.svg)
+![React 18](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/tags/v1.7.0-beta.2/assets/badges/react.svg)
+![TypeScript 5.9](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/tags/v1.7.0-beta.2/assets/badges/typescript.svg)
+![Fluent UI v9](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/tags/v1.7.0-beta.2/assets/badges/fluent-ui.svg)
+![License AGPL-3.0-only](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/tags/v1.7.0-beta.2/assets/badges/license.svg)
 
 ---
 
@@ -23,9 +23,11 @@ React 18, Fluent UI v9, TypeScript, and live Dataverse metadata integration.
 
 DRS ships with **23 request modes** in 7 groups. Every mode is
 metadata-driven and generates the correct OData / Web API shape. The
-single-request modes emit ready-to-copy code in eleven formats: `fetch`,
+single-request modes emit ready-to-copy code in thirteen formats: `fetch`,
 `Xrm.WebApi`, `Xrm.WebApi.executeMultiple`, `XMLHttpRequest`, Power Automate,
-C#, Python (`requests`), PowerShell, cURL, JSON, and an OpenAPI 3 document.
+C# (`HttpClient`), C# SDK (`ServiceClient`), Python (`requests`), PowerShell
+(`Invoke-RestMethod`), PowerShell (Microsoft.Xrm.Data.PowerShell), cURL, JSON,
+and an OpenAPI 3 document.
 `$batch` has its own HTTP / fetch / Python / PPTB outputs, and ExecuteMultiple
 has C# / HTTP / Python / PPTB.
 
@@ -115,11 +117,10 @@ has C# / HTTP / Python / PPTB.
   continue-on-error. Add the last request of a read, write, relate or execute
   mode; per-part results with
   status and body. A batch that mixes change sets and independent requests
-  is sent as consecutive ToolBox calls. Needs PPTB 1.2.7+.
+  is sent as consecutive ToolBox calls.
 - **ExecuteMultiple** — the ExecuteMultiple pattern (independent requests,
   continue-on-error, return responses) on the `$batch` engine, with SDK
-  `ExecuteMultipleRequest` (C#), raw `$batch` and PPTB code. Needs PPTB
-  1.2.7+.
+  `ExecuteMultipleRequest` (C#), raw `$batch` and PPTB code.
 
 ### 💾 Binary group
 
@@ -150,7 +151,7 @@ has C# / HTTP / Python / PPTB.
   / function CSDL all fetched lazily from the host's `dataverseAPI`, cached per
   org with in-flight promise dedup. Switching the PPTB connection resets the
   prepared request and reloads metadata for the new environment.
-- **Request headers through PPTB 1.2.7+** — Create / Update / Upsert /
+- **Request headers through PPTB** — Create / Update / Upsert /
   Delete / Merge / Bulk Write / Execute Action / Execute Workflow headers
   (preconditions, `MSCRM.*` bypass, duplicate detection, impersonation) are
   sent as additional headers after you approve them once in ToolBox. The
@@ -158,10 +159,8 @@ has C# / HTTP / Python / PPTB.
   allow-list: impersonation (`MSCRMCallerID`, `CallerObjectId`) everywhere,
   plus `If-None-Match`, `Consistency` and the page size on reads, and the
   bypass headers on Associate / Disassociate; the Headers pane marks the
-  rest as Code tab only. On older hosts, requests that depend on a
-  precondition, bypass or impersonation header are blocked with an
-  explanation. `Authorization` / `Cookie` headers are never sent, saved or
-  exported.
+  rest as Code tab only. `Authorization` / `Cookie` headers are never sent,
+  saved or exported.
 - **Import a cURL command** — More actions → **Import cURL command…** opens a
   pasted `curl` command (a browser's Copy as cURL, or DRS's own cURL code) in
   the mode that sends it: Retrieve Multiple / Single, Create, Update, Upsert,
@@ -178,9 +177,20 @@ has C# / HTTP / Python / PPTB.
 - **Code generators** — Every single-request mode emits the same request as `fetch`,
   `Xrm.WebApi` (CRUD helpers or `Xrm.WebApi.online.execute`),
   `Xrm.WebApi.online.executeMultiple`, `XMLHttpRequest`, C# `HttpClient`,
-  PowerShell `Invoke-RestMethod`, cURL, a JSON description and an OpenAPI 3
-  document, plus a field-by-field Power Automate (Dataverse connector) sheet.
-  Multi-request pipelines render as full ordered sequences.
+  Python `requests`, PowerShell `Invoke-RestMethod`, cURL, a JSON description
+  and an OpenAPI 3 document, plus a field-by-field Power Automate (Dataverse
+  connector) sheet. Multi-request pipelines render as full ordered sequences.
+- **SDK code** — **C# SDK** writes the request as `ServiceClient` calls:
+  `QueryExpression` (conditions, orders, `TopCount`, paging and the total
+  count), `Entity` with `Create` / `Update` / `Upsert` / `Delete`,
+  `Associate` / `Disassociate` and `OrganizationRequest`. **PowerShell (Xrm)**
+  uses the Microsoft.Xrm.Data.PowerShell cmdlets, with FetchXML for queries.
+  Values are typed from the table's metadata (`EntityReference`,
+  `OptionSetValue`, `Money`, …), the bypass headers become optional
+  parameters and an ETag a `RowVersion`. When a request has no faithful SDK
+  form (`$expand`, lambdas, `$apply`, deep insert, file bytes), the snippet
+  says why instead of guessing, and the C# one sends the Web API request
+  through `ServiceClient.ExecuteWebRequest`.
 - **Saved-request library** — per-connection, versioned, up to 200 requests
   across all modes, with auto-suggested names, rename / delete / overwrite and
   dirty-state detection. Export / import as JSON, export as a Postman /
@@ -233,13 +243,10 @@ has C# / HTTP / Python / PPTB.
 
 ### Prerequisites
 
-- [Power Platform ToolBox](https://www.powerplatformtoolbox.com/) **1.2.0 or
-  later** (the tool declares `minAPI: 1.2.0`). **1.2.7 or later** is
-  recommended: it sends request headers (impersonation, preconditions,
-  bypass) and the page size, and is required for
-  the `$batch` and ExecuteMultiple modes. DRS detects what the host can do
-  at runtime, so `minAPI` stays at 1.2.0 rather than locking out older
-  hosts (#273).
+- [Power Platform ToolBox](https://www.powerplatformtoolbox.com/) **1.2.8 or
+  later** (the tool declares `minAPI: 1.2.8`, #408). It sends request headers
+  (impersonation, preconditions, bypass) and the page size, and runs the
+  `$batch` and ExecuteMultiple modes.
 - A connection to a Dataverse environment
 - For local development: **Node.js 22.22.2+, 24.15+ or 26+** and **npm** (see
   `engines` in `package.json`)
@@ -249,7 +256,7 @@ has C# / HTTP / Python / PPTB.
 Dataverse Request Studio is available as a tool in Power Platform ToolBox.
 Install it from the tool gallery or load it as a custom tool. Stable releases
 are published to npm under the `latest` tag. Prereleases of the next version
-are published under the `beta` tag (for example `1.6.0-beta.1`) and use the
+are published under the `beta` tag (for example `1.7.0-beta.1`) and use the
 gold Insider icon.
 
 ### Choose the entity scope
@@ -390,7 +397,7 @@ commit style, code style, and PR guidance.
 | **Monaco Editor** | 0.54 | JSON / code editor for body authoring and Code tab |
 | **@fluentui-contrib/react-data-grid-react-window** | 1.4 | Virtualized results grid |
 | **@dnd-kit** | 6.3 | Drag-reordering for filter / orderby / select clauses |
-| **@pptb/types** | 1.2.7 | Power Platform ToolBox host API types |
+| **@pptb/types** | 1.2.8 | Power Platform ToolBox host API types |
 | **Vitest** | 5 | Unit tests (request engine, code generators, storage) |
 
 ---
@@ -434,6 +441,8 @@ src/
     binaryBuilders.ts        — file / image / attachment pipelines
     codeGenerators.ts        — fetch, Xrm.WebApi (+ executeMultiple), XHR,
                                Power Automate, C#, Python, PowerShell, cURL, JSON
+    sdkCodegen.ts            — C# SDK (ServiceClient) and PowerShell
+                               (Microsoft.Xrm.Data.PowerShell)
     openApiGenerator.ts      — OpenAPI 3 document for the current request
     collectionFormats.ts, savedToCollection.ts
                              — Postman / Insomnia / Bruno collection export
@@ -498,8 +507,7 @@ src/
 
 ## 📋 Web API coverage
 
-✅ = compose + Execute in PPTB · ✅ 1.2.7+ = Execute needs PPTB 1.2.7 or
-later · 📝 = compose + Code tab only (not available through the PPTB
+✅ = compose + Execute in PPTB · 📝 = compose + Code tab only (not available through the PPTB
 Dataverse API)
 
 | Operation | Status |
@@ -507,7 +515,7 @@ Dataverse API)
 | Retrieve Multiple (full OData) | ✅ |
 | Retrieve Single (by GUID) | ✅ |
 | `@odata.nextLink` paging, Retrieve all | ✅ |
-| `Prefer: odata.maxpagesize` (page size) | ✅ 1.2.7+ (older ToolBox: Execute keeps `$top` instead) |
+| `Prefer: odata.maxpagesize` (page size) | ✅ |
 | Predefined / user queries (incl. over related records) | ✅ |
 | `$apply` (groupby / aggregate) | ✅ |
 | Lambda filter (`any` / `all`) | ✅ |
@@ -515,9 +523,9 @@ Dataverse API)
 | Polymorphic lookups (Customer, Owner, regardingobjectid) | ✅ |
 | Create / Update / Upsert / Delete | ✅ |
 | `Prefer: return=representation` | ✅ (ToolBox always sends it on writes) |
-| Optimistic concurrency (`If-Match` / `If-None-Match`) | ✅ 1.2.7+ |
-| `MSCRM.*` bypass family (custom plug-ins, flows, async) | ✅ 1.2.7+ |
-| Impersonation (`MSCRMCallerID` / `CallerObjectId`) on every mode | ✅ 1.2.7+ |
+| Optimistic concurrency (`If-Match` / `If-None-Match`) | ✅ |
+| `MSCRM.*` bypass family (custom plug-ins, flows, async) | ✅ |
+| Impersonation (`MSCRMCallerID` / `CallerObjectId`) on every mode | ✅ |
 | Single-property PUT / DELETE | 📝 |
 | Alternate-key upsert | 📝 |
 | Associate / Disassociate (collection + single-valued) | ✅ |
@@ -527,8 +535,8 @@ Dataverse API)
 | Execute Workflow | ✅ |
 | `CreateMultiple` / `UpdateMultiple` / `UpsertMultiple` / `DeleteMultiple` | ✅ |
 | `BulkDelete` async job | ✅ |
-| `$batch` (change sets + independent requests) | ✅ 1.2.7+ |
-| `ExecuteMultiple` pattern | ✅ 1.2.7+ |
+| `$batch` (change sets + independent requests) | ✅ |
+| `ExecuteMultiple` pattern | ✅ |
 | File column (upload / download / delete) | 📝 |
 | Image column (thumbnail / full-size) | 📝 |
 | Attachment / Note (inline + message-based) | 📝 |
@@ -554,8 +562,6 @@ Ideas under consideration include:
 - A metadata browser mode
 - Comparing responses across runs or environments
 - Importing Postman / Insomnia collections
-- More code-generation targets (C# ServiceClient / IOrganizationService, the
-  PowerShell Dataverse module)
 
 ---
 

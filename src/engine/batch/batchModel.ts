@@ -8,7 +8,7 @@
 //
 // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/execute-batch-operations-using-web-api
 //
-// How it reaches Dataverse: PPTB 1.2.7 exposes `dataverseAPI.executeBatch`
+// How it reaches Dataverse: PPTB exposes `dataverseAPI.executeBatch`
 // (one $batch of independent requests) and `executeTransaction` (one $batch
 // holding a single change set). It has no call for a mixed envelope, so
 // `planDispatch` splits the batch into consecutive host calls — each change

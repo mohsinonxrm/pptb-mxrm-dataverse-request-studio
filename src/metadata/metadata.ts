@@ -529,6 +529,8 @@ export interface TableMeta {
   alternateKeys?: AlternateKeyDef[];
   /** True if this table is one of the Merge-supported types (account / contact / lead / incident). */
   supportsMerge?: boolean;
+  /** An N:N intersect table, which has no form to open (#422). */
+  isIntersect?: boolean;
 }
 
 // ════════════════════════════════════════════════════════════════════════

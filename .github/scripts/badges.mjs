@@ -55,9 +55,33 @@ export function repositoryOf(pkg) {
   return match[1];
 }
 
-/** Where the README links a badge: the file on main, as raw.githubusercontent.com serves it */
+/**
+ * The git ref a version's README reads from: its release tag (#435). npm keeps each version's
+ * README, and PPTB's details page reads `readmeUrl`, so both show that version's badges and README,
+ * not main's (a beta used to show the stable release's version and minimum ToolBox).
+ */
+export const versionRef = (pkg) => `refs/tags/v${pkg.version}`;
+
+/** Where the README links a badge: the file at the version's tag, as raw.githubusercontent.com serves it */
 export const badgeUrl = (pkg, file) =>
-  `https://raw.githubusercontent.com/${repositoryOf(pkg)}/refs/heads/main/assets/badges/${file}`;
+  `https://raw.githubusercontent.com/${repositoryOf(pkg)}/${versionRef(pkg)}/assets/badges/${file}`;
+
+/**
+ * package.json `configurations.readmeUrl`, the README PPTB's details page shows (#435). It must
+ * already exist when the release is built, because `pptb-validate` fetches it, and the version's
+ * tag doesn't exist yet then. So a prerelease reads its release branch (`release/X.Y`, which holds
+ * the beta's README while it's tested), and a stable release reads `main`, which holds exactly that
+ * release's README.
+ */
+export const readmeRef = (pkg) => {
+  const [major, minor] = String(pkg.version).split('.');
+  return String(pkg.version).includes('-')
+    ? `refs/heads/release/${major}.${minor}`
+    : 'refs/heads/main';
+};
+
+export const readmeUrlFor = (pkg) =>
+  `https://raw.githubusercontent.com/${repositoryOf(pkg)}/${readmeRef(pkg)}/README.md`;
 
 /**
  * Every README badge, from package.json: the file name, its alt text and the SVG. The order is
@@ -76,7 +100,6 @@ export function badges(pkg) {
     {
       file: 'version.svg',
       alt: 'Version',
-      link: `https://www.npmjs.com/package/${pkg.name}`,
       svg: badgeSvg('version', version, version.includes('-') ? '#dfb317' : '#007ec6'),
     },
   ];
@@ -126,12 +149,10 @@ export function badges(pkg) {
 }
 
 /**
- * The README's badge lines, one image per line. The version badge's alt text has no version and
- * it links to npm, so a release changes only the SVG (`npm run badges`), not the README. The
- * other badges' alt text names their value, so the README changes when one of those does.
+ * The README's badge lines, one image per line. The version badge's alt text has no version, so
+ * a release changes only the SVG (`npm run badges`), not the README. The other badges' alt text
+ * names their value, so the README changes when one of those does. No badge is a link: Power
+ * Platform ToolBox's README renderer shows an image inside a link as raw Markdown (#412).
  */
 export const badgeMarkdown = (pkg) =>
-  badges(pkg).map((b) => {
-    const image = `![${b.alt}](${badgeUrl(pkg, b.file)})`;
-    return b.link ? `[${image}](${b.link})` : image;
-  });
+  badges(pkg).map((b) => `![${b.alt}](${badgeUrl(pkg, b.file)})`);

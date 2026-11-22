@@ -96,3 +96,68 @@ describe('blocked Execute (#295)', () => {
     expect(send().getAttribute('aria-disabled')).toBeNull();
   });
 });
+
+describe('keyboard path into the drawer from a blocked Execute (#421)', () => {
+  const pointed = (id: string): Advisory => ({ ...blocker(id), focusNode: `node-${id}` });
+  function mountWithOpen(advisories: Advisory[]) {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    act(() =>
+      root!.render(
+        <FluentProvider theme={webLightTheme}>
+          <UrlBar
+            method="POST"
+            url="/api/data/v9.2/accounts"
+            executeVerb="Send"
+            onExecute={vi.fn()}
+            loading={false}
+            advisories={advisories}
+            onAdvisoryFocus={vi.fn()}
+            disabledReason={advisories[0].title}
+          />
+        </FluentProvider>,
+      ),
+    );
+  }
+  const openButtons = () => [
+    ...(surface()?.querySelectorAll<HTMLButtonElement>(
+      'button[aria-label="Open the affected pane"]',
+    ) ?? []),
+  ];
+  const key = (target: Element, k: string) =>
+    act(() => {
+      target.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+    });
+
+  it('Enter on Execute moves focus to the first Open; Escape brings it back', () => {
+    mountWithOpen([pointed('a'), pointed('b')]);
+    const b = send();
+    act(() => b.focus());
+    key(b, 'Enter');
+    expect(openButtons()).toHaveLength(2);
+    expect(document.activeElement).toBe(openButtons()[0]);
+
+    key(document.activeElement!, 'Escape');
+    expect(surface()).toBeNull();
+    expect(document.activeElement).toBe(send());
+  });
+
+  it('a click on Execute moves focus too; without an Open, to the drawer itself', () => {
+    mountWithOpen([blocker('a')]);
+    act(() => send().click());
+    expect(surface()).not.toBeNull();
+    expect(surface()!.contains(document.activeElement)).toBe(true);
+  });
+
+  it('opening from the chip leaves focus where it is', () => {
+    mountWithOpen([pointed('a')]);
+    const chip = [...document.body.querySelectorAll('button')].find((x) =>
+      x.getAttribute('aria-label')?.startsWith('Advisories'),
+    )!;
+    act(() => chip.focus());
+    act(() => chip.click());
+    expect(surface()).not.toBeNull();
+    expect(document.activeElement).toBe(chip);
+  });
+});

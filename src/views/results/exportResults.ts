@@ -33,8 +33,14 @@ export interface GridExportView {
   rows: Record<string, unknown>[];
   /** Every column the response has, for the Columns menu (#292). */
   choices?: ColumnChoice[];
-  /** Primary IDs of the selected rows that have one (#293). */
+  /** Primary IDs of the selected listed rows that have one (#293, #413). */
   selectedRecordIds?: string[];
+  /**
+   * The selected records with the table whose form opens each one (an
+   * activity row opens as its own activity type), in the same order as
+   * `selectedRecordIds`. `table` is absent when the record has no form.
+   */
+  selectedRecords?: { id: string; table?: string }[];
   /** The rows carry the table's primary ID, so a row can be opened (#293). */
   canOpenRecords?: boolean;
 }
@@ -135,6 +141,21 @@ export function toCsv(
     );
   }
   return '﻿' + lines.join('\r\n') + '\r\n';
+}
+
+/**
+ * "Copy as TSV" text for the given rows and columns: the same columns,
+ * headers and values as the grid (and the "values as shown" CSV), one line
+ * per row, each cell through `tsvCell` (#415).
+ */
+export function toTsv(rows: Record<string, unknown>[], columns: ExportColumn[]): string {
+  const lines = [columns.map((c) => tsvCell(c.header)).join('\t')];
+  for (const r of rows) {
+    lines.push(
+      columns.map((c) => tsvCell(exportCellText(r, c, 'shown'), r[c.sourceCol])).join('\t'),
+    );
+  }
+  return lines.join('\n');
 }
 
 /** Default file name: `<table>-<yyyyMMdd-HHmmss>.<ext>` in local time. */

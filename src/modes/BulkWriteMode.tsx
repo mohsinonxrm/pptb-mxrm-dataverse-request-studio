@@ -67,7 +67,6 @@ import { FieldSetEditor, seedRequiredFieldValues } from '../editors/FieldSetEdit
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
-import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
 import { CodeView } from '../views/CodeView';
 import { ResultsView } from '../views/ResultsView';
@@ -216,10 +215,7 @@ export function BulkWriteMode({ themeMode }: { themeMode: ThemeMode }) {
   // ── Headers / advisories ──
   const headers = useMemo(() => composeHeaderItems(state), [state]);
   const bypassAdvisories = useMemo(
-    () => [
-      ...detectBypassAdvisories(state.bypass, 'bypass'),
-      ...detectUnsentHeaderAdvisories({ op: 'create', bypass: state.bypass }),
-    ],
+    () => detectBypassAdvisories(state.bypass, 'bypass'),
     [state.bypass],
   );
   // Execute blockers, as advisories with a way to the fix (#294).
