@@ -57,6 +57,7 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
+import { recordStatus, requiredStatus } from '../primitives/clauseStatus';
 import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
 import { addRun, useRecentRuns } from '../state/runHistory';
 import { useImportedRequest } from '../state/modeHandoff';
@@ -438,7 +439,8 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
                 icon: Table20Regular,
                 iconFilled: Table20Filled,
                 label: 'Source record',
-                status: state.boundRecordId ? ('set' as const) : undefined,
+                // The one badge rule (#296, #417): the binding needs a record.
+                status: recordStatus(state.boundRecordId, true),
                 badgeAppearance: 'ghost' as const,
                 dirty: state.dirty.has('target'),
               },
@@ -457,12 +459,11 @@ export function ExecuteActionMode({ themeMode, category }: ExecuteActionModeProp
           icon: Settings20Regular,
           iconFilled: Settings20Filled,
           label: 'Parameters',
-          badge:
-            missingRequired.length > 0
-              ? `${missingRequired.length} req unset`
-              : setParamCount || null,
+          // Like its required children (#296, #417); otherwise the count set.
+          status: requiredStatus(missingRequired.length),
+          badge: setParamCount || null,
           badgeAppearance: 'tint' as const,
-          badgeColor: missingRequired.length > 0 ? ('danger' as const) : ('success' as const),
+          badgeColor: 'success' as const,
           dirty: state.dirty.has('params'),
           // Sidebar surfaces ONLY REQUIRED params as sub-items so the user's
           // attention goes to what's blocking the request. Optional params

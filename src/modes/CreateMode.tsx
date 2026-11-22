@@ -42,7 +42,6 @@ import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/Pref
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
-import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, firstBlocker } from '../primitives/advisories';
 import { Warning20Filled } from '@fluentui/react-icons';
 import { CodeView } from '../views/CodeView';
@@ -73,6 +72,7 @@ import { addRun, useRecentRuns } from '../state/runHistory';
 import { useImportedRequest } from '../state/modeHandoff';
 import { importCreate } from '../engine/curlImport/applyImport';
 import { composeHeaderItems } from '../engine/requestHeaders';
+import { requiredStatus } from '../primitives/clauseStatus';
 
 // ──────────────────────────────────────────────────────────────
 // Initial state
@@ -231,10 +231,7 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
 
   // ── Advisories — bypass family ──
   const bypassAdvisories = useMemo(
-    () => [
-      ...detectBypassAdvisories(state.bypass, 'bypass'),
-      ...detectUnsentHeaderAdvisories({ op: 'create', bypass: state.bypass }),
-    ],
+    () => detectBypassAdvisories(state.bypass, 'bypass'),
     [state.bypass],
   );
   const advisories = [...blockers, ...bypassAdvisories];
@@ -346,12 +343,11 @@ export function CreateMode({ themeMode }: { themeMode: ThemeMode }) {
           icon: FormNew20Regular,
           iconFilled: FormNew20Filled,
           label: 'Field set',
-          badge:
-            missingRequired.length > 0
-              ? `${missingRequired.length} req unset`
-              : `${populatedCount} populated`,
+          // The one badge rule (#296, #417): required while a required field is unset.
+          status: requiredStatus(missingRequired.length),
+          badge: `${populatedCount} populated`,
           badgeAppearance: 'tint' as const,
-          badgeColor: missingRequired.length > 0 ? ('danger' as const) : ('success' as const),
+          badgeColor: 'success' as const,
           dirty: state.dirty.has('fieldset'),
         },
       ],

@@ -76,7 +76,6 @@ export function badges(pkg) {
     {
       file: 'version.svg',
       alt: 'Version',
-      link: `https://www.npmjs.com/package/${pkg.name}`,
       svg: badgeSvg('version', version, version.includes('-') ? '#dfb317' : '#007ec6'),
     },
   ];
@@ -126,12 +125,10 @@ export function badges(pkg) {
 }
 
 /**
- * The README's badge lines, one image per line. The version badge's alt text has no version and
- * it links to npm, so a release changes only the SVG (`npm run badges`), not the README. The
- * other badges' alt text names their value, so the README changes when one of those does.
+ * The README's badge lines, one image per line. The version badge's alt text has no version, so
+ * a release changes only the SVG (`npm run badges`), not the README. The other badges' alt text
+ * names their value, so the README changes when one of those does. No badge is a link: Power
+ * Platform ToolBox's README renderer shows an image inside a link as raw Markdown (#412).
  */
 export const badgeMarkdown = (pkg) =>
-  badges(pkg).map((b) => {
-    const image = `![${b.alt}](${badgeUrl(pkg, b.file)})`;
-    return b.link ? `[${image}](${b.link})` : image;
-  });
+  badges(pkg).map((b) => `![${b.alt}](${badgeUrl(pkg, b.file)})`);

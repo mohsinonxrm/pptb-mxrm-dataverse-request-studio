@@ -14,7 +14,6 @@ import { useStudioStyles } from '../primitives/styles';
 import { PaneHead } from './PaneHead';
 import type { RequestGroup } from '../registry/requestTypes';
 import { useHostSession } from '../host/HostContext';
-import { hostSupportsAdditionalHeaders } from '../host/pptbBridge';
 import { isCredentialHeader } from '../engine/sensitiveHeaders';
 import { SENT_HEADERS, isHostOwnedHeader, type HeaderPolicy } from '../engine/requestHeaderPolicy';
 
@@ -122,7 +121,7 @@ export function HeadersEditor({
   items: HeaderItem[];
   setItems: (items: HeaderItem[]) => void;
   group?: RequestGroup;
-  /** Execute sends these headers on PPTB 1.2.7+. Defaults to the write group;
+  /** Execute sends these headers through PPTB. Defaults to the write group;
    *  Bulk Write (#257), Execute Action and Execute Workflow (#266) send them too. */
   sendsHeaders?: boolean;
   /** Execute sends only this policy's allow-list (reads, relate, Execute Function; #109). */
@@ -136,7 +135,7 @@ export function HeadersEditor({
   const add = () => setItems([...items, { id: newHid(), name: '', value: '', enabled: true }]);
 
   const activeCount = items.filter((it) => it.enabled && it.name && it.value).length;
-  const canSend = host.embedded && hostSupportsAdditionalHeaders();
+  const canSend = host.embedded;
   const sent = policy ? SENT_HEADERS[policy] : [];
   /** An enabled row Execute doesn't send under the allow-list (Code tab only). */
   const codeTabOnly = (it: HeaderItem) =>
@@ -157,7 +156,7 @@ export function HeadersEditor({
         group={group}
       />
 
-      {/* PPTB 1.2.7+ sends the write group's headers as `additionalHeaders`
+      {/* PPTB sends the write group's headers as `additionalHeaders`
           (minus the ones its Dataverse client builds itself), and so do the
           modes that pass `sendsHeaders` (Bulk Write, Execute Action and
           Execute Workflow, #266). Every other mode still runs with the host's

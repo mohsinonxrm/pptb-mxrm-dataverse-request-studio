@@ -6,14 +6,12 @@ import type { AssociateState, DisassociateState } from '../state/relateState';
 
 const host = vi.hoisted(() => ({
   embedded: true,
-  additionalHeaders: true,
   retrieve: vi.fn(),
   update: vi.fn(),
 }));
 vi.mock('../host/pptbBridge', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../host/pptbBridge')>()),
   isEmbedded: () => host.embedded,
-  hostSupportsAdditionalHeaders: () => host.additionalHeaders,
   dvHost: { retrieve: host.retrieve, update: host.update },
 }));
 vi.mock('../host/metadataProvider', () => ({
@@ -70,7 +68,6 @@ const missing = () => new Error("0x80040217: Entity 'contact' With Id = x Does N
 
 beforeEach(() => {
   host.embedded = true;
-  host.additionalHeaders = true;
   host.retrieve.mockReset().mockResolvedValue({ contactid: SRC });
   host.update.mockReset().mockResolvedValue(undefined);
 });
@@ -79,28 +76,12 @@ describe.each([
   ['Associate', () => executeAssociate(assoc)],
   ['Disassociate', () => executeDisassociate(disassoc)],
 ])('single-valued %s', (_name, run) => {
-  it('sends If-Match: * on a host that passes headers, with no extra read', async () => {
+  it('sends If-Match: *, with no extra read', async () => {
     const r = await run();
     expect(host.retrieve).not.toHaveBeenCalled();
     expect(host.update).toHaveBeenCalledWith('contact', SRC, expect.any(Object), {
       'If-Match': '*',
     });
-    expect(r.status).toBe(204);
-  });
-
-  it("checks the source exists first on a host that can't, and doesn't PATCH when it's missing", async () => {
-    host.additionalHeaders = false;
-    host.retrieve.mockRejectedValue(missing());
-    const r = await run();
-    expect(host.retrieve).toHaveBeenCalledWith('contact', SRC, ['contactid']);
-    expect(host.update).not.toHaveBeenCalled();
-    expect(r.status).toBe(404);
-  });
-
-  it('updates an existing source on a host that can’t send headers', async () => {
-    host.additionalHeaders = false;
-    const r = await run();
-    expect(host.update).toHaveBeenCalledWith('contact', SRC, expect.any(Object), undefined);
     expect(r.status).toBe(204);
   });
 });
@@ -134,6 +115,31 @@ describe('review follow-ups (#254)', () => {
     const r = await executeDisassociate(disassoc);
     expect(host.update).toHaveBeenCalledTimes(1);
     expect(r.status).toBe(404);
+    expect(JSON.stringify(r.body)).toMatch(/No Contact record has the id .*nothing was updated/);
+  });
+
+  it.each([
+    [
+      'the desktop app',
+      "Error invoking remote method 'dataverse.retrieve': Error: 0x80040217: Entity 'contact' With Id = x Does Not Exist",
+    ],
+    ['the PPTB VS Code extension', 'Request failed with status code 404'],
+  ])('declined: reads 404 from the error text %s rejects with', async (_host, message) => {
+    host.update.mockReset().mockRejectedValueOnce(new Error('header consent declined'));
+    host.retrieve.mockRejectedValue(new Error(message));
+    const r = await executeAssociate(assoc);
+    expect(host.update).toHaveBeenCalledTimes(1);
+    expect(r.status).toBe(404);
+    expect(JSON.stringify(r.body)).toMatch(/nothing was updated/);
+  });
+
+  it("declined: doesn't PATCH when the check itself fails", async () => {
+    host.update.mockReset().mockRejectedValueOnce(new Error('header consent declined'));
+    host.retrieve.mockRejectedValue(Object.assign(new Error('Access denied'), { statusCode: 403 }));
+    const r = await executeAssociate(assoc);
+    expect(host.update).toHaveBeenCalledTimes(1);
+    expect(r.status).toBe(403);
+    expect(JSON.stringify(r.body)).toMatch(/Nothing was updated.*Access denied/);
   });
 
   it("keeps the user's own If-Match, in any case", () => {

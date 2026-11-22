@@ -338,7 +338,8 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
                     icon={<Open20Regular />}
                     onClick={() => window.open(recordUrl, '_blank', 'noopener')}
                   >
-                    Open
+                    {/* Not just "Open": Open in Dataverse sits next to it (#422). */}
+                    Open Web API URL
                   </Button>
                 </Tooltip>
                 <OpenInDataverseButton table={ctx.table} id={resolvedId} />

@@ -60,7 +60,6 @@ import { PreferEditor, emptyPrefer, preferToHeaderString } from '../editors/Pref
 import { HeadersEditor, defaultWriteHeaders, headerItemsToObject } from '../editors/HeadersEditor';
 import { BypassEditor, summarize as summarizeBypass } from '../editors/BypassEditor';
 import { detectBypassAdvisories } from '../engine/bypassAdvisories';
-import { detectUnsentHeaderAdvisories } from '../engine/hostHeaderAdvisories';
 import { disabledReasonFromAdvisories, type Advisory } from '../primitives/advisories';
 import { PreconditionEditor, etagProblem } from '../editors/PreconditionEditor';
 import { UpdateDiffPane } from '../editors/UpdateDiffPane';
@@ -93,6 +92,7 @@ import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { rawBodyBlocker, sentFieldValues } from '../engine/fieldBody';
 import { isRecordGuid } from '../primitives/guid';
+import { recordStatus } from '../primitives/clauseStatus';
 import { isColumnInScope, useAdvancedFindOnly } from '../state/metadataScope';
 import { addRun, useRecentRuns } from '../state/runHistory';
 import { useImportedRequest } from '../state/modeHandoff';
@@ -456,14 +456,7 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
   // We still let the user author the request (correct URL + body in the Code
   // tab) but block Execute and explain why.
   const advisories = useMemo<Advisory[]>(() => {
-    const out: Advisory[] = [
-      ...detectBypassAdvisories(state.bypass, 'bypass'),
-      ...detectUnsentHeaderAdvisories({
-        op: 'update',
-        concurrency: state.concurrency,
-        bypass: state.bypass,
-      }),
-    ];
+    const out: Advisory[] = [...detectBypassAdvisories(state.bypass, 'bypass')];
 
     if (state.table && state.recordId && !isValidGuid(state.recordId)) {
       out.push({
@@ -502,15 +495,7 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
     }
 
     return out;
-  }, [
-    state.bypass,
-    state.concurrency,
-    state.table,
-    state.recordId,
-    state.method,
-    state.putColumn,
-    tbl,
-  ]);
+  }, [state.bypass, state.table, state.recordId, state.method, state.putColumn, tbl]);
   const bypassBlocker = disabledReasonFromAdvisories(advisories);
 
   // ── Sidebar ──
@@ -552,6 +537,8 @@ export function UpdateMode({ themeMode }: { themeMode: ThemeMode }) {
             pickedPrimaryFromPicker ||
             (originalRow && tbl ? String(originalRow[tbl.primaryName] ?? '') : '') ||
             (state.recordId ? '(loading record…)' : 'Pick a record'),
+          // The one badge rule (#296, #417), as the drawer's blockers say it.
+          status: recordStatus(state.recordId, !!tbl),
           dirty: state.dirty.has('target'),
         },
       ],

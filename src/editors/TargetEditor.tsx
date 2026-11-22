@@ -157,12 +157,16 @@ export function TargetEditor({
   // Only after the entity list has finished loading — the loading gate
   // prevents a flash for returning users whose persisted settings load async.
   const noScope = needsSetup && !entitiesLoading;
+  // Step 1 is choosing a scope only while there's a table to choose (#420).
+  // A table that's already there (a restored request, or one fixed by a
+  // bound action or function) can be used without a scope.
+  const askScope = noScope && !table;
 
   return (
     <div>
       {/* No scope yet (#397): Step 1 is choosing one, in the same first-step
           card as every other mode's first step (#297). */}
-      {noScope && <FirstStep step="Choose a scope" onStart={openScope} />}
+      {askScope && <FirstStep step="Choose a scope" onStart={openScope} />}
       {entitiesError && !entitiesLoading && (
         <MessageBar intent="error" style={{ marginBottom: tokens.spacingVerticalM, width: '100%' }}>
           <MessageBarBody>

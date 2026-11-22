@@ -9,9 +9,9 @@
 //   • Batch — options (continue-on-error), add from Saved / last request
 //   • one section per group — the group's settings + one node per request
 //
-// Execution goes through PPTB 1.2.7's `dataverseAPI.executeBatch` /
-// `executeTransaction` (see engine/batch/batchExecutor.ts). On older hosts
-// and standalone the batch can be composed and copied but not sent.
+// Execution goes through PPTB's `dataverseAPI.executeBatch` /
+// `executeTransaction` (see engine/batch/batchExecutor.ts). Standalone, the
+// batch can be composed and copied but not sent.
 //
 // `variant="execute-multiple"` (#11) is the same engine with the SDK's
 // ExecuteMultiple semantics: one flat list of independent requests,
