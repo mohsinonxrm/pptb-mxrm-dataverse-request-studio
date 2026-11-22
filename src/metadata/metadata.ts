@@ -531,6 +531,8 @@ export interface TableMeta {
   supportsMerge?: boolean;
   /** An N:N intersect table, which has no form to open (#422). */
   isIntersect?: boolean;
+  /** "Track changes" is on for the table, so a read can ask for a delta link (#233). */
+  changeTrackingEnabled?: boolean;
 }
 
 // ════════════════════════════════════════════════════════════════════════

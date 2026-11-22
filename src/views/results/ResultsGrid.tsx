@@ -49,6 +49,7 @@ import {
   Spinner,
   Input,
   Link,
+  Badge,
 } from '@fluentui/react-components';
 import {
   DataGrid,
@@ -82,6 +83,10 @@ import { widthsForTable, withColumnWidths, withoutTableWidths } from './columnWi
 import { hiddenForTable, visibleColumnKeys } from './hiddenColumns';
 import { formTableFor } from '../../host/openInDataverse';
 import { buildSearchIndex, filterRows, isFiltering, type ColumnFilters } from './gridFilter';
+import { CHANGE_KEY, DELETED_ID_KEY, deltaGridRow } from '../../engine/changeTracking';
+
+/** Header of the Change column a delta response's deleted rows get (#233). */
+export const CHANGE_COLUMN_LABEL = 'Change';
 
 // Row heights per density — Fluent's table row heights for each `size` (#16).
 const ROW_HEIGHT: Record<GridDensity, number> = { medium: 44, small: 34, 'extra-small': 24 };
@@ -181,6 +186,20 @@ const useStyles = makeStyles({
     color: tokens.colorBrandForeground1,
     fontWeight: tokens.fontWeightSemibold,
   },
+  deletedCell: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS,
+    minWidth: 0,
+  },
+  deletedId: {
+    fontFamily: tokens.fontFamilyMonospace,
+    fontSize: tokens.fontSizeBase200,
+    color: tokens.colorNeutralForeground2,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
   loadingMore: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -232,6 +251,8 @@ export interface ResultsGridProps {
   onViewChange?: (view: GridExportView) => void;
   /** Buttons under the "No records matched" state: the next step (#291). */
   emptyActions?: ReactNode;
+  /** Replaces the "No records matched" copy, e.g. a delta with no changes (#233). */
+  emptyText?: { title: string; body: string };
 }
 
 export function ResultsGrid({
@@ -251,6 +272,7 @@ export function ResultsGrid({
   preferredColumnOrder,
   onViewChange,
   emptyActions,
+  emptyText,
 }: ResultsGridProps) {
   const styles = useStyles();
   const [settings, updateSettings] = usePersistedSettings();
@@ -275,8 +297,10 @@ export function ResultsGrid({
   // ── Flatten nested $expand objects to dotted-key columns ──
   const allRows = useMemo(() => {
     const raw = (body as { value?: Record<string, unknown>[] } | null)?.value ?? [];
-    return flattenRows(raw);
+    // A delta response's deleted rows (#233) become rows with a Change badge.
+    return flattenRows(raw.map(deltaGridRow));
   }, [body]);
+  const hasDeletedRows = useMemo(() => allRows.some((r) => r[CHANGE_KEY] != null), [allRows]);
   // The run's row count is its top-level records — the same number Recent
   // runs shows. A collection-valued $expand fans each record out into one
   // grid line per child, so the line count is shown separately (#122).
@@ -481,6 +505,7 @@ export function ResultsGrid({
 
   // Header label for a grid column id (a "(Raw)" twin gets the suffix).
   const columnLabel = (id: string): string => {
+    if (id === CHANGE_KEY) return CHANGE_COLUMN_LABEL;
     const isTwin = id.endsWith('__raw');
     const info = columnDisplay.get(isTwin ? id.slice(0, -5) : id);
     const label = (useLogicalNames ? info?.logicalName : info?.displayName) ?? id;
@@ -500,7 +525,7 @@ export function ResultsGrid({
 
   // ── Build TableColumnDefinition[] ──
   const columns = useMemo(() => {
-    return shownKeys.flatMap((key) => {
+    const dataColumns = shownKeys.flatMap((key) => {
       const info = columnDisplay.get(key)!;
       const sortDir = sortMap.get(key);
 
@@ -637,7 +662,41 @@ export function ResultsGrid({
         }),
       ];
     });
-  }, [shownKeys, columnDisplay, sortMap, valueMode, useLogicalNames, allRows, styles]);
+    if (!hasDeletedRows) return dataColumns;
+    // Deleted rows of a delta response (#233): a leading Change column with
+    // a Deleted badge and the row's id. Changed rows show as usual.
+    const changeColumn = createTableColumn<Record<string, unknown>>({
+      columnId: CHANGE_KEY,
+      renderHeaderCell: () => (
+        <span className={styles.headerCellContent}>
+          <span className={styles.headerCellLabel}>{CHANGE_COLUMN_LABEL}</span>
+        </span>
+      ),
+      renderCell: (r) =>
+        r[CHANGE_KEY] == null ? null : (
+          <TableCellLayout truncate>
+            <span className={styles.deletedCell}>
+              <Badge appearance="tint" color="danger" size="small">
+                Deleted
+              </Badge>
+              {typeof r[DELETED_ID_KEY] === 'string' && r[DELETED_ID_KEY] && (
+                <span className={styles.deletedId}>{r[DELETED_ID_KEY] as string}</span>
+              )}
+            </span>
+          </TableCellLayout>
+        ),
+    });
+    return [changeColumn, ...dataColumns];
+  }, [
+    shownKeys,
+    columnDisplay,
+    sortMap,
+    valueMode,
+    useLogicalNames,
+    allRows,
+    styles,
+    hasDeletedRows,
+  ]);
 
   // ── Persisted column widths (#12) ──
   // `liveWidths` holds widths dragged this session so the sizing options
@@ -737,6 +796,12 @@ export function ResultsGrid({
     };
     for (const c of columns) {
       const cid = String(c.columnId);
+      if (cid === CHANGE_KEY) {
+        // A badge and a GUID.
+        const w = liveWidths[cid] ?? storedWidths[cid] ?? 340;
+        out[cid] = { minWidth: 100, defaultWidth: w, idealWidth: w };
+        continue;
+      }
       const baseKey = cid.endsWith('__raw') ? cid.slice(0, -5) : cid;
       const info = columnDisplay.get(baseKey);
       const label = useLogicalNames ? (info?.logicalName ?? cid) : (info?.displayName ?? cid);
@@ -793,6 +858,9 @@ export function ResultsGrid({
     if (!onViewChange) return;
     const exportColumns: ExportColumn[] = columns.map((c) => {
       const id = String(c.columnId);
+      if (id === CHANGE_KEY) {
+        return { id, header: CHANGE_COLUMN_LABEL, sourceCol: CHANGE_KEY, showsRaw: true };
+      }
       const isTwin = id.endsWith('__raw');
       const sourceCol = isTwin ? id.slice(0, -5) : id;
       const info = columnDisplay.get(sourceCol);
@@ -921,7 +989,7 @@ export function ResultsGrid({
         style={{ flexDirection: 'column', gap: 6, padding: '32px 16px' }}
       >
         <div style={{ fontSize: tokens.fontSizeBase400, fontWeight: tokens.fontWeightSemibold }}>
-          No records matched
+          {emptyText?.title ?? 'No records matched'}
         </div>
         <div
           style={{
@@ -931,8 +999,8 @@ export function ResultsGrid({
             maxWidth: 520,
           }}
         >
-          The request succeeded but Dataverse returned zero rows. Check your $filter / $top — or try
-          removing conditions to widen the result set.
+          {emptyText?.body ??
+            'The request succeeded but Dataverse returned zero rows. Check your $filter / $top — or try removing conditions to widen the result set.'}
         </div>
         {emptyActions && (
           <div
@@ -993,6 +1061,8 @@ export function ResultsGrid({
                 >
                   {({ columnId }) => {
                     const id = String(columnId);
+                    // The Change column isn't searched or filtered.
+                    if (id === CHANGE_KEY) return <DataGridCell className={styles.filterCell} />;
                     return (
                       <DataGridCell className={styles.filterCell}>
                         <Input

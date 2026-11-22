@@ -117,6 +117,8 @@ interface Opts {
   pageSize?: number;
   annotations: boolean;
   returnRepresentation: boolean;
+  /** `Prefer: odata.track-changes` (#233): the SDK uses RetrieveEntityChanges instead. */
+  trackChanges?: boolean;
   /** Headers with no SDK equivalent. */
   dropped: [string, string][];
 }
@@ -444,6 +446,7 @@ function readOpts(headers: Record<string, string>): Opts {
         if (size) o.pageSize = Number(size[1]);
         else if (/^odata\.include-annotations\s*=/i.test(part)) o.annotations = true;
         else if (/^return\s*=\s*representation$/i.test(part)) o.returnRepresentation = true;
+        else if (/^odata\.track-changes$/i.test(part)) o.trackChanges = true;
         else if (part) rest.push(part);
       }
       if (rest.length) o.dropped.push([k, rest.join(',')]);
@@ -1358,6 +1361,11 @@ function optNotes(plan: Plan, o: Opts): string[] {
     out.push('The SDK returns no row from a write (return=representation): Retrieve it after.');
   }
   if (o.pageSize && plan.k !== 'query') out.push('odata.maxpagesize only applies to queries.');
+  if (o.trackChanges) {
+    out.push(
+      'Not sent: odata.track-changes. The SDK tracks changes with RetrieveEntityChangesRequest, which returns the changes and a DataToken for the next call.',
+    );
+  }
   for (const [k, v] of o.dropped)
     out.push(`Not sent: the SDK has no equivalent of the "${k}: ${v}" header.`);
   return out;

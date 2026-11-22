@@ -172,25 +172,34 @@ export function impersonationProblem(headers?: Record<string, string>): string |
 }
 
 /**
- * The `Prefer` a read sends for its page size (#219), or `undefined`. The
- * host's own is `odata.include-annotations="*"`, which a custom Prefer
- * replaces, so it's sent again first: the grid needs the annotations. The
- * page size goes last: Dataverse rejects it ahead of `include-annotations`
- * (0x80060888 "Invalid prefer header", confirmed live). Other preferences
- * stay in the Code tab, like the rest of the Prefer pane.
+ * The `Prefer` a read sends for its page size (#219) or change tracking
+ * (#233), or `undefined`. The host's own is `odata.include-annotations="*"`,
+ * which a custom Prefer replaces, so it's sent again first: the grid needs
+ * the annotations. `odata.track-changes` follows it, and the page size goes
+ * last: Dataverse rejects it ahead of `include-annotations` (0x80060888
+ * "Invalid prefer header", confirmed live). Other preferences stay in the
+ * Code tab, like the rest of the Prefer pane.
  */
-export function readPrefer(maxpagesize: number | null | undefined): string | undefined {
-  return maxpagesize && maxpagesize > 0
-    ? `odata.include-annotations="*",odata.maxpagesize=${maxpagesize}`
-    : undefined;
+export function readPrefer(
+  maxpagesize: number | null | undefined,
+  trackChanges = false,
+): string | undefined {
+  const parts: string[] = [];
+  if (trackChanges) parts.push('odata.track-changes');
+  if (maxpagesize && maxpagesize > 0) parts.push(`odata.maxpagesize=${maxpagesize}`);
+  return parts.length > 0 ? ['odata.include-annotations="*"', ...parts].join(',') : undefined;
 }
 
-/** What a read sends: the allow-listed rows, plus `Prefer` for a page size. */
+/**
+ * What a read sends: the allow-listed rows, plus `Prefer` for a page size or
+ * change tracking.
+ */
 export function readRequestHeaders(
   headers: Record<string, string> | undefined,
   maxpagesize: number | null | undefined,
+  trackChanges = false,
 ): Record<string, string> | undefined {
-  const prefer = readPrefer(maxpagesize);
+  const prefer = readPrefer(maxpagesize, trackChanges);
   const sent = { ...allowedHeaders('read', headers), ...(prefer ? { Prefer: prefer } : {}) };
   return Object.keys(sent).length > 0 ? sent : undefined;
 }

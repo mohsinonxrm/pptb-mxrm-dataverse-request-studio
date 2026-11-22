@@ -528,6 +528,7 @@ async function buildTable(logical: string): Promise<TableMeta | undefined> {
         alternateKeys,
         supportsMerge: ['account', 'contact', 'lead', 'incident'].includes(logical),
         ...(entity.IsIntersect === true ? { isIntersect: true } : {}),
+        ...(entity.ChangeTrackingEnabled === true ? { changeTrackingEnabled: true } : {}),
       };
 
       // Publish into the synchronous registry — this is what makes the

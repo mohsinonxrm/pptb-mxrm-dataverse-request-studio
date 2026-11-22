@@ -45,6 +45,8 @@ export interface ResultsSummaryBarProps {
   totalCapped?: boolean;
   /** `@odata.nextLink` is present. */
   more?: boolean;
+  /** Deleted rows in a change-tracking delta (#233). */
+  deleted?: number;
 }
 
 export const statusKindOf = (code: number): StatusKind =>
@@ -69,6 +71,7 @@ export function ResultsSummaryBar({
   total,
   totalCapped,
   more,
+  deleted,
 }: ResultsSummaryBarProps) {
   const s = useStyles();
   const studio = useStudioStyles();
@@ -80,6 +83,13 @@ export function ResultsSummaryBar({
       <span key="rows">
         <span className={s.strong}>{rows.toLocaleString()}</span> row{rows === 1 ? '' : 's'}
         {more ? ' loaded' : ''}
+      </span>,
+    );
+  }
+  if (deleted) {
+    parts.push(
+      <span key="deleted">
+        <span className={s.strong}>{deleted.toLocaleString()}</span> deleted
       </span>,
     );
   }

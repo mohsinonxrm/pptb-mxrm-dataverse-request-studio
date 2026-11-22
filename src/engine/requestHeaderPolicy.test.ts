@@ -82,6 +82,15 @@ describe('readPrefer', () => {
     expect(readPrefer(0)).toBeUndefined();
     expect(readPrefer(25)).toBe('odata.include-annotations="*",odata.maxpagesize=25');
   });
+
+  it('change tracking (#233): after the annotations, before the page size, in one Prefer', () => {
+    expect(readPrefer(null, true)).toBe('odata.include-annotations="*",odata.track-changes');
+    expect(readPrefer(0, true)).toBe('odata.include-annotations="*",odata.track-changes');
+    expect(readPrefer(25, true)).toBe(
+      'odata.include-annotations="*",odata.track-changes,odata.maxpagesize=25',
+    );
+    expect(readPrefer(25, false)).toBe('odata.include-annotations="*",odata.maxpagesize=25');
+  });
 });
 
 describe('readRequestHeaders', () => {
@@ -92,6 +101,16 @@ describe('readRequestHeaders', () => {
     });
     expect(readRequestHeaders({ Prefer: 'odata.track-changes' }, null)).toBeUndefined();
     expect(readRequestHeaders({ Accept: 'application/json' }, null)).toBeUndefined();
+  });
+
+  it('sends change tracking with the allow-listed rows (#233)', () => {
+    expect(readRequestHeaders({ MSCRMCallerID: ID }, 10, true)).toEqual({
+      MSCRMCallerID: ID,
+      Prefer: 'odata.include-annotations="*",odata.track-changes,odata.maxpagesize=10',
+    });
+    expect(readRequestHeaders(undefined, null, true)).toEqual({
+      Prefer: 'odata.include-annotations="*",odata.track-changes',
+    });
   });
 });
 
