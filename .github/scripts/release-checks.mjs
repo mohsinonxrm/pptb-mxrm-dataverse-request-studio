@@ -4,7 +4,7 @@
 // section. Used by check-release.mjs; pure functions, so they're unit tested
 // (release-checks.test.mjs). Ported from FetchXML Studio.
 
-import { badgeMarkdown, badges } from './badges.mjs';
+import { badgeMarkdown, badges, readmeUrlFor } from './badges.mjs';
 
 /** X.Y.Z, X.Y.Z-beta.N or X.Y.Z-rc.N: the shapes release.yml publishes */
 export const VERSION_PATTERN =
@@ -84,6 +84,13 @@ export function checkReleaseFiles({ pkg, lock, changelog, readme, badgeFiles }) 
     .map(({ file }) => file);
   if (stale.length > 0) {
     problems.push(`assets/badges/ is out of date (${stale.join(', ')}): run \`npm run badges\`.`);
+  }
+  // PPTB's details page reads configurations.readmeUrl: this version's README, at its tag (#435)
+  const readmeUrl = readmeUrlFor(pkg);
+  if (pkg.configurations?.readmeUrl !== readmeUrl) {
+    problems.push(
+      `package.json configurations.readmeUrl isn't ${readmeUrl}: run \`npm run badges\`.`,
+    );
   }
   // Each badge on a line of its own: an image inside a link shows as raw Markdown in PPTB (#412)
   const readmeLines = new Set(readme.split(/\r?\n/).map((l) => l.trim()));

@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { badgeMarkdown, badges } from './badges.mjs';
+import { badgeMarkdown, badges, readmeUrlFor } from './badges.mjs';
 
 // check-release.mjs as release.yml and CI run it (#372), in a folder with just the files it reads.
 const script = fileURLToPath(new URL('./check-release.mjs', import.meta.url));
@@ -28,6 +28,7 @@ function setUp({ version = '1.5.0-beta.2', bundled = INSIDER, badgeFiles = true 
     repository: { url: 'git+https://github.com/o/r.git' },
     features: { minAPI: '1.2.0' },
   };
+  pkg.configurations = { readmeUrl: readmeUrlFor(pkg) };
   write('package.json', JSON.stringify(pkg));
   write('package-lock.json', JSON.stringify({ version, packages: { '': { version } } }));
   write('CHANGELOG.md', `## [Unreleased]\n\n## [${version}] - 2026-11-01\n\n- **A fix.**\n`);
@@ -96,5 +97,29 @@ describe('write-badges.mjs', () => {
     expect(w.status).toBe(0);
     expect(w.stdout).toMatch(/assets\/badges\/version\.svg/);
     expect(run()).toMatchObject({ status: 0 });
+  });
+
+  it("moves the README's badge lines and readmeUrl to a new version's tag (#435)", () => {
+    setUp();
+    const pkgPath = join(dir, 'package.json');
+    const next = JSON.parse(readFileSync(pkgPath, 'utf8'));
+    next.version = '1.5.0';
+    writeFileSync(pkgPath, JSON.stringify(next, null, 2));
+    writeFileSync(
+      join(dir, 'package-lock.json'),
+      JSON.stringify({ version: '1.5.0', packages: { '': { version: '1.5.0' } } }),
+    );
+    writeFileSync(
+      join(dir, 'CHANGELOG.md'),
+      '## [Unreleased]\n\n## [1.5.0] - 2026-11-01\n\n- **A fix.**\n',
+    );
+    const write = fileURLToPath(new URL('./write-badges.mjs', import.meta.url));
+    expect(spawnSync(process.execPath, [write], { cwd: dir, encoding: 'utf8' }).status).toBe(0);
+    expect(readFileSync(join(dir, 'README.md'), 'utf8')).toContain(
+      '/refs/tags/v1.5.0/assets/badges/version.svg',
+    );
+    expect(JSON.parse(readFileSync(pkgPath, 'utf8')).configurations.readmeUrl).toBe(
+      'https://raw.githubusercontent.com/o/r/refs/tags/v1.5.0/README.md',
+    );
   });
 });
