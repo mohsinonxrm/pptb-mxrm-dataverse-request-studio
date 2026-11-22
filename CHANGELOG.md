@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-beta.1] - 2026-11-21
+
+The first 1.7.0 beta: a guided builder. Each request type says what it does
+and opens on its first step ([#289], [#297]). Results get a summary line, a
+Columns menu and Open in Dataverse ([#290], [#292], [#293]). The advisory chip
+says what to fix, and a blocked Execute opens it ([#295]). One badge rule
+applies in every mode ([#296], [#417]), and choosing a scope is one step
+([#397]). It also fixes the findings of a review of this work ([#413]–[#422]).
+
+Still a **prerelease** on the npm `beta` tag, with the gold Insider icon.
+It needs **Power Platform ToolBox 1.2.8 or later** ([#408]).
+
 ### ✨ Added
 
 - **The header shows the saved request's name** ([#298]). Once a request is
@@ -93,13 +105,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The `?`, `⚠` and `req` badges some modes used are gone, so the same state
   looks the same everywhere and matches what the advisory drawer says.
   Retrieve Single now marks the record as **required** once a table is picked.
-### 🐛 Fixed
-
-- **The README renders correctly on the Power Platform ToolBox details page**
-  ([#412]). The Version badge was a link around an image, which ToolBox's
-  README renderer shows as raw Markdown. It is now a plain image, and the
-  release check flags any badge that isn't on a line of its own and any link
-  around an image or code. Same fix as FetchXML Studio 1.5.1.
 
 ### 🐛 Fixed
 
@@ -152,13 +157,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🔧 Internal
 
-- **Every tag is checked in PPTB first** ([#385]). Each PR was checked in PPTB
-  on its own build, but the build a tag publishes (every merged change plus the
-  version bump, built by `release.yml`) wasn't run in PPTB until it was on npm.
-  RELEASING.md's new *Before every tag* step loads the rehearsal's `package`
-  tarball in PPTB, with a short smoke list, before any beta, stable or hotfix
-  tag. The smoke test of the published beta before `latest` stays. Same step as
-  FetchXML Studio.
 - **Tests for the Results features** ([#419]). Component tests now render
   the grid (with a `ResizeObserver` stub that reports a size), the Columns
   menu, the toolbar's Open in Dataverse and Copy as TSV, the Open in
@@ -174,9 +172,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#296]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/296
 [#297]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/297
 [#298]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/298
-[#385]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/385
 [#301]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/301
 [#397]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/397
+[#408]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/408
 [#413]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/413
 [#414]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/414
 [#415]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/415
@@ -187,8 +185,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#420]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/420
 [#421]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/421
 [#422]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/422
-[#408]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/408
-[#412]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/412
 
 ## [1.6.0-beta.1] - 2026-11-07
 
