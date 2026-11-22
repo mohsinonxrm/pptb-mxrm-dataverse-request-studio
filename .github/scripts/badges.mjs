@@ -55,9 +55,20 @@ export function repositoryOf(pkg) {
   return match[1];
 }
 
-/** Where the README links a badge: the file on main, as raw.githubusercontent.com serves it */
+/**
+ * The git ref a version's README reads from: its release tag (#435). npm keeps each version's
+ * README, and PPTB's details page reads `readmeUrl`, so both show that version's badges and README,
+ * not main's (a beta used to show the stable release's version and minimum ToolBox).
+ */
+export const versionRef = (pkg) => `refs/tags/v${pkg.version}`;
+
+/** Where the README links a badge: the file at the version's tag, as raw.githubusercontent.com serves it */
 export const badgeUrl = (pkg, file) =>
-  `https://raw.githubusercontent.com/${repositoryOf(pkg)}/refs/heads/main/assets/badges/${file}`;
+  `https://raw.githubusercontent.com/${repositoryOf(pkg)}/${versionRef(pkg)}/assets/badges/${file}`;
+
+/** package.json `configurations.readmeUrl`: the README at the version's tag (#435) */
+export const readmeUrlFor = (pkg) =>
+  `https://raw.githubusercontent.com/${repositoryOf(pkg)}/${versionRef(pkg)}/README.md`;
 
 /**
  * Every README badge, from package.json: the file name, its alt text and the SVG. The order is
