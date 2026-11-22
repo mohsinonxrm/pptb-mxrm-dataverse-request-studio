@@ -9,7 +9,7 @@ file / image / attachment operations.
 Built for [Power Platform ToolBox](https://www.powerplatformtoolbox.com/) with
 React 18, Fluent UI v9, TypeScript, and live Dataverse metadata integration.
 
-[![Version](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/version.svg)](https://www.npmjs.com/package/@mohsinonxrm/pptb-dataverse-request-studio)
+![Version](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/version.svg)
 ![Power Platform ToolBox 1.2.8 or later](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/pptb.svg)
 ![@pptb/types 1.2.8](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/pptb-types.svg)
 ![React 18](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/react.svg)
