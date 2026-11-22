@@ -170,6 +170,12 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
   // alone left the URL / Code tab blank after picking a table (#78).
   const { table: liveTable } = useLiveTable(state.table || null);
   const [activePath, setActivePath] = useState<string>('preview');
+  // The preview's Step 1 leads to Target with the table list open (#429);
+  // forgotten once the user leaves Target, so coming back shows its own card.
+  const [openTableList, setOpenTableList] = useState(false);
+  useEffect(() => {
+    if (activePath !== 'target') setOpenTableList(false);
+  }, [activePath]);
   const [tab, setTab] = useState<MainTab>('builder');
   const [result, setResult] = useState<ExecResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -596,6 +602,7 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
           }}
           group="binary"
           sub="Pick the entity + record that holds the image column."
+          openTableList={openTableList}
         />
       );
       break;
@@ -648,9 +655,16 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
             sub="The record's image, and what this request does to it."
             group="binary"
           />
-          {/* Opens here (#224); until a table is picked, Step 1 leads to Target (#297). */}
+          {/* Opens here (#224); until a table is picked, Step 1 leads to Target
+              (#297) with the table list open, so it isn't asked twice (#429). */}
           {!state.table && (
-            <FirstStep step="Choose a table" onStart={() => setActivePath('target')} />
+            <FirstStep
+              step="Choose a table"
+              onStart={() => {
+                setOpenTableList(true);
+                setActivePath('target');
+              }}
+            />
           )}
           <OperationBanner state={state} imageCol={imageCol} />
           <PreviewCard

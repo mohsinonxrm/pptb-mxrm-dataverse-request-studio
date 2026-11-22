@@ -282,3 +282,44 @@ describe('ResultsView throttling (#269)', () => {
     expect(button('Try again')).toBeUndefined();
   });
 });
+
+describe('ResultsView 404 while impersonating (#431)', () => {
+  const missingUser = 'systemuser With Id = 11111111-2222-3333-4444-555555555555 Does Not Exist';
+
+  it('says the impersonated user was not found, naming the header', () => {
+    const result = {
+      ...failed(404, missingUser, '0x80040217'),
+      impersonatedUserNotFound: 'MSCRMCallerID',
+    };
+    render(<ResultsView result={result} mode="single" requestUrl="/api/data/v9.2/accounts(1)" />);
+    expect(hostEl!.textContent).toContain('Impersonated user not found');
+    expect(hostEl!.textContent).toContain(
+      "The user you're impersonating (MSCRMCallerID) wasn't found. Check the id in HTTP headers.",
+    );
+    expect(hostEl!.textContent).not.toContain('Record (or entity) not found');
+    expect(button('Copy error report')).toBeDefined();
+  });
+
+  it('names CallerObjectId when that was the header', () => {
+    const result = {
+      ...failed(404, missingUser, '0x80040217'),
+      impersonatedUserNotFound: 'CallerObjectId',
+    };
+    render(<ResultsView result={result} mode="single" />);
+    expect(hostEl!.textContent).toContain("The user you're impersonating (CallerObjectId)");
+  });
+
+  it('keeps the generic 404 without impersonation', () => {
+    render(
+      <ResultsView
+        result={failed(404, 'account With Id = 1 Does Not Exist', '0x80040217')}
+        mode="single"
+      />,
+    );
+    expect(hostEl!.textContent).toContain('Not Found · 404');
+    expect(hostEl!.textContent).toContain(
+      'Record (or entity) not found. Verify the GUID and entity set.',
+    );
+    expect(hostEl!.textContent).not.toContain('Impersonated user');
+  });
+});

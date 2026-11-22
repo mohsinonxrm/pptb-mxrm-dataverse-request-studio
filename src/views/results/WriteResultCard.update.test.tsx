@@ -99,3 +99,37 @@ describe('WriteResultCard after an Update / Upsert (#224)', () => {
     expect(host!.textContent).not.toContain(NOTE);
   });
 });
+
+describe('WriteResultCard 404 while impersonating (#431)', () => {
+  const notFound = (extra: Partial<ExecResult> = {}): ExecResult => ({
+    status: 404,
+    statusText: 'Not Found',
+    ms: 5,
+    bytes: 0,
+    ok: false,
+    outcome: '404',
+    body: { error: { code: '0x80040217', message: 'systemuser With Id = x Does Not Exist' } },
+    headers: {},
+    ...extra,
+  });
+  const ctx: WriteResultContext = {
+    operation: 'update',
+    table: 'account',
+    recordId: '00000000-0000-0000-0000-0000000000a1',
+  };
+
+  it('says the impersonated user was not found, naming the header', () => {
+    render(ctx, notFound({ impersonatedUserNotFound: 'MSCRMCallerID' }));
+    expect(host!.textContent).toContain('Impersonated user not found');
+    expect(host!.textContent).toContain(
+      "The user you're impersonating (MSCRMCallerID) wasn't found. Check the id in HTTP headers.",
+    );
+    expect(host!.textContent).not.toContain('Record not found');
+  });
+
+  it('keeps Record not found without impersonation', () => {
+    render(ctx, notFound());
+    expect(host!.textContent).toContain('Record not found');
+    expect(host!.textContent).not.toContain('Impersonated user');
+  });
+});

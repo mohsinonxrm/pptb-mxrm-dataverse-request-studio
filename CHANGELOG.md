@@ -37,8 +37,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   format sends the header; Xrm.WebApi can't, so that tab shows fetch, and
   Power Automate uses "Invoke an HTTP request".
 
+### 🐛 Fixed
+
+- **Manage Image asks for the table once** ([#429]). With no table picked, the
+  preview's **Choose a table** only switched to Target, where an identical
+  Step 1 card asked again. It now opens Target with the table list open, and
+  Target shows no second card for the step.
+- **Impersonating a user that doesn't exist says so** ([#431]). With
+  `MSCRMCallerID` or `CallerObjectId` on, Dataverse answers 404 when that user
+  isn't found, and the error card said "Record (or entity) not found", which
+  points at the record. When the 404 names the impersonated user, the card
+  now reads **Impersonated user not found**, names the header, and says to
+  check the id in HTTP headers. A missing record still gets the usual 404.
+
 [#232]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/232
 [#233]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/233
+[#429]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/429
+[#431]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/431
 
 ## [1.7.0-beta.2] - 2026-11-21
 

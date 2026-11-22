@@ -9,6 +9,7 @@ import {
   executePredefined,
   executeRetrieveMultiple,
   executeRetrieveSingle,
+  impersonatedUserNotFound,
   readCount,
   readPreferHeaders,
 } from './dataverseExecutor';
@@ -281,6 +282,103 @@ describe('Retrieve Single headers (#109)', () => {
     expect(host.queryData).not.toHaveBeenCalled();
     expect(JSON.stringify(r1.body)).toMatch(/needs the id of the user to run as/);
     expect(JSON.stringify(r2.body)).toMatch(/Turn on one impersonation header, not both/);
+  });
+});
+
+describe('impersonated user not found (#431)', () => {
+  const ID = '00000000-0000-0000-0000-0000000000a1';
+  const CALLER = '11111111-2222-3333-4444-555555555555';
+  const single = {
+    table: 'account',
+    recordId: ID,
+    select: [],
+    expand: [],
+    prefer: emptyPrefer(),
+    headers: [],
+    dirty: new Set(),
+  } as unknown as RetrieveSingleState;
+  const missing = (what: string, id: string) =>
+    new Error(`0x80040217: ${what} With Id = ${id} Does Not Exist`);
+
+  it('names the header when Dataverse says the impersonated user does not exist', async () => {
+    host.queryData.mockRejectedValue(missing('systemuser', CALLER));
+    const r = await executeRetrieveSingle(single, { MSCRMCallerID: CALLER });
+    expect(r.status).toBe(404);
+    expect(r.impersonatedUserNotFound).toBe('MSCRMCallerID');
+    // Only the header's name goes on the result, never the caller's id.
+    expect(JSON.stringify({ ...r, body: null })).not.toContain(CALLER);
+  });
+
+  it('names CallerObjectId too, in the case the docs spell it', async () => {
+    host.queryData.mockRejectedValue(missing('systemuser', CALLER.toUpperCase()));
+    const r = await executeRetrieveSingle(single, { callerobjectid: CALLER });
+    expect(r.impersonatedUserNotFound).toBe('CallerObjectId');
+  });
+
+  it('leaves a missing record alone, with or without impersonation', async () => {
+    host.queryData.mockRejectedValue(missing('account', ID));
+    const plain = await executeRetrieveSingle(single);
+    const impersonating = await executeRetrieveSingle(single, { MSCRMCallerID: CALLER });
+    for (const r of [plain, impersonating]) {
+      expect(r.status).toBe(404);
+      expect(r.impersonatedUserNotFound).toBeUndefined();
+    }
+  });
+
+  it('leaves a missing systemuser record alone: its id is the record’s, not the caller’s', () => {
+    const msg = `0x80040217: systemuser With Id = ${ID} Does Not Exist`;
+    expect(impersonatedUserNotFound({ MSCRMCallerID: CALLER }, 404, '0x80040217', msg)).toBeNull();
+  });
+
+  it('matches the caller’s id in the plural message, or systemuser with no id at all', () => {
+    const plural = `0x80040217: systemuser With Ids = ${CALLER} Do Not Exist`;
+    expect(impersonatedUserNotFound({ MSCRMCallerID: CALLER }, 404, '0x80040217', plural)).toBe(
+      'MSCRMCallerID',
+    );
+    expect(
+      impersonatedUserNotFound(
+        { MSCRMCallerID: CALLER },
+        404,
+        '0x80040217',
+        'systemuser Does Not Exist',
+      ),
+    ).toBe('MSCRMCallerID');
+    // A 404 without Dataverse's code is the caller too: that's what PPTB reports (verified live).
+    expect(
+      impersonatedUserNotFound(
+        { MSCRMCallerID: CALLER },
+        404,
+        undefined,
+        'systemuser Does Not Exist',
+      ),
+    ).toBe('MSCRMCallerID');
+  });
+
+  it('reads the bare "HTTP 404" PPTB reports for an unknown caller (verified live)', () => {
+    const bare = 'Dataverse queryData failed: HTTP 404';
+    expect(impersonatedUserNotFound({ MSCRMCallerID: CALLER }, 404, undefined, bare)).toBe(
+      'MSCRMCallerID',
+    );
+    // No impersonation header: an ordinary 404 stays generic
+    expect(impersonatedUserNotFound({}, 404, undefined, bare)).toBeNull();
+    // A missing record carries Dataverse's code, so it isn't the caller
+    expect(
+      impersonatedUserNotFound(
+        { MSCRMCallerID: CALLER },
+        404,
+        '0x80040217',
+        'businessunit With Id = e2e00431-0000-4000-8000-000000000431 Does Not Exist',
+      ),
+    ).toBeNull();
+  });
+
+  it('needs an impersonation header that was sent, and a not-found', () => {
+    const msg = `0x80040217: systemuser With Id = ${CALLER} Does Not Exist`;
+    expect(impersonatedUserNotFound(undefined, 404, '0x80040217', msg)).toBeNull();
+    expect(impersonatedUserNotFound({ Consistency: 'Strong' }, 404, '0x80040217', msg)).toBeNull();
+    expect(
+      impersonatedUserNotFound({ MSCRMCallerID: CALLER }, 400, '0x80060888', `Bad ${CALLER}`),
+    ).toBeNull();
   });
 });
 
