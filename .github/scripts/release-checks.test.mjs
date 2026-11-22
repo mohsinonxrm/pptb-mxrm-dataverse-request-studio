@@ -147,9 +147,12 @@ describe('checkReleaseFiles', () => {
 
   it("flags a readmeUrl or badge lines that aren't at the version's tag (#435)", () => {
     const onMain = (url) => url.replace('refs/tags/v1.5.0-beta.2', 'refs/heads/main');
-    const stale = { ...pkg, configurations: { readmeUrl: onMain(readmeUrlFor(pkg)) } };
+    const stale = {
+      ...pkg,
+      configurations: { readmeUrl: readmeUrlFor({ ...pkg, version: '1.5.0' }) },
+    };
     expect(checkReleaseFiles({ ...files, pkg: stale }).join(' ')).toMatch(
-      /configurations\.readmeUrl isn't .*refs\/tags\/v1\.5\.0-beta\.2\/README\.md/,
+      /configurations\.readmeUrl isn't .*refs\/heads\/release\/1\.5\/README\.md/,
     );
     expect(checkReleaseFiles({ ...files, readme: onMain(readme) }).join(' ')).toMatch(
       /doesn't show these badges/,
@@ -198,8 +201,13 @@ describe('badges', () => {
     expect(badgeUrl(pkg, 'react.svg')).toBe(
       'https://raw.githubusercontent.com/owner/tool/refs/tags/v1.5.0-beta.2/assets/badges/react.svg',
     );
+    // readmeUrl must exist before the tag (pptb-validate fetches it): a beta reads its release
+    // branch, a stable release main (#435)
     expect(readmeUrlFor(pkg)).toBe(
-      'https://raw.githubusercontent.com/owner/tool/refs/tags/v1.5.0-beta.2/README.md',
+      'https://raw.githubusercontent.com/owner/tool/refs/heads/release/1.5/README.md',
+    );
+    expect(readmeUrlFor({ ...pkg, version: '1.5.0' })).toBe(
+      'https://raw.githubusercontent.com/owner/tool/refs/heads/main/README.md',
     );
     // The version badge has no version in its alt text, so a release changes only the SVG; and
     // it isn't a link, which ToolBox's README renderer would show as raw Markdown (#412)
