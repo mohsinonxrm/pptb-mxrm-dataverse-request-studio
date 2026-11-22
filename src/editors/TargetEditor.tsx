@@ -60,6 +60,12 @@ export interface TargetEditorProps {
    * reason as onResetRequest.
    */
   onApplyParsed?: (parsed: ParsedRequest) => void;
+  /**
+   * Another pane's first step brought the user here to choose a table
+   * (#429): open the table list on arrival, and don't ask again with this
+   * pane's own Step 1 card.
+   */
+  openTableList?: boolean;
 }
 
 export function TargetEditor({
@@ -71,6 +77,7 @@ export function TargetEditor({
   sub = 'Pick the entity set this request operates on.',
   onResetRequest,
   onApplyParsed,
+  openTableList = false,
 }: TargetEditorProps) {
   const {
     entities,
@@ -157,6 +164,19 @@ export function TargetEditor({
   // Only after the entity list has finished loading — the loading gate
   // prevents a flash for returning users whose persisted settings load async.
   const noScope = needsSetup && !entitiesLoading;
+
+  // Arrived from another pane's Step 1 (#429): that step is choosing a
+  // table, so open the list now. Not when Step 1 is a scope after all:
+  // the picker is disabled then, and the scope card asks for it.
+  const openOnArrival = openTableList && !table;
+  useEffect(() => {
+    if (openOnArrival && !noScope) startFirstStep();
+    // On arrival only; a scope that turns out to be missing closes it below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (noScope && !table) setListOpen(false);
+  }, [noScope, table]);
   // Step 1 is choosing a scope only while there's a table to choose (#420).
   // A table that's already there (a restored request, or one fixed by a
   // bound action or function) can be used without a scope.
@@ -218,7 +238,7 @@ export function TargetEditor({
       </PaneHead>
 
       {/* Until a table is picked: what this request does, and Step 1 (#297). */}
-      {!table && !noScope && !entitiesError && (
+      {!table && !noScope && !entitiesError && !openOnArrival && (
         <FirstStep step="Choose a table" onStart={startFirstStep} />
       )}
 

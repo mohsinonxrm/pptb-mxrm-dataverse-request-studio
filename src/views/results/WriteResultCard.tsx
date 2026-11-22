@@ -478,6 +478,13 @@ function buildNarrative(
             : 'precondition failed';
       return { title: 'Operation rejected', body: why };
     }
+    // #431: the 404 is for the impersonated user, not the record.
+    if (result.impersonatedUserNotFound) {
+      return {
+        title: 'Impersonated user not found',
+        body: `The user you're impersonating (${result.impersonatedUserNotFound}) wasn't found. Check the id in HTTP headers.`,
+      };
+    }
     if (result.status === 404) {
       return {
         title: 'Record not found',
