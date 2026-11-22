@@ -9,6 +9,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
+- **C# SDK and PowerShell (Xrm) code** ([#232]). Two new Code tab formats
+  write the request as Dataverse SDK calls instead of an HTTP call.
+  **C# SDK** uses `ServiceClient`: a `QueryExpression` for a query (with
+  `$filter` as conditions and Dataverse query functions as their
+  `ConditionOperator`), an `Entity` with `Create`, `Update`, `Upsert` or
+  `Delete` for a write, `Associate` / `Disassociate`, and an
+  `OrganizationRequest` for actions and functions. **PowerShell (Xrm)** does
+  the same with the Microsoft.Xrm.Data.PowerShell module: FetchXML through
+  `Get-CrmRecordsByFetch`, `New-CrmRecord`, `Set-CrmRecord`,
+  `Invoke-CrmAction` and so on. With the table's metadata loaded, a lookup
+  becomes an `EntityReference`, a choice an `OptionSetValue` and money a
+  `Money`; the bypass and duplicate-detection headers become optional
+  parameters, and an ETag a `RowVersion`. A request with no faithful SDK form
+  (an `$expand`, a lambda, deep insert, a file's bytes, …) says why in the
+  snippet, and the C# one sends the Web API request through `ExecuteWebRequest`.
+
+### 🐛 Fixed
+
+- **Each version's README shows its own badges** ([#435]). The badge images and
+  the README ToolBox's details page reads (`readmeUrl`) came from `main`, the
+  latest stable release. So npm's 1.7.0-beta.1 page showed "version 1.6.0",
+  "Power Platform ToolBox ≥ 1.2.0" and "@pptb/types 1.2.7", although 1.7 needs
+  ToolBox 1.2.8. They now point at the version's own git tag.
+  `npm run badges` updates the README's badge lines and `readmeUrl` for each
+  release, and the release check fails when they're stale.
+
+[#232]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/232
+[#435]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/435
+
+## [1.7.0-beta.1] - 2026-11-21
+
+The first 1.7.0 beta: a guided builder. Each request type says what it does
+and opens on its first step ([#289], [#297]). Results get a summary line, a
+Columns menu and Open in Dataverse ([#290], [#292], [#293]). The advisory chip
+says what to fix, and a blocked Execute opens it ([#295]). One badge rule
+applies in every mode ([#296], [#417]), and choosing a scope is one step
+([#397]). It also fixes the findings of a review of this work ([#413]–[#422]).
+
+Still a **prerelease** on the npm `beta` tag, with the gold Insider icon.
+It needs **Power Platform ToolBox 1.2.8 or later** ([#408]).
+
+### ✨ Added
+
 - **The header shows the saved request's name** ([#298]). Once a request is
   saved or loaded from Saved, its name sits next to the request type, with an
   **Unsaved** tag while it has changes. Click the name to rename it; Enter
@@ -50,21 +93,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every results view, including empty results, errors and Count only, and wraps
   in a narrow pane. The grid footer now keeps only the grid's own state: filters,
   expanded lines, loading more pages and the selection.
-- **C# SDK and PowerShell (Xrm) code** ([#232]). Two new Code tab formats
-  write the request as Dataverse SDK calls instead of an HTTP call.
-  **C# SDK** uses `ServiceClient`: a `QueryExpression` for a query (with
-  `$filter` as conditions and Dataverse query functions as their
-  `ConditionOperator`), an `Entity` with `Create`, `Update`, `Upsert` or
-  `Delete` for a write, `Associate` / `Disassociate`, and an
-  `OrganizationRequest` for actions and functions. **PowerShell (Xrm)** does
-  the same with the Microsoft.Xrm.Data.PowerShell module: FetchXML through
-  `Get-CrmRecordsByFetch`, `New-CrmRecord`, `Set-CrmRecord`,
-  `Invoke-CrmAction` and so on. With the table's metadata loaded, a lookup
-  becomes an `EntityReference`, a choice an `OptionSetValue` and money a
-  `Money`; the bypass and duplicate-detection headers become optional
-  parameters, and an ETag a `RowVersion`. A request with no faithful SDK form
-  (an `$expand`, a lambda, deep insert, a file's bytes, …) says why in the
-  snippet, and the C# one sends the Web API request through `ExecuteWebRequest`.
 
 ### 🔄 Changed
 
@@ -108,6 +136,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The `?`, `⚠` and `req` badges some modes used are gone, so the same state
   looks the same everywhere and matches what the advisory drawer says.
   Retrieve Single now marks the record as **required** once a table is picked.
+
 ### 🐛 Fixed
 
 - **Open in Dataverse opens the row you can see ticked** ([#413]). A row
@@ -176,6 +205,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#298]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/298
 [#301]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/301
 [#397]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/397
+[#408]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/408
 [#413]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/413
 [#414]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/414
 [#415]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/415
@@ -186,8 +216,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#420]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/420
 [#421]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/421
 [#422]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/422
-[#408]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/408
-[#232]: https://github.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/issues/232
 
 ## [1.6.0] - 2026-11-21
 

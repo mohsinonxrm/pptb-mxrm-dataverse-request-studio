@@ -9,13 +9,13 @@ file / image / attachment operations.
 Built for [Power Platform ToolBox](https://www.powerplatformtoolbox.com/) with
 React 18, Fluent UI v9, TypeScript, and live Dataverse metadata integration.
 
-![Version](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/version.svg)
-![Power Platform ToolBox 1.2.8 or later](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/pptb.svg)
-![@pptb/types 1.2.8](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/pptb-types.svg)
-![React 18](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/react.svg)
-![TypeScript 5.9](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/typescript.svg)
-![Fluent UI v9](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/fluent-ui.svg)
-![License AGPL-3.0-only](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/heads/main/assets/badges/license.svg)
+![Version](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/tags/v1.7.0-beta.1/assets/badges/version.svg)
+![Power Platform ToolBox 1.2.8 or later](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/tags/v1.7.0-beta.1/assets/badges/pptb.svg)
+![@pptb/types 1.2.8](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/tags/v1.7.0-beta.1/assets/badges/pptb-types.svg)
+![React 18](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/tags/v1.7.0-beta.1/assets/badges/react.svg)
+![TypeScript 5.9](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/tags/v1.7.0-beta.1/assets/badges/typescript.svg)
+![Fluent UI v9](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/tags/v1.7.0-beta.1/assets/badges/fluent-ui.svg)
+![License AGPL-3.0-only](https://raw.githubusercontent.com/mohsinonxrm/pptb-mxrm-dataverse-request-studio/refs/tags/v1.7.0-beta.1/assets/badges/license.svg)
 
 ---
 
