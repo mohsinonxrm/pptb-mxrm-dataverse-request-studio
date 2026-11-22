@@ -1,6 +1,17 @@
 # #225 — `$batch` as a raw-request transport (design spike)
 
-Status: **draft for review**. No code changes yet.
+Status: **approved by the owner on 2026-11-22**, with the decisions below. No code changes yet.
+
+## Decisions (2026-11-22)
+
+- **Narrow scope approved.** Only the three refused shapes go through `rawRequest`: PUT of one column, DELETE of one column's value, and alternate-key Upsert. Everything else stays on the typed calls.
+- **PR 4 is dropped.** No "Send through `$batch`" toggle for GUID-addressed writes or Retrieve Single.
+- **No host-version gate.** #408 made ToolBox 1.2.8 the minimum (`minAPI` 1.2.8) and removed the `HEADER_PASS_THROUGH` probe, so every supported host has `executeBatch`. So PR 1:
+  - drops `hostSupportsRawRequest`;
+  - doesn't keep today's 400 refusal as a fallback in PR 2.
+
+  Sections 2.1 and 5 below are updated to match.
+- The five upstream asks (§7) are for the owner to file.
 Refs #225. Related: #361 (Retry-After), #233 (change tracking), #231 (compare responses), #267 (request tests).
 
 Sources read for this note:
@@ -164,9 +175,6 @@ export interface RawResponse {
   body?: unknown;
 }
 
-/** True when rawRequest can run: embedded and `executeBatch` present (1.2.7+). */
-export const hostSupportsRawRequest = (): boolean => HEADER_PASS_THROUGH;
-
 dvHost.rawRequest = async (req: RawRequest): Promise<RawResponse> => {
   const part: DataverseAPI.BatchRequest = {
     method: req.method,
@@ -189,7 +197,7 @@ Notes:
   - throws on an empty path, `..` or `$batch`, so DRS reports a clear "not sent" before the host rejects it with a generic message.
 - **`connectionTarget`** is passed explicitly, unlike the existing wrappers, which pass `undefined`. This lets #231 use it.
 - No outer headers, ever. They don't affect the part, and they'd trigger a prompt for nothing.
-- `minAPI` is moving to 1.2.8 (#408), so the probe is a guard rather than a version gate.
+- `minAPI` is 1.2.8 (#408), so every supported host has `executeBatch`: there is no capability gate. Outside PPTB, `dv()` throws `HostNotAvailableError` as for every other host call.
 
 ### 2.2 Which headers go on the part
 
@@ -250,7 +258,7 @@ function fromRaw(r: RawResponse, ms: number): ExecResult {
 | **Update — PUT single column** | Refused with 400 (`dataverseExecutor.ts:775-787`); advisory `UpdateMode.tsx:485`; README 📝 (`:521`) | `PUT <set>(<id>)/<col>` with body `{ "value": … }` → 204. Clearing a value: `DELETE` the property (below) | No, unless the user adds headers |
 | **Delete — single property** | Refused with 400 (`:864-875`); advisory `DeleteMode.tsx:393-399` | `DELETE <set>(<id>)/<col>` → 204 | No |
 | **Upsert — alternate key** | Refused with 400 (`:816-828`); advisory `UpsertMode.tsx:275`; README 📝 (`:522`) | `PATCH <set>(<key>='v',…)` → 204, or 201/200 with `Prefer: return=representation`. Create-only / update-only via `If-None-Match: *` / `If-Match: *` | Only when Prefer or a precondition is on |
-| Upsert / Update by GUID: tell 201 from 204, return the row | Always reported as 204 with no row (`:798-800, 844-845`) | Possible, but **not proposed by default** (§4: impersonation, consent). Optional later (PR 4) | Prefer → yes |
+| Upsert / Update by GUID: tell 201 from 204, return the row | Always reported as 204 with no row (`:798-800, 844-845`) | Possible, but **not built**: PR 4 was dropped (see Decisions) | Prefer → yes |
 | **Response headers** (#59 follow-up) | Headers tab always empty (`ResultsView.tsx:553`) | Real part headers for every request sent raw (`ETag`, `OData-EntityId`, `Location`, `Preference-Applied`, `x-ms-*`). Enables "use this ETag as If-Match" (#227 can capture it) | — |
 | **#361 Retry-After** | No duration (`serviceProtection.ts:5-8`) | **Not unblocked.** A throttled `$batch` is an outer non-multipart 429: the host rejects with the message only, and `Retry-After` isn't in `batchHeaders` (§1.3, §1.5). A part-level 429, if Dataverse ever sends one, would carry it. **Blocked on ToolBox** (§7, ask 1) | — |
 | **#233 change tracking** | Blocked "on #109 or #225" | **Doesn't need #225.** #109 shipped. Typed `queryData` takes a custom `Prefer` (host appends it, `dataverseManager.ts:886-895`), returns the full body including `@odata.deltaLink` (`:744-762`), and the delta follow-up is a relative `queryData` call. DRS just has to add `odata.track-changes` to `readPrefer` (`requestHeaderPolicy.ts:141-145`). Raw adds only the `Preference-Applied` check | Prefer → yes (as with page size today) |
@@ -306,7 +314,6 @@ Every PR branches off `dev`, targets `dev`, and is merged with a merge commit by
 - `pptbBridge.ts`:
   - `RawRequest` / `RawResponse`;
   - `dvHost.rawRequest`;
-  - `hostSupportsRawRequest`;
   - `toBatchUrl` (move the absolute-URL stripping from `executeAbsoluteUrl` into it and reuse it there).
 - `requestHeaderPolicy.ts`: `toRawPartHeaders`.
 - `dataverseExecutor.ts`:
@@ -322,12 +329,12 @@ Every PR branches off `dev`, targets `dev`, and is merged with a merge commit by
 
 ### PR 2 — the three refused shapes
 
-- `executeUpdate` (PUT), `executeDelete` (single-property) and `executeUpsert` (alternate key) call `rawRequest` when `hostSupportsRawRequest()`. Each keeps today's 400 refusal as the fallback.
+- `executeUpdate` (PUT), `executeDelete` (single-property) and `executeUpsert` (alternate key) call `rawRequest`. Today's 400 refusals are removed (no fallback: see Decisions).
 - Drop or replace the advisories in `UpdateMode` / `DeleteMode` / `UpsertMode` with an info note: "Sent through ToolBox's `$batch`; ToolBox impersonation doesn't apply."
 - `WriteResultCard` copy for raw-sent results.
 - README: coverage table (📝 → ✅ 1.2.8), Update/Upsert/Delete bullets (`:58, :63, :65`).
 - Tests:
-  - executor tests per shape (URL, method, body, headers or none, result mapping, fallback when unsupported);
+  - executor tests per shape (URL, method, body, headers or none, result mapping);
   - mode render tests: the advisory is gone and Execute is enabled;
   - `executeCodeParity`: the executed request equals the Code tab request apart from the envelope.
 - **Live E2E in PPTB** (owner's protocol, test records only, cleaned up): run each shape, plus the checks in §6.
@@ -338,7 +345,7 @@ Every PR branches off `dev`, targets `dev`, and is merged with a merge commit by
 - "Use as If-Match" action on an `etag` header. Fall back to the body's `@odata.etag` when the header is missing.
 - Tests: render with and without headers, the ETag action fills the precondition.
 
-### PR 4 (optional, owner's call) — "Send through `$batch` to see headers"
+### ~~PR 4~~ — dropped (owner, 2026-11-22): "Send through `$batch` to see headers"
 
 - A per-request toggle (off by default) that sends GUID-addressed Create / Update / Upsert / Delete and Retrieve Single through `rawRequest`. That gives the real status (201 vs 204), the returned row, and headers.
 - Shown with the impersonation and 16 MB caveats.
