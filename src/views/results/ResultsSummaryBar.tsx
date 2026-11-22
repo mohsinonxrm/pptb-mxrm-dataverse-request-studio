@@ -4,8 +4,13 @@
 // The grid footer keeps only what's about the grid itself (filters,
 // selection, loading more pages).
 
-import { makeStyles, tokens } from '@fluentui/react-components';
+import { makeStyles, tokens, Tooltip } from '@fluentui/react-components';
 import { StatusPill, type StatusKind } from '../../primitives/StatusPill';
+import { useStudioStyles } from '../../primitives/styles';
+
+/** Why a capped total reads "5,000+": the Count only view's wording (#272, #414). */
+export const COUNT_LIMIT_TIP =
+  'Dataverse stops counting at 5,000 rows (500 for elastic tables), and more rows match.';
 
 const useStyles = makeStyles({
   bar: {
@@ -36,6 +41,8 @@ export interface ResultsSummaryBarProps {
   rows?: number;
   /** `@odata.count`, when the request asked for it. */
   total?: number;
+  /** Dataverse stopped counting at its limit, so `total` is a floor (#414). */
+  totalCapped?: boolean;
   /** `@odata.nextLink` is present. */
   more?: boolean;
 }
@@ -43,11 +50,13 @@ export interface ResultsSummaryBarProps {
 export const statusKindOf = (code: number): StatusKind =>
   code >= 400 || code === 0 ? 'danger' : code >= 300 ? 'warning' : 'success';
 
-/** "0.9 KB", "1.2 MB". */
+/** "512 B", "4.2 KB", "1.2 MB": bytes below 1 KB (#422). */
 export function formatBytes(bytes: number): string {
   return bytes >= 1024 * 1024
     ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-    : `${(bytes / 1024).toFixed(1)} KB`;
+    : bytes >= 1024
+      ? `${(bytes / 1024).toFixed(1)} KB`
+      : `${bytes} B`;
 }
 
 export function ResultsSummaryBar({
@@ -58,11 +67,14 @@ export function ResultsSummaryBar({
   codeLabel,
   rows,
   total,
+  totalCapped,
   more,
 }: ResultsSummaryBarProps) {
   const s = useStyles();
+  const studio = useStudioStyles();
   const parts: React.ReactNode[] = [];
-  if (bytes !== undefined) parts.push(<span key="size">{formatBytes(bytes)}</span>);
+  // An empty body (a 204, say) has no size worth showing (#422).
+  if (bytes) parts.push(<span key="size">{formatBytes(bytes)}</span>);
   if (rows !== undefined) {
     parts.push(
       <span key="rows">
@@ -71,7 +83,18 @@ export function ResultsSummaryBar({
       </span>,
     );
   }
-  if (total !== undefined) {
+  if (total !== undefined && totalCapped) {
+    // A floor, not the total. Hover says why; a screen reader reads the
+    // same text from the page, so the tooltip isn't announced twice.
+    parts.push(
+      <Tooltip key="total" content={COUNT_LIMIT_TIP} relationship="inaccessible">
+        <span>
+          total <span className={s.strong}>{total.toLocaleString()}+</span>
+          <span className={studio.srOnly}> ({COUNT_LIMIT_TIP})</span>
+        </span>
+      </Tooltip>,
+    );
+  } else if (total !== undefined) {
     parts.push(
       <span key="total">
         total <span className={s.strong}>{total.toLocaleString()}</span>

@@ -94,6 +94,7 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { isRecordGuid } from '../primitives/guid';
+import { recordStatus } from '../primitives/clauseStatus';
 import { addRun, useRecentRuns } from '../state/runHistory';
 import { composeHeaderItems } from '../engine/requestHeaders';
 
@@ -470,7 +471,8 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
           icon: PersonAccounts20Regular,
           iconFilled: PersonAccounts20Filled,
           label: 'Master (survives)',
-          status: state.targetId ? ('set' as const) : undefined,
+          // The one badge rule (#296, #417), as the drawer's blockers say it.
+          status: recordStatus(state.targetId, !!tbl),
           badgeAppearance: 'ghost' as const,
           dirty: state.dirty.has('target') || state.dirty.has('entity'),
         },
@@ -486,7 +488,7 @@ export function MergeMode({ themeMode }: { themeMode: ThemeMode }) {
           icon: BranchFork20Regular,
           iconFilled: BranchFork20Filled,
           label: 'Subordinate record',
-          status: state.subordinateId ? ('set' as const) : undefined,
+          status: recordStatus(state.subordinateId, !!tbl),
           badgeAppearance: 'ghost' as const,
           dirty: state.dirty.has('subordinate'),
         },

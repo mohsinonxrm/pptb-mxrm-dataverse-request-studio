@@ -106,6 +106,7 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { invalidUrlPartReason } from '../primitives/urlParts';
+import { recordStatus } from '../primitives/clauseStatus';
 import { addRun, useRecentRuns } from '../state/runHistory';
 import { recordInitials } from '../primitives/recordInitials';
 
@@ -424,7 +425,8 @@ export function ManageImageMode({ themeMode }: { themeMode: ThemeMode }) {
           icon: Table20Regular,
           iconFilled: Table20Filled,
           label: state.recordId ? `${tbl?.displayName ?? ''} (selected)` : 'Pick a record',
-          status: state.recordId ? ('set' as const) : undefined,
+          // The one badge rule (#296, #417), as the drawer's blockers say it.
+          status: recordStatus(state.recordId, !!tbl),
           badgeAppearance: 'ghost' as const,
           dirty: state.dirty.has('target'),
         },

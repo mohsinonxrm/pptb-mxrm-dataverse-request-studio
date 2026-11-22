@@ -107,6 +107,7 @@ import { useModeDraft, useStashModeDraft } from '../state/modeDrafts';
 import { usePublishSaveContext } from '../state/SaveContext';
 import { useLatestCallback } from '../primitives/useLatestCallback';
 import { isRecordGuid } from '../primitives/guid';
+import { recordStatus } from '../primitives/clauseStatus';
 import { isColumnInScope, useAdvancedFindOnly } from '../state/metadataScope';
 import { addRun, useRecentRuns } from '../state/runHistory';
 import { useImportedRequest } from '../state/modeHandoff';
@@ -480,6 +481,8 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
           label: state.recordId
             ? primaryName || `${tbl?.displayName ?? ''} (selected)`
             : 'Pick a record',
+          // The one badge rule (#296, #417), as the drawer's blockers say it.
+          status: recordStatus(state.recordId, !!tbl),
           dirty: state.dirty.has('target'),
         },
         {
