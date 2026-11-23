@@ -56,6 +56,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🐛 Fixed
 
+- **A write DRS stops before sending says why** ([#225]). The result read
+  "Failed · 400 Bad Request, see the JSON tab", as if Dataverse had answered.
+  It now reads **Not sent** with the reason.
 - **Manage Image asks for the table once** ([#429]). With no table picked, the
   preview's **Choose a table** only switched to Target, where an identical
   Step 1 card asked again. It now opens Target with the table list open, and

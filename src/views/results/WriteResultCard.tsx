@@ -439,6 +439,8 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
 // ──────────────────────────────────────────────────────────────
 // Narrative composition — short, accurate sentence per op + status
 // ──────────────────────────────────────────────────────────────
+const NOT_SENT = 'Not sent: ';
+
 function buildNarrative(
   ctx: WriteResultContext,
   result: ExecResult,
@@ -466,6 +468,15 @@ function buildNarrative(
       return {
         title: 'Not sent — header rejected',
         body: err?.message ?? 'Power Platform ToolBox rejected a request header.',
+      };
+    }
+    // DRS refused the request before sending it (a check in the executor
+    // or the bridge). The reason is the message; the status is DRS's own.
+    const notSent = err?.message?.startsWith(NOT_SENT) ? err.message.slice(NOT_SENT.length) : null;
+    if (notSent) {
+      return {
+        title: 'Not sent',
+        body: notSent.charAt(0).toUpperCase() + notSent.slice(1),
       };
     }
     // Service protection limits (#269): Dataverse refused the request
