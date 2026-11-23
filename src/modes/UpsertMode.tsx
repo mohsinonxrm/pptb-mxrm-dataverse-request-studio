@@ -720,6 +720,9 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
               recordName: writeResultName(tbl?.primaryName, result?.body, state.fieldValues),
               returnRepresentation: sentReturnRep,
             }}
+            // An alternate-key upsert's response carries the row's ETag
+            // (#225): offer it as the next Send's If-Match.
+            onUseEtag={(etag) => set('concurrency', { kind: 'etag', etag }, 'precondition')}
           />
         )}
       </MainTabs>

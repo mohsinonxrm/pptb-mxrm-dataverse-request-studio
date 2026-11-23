@@ -53,9 +53,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   single-column PUT or clear, and nothing is sent. ToolBox refuses a URL with
   some `%` characters in it, so an alternate-key value with `%` is stopped
   before sending, with a message saying to use the GUID.
+- **Response headers for these three requests** ([#225]). Their results'
+  **Headers** tab shows Dataverse's headers for the request (`etag`,
+  `preference-applied`, …) and says they come from the `$batch` response,
+  with the batch's own rate-limit headers in their own group. Other requests still say ToolBox doesn't expose headers. After an
+  Upsert, **Use as If-Match** puts the returned ETag into the Precondition
+  pane, so the next Send fails with 412 if the row has changed since.
 
 ### 🐛 Fixed
 
+- **A stale ETag on an Upsert says so** ([#225]). A 412 for an ETag that no
+  longer matched read "the record's existence state didn't match your
+  selection", which is about create-only and update-only. It now says the ETag
+  is stale.
 - **A write DRS stops before sending says why** ([#225]). The result read
   "Failed · 400 Bad Request, see the JSON tab", as if Dataverse had answered.
   It now reads **Not sent** with the reason.

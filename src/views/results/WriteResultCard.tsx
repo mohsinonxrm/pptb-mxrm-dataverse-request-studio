@@ -440,6 +440,7 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
 // Narrative composition — short, accurate sentence per op + status
 // ──────────────────────────────────────────────────────────────
 const NOT_SENT = 'Not sent: ';
+const STALE_ETAG = 'precondition failed — the ETag is stale: the record has changed since then';
 
 function buildNarrative(
   ctx: WriteResultContext,
@@ -489,12 +490,16 @@ function buildNarrative(
       };
     }
     if (result.status === 412) {
+      // 0x80060882 is a stale If-Match ETag whatever the operation: an
+      // Upsert sends one after "Use as If-Match" (#225).
       const why =
-        ctx.operation === 'upsert'
-          ? "precondition failed — the record's existence state didn't match your selection"
-          : ctx.operation === 'delete' || ctx.operation === 'update'
-            ? 'precondition failed — the ETag is stale (someone else changed the record)'
-            : 'precondition failed';
+        errCode === '0x80060882'
+          ? STALE_ETAG
+          : ctx.operation === 'upsert'
+            ? "precondition failed — the record's existence state didn't match your selection"
+            : ctx.operation === 'delete' || ctx.operation === 'update'
+              ? STALE_ETAG
+              : 'precondition failed';
       return { title: 'Operation rejected', body: why };
     }
     // #431: the 404 is for the impersonated user, not the record.

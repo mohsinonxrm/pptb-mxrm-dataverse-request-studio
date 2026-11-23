@@ -12,6 +12,7 @@ const host = vi.hoisted(() => ({
   liveTable: undefined as unknown,
   urlBar: null as null | { advisories?: Advisory[]; disabledReason?: string | null },
   sidebar: null as null | { onSelect: (id: string) => void },
+  results: null as null | { onUseEtag?: (etag: string) => void },
 }));
 vi.mock('../shell/UrlBar', () => ({
   UrlBar: (p: typeof host.urlBar) => {
@@ -44,7 +45,12 @@ vi.mock('../host/useScopedEntities', () => ({
   }),
 }));
 vi.mock('../views/CodeView', () => ({ CodeView: () => null }));
-vi.mock('../views/ResultsView', () => ({ ResultsView: () => null }));
+vi.mock('../views/ResultsView', () => ({
+  ResultsView: (p: typeof host.results) => {
+    host.results = p;
+    return null;
+  },
+}));
 
 import { UpdateMode } from './UpdateMode';
 import { DeleteMode } from './DeleteMode';
@@ -86,6 +92,7 @@ beforeEach(() => {
   host.liveTable = findTable('account');
   host.urlBar = null;
   host.sidebar = null;
+  host.results = null;
   published = null;
   hostEl = document.createElement('div');
   document.body.appendChild(hostEl);
@@ -277,5 +284,42 @@ describe("one column: the Precondition pane says why there's none (#225)", () =>
     open(Delete, 'delete', serializeDelete(s), 'precondition');
     expect(text()).toContain('Not sent when clearing one column');
     expect(hostEl!.querySelector('input[type=radio]')).toBeNull();
+  });
+});
+
+describe('Use as If-Match (#225 PR 3)', () => {
+  it("Upsert: the returned ETag becomes the Precondition's If-Match", () => {
+    const s: UpsertState = {
+      table: 'account',
+      key: {
+        kind: 'alternate',
+        keyName: 'akey_accountnumber',
+        keyValues: { accountnumber: 'A-1' },
+      },
+      fieldValues: { name: 'Fabrikam' },
+      nullFields: [],
+      rawBody: null,
+      prefer: emptyPrefer(),
+      headers: defaultWriteHeaders(),
+      returnSelect: [],
+      concurrency: { kind: 'none' },
+      bypass: defaultBypassOptions(),
+      dirty: new Set(),
+    };
+    open(Upsert, 'upsert', serializeUpsert(s), 'precondition');
+    const tab = (name: string) =>
+      [...hostEl!.querySelectorAll<HTMLElement>('[role=tab]')].find(
+        (t) => !!t.textContent?.trim().startsWith(name),
+      )!;
+    act(() => tab('Results').click());
+    expect(host.results?.onUseEtag).toBeTypeOf('function');
+    act(() => host.results!.onUseEtag!('W/"18778200"'));
+    act(() => tab('Builder').click());
+    act(() => host.sidebar!.onSelect('precondition'));
+    const checked = hostEl!.querySelector<HTMLInputElement>('input[type=radio]:checked');
+    expect(checked?.value).toBe('etag');
+    expect(
+      hostEl!.querySelector<HTMLInputElement>(`input[placeholder='W/"12345678"']`)?.value,
+    ).toBe('W/"18778200"');
   });
 });
