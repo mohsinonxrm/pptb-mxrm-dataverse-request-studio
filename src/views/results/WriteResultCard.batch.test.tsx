@@ -80,6 +80,40 @@ describe('WriteResultCard for a request sent through $batch (#225)', () => {
     expect(text()).toContain(CAPTION);
   });
 
+  it('Upsert: a stale ETag (after Use as If-Match) says the ETag is stale', () => {
+    render(
+      { operation: 'upsert', table: 'account', recordId: null },
+      batch({
+        status: 412,
+        statusText: 'Precondition Failed',
+        ok: false,
+        outcome: 'error',
+        body: { error: { code: '0x80060882', message: 'Version mismatch' } },
+      }),
+    );
+    expect(text()).toContain('the ETag is stale');
+    expect(text()).not.toContain('existence state');
+  });
+
+  it('Upsert: any other 412 is about create-only / update-only', () => {
+    render(
+      { operation: 'upsert', table: 'account', recordId: null },
+      batch({
+        status: 412,
+        statusText: 'Precondition Failed',
+        ok: false,
+        outcome: 'error',
+        body: {
+          error: {
+            code: '0x80040237',
+            message: 'A record with matching key values already exists.',
+          },
+        },
+      }),
+    );
+    expect(text()).toContain("the record's existence state didn't match your selection");
+  });
+
   it('Delete of one column: Cleared column', () => {
     render(
       { operation: 'delete', table: 'account', recordId: ID, clearedColumn: 'description' },

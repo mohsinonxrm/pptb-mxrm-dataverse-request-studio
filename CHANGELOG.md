@@ -62,6 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🐛 Fixed
 
+- **A stale ETag on an Upsert says so** ([#225]). A 412 for an ETag that no
+  longer matched read "the record's existence state didn't match your
+  selection", which is about create-only and update-only. It now says the ETag
+  is stale.
 - **A write DRS stops before sending says why** ([#225]). The result read
   "Failed · 400 Bad Request, see the JSON tab", as if Dataverse had answered.
   It now reads **Not sent** with the reason.
