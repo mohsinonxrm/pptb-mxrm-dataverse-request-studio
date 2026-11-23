@@ -105,6 +105,7 @@ export function ResultsView({
   notice,
   loading = false,
   changeTracking,
+  onUseEtag,
 }: {
   result: ExecResult | null;
   table?: string;
@@ -176,6 +177,12 @@ export function ResultsView({
     /** The results are a delta link's: the changes since the previous one. */
     isDelta?: boolean;
   };
+  /**
+   * Put a returned ETag into this mode's Precondition as If-Match (#225).
+   * The Headers tab offers it when the response has an `etag` header, or
+   * failing that a body `@odata.etag`. Without it, no button.
+   */
+  onUseEtag?: (etag: string) => void;
 }) {
   const [tab, setTab] = useState<ResultsTab>('data');
   // Grid-local UI state. We hoist it here (not inside ResultsGrid) so the
@@ -461,6 +468,10 @@ export function ResultsView({
             headers={result.headers}
             status={result.status}
             statusText={result.statusText}
+            transport={result.transport}
+            batchHeaders={result.batchHeaders}
+            body={result.body}
+            onUseEtag={onUseEtag}
           />
         )}
       </div>
@@ -553,53 +564,129 @@ function JsonPane({ body }: { body: unknown }) {
   );
 }
 
+/** The response's ETag: the `etag` header, else the row's `@odata.etag`. */
+export function responseEtag(
+  headers: Record<string, string>,
+  body: unknown,
+): { etag: string; from: 'header' | 'body' } | null {
+  const h = headers.etag?.trim();
+  if (h) return { etag: h, from: 'header' };
+  const b =
+    body && typeof body === 'object' && !Array.isArray(body)
+      ? (body as Record<string, unknown>)['@odata.etag']
+      : undefined;
+  return typeof b === 'string' && b.trim() ? { etag: b.trim(), from: 'body' } : null;
+}
+
+function HeaderLines({ lines }: { lines: [string, string][] }) {
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '220px 1fr',
+        gap: 6,
+        fontFamily: tokens.fontFamilyMonospace,
+        fontSize: 12,
+      }}
+    >
+      {lines.map(([k, v]) => (
+        <span key={k} style={{ display: 'contents' }}>
+          <span style={{ color: tokens.colorBrandForeground1, fontWeight: 600 }}>{k}:</span>
+          <span style={{ color: tokens.colorNeutralForeground1, wordBreak: 'break-all' }}>{v}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function HeadersPane({
   headers,
   status,
   statusText,
+  transport,
+  batchHeaders,
+  body,
+  onUseEtag,
 }: {
   headers: Record<string, string>;
   status: number;
   statusText: string;
+  transport?: 'batch';
+  batchHeaders?: Record<string, string>;
+  body?: unknown;
+  onUseEtag?: (etag: string) => void;
 }) {
   const s = useStudioStyles();
+  const [usedEtag, setUsedEtag] = useState<string | null>(null);
   const lines = Object.entries(headers).filter(([, v]) => v !== '');
+  const outer = Object.entries(batchHeaders ?? {}).filter(([, v]) => v !== '');
   const responseLine = status ? `HTTP/1.1 ${status} ${statusText}` : statusText;
+  const etag = onUseEtag ? responseEtag(headers, body) : null;
+  const muted = { display: 'block', color: tokens.colorNeutralForeground3 } as const;
   return (
-    <div className={s.inlineCard} style={{ padding: 16 }}>
-      <Caption1
-        style={{
-          display: 'block',
-          fontFamily: tokens.fontFamilyMonospace,
-          color: tokens.colorNeutralForeground3,
-          marginBottom: 8,
-        }}
-      >
+    <div
+      className={s.inlineCard}
+      style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}
+    >
+      <Caption1 style={{ ...muted, fontFamily: tokens.fontFamilyMonospace }}>
         {responseLine}
       </Caption1>
-      {lines.length === 0 && (
-        <Caption1 style={{ color: tokens.colorNeutralForeground3, fontStyle: 'italic' }}>
-          Response headers aren&apos;t exposed by the PPTB host, so none can be shown here.
+      {transport === 'batch' && (
+        <Caption1 style={muted}>
+          Sent through $batch: these are Dataverse&apos;s headers for this request, from its part of
+          the batch response.
         </Caption1>
       )}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '220px 1fr',
-          gap: 6,
-          fontFamily: tokens.fontFamilyMonospace,
-          fontSize: 12,
-        }}
-      >
-        {lines.map(([k, v]) => (
-          <span key={k} style={{ display: 'contents' }}>
-            <span style={{ color: tokens.colorBrandForeground1, fontWeight: 600 }}>{k}:</span>
-            <span style={{ color: tokens.colorNeutralForeground1, wordBreak: 'break-all' }}>
-              {v}
-            </span>
-          </span>
-        ))}
-      </div>
+      {lines.length === 0 && (
+        <Caption1 style={{ color: tokens.colorNeutralForeground3, fontStyle: 'italic' }}>
+          {transport === 'batch'
+            ? 'Dataverse sent no headers for this request.'
+            : "Response headers aren't exposed by the PPTB host, so none can be shown here."}
+        </Caption1>
+      )}
+      {lines.length > 0 && <HeaderLines lines={lines} />}
+      {etag && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Button
+            size="small"
+            appearance="outline"
+            disabled={usedEtag === etag.etag}
+            onClick={() => {
+              onUseEtag?.(etag.etag);
+              setUsedEtag(etag.etag);
+            }}
+          >
+            Use as If-Match
+          </Button>
+          <Caption1 role="status" style={{ color: tokens.colorNeutralForeground2 }}>
+            {usedEtag === etag.etag ? (
+              <>
+                Precondition set: the next Send fails with 412 if the row has changed since{' '}
+                <code>{etag.etag}</code>.
+              </>
+            ) : etag.from === 'header' ? (
+              'Makes the next Send fail with 412 if the row has changed since this response.'
+            ) : (
+              <>
+                From the row&apos;s <code>@odata.etag</code>. Makes the next Send fail with 412 if
+                the row has changed since.
+              </>
+            )}
+          </Caption1>
+        </div>
+      )}
+      {outer.length > 0 && (
+        <>
+          <Caption1 style={{ ...muted, marginTop: 6, fontWeight: 600 }}>
+            From the $batch response
+          </Caption1>
+          <Caption1 style={muted}>
+            The batch&apos;s own headers that ToolBox passes on. The rate-limit counts are for
+            reading, not for pacing requests.
+          </Caption1>
+          <HeaderLines lines={outer} />
+        </>
+      )}
     </div>
   );
 }

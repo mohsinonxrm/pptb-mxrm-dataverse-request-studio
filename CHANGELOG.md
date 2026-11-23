@@ -53,6 +53,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   single-column PUT or clear, and nothing is sent. ToolBox refuses a URL with
   some `%` characters in it, so an alternate-key value with `%` is stopped
   before sending, with a message saying to use the GUID.
+- **Response headers for these three requests** ([#225]). Their results'
+  **Headers** tab shows Dataverse's headers for the request (`etag`,
+  `preference-applied`, …) and says they come from the `$batch` response,
+  with the batch's own rate-limit headers in their own group. Other requests still say ToolBox doesn't expose headers. After an
+  Upsert, **Use as If-Match** puts the returned ETag into the Precondition
+  pane, so the next Send fails with 412 if the row has changed since.
 
 ### 🐛 Fixed
 

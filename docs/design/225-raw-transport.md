@@ -339,11 +339,12 @@ Every PR branches off `dev`, targets `dev`, and is merged with a merge commit by
   - `executeCodeParity`: the executed request equals the Code tab request apart from the envelope.
 - **Live E2E in PPTB** (owner's protocol, test records only, cleaned up): run each shape, plus the checks in §6.
 
-### PR 3 — Headers view
+### PR 3 — Headers view (done)
 
 - `ResultsView` Headers tab: render `result.headers` when `transport === 'batch'`, with the three `batchHeaders` in their own group. Keep the empty-state text for typed results.
 - "Use as If-Match" action on an `etag` header. Fall back to the body's `@odata.etag` when the header is missing.
 - Tests: render with and without headers, the ETag action fills the precondition.
+- **As built:** `ResultsView` takes `onUseEtag`. Only Upsert passes it: of the three shapes, only an alternate-key Upsert returns an ETag (PUT and clearing a column answer 204 with none, and take no precondition, §2.2). A typed result has no `etag` header and no row, so the body fallback doesn't come into play there today. The batch-headers group is labelled "From the $batch response" and says the rate-limit counts are for reading, not pacing.
 
 ### ~~PR 4~~ — dropped (owner, 2026-11-22): "Send through `$batch` to see headers"
 

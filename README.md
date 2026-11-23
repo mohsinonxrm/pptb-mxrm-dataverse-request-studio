@@ -81,7 +81,10 @@ has C# / HTTP / Python / PPTB.
 > to run them as another user, turn on `MSCRMCallerID` or `CallerObjectId` in
 > HTTP headers. Dataverse doesn't support `If-Match` on a single column, so the
 > Precondition pane doesn't apply to the first two. ToolBox can't send an
-> alternate-key value containing `%`; address that row by its GUID.
+> alternate-key value containing `%`; address that row by its GUID. Because
+> they go through `$batch`, their results' **Headers** tab shows Dataverse's
+> real response headers, and after an Upsert **Use as If-Match** puts the
+> returned ETag into the Precondition pane for the next Send.
 
 ### 📦 Bulk group
 
