@@ -375,6 +375,13 @@ export function buildUpdateBody(s: UpdateState): Record<string, unknown> {
     //   PUT /accounts(<id>)/primarycontactid/$ref  with  { '@odata.id': '/contacts(<id>)' }
     // — that's the Associate-single mode, not a property PUT. So lookups
     // aren't valid here; surface the GUID directly and let the user know.
+    // A multi-select choice goes as Dataverse writes it in a body: `"1,2"`,
+    // not an array (as `encodeFieldBody` does for PATCH).
+    const tbl = findTable(s.table);
+    const col = tbl ? findColumn(tbl, s.putColumn) : undefined;
+    if (col?.attributeType === 'MultiSelectPicklist' && Array.isArray(v)) {
+      return { value: v.join(',') };
+    }
     return { value: v as unknown };
   }
   // PATCH path — delegate to the Create encoder (single source of truth).

@@ -14,6 +14,15 @@ const names = (bits: HeaderBits) =>
     .map((h) => `${h.name}: ${h.value}`);
 
 describe('composeHeaderItems', () => {
+  it("sends no precondition with a request on one column's URL (#225)", () => {
+    // Live: Dataverse refuses any If-Match there (405, 0x80060888).
+    const etag = { kind: 'etag', etag: 'W/"5"' } as const;
+    expect(names({ method: 'PUT', concurrency: { kind: 'update-only' } })).toEqual([]);
+    expect(names({ scope: { kind: 'single-property' }, concurrency: etag })).toEqual([]);
+    expect(names({ method: 'PATCH', concurrency: etag })).toEqual(['If-Match: W/"5"']);
+    expect(names({ scope: { kind: 'whole-row' }, concurrency: etag })).toEqual(['If-Match: W/"5"']);
+  });
+
   it('adds the precondition after the rows, then the bypass headers', () => {
     expect(
       names({

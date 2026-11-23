@@ -17,6 +17,12 @@
 // consistency, bypass; #109), and reads a `Prefer` that keeps the host's
 // annotations (`readHeaders`).
 //
+// Three shapes the typed calls can't express go as a one-part `$batch`
+// through `dvHost.rawRequest` (#225): Update by PUT of one column, Delete of
+// one column's value, and Upsert by alternate key. Their part carries the
+// headers the Code tab shows (`toRawPartHeaders`), and the result is the
+// operation's real status and response headers (`fromRaw`).
+//
 // What's expressly NOT implemented:
 //   - Binary (file/image) chunked upload — host doesn't expose this API.
 //     ManageFile / ManageImage modes return `host-not-supported` from the
@@ -31,7 +37,15 @@
 //      so `ResultsView` rendering doesn't need to know which executor
 //      ran.
 
-import { dvHost, HostNotAvailableError, type RawResponse } from '../host/pptbBridge';
+import {
+  dvHost,
+  HostNotAvailableError,
+  type RawRequest,
+  type RawResponse,
+} from '../host/pptbBridge';
+import { stripApiPrefix } from '../host/batchUrl';
+import { findTable } from '../metadata/metadata';
+import { preferToHeaderString } from '../editors/PreferEditor';
 import { metadata } from '../host/metadataProvider';
 import { cleanHostMessage } from './hostErrorText';
 import { jsonBytes } from './byteSize';
@@ -45,6 +59,9 @@ import {
   buildMergeBody,
   buildAssociateRequests,
   buildDisassociateRequests,
+  buildUpdate,
+  buildUpsert,
+  buildDelete,
   PATCH_EXISTING_HEADERS,
 } from './urlBuilder';
 import {
@@ -83,6 +100,7 @@ import {
   impersonationProblem,
   isImpersonationHeader,
   readRequestHeaders,
+  toRawPartHeaders,
   toWireHeaders,
 } from './requestHeaderPolicy';
 
@@ -476,8 +494,14 @@ function dataverseErrorIn(
  * 304 (a conditional GET whose row hasn't changed) are successes, anything
  * else a failure carrying the Dataverse error from the body. `headers` are
  * the part's response headers, so a part-level 429 keeps `retry-after`.
+ * `sentHeaders` are the part's request headers: a failure that names the
+ * impersonated caller is marked as such, as for the typed calls (#431).
  */
-export function fromRaw(r: RawResponse, ms: number): ExecResult {
+export function fromRaw(
+  r: RawResponse,
+  ms: number,
+  sentHeaders?: Record<string, string>,
+): ExecResult {
   const extra = {
     headers: r.headers ?? {},
     transport: 'batch' as const,
@@ -498,7 +522,9 @@ export function fromRaw(r: RawResponse, ms: number): ExecResult {
     code: text ? dataverseCodeIn(text) : undefined,
     message: text || r.statusText || `HTTP ${r.status}`,
   };
-  return { ...failure(r.status, error, ms, r.statusText || undefined), ...extra };
+  const result = { ...failure(r.status, error, ms, r.statusText || undefined), ...extra };
+  const caller = impersonatedUserNotFound(sentHeaders, r.status, error.code, error.message);
+  return caller ? { ...result, impersonatedUserNotFound: caller } : result;
 }
 
 /** Returned by the binary modes — host doesn't expose chunked upload. */
@@ -528,6 +554,26 @@ async function timed<T>(
   } catch (e) {
     return mapError(e, Math.round(performance.now() - t0), sentHeaders);
   }
+}
+
+/**
+ * Send one request as a one-part `$batch` (`dvHost.rawRequest`, #225). The
+ * part carries what the Code tab shows: the mode's composed headers plus
+ * the Prefer its pane composes, minus what a part doesn't need
+ * (`toRawPartHeaders`). With no headers left the part has none, and the
+ * host doesn't prompt. `req.path` is the Code tab's relative URL.
+ */
+async function sendRaw(
+  req: Omit<RawRequest, 'headers'>,
+  composed: Record<string, string> | undefined,
+  prefer: string | null,
+): Promise<ExecResult> {
+  if (!req.path) return mapError({ statusCode: 400, message: 'Pick a target table first.' }, 0);
+  const part = toRawPartHeaders(prefer ? { ...composed, Prefer: prefer } : composed);
+  const sent = Object.keys(part).length > 0 ? part : undefined;
+  const res = await timed(() => dvHost.rawRequest(sent ? { ...req, headers: sent } : req), sent);
+  if (isExecResult(res)) return res;
+  return fromRaw(res.value, res.ms, sent);
 }
 
 /**
@@ -712,14 +758,8 @@ export async function executeAbsoluteUrl(
   const dropped = refuseHeaderProblems(composed);
   if (dropped) return dropped;
   const headers = readHeaders(composed, maxpagesize, trackChanges);
-  // TODO(#225 PR 2): reuse toBatchUrl in executeAbsoluteUrl
-  let path = url;
-  const apiIdx = path.indexOf('/api/data/');
-  if (apiIdx >= 0) {
-    path = path.slice(apiIdx + '/api/data/'.length);
-    const slash = path.indexOf('/');
-    if (slash >= 0) path = path.slice(slash + 1);
-  }
+  // The same prefix stripping as a `$batch` part's URL (#225).
+  const path = stripApiPrefix(url);
   const res = await timed(() => dvHost.queryData(path, headers), headers);
   if (isExecResult(res)) return res;
   return ok(200, res.value, res.ms);
@@ -871,23 +911,18 @@ export async function executeUpdate(
   if (!s.recordId) return mapError({ statusCode: 400, message: 'Pick a record to update.' }, 0);
   const refused = refuseUrlParts([['Record id', s.recordId]]);
   if (refused) return refused;
-  // CRITICAL: PUT single-column (PUT /<entityset>(<id>)/<column> with body
-  // `{ value: <scalar> }`) is a real Web API pattern but PPTB's
-  // dataverseAPI.update is PATCH-only — there's no raw-request hook for the
-  // property-path URL. If we silently fell through to PATCH here we'd write
-  // a different shape than DRS authored (and what the URL bar / Code tab
-  // promise). Fail loud and direct the user to PATCH-one-field instead.
+  // PUT of one column (`PUT /<set>(<id>)/<column>`, body `{ "value": … }`):
+  // the host's `update()` only PATCHes the row, so it goes as a one-part
+  // `$batch` (#225). The Prefer pane is hidden for PUT, so no Prefer is sent.
   if (s.method === 'PUT') {
-    return mapError(
-      {
-        statusCode: 400,
-        message:
-          "PUT single-column (PUT /<entityset>(<id>)/<column>) isn't supported by the PPTB host. " +
-          "Its dataverseAPI.update is PATCH-only; there's no raw-request hook for property-path URLs. " +
-          'To set one column from inside PPTB, switch back to PATCH and put a single field in the body. ' +
-          'To use the PUT pattern, copy the URL + body from the Code tab and run it outside PPTB.',
-      },
-      0,
+    if (!s.putColumn)
+      return mapError({ statusCode: 400, message: 'Pick a column for the PUT.' }, 0);
+    const refusedColumn = refuseUrlParts([], [['Column', s.putColumn]]);
+    if (refusedColumn) return refusedColumn;
+    return sendRaw(
+      { method: 'PUT', path: buildUpdate(s).relativeNoBase, body: buildUpdateBody(s) },
+      headers,
+      null,
     );
   }
   const body = buildUpdateBody(s);
@@ -907,24 +942,33 @@ export async function executeUpsert(
 ): Promise<ExecResult> {
   const dropped = refuseHeaderProblems(headers);
   if (dropped) return dropped;
-  // The host's `update()` is PATCH semantics, addressed by logical name +
-  // GUID. For alt-key Upsert the address is `<entitySet>(<keyCol>='value')`
-  // and PPTB's dataverseAPI doesn't expose a raw-request hook for that
-  // URL shape. Same family of limitation as Delete-single-property and
-  // Update-PUT: we still author the correct URL + body, but Execute is
-  // gated by an advisory in UpsertMode pointing users to copy the
-  // request out for external execution.
+  // By alternate key (`PATCH /<set>(<keyCol>='value',…)`): the host's
+  // `update()` only addresses a row by GUID, so it goes as a one-part
+  // `$batch` (#225), with the URL, body and precondition the Code tab shows.
+  // Create-only / update-only arrive as `If-None-Match: *` / `If-Match: *`
+  // in the composed headers, as for the typed call. The pane's Prefer goes
+  // only when it asks for return=representation: its annotations alone
+  // change nothing on a 204, and would cost a consent prompt.
   if (s.key.kind === 'alternate') {
-    return mapError(
-      {
-        statusCode: 400,
-        message:
-          "Alternate-key Upsert (PATCH /<entityset>(<keyCol>='value')) isn't supported by the PPTB host — " +
-          'its dataverseAPI.update only accepts GUID addressing. ' +
-          'DRS authored the correct request — copy the URL + body from the Code tab and run it from outside PPTB ' +
-          '(Postman / curl / JS SDK / Power Automate).',
-      },
-      0,
+    const key = s.key;
+    const def = findTable(s.table)?.alternateKeys?.find((k) => k.name === key.keyName);
+    if (!def) {
+      return mapError(
+        { statusCode: 400, message: `Not sent: the alternate key "${key.keyName}" isn't loaded.` },
+        0,
+      );
+    }
+    const unset = def.columns.filter((c) => (key.keyValues[c] ?? '').trim() === '');
+    if (unset.length > 0) {
+      return mapError(
+        { statusCode: 400, message: `Fill in every alternate-key column (${unset.join(', ')}).` },
+        0,
+      );
+    }
+    return sendRaw(
+      { method: 'PATCH', path: buildUpsert(s).relativeNoBase, body: buildUpsertBody(s) },
+      headers,
+      s.prefer.returnRepresentation ? preferToHeaderString(s.prefer) : null,
     );
   }
   if (s.key.kind !== 'guid' || !s.key.recordId) {
@@ -955,24 +999,15 @@ export async function executeDelete(
   if (!s.recordId) return mapError({ statusCode: 400, message: 'Pick a record to delete.' }, 0);
   const refused = refuseUrlParts([['Record id', s.recordId]]);
   if (refused) return refused;
-  // CRITICAL: single-property delete (DELETE /<entityset>(<id>)/<column>) is
-  // a real Web API pattern (per the docs) but PPTB's dataverseAPI surface
-  // only exposes a whole-row `delete(entityLogicalName, id)`. There is no
-  // generic raw-request method we can route a property-path DELETE through.
-  // If we called `dvHost.delete(table, id)` here in single-property mode,
-  // we'd silently whole-row-delete the record — which is exactly the bug
-  // the user reported. Fail loud instead.
+  // Clearing one column (`DELETE /<set>(<id>)/<column>`): the host's
+  // `delete()` only removes the whole row, which this must never fall back
+  // to, so it goes as a one-part `$batch` (#225).
   if (s.scope.kind === 'single-property') {
-    return mapError(
-      {
-        statusCode: 400,
-        message:
-          "Single-property DELETE (DELETE /<entityset>(<id>)/<column>) isn't supported by the PPTB host. " +
-          "Its dataverseAPI only does whole-row deletes; there's no raw-request hook for property-path URLs. " +
-          'DRS authored the correct request — copy the URL or the Code-tab fetch snippet and run it from outside PPTB (Postman, curl, the JS SDK, Power Automate, etc.).',
-      },
-      0,
-    );
+    const column = s.scope.column;
+    if (!column) return mapError({ statusCode: 400, message: 'Pick a column to clear.' }, 0);
+    const refusedColumn = refuseUrlParts([], [['Column', column]]);
+    if (refusedColumn) return refusedColumn;
+    return sendRaw({ method: 'DELETE', path: buildDelete(s).relativeNoBase }, headers, null);
   }
   const wire = sendable(headers);
   const res = await timed(() => dvHost.delete(s.table, s.recordId!, wire), wire);

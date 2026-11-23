@@ -113,6 +113,7 @@ import { addRun, useRecentRuns } from '../state/runHistory';
 import { useImportedRequest } from '../state/modeHandoff';
 import { importDelete } from '../engine/curlImport/applyImport';
 import { composeHeaderItems } from '../engine/requestHeaders';
+import { BatchTransportNote } from '../primitives/BatchTransportNote';
 
 const initialState = (): DeleteState => ({
   table: '',
@@ -375,37 +376,8 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
       });
     }
 
-    // Single-property delete + embedded-in-PPTB = unsupported by the host
-    // (see executeDelete for the full reasoning). We still let the user
-    // author the request and copy the URL / Code snippet, but block
-    // Execute so we don't silently whole-row-delete instead. In standalone
-    // mode there's no host at all — Execute is already disabled by the
-    // missing dataverseAPI — but we surface the advisory anyway so the
-    // limitation is documented.
-    if (state.scope.kind === 'single-property') {
-      out.push({
-        id: 'del-single-property-unsupported',
-        severity: 'error',
-        source: 'validation',
-        focusNode: 'scope',
-        title: "Single-property DELETE isn't supported by the PPTB host",
-        body: (
-          <>
-            DRS authors the correct URL{' '}
-            <code>DELETE /{state.table ? `&lt;set&gt;` : ''}(&lt;id&gt;)/&lt;column&gt;</code>, but
-            PPTB&apos;s <code>dataverseAPI</code> only exposes whole-row delete — there&apos;s no
-            raw-request hook for property-path URLs. To clear one column from inside PPTB, switch to{' '}
-            <strong>Update mode</strong> and set the column to <code>null</code>. To use the
-            property-DELETE pattern, copy the URL from the URL bar (or the Code-tab{' '}
-            <code>fetch</code> snippet) and run it from Postman / curl / the JS SDK / Power
-            Automate.
-          </>
-        ),
-      });
-    }
-
     return out;
-  }, [state.bypass, state.table, state.recordId, state.scope]);
+  }, [state.bypass, state.table, state.recordId]);
 
   const bypassBlocker = disabledReasonFromAdvisories(advisories);
 
@@ -417,7 +389,9 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
         ? 'Record id is not a valid GUID.'
         : state.scope.kind === 'single-property' && !state.scope.column
           ? 'Pick a column to clear.'
-          : state.concurrency.kind === 'etag' && etagProblem(state.concurrency.etag)
+          : state.scope.kind === 'whole-row' &&
+              state.concurrency.kind === 'etag' &&
+              etagProblem(state.concurrency.etag)
             ? etagProblem(state.concurrency.etag)
             : state.headers.some((h) => h.enabled && !h.name)
               ? 'Fix empty header name.'
@@ -460,7 +434,12 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     state.scope.kind === 'whole-row' ? 'row' : `clear ${state.scope.column ?? '?'}`;
   // DELETE only supports `If-Match: "<etag>"` per docs — no `*` form,
   // no `If-None-Match`. Two badge states only.
-  const concurrencyBadge = state.concurrency.kind === 'etag' ? 'If-Match: etag' : 'none';
+  const concurrencyBadge =
+    state.scope.kind === 'single-property'
+      ? 'n/a for single property'
+      : state.concurrency.kind === 'etag'
+        ? 'If-Match: etag'
+        : 'none';
 
   const isWholeRow = state.scope.kind === 'whole-row';
   const confirmOk =
@@ -539,7 +518,7 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
     {
       id: 'headers',
       label: 'Headers',
-      meta: `${state.headers.filter((h) => h.enabled).length + (state.concurrency.kind !== 'none' ? 1 : 0)} active`,
+      meta: `${state.headers.filter((h) => h.enabled).length + (state.scope.kind === 'whole-row' && state.concurrency.kind !== 'none' ? 1 : 0)} active`,
       items: [
         {
           id: 'headers',
@@ -645,6 +624,11 @@ export function DeleteMode({ themeMode }: { themeMode: ThemeMode }) {
           // "require existing" adds no value. Restrict to None + ETag.
           available={['none', 'etag']}
           group="write"
+          notApplicable={
+            state.scope.kind === 'single-property'
+              ? "Not sent when clearing one column: Dataverse doesn't support If-Match on a column's URL and rejects the request. Switch the scope back to the whole row to use optimistic concurrency."
+              : null
+          }
         />
       );
       break;
@@ -1458,15 +1442,7 @@ function ScopeEditor({
         group="write"
       />
       {scope.kind === 'single-property' && (
-        <MessageBar layout="multiline" intent="warning" style={{ marginBottom: 14, maxWidth: 720 }}>
-          <MessageBarBody>
-            <MessageBarTitle>Author-only inside PPTB</MessageBarTitle>
-            PPTB&apos;s <code>dataverseAPI</code> doesn&apos;t expose property-path DELETE — only
-            whole-row. DRS shows the correct URL + code so you can copy it for use outside (Postman,
-            curl, SDK, Flow). To clear one column from inside PPTB, use <strong>Update mode</strong>{' '}
-            and set the column to <code>null</code>.
-          </MessageBarBody>
-        </MessageBar>
+        <BatchTransportNote style={{ marginBottom: 14, maxWidth: 720 }} />
       )}
       <div style={{ maxWidth: 720 }}>
         <Field label="Scope">

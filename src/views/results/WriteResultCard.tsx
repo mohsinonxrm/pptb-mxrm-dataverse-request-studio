@@ -253,12 +253,20 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
             {family === 'success' &&
               ctx.returnRepresentation &&
               (ctx.operation === 'update' || ctx.operation === 'upsert') &&
+              // A $batch part passes the row back (#225); the typed update doesn't.
+              result.transport !== 'batch' &&
               !hasReturnedRecord && (
                 <Caption1 style={{ display: 'block', color: tokens.colorNeutralForeground3 }}>
                   You asked for return=representation, but ToolBox&apos;s update doesn&apos;t pass
                   the row back.{canRetrieve && ' Retrieve this record to see it.'}
                 </Caption1>
               )}
+            {/* How it was sent (#225): the status is the operation's own. */}
+            {result.transport === 'batch' && (
+              <Caption1 style={{ display: 'block', color: tokens.colorNeutralForeground3 }}>
+                Sent through $batch.
+              </Caption1>
+            )}
           </div>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <StatusPill
@@ -431,6 +439,8 @@ export function WriteResultCard({ result, ctx }: WriteResultCardProps) {
 // ──────────────────────────────────────────────────────────────
 // Narrative composition — short, accurate sentence per op + status
 // ──────────────────────────────────────────────────────────────
+const NOT_SENT = 'Not sent: ';
+
 function buildNarrative(
   ctx: WriteResultContext,
   result: ExecResult,
@@ -458,6 +468,15 @@ function buildNarrative(
       return {
         title: 'Not sent — header rejected',
         body: err?.message ?? 'Power Platform ToolBox rejected a request header.',
+      };
+    }
+    // DRS refused the request before sending it (a check in the executor
+    // or the bridge). The reason is the message; the status is DRS's own.
+    const notSent = err?.message?.startsWith(NOT_SENT) ? err.message.slice(NOT_SENT.length) : null;
+    if (notSent) {
+      return {
+        title: 'Not sent',
+        body: notSent.charAt(0).toUpperCase() + notSent.slice(1),
       };
     }
     // Service protection limits (#269): Dataverse refused the request
@@ -488,7 +507,8 @@ function buildNarrative(
     if (result.status === 404) {
       return {
         title: 'Record not found',
-        body: `No ${entityDisplay} record matched ${resolvedId ?? 'the supplied id'}.`,
+        // Only an alternate-key upsert has no id: its row is named by the key.
+        body: `No ${entityDisplay} record matched ${resolvedId ?? (ctx.operation === 'upsert' ? 'the alternate key' : 'the supplied id')}.`,
       };
     }
     if (result.status === 409) {
@@ -557,13 +577,13 @@ function buildNarrative(
             : null,
       };
     case 'upsert':
-      // Per the Web API docs: server returns 201 if it created, 204 if it
-      // updated. BUT — PPTB's `dataverseAPI.update()` resolves with `void`
-      // and our executor hardcodes 204, so we can't actually distinguish
-      // the two paths from inside DRS. Don't pretend we can.
-      //
-      // When status is unambiguous (e.g. 201, or 200 with body), we still
-      // use the precise wording; otherwise hedge with "completed".
+      // Per the Web API docs: with return=representation the server returns
+      // 201 if it created and 200 if it updated; without it, 204 either way.
+      // A GUID-keyed upsert goes through PPTB's `dataverseAPI.update()`,
+      // which resolves with `void`, so the executor reports 204 then too.
+      // An alternate-key upsert goes as a one-part $batch (#225) and carries
+      // the real status. Use the precise wording when the status says which
+      // path ran; otherwise hedge with "completed".
       if (result.status === 201) {
         return {
           title: `Upsert: created new ${entityDisplay}`,
@@ -572,6 +592,19 @@ function buildNarrative(
             : resolvedId
               ? `id ${resolvedId.slice(0, 8)}…`
               : null,
+        };
+      }
+      if (result.status === 200 && result.transport === 'batch') {
+        return {
+          title: `Upsert: updated ${entityDisplay}`,
+          body: name ? `Updated "${name}".` : resolvedId ? `id ${resolvedId.slice(0, 8)}…` : null,
+        };
+      }
+      if (result.transport === 'batch') {
+        // 204: Dataverse doesn't say whether it created or updated.
+        return {
+          title: `Upsert completed on ${entityDisplay}`,
+          body: 'Dataverse answers 204 whether it created or updated the row. Turn on return=representation in Prefer to tell which (201 created, 200 updated).',
         };
       }
       return {

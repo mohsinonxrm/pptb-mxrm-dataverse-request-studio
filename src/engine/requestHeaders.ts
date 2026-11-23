@@ -28,6 +28,20 @@ export interface HeaderBits {
   duplicateDetection?: boolean;
   /** Merge: skip duplicate detection on UpdateContent. */
   suppressDuplicateDetection?: boolean;
+  /** Update: 'PUT' writes one column through its property URL. */
+  method?: string;
+  /** Delete: 'single-property' clears one column through its property URL. */
+  scope?: { kind: string };
+}
+
+/**
+ * The request addresses one column (`/<set>(<id>)/<column>`): Update's PUT
+ * or Delete's single-property scope. Dataverse refuses any If-Match there
+ * with 405 "Versioning is not supported at property level" (0x80060888,
+ * checked live in #225), so no precondition is sent with it.
+ */
+export function addressesOneColumn(s: HeaderBits): boolean {
+  return s.method === 'PUT' || s.scope?.kind === 'single-property';
 }
 
 function composed(name: string, value: string, hint: string): HeaderItem {
@@ -45,7 +59,7 @@ export function composeHeaderItems(s: HeaderBits): HeaderItem[] {
       ? { ...it, enabled: s.duplicateDetection, value: 'false' }
       : it,
   );
-  const cc = s.concurrency ? preconditionToHeader(s.concurrency) : null;
+  const cc = s.concurrency && !addressesOneColumn(s) ? preconditionToHeader(s.concurrency) : null;
   if (cc) h.push(composed(cc.name, cc.value, 'Composed from the Optimistic concurrency pane.'));
   if (s.suppressDuplicateDetection) {
     h.push(

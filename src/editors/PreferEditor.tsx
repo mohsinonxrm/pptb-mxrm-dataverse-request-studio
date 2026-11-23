@@ -53,6 +53,7 @@ export function PreferEditor({
   group = 'read',
   sendsPageSize = false,
   changeTracking,
+  sentWithRequest = false,
 }: {
   spec: PreferSpec;
   setSpec: (s: PreferSpec) => void;
@@ -61,6 +62,11 @@ export function PreferEditor({
   sendsPageSize?: boolean;
   /** Offers Track changes (#233); only Retrieve Multiple passes it. */
   changeTracking?: ChangeTrackingAvailability;
+  /**
+   * Execute sends this pane's Prefer when it asks for return=representation:
+   * an Upsert by alternate key, sent as a one-part `$batch` (#225).
+   */
+  sentWithRequest?: boolean;
 }) {
   const set = <K extends keyof PreferSpec>(k: K, v: PreferSpec[K]) => setSpec({ ...spec, [k]: v });
   const host = useHostSession();
@@ -108,7 +114,18 @@ export function PreferEditor({
           </MessageBarBody>
         </MessageBar>
       )}
-      {host.embedded && !sendsPageSize && (
+      {host.embedded && sentWithRequest && (
+        <MessageBar layout="multiline" intent="info" style={{ marginBottom: 14, maxWidth: 720 }}>
+          <MessageBarBody>
+            <MessageBarTitle>Execute sends this Prefer header</MessageBarTitle>
+            With <code>return=representation</code> on, Execute sends the Prefer shown in the Code
+            tab and Dataverse returns the row: <strong>201</strong> if it created it,{' '}
+            <strong>200</strong> if it updated it. ToolBox asks you to approve the header the first
+            time. With it off, no Prefer is sent and Dataverse answers 204 either way.
+          </MessageBarBody>
+        </MessageBar>
+      )}
+      {host.embedded && !sendsPageSize && !sentWithRequest && (
         <MessageBar layout="multiline" intent="info" style={{ marginBottom: 14, maxWidth: 720 }}>
           <MessageBarBody>
             <MessageBarTitle>

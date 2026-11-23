@@ -21,7 +21,7 @@ Sources read for this note:
 - **DRS:** `dev` @ `d415ffa`.
 - **Dataverse docs:** [Execute batch operations](https://learn.microsoft.com/power-apps/developer/data-platform/webapi/execute-batch-operations-using-web-api) and [Service protection API limits](https://learn.microsoft.com/power-apps/developer/data-platform/api-limits).
 
-Nothing was run against a live environment for this note. §6 lists what the first implementation PR has to confirm live.
+Nothing was run against a live environment for this note. §6 lists what the first implementation PR has to confirm live; PR 2 ran those checks on 2026-11-22, and §6 records what they found. Three findings changed the design: impersonation goes on the outer `$batch` (§1.7), no precondition goes with a request on one column's URL (§2.2), and the host refuses some `%` in a path (§1.2).
 
 ---
 
@@ -62,7 +62,7 @@ Nothing was run against a live environment for this note. §6 lists what the fir
 | Aspect | Behaviour | Host code |
 |---|---|---|
 | Methods | `GET`, `POST`, `PATCH`, `PUT`, `DELETE`. Anything else throws. `executeTransaction` also refuses `GET`. | `utils/dataverseBatch.ts:161-167` |
-| URL | **Relative only**: a scheme, `//` or `\` throws. Leading `/` optional; `api/data/v9.2/` is added when missing, and any other `api/data/<ver>/` throws. `..`, `.`, control characters and a nested `$batch` are rejected, also after up to 3 rounds of percent-decoding. | `dataverseBatch.ts:106-143` |
+| URL | **Relative only**: a scheme, `//` or `\` throws. Leading `/` optional; `api/data/v9.2/` is added when missing, and any other `api/data/<ver>/` throws. `..`, `.`, control characters and a nested `$batch` are rejected, also after up to 3 rounds of percent-decoding. **A decoding round that throws rejects the request** ("URL contains invalid encoding"): a literal `%` in a value (`%25`) does that when what follows, once decoded, isn't a valid escape (`z%25%C3%A9` → `z%é`, live). | `dataverseBatch.ts:106-143` |
 | URL query | Split with `split("?", 2)`. **JavaScript's limit truncates**: anything after a *second* literal `?` is silently dropped. | `dataverseBatch.ts:115` |
 | Property paths | Not restricted. `accounts(<id>)/name` and `accounts(accountnumber='A1')` both pass validation. | `dataverseBatch.ts:106-143` |
 | Headers | Up to 64 per part, 4,096 per batch. Names must be RFC 7230 tokens of 256 characters or fewer. Values must be strings with no control characters, 8,192 characters or fewer. Duplicate names must have the same value. **Nothing is reserved**: `Prefer`, `If-Match`, `Content-Type`, `CallerObjectId` and the rest go into the part verbatim. | `dataverseBatch.ts:39-75, 177-181`, `encodeHttpPart` `:207-226` |
@@ -71,7 +71,7 @@ Nothing was run against a live environment for this note. §6 lists what the fir
 | Request size | Estimated per part, then the encoded body is capped at **16 MB**. | `dataverseBatch.ts:9, 190-194, 264-266` |
 | `contentId` | Optional. It defaults to the 1-based index and must match `[A-Za-z0-9._-]{1,128}`. | `dataverseBatch.ts:16, 171-175` |
 | `changesetId` (new in 1.2.8) | `executeBatch` groups parts with the same id into one change set, placed at the first part's position. Parts with no id stay independent. `executeTransaction` ignores it and wraps everything in one change set. An empty or non-string id throws. | `dataverseBatch.ts:168-170, 228-262` |
-| Outer headers | The optional third argument goes on the `$batch` POST. Dataverse applies outer headers **to the batch only, not to each part** (docs: "Headers applied to the `$batch` operation don't apply to each item"). The host also always adds `Prefer: return=representation`, which merges with any custom outer `Prefer` and has no effect on the parts. | `dataverseManager.ts:886-895` |
+| Outer headers | The optional third argument goes on the `$batch` POST. Dataverse applies outer headers **to the batch only, not to each part** (docs: "Headers applied to the `$batch` operation don't apply to each item"). **Impersonation is the exception** (live, §6): the batch runs as its caller, so an outer `CallerObjectId` / `MSCRMCallerID` applies to every part, and one inside a part is ignored. The host also always adds `Prefer: return=representation`, which merges with any custom outer `Prefer` and has no effect on the parts. | `dataverseManager.ts:886-895` |
 
 For a single raw request, `changesetId` doesn't matter. Use `executeBatch` with one part and no `changesetId`. It's the only one of the two calls that accepts a `GET`.
 
@@ -126,7 +126,7 @@ So a raw request with **no part headers never prompts**. PUT column, single-prop
 
 There are two kinds, and they behave differently:
 
-- **DRS impersonation** sends `CallerObjectId` / `MSCRMCallerID` as a request header (#109). As a **part** header it goes into the part as written, and Dataverse applies per-part headers to that operation. It does trigger consent, the same as on the typed calls today.
+- **DRS impersonation** sends `CallerObjectId` / `MSCRMCallerID` as a request header (#109). ~~As a part header, Dataverse applies it to that operation.~~ **Checked live (§6): Dataverse ignores it inside a part.** An unknown `CallerObjectId` in the part still returned 204; on the outer `$batch` it returned 403, and the signed-in user's own id returned 204. So `rawRequest` puts these two headers on the outer request (the third `executeBatch` argument) and everything else in the part. They go through consent there, as on the typed calls.
 - **ToolBox impersonation** is the host's own "run as user" for a tool window. The typed handlers wrap their call in `withImpersonation(callerObjectId, …)`, which adds `CallerObjectId` to the HTTP request (`index.ts:2161, 2170`, `dataverseManager.ts:91-93, 910`). **The `executeBatch` / `executeTransaction` handlers don't** (`index.ts:2135-2155`), and the header would only reach the outer `$batch` anyway. A request sent through raw transport while ToolBox impersonation is on runs **as the signed-in user**. `@pptb/types` doesn't expose whether ToolBox impersonation is on, so DRS can't detect it.
 
 ### 1.8 Encoding (host-wide)
@@ -196,7 +196,7 @@ Notes:
   - percent-encodes every literal `?` after the first one, to get around the §1.2 truncation;
   - throws on an empty path, `..` or `$batch`, so DRS reports a clear "not sent" before the host rejects it with a generic message.
 - **`connectionTarget`** is passed explicitly, unlike the existing wrappers, which pass `undefined`. This lets #231 use it.
-- No outer headers, ever. They don't affect the part, and they'd trigger a prompt for nothing.
+- ~~No outer headers, ever.~~ No outer headers except impersonation, which only counts there (§1.7).
 - `minAPI` is 1.2.8 (#408), so every supported host has `executeBatch`: there is no capability gate. Outside PPTB, `dv()` throws `HostNotAvailableError` as for every other host call.
 
 ### 2.2 Which headers go on the part
@@ -209,9 +209,9 @@ Inside a part nothing is host-owned, so Execute can finally send **what the Code
 It keeps:
 
 - `Prefer`, from the mode's own Prefer pane rather than `HOST_OWNED_HEADERS`;
-- `If-Match` / `If-None-Match`;
-- the `MSCRM.*` bypass headers;
-- impersonation;
+- `If-Match` / `If-None-Match`, except with a request on one column's URL: Dataverse refuses any `If-Match` there with 405 "Versioning is not supported at property level" (`0x80060888`, live). `composeHeaderItems` leaves the precondition out for Update's PUT and Delete's single-property scope, and their Precondition panes say why;
+- the `MSCRM.*` bypass headers (not verified live: no plug-in to bypass in the test environment);
+- impersonation, which `rawRequest` then moves to the outer request (§1.7);
 - `Content-Type`, only when it isn't JSON.
 
 When the result is `{}`, no prompt is shown.
@@ -292,7 +292,7 @@ The README Web API coverage rows for single-property PUT/DELETE and alternate-ke
    - Remaining host throws: outer status errors, size, malformed multipart, consent. They all go through `mapError`.
    - Part errors arrive as data (status + Dataverse error body), which is *better* than the typed path's message parsing.
 5. **Behaviour differences from the typed calls:**
-   - The default part `Content-Type` is `application/json; type=entry`, even for a PUT of a property value. Dataverse is expected to accept it, but this needs a live check (§6).
+   - The default part `Content-Type` is `application/json; type=entry`, even for a PUT of a property value. Dataverse accepts it (live, §6).
    - No `odata.include-annotations` unless DRS sends `Prefer`. This only matters for reads, which stay typed.
    - No host `return=representation`: DRS sends `Prefer` only when the mode asks.
    - The URL must be relative, and a second literal `?` is truncated. `toBatchUrl` encodes it, and alternate-key values containing `?` need this too.
@@ -369,12 +369,22 @@ Every PR branches off `dev`, targets `dev`, and is merged with a merge commit by
 5. A part-level failure (412 on `If-Match` with a stale ETag) → `{ status: 412, body.error }`, nothing thrown.
 6. With ToolBox impersonation on: confirm the raw request runs as the signed-in user, to word the note accurately.
 
+**Results (2026-11-22, PPTB with `minAPI` 1.2.8, test rows created and deleted):**
+
+1. ✅ `PUT accounts(<id>)/name` with the default part `Content-Type` → 204, value written. **But** with `If-Match: *` (Update's default precondition) → 405 `0x80060888` "Versioning is not supported at property level". The same for `DELETE accounts(<id>)/telephone1` with an ETag. Without a precondition, the DELETE → 204 and the column is null. Fixed: no precondition with a request on one column's URL (§2.2).
+2. ✅ Part headers come back: PUT / DELETE → `odata-version`, `x-content-type-options`; alternate-key PATCH with `return=representation` → `etag`, `preference-applied`, `content-type`, and the row. GET single stays typed.
+3. ✅ `msfp_unsubscribedrecipients(msfp_emailaddress='drs-e2e-225+o''q?x#y&zé@example.invalid')` → 201 Created, then 200 on the same key; the stored value round-trips exactly. ❌ With a `%` in the value (`…z%é…`), ToolBox refused the request before sending it ("URL contains invalid encoding", §1.2). Fixed: `toBatchUrl` refuses such a path with a message saying why and suggesting the GUID.
+4. ❌ `CallerObjectId` in the part is ignored (an unknown id → 204). On the outer request it applies (unknown → 403; own id → 204). Fixed: `rawRequest` sends impersonation outer (§1.7).
+5. ✅ Alternate-key PATCH with a stale `If-Match` → `{ status: 412, body.error.code: 0x80060882 }`, shown as a result, nothing thrown.
+6. Not run: ToolBox impersonation wasn't on. The source (§1.7) shows the `executeBatch` handler doesn't apply it, so the note stands.
+
 ---
 
 ## 7. Upstream asks (desktop-app) — for the owner to file
 
 1. **Throttling:** add `retry-after` to `DATAVERSE_BATCH_RESPONSE_HEADERS` (`dataverseBatch.ts:13`). On a non-multipart outer error, reject with an error that carries `status` and the response headers (at least `retry-after`), not only `<code>: <message>` (`dataverseManager.ts:966-980`). Doing the same for typed calls would unblock #361 for every mode.
-2. **Impersonation:** wrap `EXECUTE_BATCH` / `EXECUTE_TRANSACTION` in `withImpersonation`, and apply the caller to each part (outer headers don't reach parts). Or document that batch ignores ToolBox impersonation (`index.ts:2135-2155`).
+2. **Impersonation:** wrap `EXECUTE_BATCH` / `EXECUTE_TRANSACTION` in `withImpersonation`: an outer `CallerObjectId` applies to every part (live, §6). Or document that batch ignores ToolBox impersonation (`index.ts:2135-2155`).
 3. **Query truncation:** `split("?", 2)` drops everything after a second `?` (`dataverseBatch.ts:115`). Use `indexOf("?")`.
+3a. **`%` in a path:** `validateDataverseRelativeUrl` throws "URL contains invalid encoding" when a round of its traversal check's decoding throws, so a value with a literal `%` (`%25`) followed by anything that isn't a valid escape once decoded can't be sent (`dataverseBatch.ts:116-125`). Treat a decoding error as "no further decoding" (an undecodable string can't hide a traversal), or decode only the `%2E` / `%2F` / `%5C` forms it looks for.
 4. **UTF-8 decoding:** collect `Buffer` chunks and decode once (`dataverseManager.ts:921-930`). This also opens the door to binary responses.
 5. (Nice to have) a first-class single-request API (`dataverseAPI.request({ method, url, headers, body })` returning `{ status, headers, body }`) with the typed calls' 128 MB limit, binary bodies and impersonation. That would make this whole workaround unnecessary.

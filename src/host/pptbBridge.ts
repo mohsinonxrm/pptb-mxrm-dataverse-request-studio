@@ -32,6 +32,7 @@
 /// <reference types="@pptb/types" />
 
 import { toBatchUrl } from './batchUrl';
+import { isImpersonationHeader } from '../engine/requestHeaderPolicy';
 
 export interface HostSession {
   /** True when running inside PPTB (window.toolboxAPI is present). */
@@ -442,18 +443,28 @@ export const dvHost = {
       : dv().executeTransaction(requests),
 
   // One request as a one-part `$batch` (#225): for the shapes the typed
-  // calls can't send, with the operation's real status and headers. No
-  // outer headers: they don't reach the part, and would prompt for nothing.
-  // Throws `BatchPathError` (from `toBatchUrl`) without calling the host.
+  // calls can't send, with the operation's real status and headers. The
+  // request's headers go in the part, except impersonation: Dataverse runs
+  // the whole `$batch` as its caller and ignores MSCRMCallerID or
+  // CallerObjectId inside a part (checked live), so those go on the outer
+  // request. Throws `BatchPathError` (from `toBatchUrl`) without calling
+  // the host.
   rawRequest: async (req: RawRequest): Promise<RawResponse> => {
+    const partHeaders: Record<string, string> = {};
+    const outer: Record<string, string> = {};
+    for (const [name, value] of Object.entries(req.headers ?? {}))
+      (isImpersonationHeader(name) ? outer : partHeaders)[name] = value;
     const part: DataverseAPI.BatchRequest = {
       method: req.method,
       url: toBatchUrl(req.path),
       contentId: '1',
-      ...(req.headers && Object.keys(req.headers).length > 0 ? { headers: req.headers } : {}),
+      ...(Object.keys(partHeaders).length > 0 ? { headers: partHeaders } : {}),
       ...(req.body !== undefined ? { body: req.body } : {}),
     };
-    const [r] = await dv().executeBatch([part], req.connectionTarget);
+    const [r] =
+      Object.keys(outer).length > 0
+        ? await dv().executeBatch([part], req.connectionTarget, outer)
+        : await dv().executeBatch([part], req.connectionTarget);
     if (!r) throw new Error('Malformed Dataverse batch response: no operation result');
     return {
       status: r.status,

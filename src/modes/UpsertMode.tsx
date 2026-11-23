@@ -240,7 +240,8 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
   // ── Compose effective headers ──
   const effectiveHeaders = useMemo(() => composeHeaderItems(state), [state]);
 
-  // ── Advisories — bypass + GUID + alt-key host limitation ──
+  // ── Advisories — bypass + GUID + alternate-key values ──
+  // Upsert by alternate key runs: Execute sends it as a one-part $batch (#225).
   const advisories = useMemo<Advisory[]>(() => {
     const out: Advisory[] = [...detectBypassAdvisories(state.bypass, 'bypass')];
 
@@ -256,29 +257,6 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
     }
 
     if (state.key.kind === 'alternate') {
-      // Same family as Delete single-property and Update PUT — the host's
-      // dataverseAPI doesn't expose a raw-request hook. DRS authors the
-      // correct URL; user copies it out for external execution.
-      out.push({
-        id: 'ups-altkey-unsupported',
-        severity: 'error',
-        source: 'validation',
-        focusNode: 'key',
-        title: "Alternate-key Upsert isn't supported by the PPTB host",
-        body: (
-          <>
-            DRS authors the correct request{' '}
-            <code>
-              PATCH /{tbl?.entitySetName ?? '&lt;set&gt;'}(&lt;keyCol&gt;=&apos;value&apos;)
-            </code>
-            , but PPTB&apos;s <code>dataverseAPI.update</code> only accepts GUID addressing —
-            there&apos;s no raw-request hook for property-keyed URLs. Copy the URL + body from the
-            Code tab and run it from Postman / curl / the JS SDK / Power Automate. Or switch the Key
-            pane to <strong>By GUID</strong> if you know the record&apos;s primary key.
-          </>
-        ),
-      });
-
       const key = state.key;
       const def = tbl?.alternateKeys?.find((d) => d.name === key.keyName);
       const reserved = def ? altKeyReservedCharColumns(state.table, def, key.keyValues) : [];
@@ -644,6 +622,8 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
           spec={state.prefer}
           setSpec={(p) => set('prefer', p, 'prefer')}
           group="write"
+          // By alternate key, Execute sends this Prefer (#225).
+          sentWithRequest={state.key.kind === 'alternate'}
         />
       );
       break;
@@ -734,8 +714,8 @@ export function UpsertMode({ themeMode }: { themeMode: ThemeMode }) {
               operation: 'upsert',
               table: state.table,
               // GUID mode → known id. Alt-key mode → unknown until the
-              // response comes back (and even then PPTB blocks alt-key
-              // via the advisory, so this path rarely fires in practice).
+              // response comes back: the card reads it from the returned
+              // row (return=representation) when there is one.
               recordId: state.key.kind === 'guid' ? state.key.recordId : null,
               recordName: writeResultName(tbl?.primaryName, result?.body, state.fieldValues),
               returnRepresentation: sentReturnRep,

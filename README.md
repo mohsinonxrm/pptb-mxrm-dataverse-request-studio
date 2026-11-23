@@ -61,18 +61,27 @@ has C# / HTTP / Python / PPTB.
   optional `$select` return list, duplicate detection and the `MSCRM.*`
   bypass-header family. **Retrieve this record** from the result card.
 - **Update Record** — `PATCH /<set>(<id>)` multi-field OR
-  `PUT /<set>(<id>)/<col>` single-column (Code tab only), with a before →
-  after diff.
+  `PUT /<set>(<id>)/<col>` single-column, with a before → after diff.
   **Require existing record** (`If-Match: *`) is the default, so a wrong GUID
   returns 404 instead of creating a record.
 - **Upsert Record** — full upsert / create-only / update-only / ETag-guarded
-  variants, by GUID or alternate key (alternate key: Code tab only).
+  variants, by GUID or alternate key. By alternate key, the result says
+  whether Dataverse created (201) or updated (200) the row when
+  `return=representation` is on, and shows the returned row.
 - **Delete Record** — `DELETE /<set>(<id>)` with a typed-confirmation safety
-  affordance + cascade-impact preview. Single-property delete via
-  `DELETE /<set>(<id>)/<col>` is composed for the Code tab.
+  affordance + cascade-impact preview. Clear one column with a single-property
+  `DELETE /<set>(<id>)/<col>`.
 - **Merge Records** — `POST /Merge` for `account` / `contact` / `lead` /
   `incident` with target + subordinate record cards, field-override matrix,
   and PerformParentingChecks / SuppressDuplicateDetection settings.
+
+> Single-column PUT, single-property DELETE and alternate-key Upsert are sent
+> through ToolBox's `$batch` as one request each, since ToolBox's typed calls
+> can't express them. ToolBox's own impersonation setting doesn't reach them:
+> to run them as another user, turn on `MSCRMCallerID` or `CallerObjectId` in
+> HTTP headers. Dataverse doesn't support `If-Match` on a single column, so the
+> Precondition pane doesn't apply to the first two. ToolBox can't send an
+> alternate-key value containing `%`; address that row by its GUID.
 
 ### 📦 Bulk group
 
@@ -531,8 +540,8 @@ Dataverse API)
 | Optimistic concurrency (`If-Match` / `If-None-Match`) | ✅ |
 | `MSCRM.*` bypass family (custom plug-ins, flows, async) | ✅ |
 | Impersonation (`MSCRMCallerID` / `CallerObjectId`) on every mode | ✅ |
-| Single-property PUT / DELETE | 📝 |
-| Alternate-key upsert | 📝 |
+| Single-property PUT / DELETE | ✅ (sent through `$batch`) |
+| Alternate-key upsert | ✅ (sent through `$batch`) |
 | Associate / Disassociate (collection + single-valued) | ✅ |
 | Merge (account / contact / lead / incident) | ✅ |
 | Execute Action (OOB / Custom API / Custom Action) | ✅ |
